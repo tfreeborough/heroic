@@ -38,3 +38,26 @@ export const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => {
   const k = t < 0 ? 0 : t > 1 ? 1 : t;
   return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
 };
+
+/** Angle (radians) of the direction from `from` to `to`. 0 = +x, clockwise (screen y down). */
+export const angleTo = (from: Vec2, to: Vec2): number => Math.atan2(to.y - from.y, to.x - from.x);
+
+/** Rotate a vector by `angle` radians (positive = clockwise with screen y down). */
+export const rotate = (v: Vec2, angle: number): Vec2 => {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
+};
+
+/**
+ * Signed smallest difference between two angles, normalised to [-π, π].
+ * Needed wherever angles are compared (arc hit checks, turn-toward logic) —
+ * raw subtraction breaks at the ±π wrap.
+ */
+export const angleDiff = (a: number, b: number): number => {
+  const TWO_PI = Math.PI * 2;
+  let d = (a - b) % TWO_PI;
+  if (d > Math.PI) d -= TWO_PI;
+  if (d < -Math.PI) d += TWO_PI;
+  return d;
+};

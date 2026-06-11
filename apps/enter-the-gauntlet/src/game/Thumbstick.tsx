@@ -4,10 +4,9 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { length, resolveStick, STICK_ZERO, type StickSample, vec2 } from "@heroic/core";
 
-const PAD_SIZE = 220;
-const KNOB_SIZE = 72;
-/** Knob travel radius; also the input radius, so max speed lands exactly when the knob hits the rim. */
-const TRAVEL = (PAD_SIZE - KNOB_SIZE) / 2;
+const DEFAULT_PAD_SIZE = 220;
+/** Knob diameter as a fraction of the pad — keeps proportions at any size. */
+const KNOB_RATIO = 72 / 220;
 
 export interface ThumbstickProps {
   /**
@@ -15,6 +14,8 @@ export interface ThumbstickProps {
    * gesture callbacks (not React renders) — stash it in a ref, don't setState.
    */
   onChange: (sample: StickSample) => void;
+  /** Pad diameter in px. */
+  size?: number;
 }
 
 /**
@@ -23,18 +24,22 @@ export interface ThumbstickProps {
  * The knob mirrors the (clamped) raw thumb position for honest feedback —
  * where the knob sits is where the input is.
  */
-export const Thumbstick = ({ onChange }: ThumbstickProps) => {
+export const Thumbstick = ({ onChange, size = DEFAULT_PAD_SIZE }: ThumbstickProps) => {
   const knobX = useSharedValue(0);
   const knobY = useSharedValue(0);
 
+  const knobSize = Math.round(size * KNOB_RATIO);
+  /** Knob travel radius; also the input radius, so max speed lands exactly when the knob hits the rim. */
+  const travel = (size - knobSize) / 2;
+
   const pan = useMemo(() => {
     const track = (x: number, y: number): void => {
-      const offset = vec2(x - PAD_SIZE / 2, y - PAD_SIZE / 2);
+      const offset = vec2(x - size / 2, y - size / 2);
       const len = length(offset);
-      const clamp = len > TRAVEL ? TRAVEL / len : 1;
+      const clamp = len > travel ? travel / len : 1;
       knobX.value = offset.x * clamp;
       knobY.value = offset.y * clamp;
-      onChange(resolveStick(offset, TRAVEL));
+      onChange(resolveStick(offset, travel));
     };
     const release = (): void => {
       knobX.value = withSpring(0, { damping: 20, stiffness: 400 });
@@ -48,18 +53,34 @@ export const Thumbstick = ({ onChange }: ThumbstickProps) => {
       .onBegin((e) => track(e.x, e.y))
       .onUpdate((e) => track(e.x, e.y))
       .onFinalize(release);
-  }, [knobX, knobY, onChange]);
+  }, [knobX, knobY, onChange, size, travel]);
 
   const knobStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: knobX.value }, { translateY: knobY.value }],
   }));
 
+  const sized = useMemo(
+    () => ({
+      pad: { width: size, height: size },
+      crosshairH: { top: size / 2 - 0.5 },
+      crosshairV: { left: size / 2 - 0.5 },
+      knob: {
+        left: (size - knobSize) / 2,
+        top: (size - knobSize) / 2,
+        width: knobSize,
+        height: knobSize,
+        borderRadius: knobSize / 2,
+      },
+    }),
+    [size, knobSize],
+  );
+
   return (
     <GestureDetector gesture={pan}>
-      <View style={styles.pad}>
-        <View style={[styles.crosshair, styles.crosshairH]} />
-        <View style={[styles.crosshair, styles.crosshairV]} />
-        <Animated.View style={[styles.knob, knobStyle]} />
+      <View style={[styles.pad, sized.pad]}>
+        <View style={[styles.crosshair, styles.crosshairH, sized.crosshairH]} />
+        <View style={[styles.crosshair, styles.crosshairV, sized.crosshairV]} />
+        <Animated.View style={[styles.knob, sized.knob, knobStyle]} />
       </View>
     </GestureDetector>
   );
@@ -67,8 +88,6 @@ export const Thumbstick = ({ onChange }: ThumbstickProps) => {
 
 const styles = StyleSheet.create({
   pad: {
-    width: PAD_SIZE,
-    height: PAD_SIZE,
     borderRadius: 999,
     borderWidth: 1.5,
     borderColor: "rgba(255, 255, 255, 0.18)",
@@ -81,22 +100,15 @@ const styles = StyleSheet.create({
   crosshairH: {
     left: 16,
     right: 16,
-    top: PAD_SIZE / 2 - 0.5,
     height: 1,
   },
   crosshairV: {
     top: 16,
     bottom: 16,
-    left: PAD_SIZE / 2 - 0.5,
     width: 1,
   },
   knob: {
     position: "absolute",
-    left: (PAD_SIZE - KNOB_SIZE) / 2,
-    top: (PAD_SIZE - KNOB_SIZE) / 2,
-    width: KNOB_SIZE,
-    height: KNOB_SIZE,
-    borderRadius: KNOB_SIZE / 2,
     backgroundColor: "rgba(255, 255, 255, 0.22)",
     borderWidth: 1.5,
     borderColor: "rgba(255, 255, 255, 0.35)",

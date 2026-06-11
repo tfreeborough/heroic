@@ -55,12 +55,21 @@ Every attack — player *or* enemy — is one record:
   arcWidth,              // arc only
   projectileSpeed,       // projectile only
   pierce,                // projectile only — how many enemies it passes through
+  projectileCount,       // projectile only — shots per strike (default 1)
+  flight,                // projectile only — named pattern from the flight bank (below)
   windup, recovery,      // cycle timing (attack_speed scales these)
   knockback,             // optional impulse on hit
   manaCost,              // magic only
   // damage numbers are pulled from school + stats at resolve time, not hardcoded
 }
 ```
+
+**Flight patterns (decided 2026-06-11):** projectile *movement logic* lives in a shared,
+named bank in core (`straight`, `pincer`, …) — the same data-refs-code pattern as enemy
+brains and effect hooks. A weapon (or later a modifier) just names a pattern; the math
+exists once. Pincer rules: curved arms converge exactly on the aim point, straighten and
+scissor onward after converging (no orbits), and each projectile damages independently —
+landing both arms on one victim is double damage by design.
 
 **One attack library, assigned to any entity.** There is no separate "enemy attack" system —
 enemies draw from the same config set the player does (a skeleton archer uses the same

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "gauntlet",
+    "name": "Heroic: Enter the Gauntlet",
     "slug": "heroic-enter-the-gauntlet",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,8 +11,9 @@
       "bundleIdentifier": "com.tfreeb.heroic-enter-the-gauntlet"
     },
     "android": {
+      "package": "com.heroic.enter_the_gauntlet",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#A7A096",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -22,11 +23,11 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "owner": "free-the-borough-games",
     "extra": {
       "eas": {
-        "projectId": "35577e37-7e40-420b-8531-167b41a71c9e"
+        "projectId": "79b49a52-68f8-4205-a7c7-eb1dfb22546e"
       }
-    },
-    "owner": "free-the-borough-games"
+    }
   }
 }

@@ -28,6 +28,31 @@ export const getVelocityPerSecond = (body: Matter.Body): { x: number; y: number 
   };
 };
 
+/** Add to a body's velocity, expressed in px/s — impulses like knockback. */
+export const addVelocityPerSecond = (body: Matter.Body, dvx: number, dvy: number): void => {
+  const v = Matter.Body.getVelocity(body);
+  Matter.Body.setVelocity(body, {
+    x: v.x + dvx / MATTER_BASE_TICKS_PER_SECOND,
+    y: v.y + dvy / MATTER_BASE_TICKS_PER_SECOND,
+  });
+};
+
+/** Teleport a body and zero its motion — respawns, scene resets. */
+export const resetBody = (body: Matter.Body, x: number, y: number): void => {
+  Matter.Body.setPosition(body, { x, y });
+  Matter.Body.setVelocity(body, { x: 0, y: 0 });
+};
+
+export interface MoverOptions {
+  /**
+   * Matter's per-tick velocity damping (0 = none). Leave at 0 for bodies
+   * driven by a commanded velocity each step (the player); set it for bodies
+   * that only ever receive impulses (knockback dummies) so they glide to a
+   * stop instead of sliding forever.
+   */
+  frictionAir?: number;
+}
+
 /**
  * A player/enemy mover: a circle that collides but never spins or bounces.
  * - inertia: Infinity — collisions can't rotate it; facing is gameplay state,
@@ -35,12 +60,17 @@ export const getVelocityPerSecond = (body: Matter.Body): { x: number; y: number 
  * - zero friction/restitution — velocity is set directly each step, so any
  *   physics damping would just fight the controls; walls slide, not bounce.
  */
-export const createMoverBody = (x: number, y: number, radius: number): Matter.Body =>
+export const createMoverBody = (
+  x: number,
+  y: number,
+  radius: number,
+  options: MoverOptions = {},
+): Matter.Body =>
   Matter.Bodies.circle(x, y, radius, {
     inertia: Infinity,
     friction: 0,
     frictionStatic: 0,
-    frictionAir: 0,
+    frictionAir: options.frictionAir ?? 0,
     restitution: 0,
   });
 
