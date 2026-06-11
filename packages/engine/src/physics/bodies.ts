@@ -16,6 +16,19 @@ export const setVelocityPerSecond = (body: Matter.Body, vx: number, vy: number):
 };
 
 /**
+ * Read a body's velocity in px/s. Post-collision, so accelerating from this
+ * (rather than from a commanded velocity) keeps the controls honest about
+ * what physics actually allowed.
+ */
+export const getVelocityPerSecond = (body: Matter.Body): { x: number; y: number } => {
+  const v = Matter.Body.getVelocity(body);
+  return {
+    x: v.x * MATTER_BASE_TICKS_PER_SECOND,
+    y: v.y * MATTER_BASE_TICKS_PER_SECOND,
+  };
+};
+
+/**
  * A player/enemy mover: a circle that collides but never spins or bounces.
  * - inertia: Infinity — collisions can't rotate it; facing is gameplay state,
  *   not physics state (see player-movement-and-targeting.md).

@@ -4,10 +4,12 @@ import { Canvas, Circle, Fill, Group, Path, Rect } from "@shopify/react-native-s
 import { useDerivedValue, useSharedValue } from "react-native-reanimated";
 import {
   addBody,
+  approachVelocity,
   createBlockerBody,
   createMoverBody,
   createPhysicsWorld,
   faceMovement,
+  getVelocityPerSecond,
   setVelocityPerSecond,
   STICK_ZERO,
   stepPhysics,
@@ -18,6 +20,8 @@ import {
   ARENA_SIZE,
   ARENA_TILES,
   COLORS,
+  PLAYER_ACCEL,
+  PLAYER_DECEL,
   PLAYER_MAX_SPEED,
   PLAYER_RADIUS,
   TILE_SIZE,
@@ -84,8 +88,18 @@ export const GameScreen = () => {
       s.prevX = s.currX;
       s.prevY = s.currY;
 
+      // The stick sets a *desired* velocity; the actual velocity chases it at
+      // a capped rate, giving a short ramp-up and a small skid on release.
       const speed = PLAYER_MAX_SPEED * stick.magnitude;
-      setVelocityPerSecond(player, stick.dir.x * speed, stick.dir.y * speed);
+      const desired = { x: stick.dir.x * speed, y: stick.dir.y * speed };
+      const vel = approachVelocity(
+        getVelocityPerSecond(player),
+        desired,
+        dt,
+        PLAYER_ACCEL,
+        PLAYER_DECEL,
+      );
+      setVelocityPerSecond(player, vel.x, vel.y);
       stepPhysics(physics, dt);
 
       s.currX = player.position.x;

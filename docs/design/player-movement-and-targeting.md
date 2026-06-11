@@ -15,6 +15,11 @@ for you.
 - A single virtual joystick produces a desired velocity vector.
 - The player is a **circle body** in the Matter.js world. The stick's vector is
   applied to that body (velocity/force); Matter resolves collisions.
+- **Acceleration-limited** (decided 2026-06-11): the actual velocity chases the
+  desired velocity at capped rates rather than snapping to it. Ramp-up is a
+  short wind-up (~0.2s to max); release decelerates much faster but still
+  skids a few px, scaling with how fast you were going — weight, not ice.
+  Stopping must stay near-instant so kiting isn't mushy.
 - **Impassable entities** (walls, etc.) are static/blocking bodies — the player
   physically cannot pass through them; no separate "can I move here" check.
 - The player can **move and attack at the same time** (Brotato / survivor-like,
@@ -92,6 +97,7 @@ zone after you've committed. Resolution depends on weapon type:
 ## Open tunables (numbers to find in playtest)
 
 - engagement radius vs attack range (per weapon)
+- accel/decel rates (first pass: 1600 / 2800 px/s² at 280 px/s max speed)
 - hysteresis margin (default ~15%)
 - melee arc width; facing turn speed (default near-instant snap)
 - **player speed vs enemy speed** — if the player out-runs everything, kiting

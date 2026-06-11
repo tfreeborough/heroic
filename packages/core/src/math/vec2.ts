@@ -21,6 +21,18 @@ export const normalize = (a: Vec2): Vec2 => {
   return len === 0 ? { x: 0, y: 0 } : { x: a.x / len, y: a.y / len };
 };
 
+/**
+ * Step `current` toward `target` by at most `maxDelta`, without overshooting.
+ * The workhorse of acceleration-limited movement: call once per fixed step
+ * with `maxDelta = rate * dt`.
+ */
+export const moveToward = (current: Vec2, target: Vec2, maxDelta: number): Vec2 => {
+  const delta = sub(target, current);
+  const dist = length(delta);
+  if (dist <= maxDelta) return target;
+  return add(current, scale(delta, maxDelta / dist));
+};
+
 /** Linear interpolation; `t` is clamped to [0, 1]. Used for render interpolation. */
 export const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => {
   const k = t < 0 ? 0 : t > 1 ? 1 : t;

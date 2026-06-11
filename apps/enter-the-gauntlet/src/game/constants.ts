@@ -11,6 +11,13 @@ export const WALL_THICKNESS = 48;
 export const PLAYER_RADIUS = 18;
 /** Top speed in px/s when the stick is at full deflection. */
 export const PLAYER_MAX_SPEED = 280;
+/** Ramp-up rate, px/s². 0 → max in ~0.18s — a short, readable wind-up. */
+export const PLAYER_ACCEL = 1600;
+/**
+ * Slow-down rate, px/s². Much higher than accel: releasing at full speed
+ * stops in ~0.1s, skidding ~14px (v²/2a) — a hint of weight, not ice.
+ */
+export const PLAYER_DECEL = 2800;
 
 export const COLORS = {
   void: "#0e1116",

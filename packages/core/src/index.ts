@@ -5,6 +5,7 @@
 
 export * from "./math/vec2";
 export * from "./movement/stick";
+export * from "./movement/locomotion";
 export * from "./pathfinding/grid";
 export * from "./pathfinding/astar";
 export * from "./combat/combat";

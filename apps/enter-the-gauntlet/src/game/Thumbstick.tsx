@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   pad: {
     width: PAD_SIZE,
     height: PAD_SIZE,
-    borderRadius: 28,
+    borderRadius: 999,
     borderWidth: 1.5,
     borderColor: "rgba(255, 255, 255, 0.18)",
     backgroundColor: "rgba(255, 255, 255, 0.04)",
