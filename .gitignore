@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# expo
+.expo/
+dist/
+web-build/
+*.orig.*
+.expo-shared/
+
+# native
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# misc
+.DS_Store
+*.log
+.env*.local
+.idea/
+.vscode/
+
+# bun
+# (bun.lock is committed; lockb binary is also fine to commit)
