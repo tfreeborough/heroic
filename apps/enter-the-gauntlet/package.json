@@ -8,6 +8,7 @@
     "@shopify/react-native-skia": "2.6.2",
     "expo": "~56.0.9",
     "expo-dev-client": "~56.0.20",
+    "expo-haptics": "~56.0.3",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-native": "0.85.3",
@@ -21,8 +22,8 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
+    "android": "APP_VARIANT=development expo run:android",
+    "ios": "APP_VARIANT=development expo run:ios",
     "web": "expo start --web",
     "build:android:dev": "eas build --platform android --profile development",
     "build:android:preview": "eas build --platform android --profile preview",

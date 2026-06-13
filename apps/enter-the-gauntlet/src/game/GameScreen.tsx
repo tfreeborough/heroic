@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
-import { Canvas, Circle, Fill, Group, Path, Picture, Rect } from "@shopify/react-native-skia";
-import { Easing, useDerivedValue, useSharedValue, withTiming } from "react-native-reanimated";
+import { Canvas, Fill, Picture } from "@shopify/react-native-skia";
+import { useSharedValue } from "react-native-reanimated";
 import {
   addBody,
   addVelocityPerSecond,
   angleTo,
   approachVelocity,
   ATTACK_CYCLE_READY,
+  brainTelegraph,
   createBlockerBody,
   createMoverBody,
   createPhysicsWorld,
@@ -19,7 +20,6 @@ import {
   makeCombatant,
   normalize,
   removeBody,
-  resetBody,
   resolveAttack,
   selectTarget,
   setVelocityPerSecond,
@@ -29,8 +29,10 @@ import {
   stepProjectile,
   STICK_ZERO,
   sub,
+  tickBrain,
   useGameLoop,
   type AttackCycleState,
+  type Brain,
   type Combatant,
   type HurtCircle,
   type ProjectileState,
@@ -42,60 +44,61 @@ import {
   ARENA_SIZE,
   ARENA_TILES,
   CAMERA_FIT_MARGIN,
+  CAMERA_FOLLOW_RATE,
+  CAMERA_FRAME_PADDING,
   CAMERA_MIN_RADIUS,
   COLORS,
   CONTROLS_MIN_HEIGHT,
+  CREATURES,
   DAMAGE_NUMBER_LIFE,
   DAMAGE_NUMBER_RISE,
-  DUMMY_DEFENSE,
-  DUMMY_FRICTION_AIR,
-  DUMMY_MAX_HP,
-  DUMMY_RADIUS,
-  DUMMY_RESPAWN,
-  DUMMY_SPAWNS,
+  ENEMY_ACCEL,
+  ENEMY_DECEL,
+  ENEMY_RADIUS,
   ENGAGEMENT_MARGIN,
   HIT_FLASH_DURATION,
   PLAY_HEIGHT_RATIO,
   PLAYER_ACCEL,
   PLAYER_DECEL,
+  PLAYER_IFRAMES,
   PLAYER_MAX_SPEED,
   PLAYER_RADIUS,
-  TILE_SIZE,
-  WALL_THICKNESS,
+  PLAYER_STATS,
+  WALLS,
+  type EnemyTypeId,
 } from "./constants";
 import { WEAPONS, type WeaponDef, type WeaponId } from "./weapons";
+import { playStrikeHaptic } from "./haptics";
 import { Thumbstick } from "./Thumbstick";
 import { WeaponPicker } from "./WeaponPicker";
+import { SpawnPicker } from "./SpawnPicker";
 import { EMPTY_COMBAT_PICTURE, recordCombatScene } from "./renderCombat";
 
-/** Arena boundary walls, centred rects shared by physics bodies and rendering. */
-const WALLS = (() => {
-  const s = ARENA_SIZE;
-  const t = WALL_THICKNESS;
-  return [
-    { x: s / 2, y: -t / 2, w: s + 2 * t, h: t },
-    { x: s / 2, y: s + t / 2, w: s + 2 * t, h: t },
-    { x: -t / 2, y: s / 2, w: t, h: s + 2 * t },
-    { x: s + t / 2, y: s / 2, w: t, h: s + 2 * t },
-  ];
-})();
-
-/** Arrowhead inside the player circle pointing along +x (rotated by facing). */
-const NOTCH_PATH = (() => {
-  const r = PLAYER_RADIUS;
-  return `M ${r * 0.95} 0 L ${r * 0.15} ${-r * 0.5} L ${r * 0.15} ${r * 0.5} Z`;
-})();
-
-/** A training dummy: a stationary hostile that soaks hits and respawns. */
-interface Dummy {
+/** A hostile with a brain: chases/circles/kites per its type, soaks hits. */
+interface Enemy {
   id: number;
+  type: EnemyTypeId;
   body: ReturnType<typeof createMoverBody>;
   combatant: Combatant;
-  spawn: Vec2;
+  brain: Brain;
   /** Seconds of white hit-flash left. */
   flash: number;
-  /** Seconds until respawn; null while alive. */
-  respawnIn: number | null;
+  /** Ranged creatures only (else null): their attack cycle + attacker stats. */
+  cycle: AttackCycleState | null;
+  attackCombatant: Combatant | null;
+  /** Summoners only (else null): their summon cycle + the ids of living minions. */
+  summonCycle: AttackCycleState | null;
+  minionIds: number[];
+  /**
+   * Render interpolation: body position at the previous and current sim step.
+   * The renderer lerps between them by the frame alpha, so enemies move as
+   * smoothly as the (interpolated) camera — without this they snap at the sim
+   * rate and their bars/rings jitter against the scrolling world while you move.
+   */
+  prevX: number;
+  prevY: number;
+  currX: number;
+  currY: number;
 }
 
 /** A projectile in flight plus everything needed to resolve its hits later. */
@@ -111,6 +114,8 @@ interface FlyingNumber {
   y: number;
   text: string;
   crit: boolean;
+  /** True for damage the *player* took (rendered red). */
+  hostile: boolean;
   age: number;
 }
 
@@ -137,7 +142,8 @@ export const GameScreen = () => {
   // radius keeps short-reach melee from zooming in claustrophobically; the
   // 1:1 cap keeps big screens from zooming in past native scale.
   const zoomFor = (weapon: WeaponDef): number => {
-    const framed = Math.max(weapon.config.reach + DUMMY_RADIUS, CAMERA_MIN_RADIUS);
+    const framed =
+      Math.max(weapon.config.reach + ENEMY_RADIUS, CAMERA_MIN_RADIUS) * CAMERA_FRAME_PADDING;
     return Math.min(1, (width / 2 - CAMERA_FIT_MARGIN) / framed);
   };
 
@@ -145,32 +151,11 @@ export const GameScreen = () => {
   // step. A ref (not state) so input never causes a React render.
   const stickRef = useRef<StickSample>(STICK_ZERO);
 
-  const { physics, player, dummies, weaponCombatants, rng } = useMemo(() => {
+  const { physics, player, weaponCombatants, rng } = useMemo(() => {
     const physics = createPhysicsWorld();
     const player = createMoverBody(ARENA_SIZE / 2, ARENA_SIZE / 2, PLAYER_RADIUS);
     addBody(physics, player);
     for (const w of WALLS) addBody(physics, createBlockerBody(w.x, w.y, w.w, w.h));
-
-    const dummies: Dummy[] = DUMMY_SPAWNS.map((spawn, i) => {
-      const body = createMoverBody(spawn.x, spawn.y, DUMMY_RADIUS, {
-        frictionAir: DUMMY_FRICTION_AIR,
-      });
-      addBody(physics, body);
-      return {
-        id: i + 1,
-        body,
-        combatant: makeCombatant({
-          maxHp: DUMMY_MAX_HP,
-          attack: 0,
-          defense: DUMMY_DEFENSE,
-          critChance: 0,
-          critMultiplier: 1,
-        }),
-        spawn,
-        flash: 0,
-        respawnIn: null,
-      };
-    });
 
     // One attacker stat block per weapon, reused across strikes (resolveAttack
     // only reads the attacker's stats — hp is irrelevant on this side).
@@ -178,8 +163,57 @@ export const GameScreen = () => {
       WEAPONS.map((w) => [w.id, makeCombatant(w.stats)]),
     );
 
-    return { physics, player, dummies, weaponCombatants, rng: createRng(0xc0ffee) };
+    return { physics, player, weaponCombatants, rng: createRng(0xc0ffee) };
   }, []);
+
+  // Enemies are spawned on demand from the test HUD (no auto-population, no
+  // respawn): a mutable list the sim reads and mutates each step, plus a
+  // monotonic id source. A ref, not state — the sim owns it; spawning never
+  // needs a React render.
+  const enemiesRef = useRef<Enemy[]>([]);
+  const nextEnemyId = useRef(1);
+
+  /** Build one enemy and add its body to the world (does not enlist it). */
+  const makeEnemy = (type: EnemyTypeId, x: number, y: number): Enemy => {
+    const def = CREATURES[type];
+    // No frictionAir: enemies are velocity-driven each step like the player,
+    // so knockback decays through the locomotion decel, not physics damping.
+    const body = createMoverBody(x, y, ENEMY_RADIUS);
+    addBody(physics, body);
+    const id = nextEnemyId.current++;
+    return {
+      id,
+      type,
+      body,
+      combatant: makeCombatant(def.stats),
+      brain: def.makeBrain(id),
+      flash: 0,
+      cycle: def.attack ? { ...ATTACK_CYCLE_READY } : null,
+      attackCombatant: def.attack ? makeCombatant(def.attack.stats) : null,
+      summonCycle: def.summon ? { ...ATTACK_CYCLE_READY } : null,
+      minionIds: [],
+      prevX: x,
+      prevY: y,
+      currX: x,
+      currY: y,
+    };
+  };
+
+  /** Spawn one of `type` at a random bearing a test-distance from the player. */
+  const spawnEnemy = (type: EnemyTypeId) => {
+    const angle = rng.next() * Math.PI * 2;
+    const dist = 300 + rng.next() * 120;
+    const margin = ENEMY_RADIUS + 8;
+    const clamp = (v: number) => Math.max(margin, Math.min(ARENA_SIZE - margin, v));
+    const x = clamp(player.position.x + Math.cos(angle) * dist);
+    const y = clamp(player.position.y + Math.sin(angle) * dist);
+    enemiesRef.current.push(makeEnemy(type, x, y));
+  };
+
+  const clearEnemies = () => {
+    for (const e of enemiesRef.current) removeBody(physics, e.body);
+    enemiesRef.current = [];
+  };
 
   // Combat state lives in a ref: it's stepped by the game loop, never rendered
   // through React. The weapon picker is the only React-state piece.
@@ -190,8 +224,13 @@ export const GameScreen = () => {
     lockedId: null as number | null,
     lockedFacing: 0,
     projectiles: [] as FlightProjectile[],
+    /** Enemy shots in flight — stepped against the player, not the enemies. */
+    enemyProjectiles: [] as FlightProjectile[],
     numbers: [] as FlyingNumber[],
     arcFlashes: [] as ArcFlash[],
+    playerCombatant: makeCombatant(PLAYER_STATS),
+    /** Post-hit invulnerability time left; any hit is ignored while > 0. */
+    iFrames: 0,
   });
 
   const [weaponId, setWeaponId] = useState<WeaponId>(combat.current.weapon.id);
@@ -212,23 +251,26 @@ export const GameScreen = () => {
     currX: ARENA_SIZE / 2,
     currY: ARENA_SIZE / 2,
     facing: -Math.PI / 2, // face "up" until the first input
+    // The camera is its own simulated object that chases the player rather
+    // than pinning to them — moving lets the player drift off-centre and the
+    // camera catch up, like a human operator (see CAMERA_FOLLOW_RATE).
+    camPrevX: ARENA_SIZE / 2,
+    camPrevY: ARENA_SIZE / 2,
+    camCurrX: ARENA_SIZE / 2,
+    camCurrY: ARENA_SIZE / 2,
   });
 
-  // What the renderer sees. Written from the game loop, read by Skia via
-  // Reanimated — no React re-renders during gameplay.
-  const playerX = useSharedValue(ARENA_SIZE / 2);
-  const playerY = useSharedValue(ARENA_SIZE / 2);
-  const facing = useSharedValue(sim.current.facing);
+  // The only thing the Skia tree reads: one picture holding the whole world,
+  // re-recorded each frame from the game loop. No React re-renders in play.
   const combatPicture = useSharedValue(EMPTY_COMBAT_PICTURE);
 
-  // Eased so a swap reads as a deliberate reframe, not a snap cut.
-  const zoom = useSharedValue(zoomFor(combat.current.weapon));
+  // Zoom is a plain number eased in JS (the picture recorder needs it per
+  // frame); a swap sets the target and onRender glides toward it.
+  const zoomTarget = useRef(zoomFor(combat.current.weapon));
+  const zoomCurrent = useRef(zoomTarget.current);
   useEffect(() => {
     const weapon = WEAPONS.find((w) => w.id === weaponId) as WeaponDef;
-    zoom.value = withTiming(zoomFor(weapon), {
-      duration: 280,
-      easing: Easing.out(Easing.cubic),
-    });
+    zoomTarget.current = zoomFor(weapon);
   }, [weaponId, width]);
 
   useGameLoop({
@@ -236,8 +278,15 @@ export const GameScreen = () => {
       const s = sim.current;
       const c = combat.current;
       const stick = stickRef.current;
+      const enemies = enemiesRef.current;
       s.prevX = s.currX;
       s.prevY = s.currY;
+      // Mirror the player's prev/curr snapshot for every enemy, so the renderer
+      // can interpolate their positions too (see Enemy.prevX).
+      for (const e of enemies) {
+        e.prevX = e.currX;
+        e.prevY = e.currY;
+      }
 
       // --- Movement: the stick sets a *desired* velocity; the actual velocity
       // chases it at a capped rate (short ramp-up, small skid on release).
@@ -251,66 +300,141 @@ export const GameScreen = () => {
         PLAYER_DECEL,
       );
       setVelocityPerSecond(player, vel.x, vel.y);
+
+      // --- Enemy AI: each brain reads perception and yields a desired
+      // velocity, shaped through the same acceleration-limited locomotion as
+      // the player — so enemies inherit the weight/skid feel, and knockback
+      // impulses decay through decel instead of physics damping. Positions
+      // and facing are last step's resolved values; one step of lag is
+      // imperceptible and keeps the order simple.
+      const living = enemies;
+      for (const e of living) {
+        const desired = tickBrain(
+          e.brain,
+          {
+            selfPos: e.body.position,
+            playerPos: player.position,
+            playerFacing: s.facing,
+            neighbors: living.filter((o) => o !== e).map((o) => o.body.position),
+          },
+          dt,
+        );
+        const eVel = approachVelocity(
+          getVelocityPerSecond(e.body),
+          desired,
+          dt,
+          ENEMY_ACCEL,
+          ENEMY_DECEL,
+        );
+        setVelocityPerSecond(e.body, eVel.x, eVel.y);
+      }
+
       stepPhysics(physics, dt);
 
       s.currX = player.position.x;
       s.currY = player.position.y;
       const playerPos = { x: s.currX, y: s.currY };
-
-      // --- Dummy upkeep: flash decay and respawns.
-      for (const d of dummies) {
-        d.flash = Math.max(0, d.flash - dt);
-        if (d.respawnIn !== null) {
-          d.respawnIn -= dt;
-          if (d.respawnIn <= 0) {
-            d.respawnIn = null;
-            d.combatant.hp = d.combatant.stats.maxHp;
-            resetBody(d.body, d.spawn.x, d.spawn.y);
-            addBody(physics, d.body);
-          }
-        }
+      for (const e of enemies) {
+        e.currX = e.body.position.x;
+        e.currY = e.body.position.y;
       }
-      const aliveDummies = () => dummies.filter((d) => d.respawnIn === null);
-      const hurtCircles = (): HurtCircle[] =>
-        aliveDummies().map((d) => ({ id: d.id, pos: d.body.position, radius: DUMMY_RADIUS }));
 
-      const applyHit = (d: Dummy, dir: Vec2, knockback: number, attacker: Combatant): void => {
+      // --- Camera: exponentially close the gap to the player. Stepped at the
+      // fixed sim rate, so the feel is identical whatever the render fps.
+      s.camPrevX = s.camCurrX;
+      s.camPrevY = s.camCurrY;
+      const catchUp = 1 - Math.exp(-CAMERA_FOLLOW_RATE * dt);
+      s.camCurrX += (s.currX - s.camCurrX) * catchUp;
+      s.camCurrY += (s.currY - s.camCurrY) * catchUp;
+
+      // --- Enemy upkeep: just flash decay now (no respawn — the test HUD owns
+      // population; the dead are removed outright).
+      for (const d of enemies) d.flash = Math.max(0, d.flash - dt);
+      const hurtCircles = (): HurtCircle[] =>
+        enemies.map((d) => ({ id: d.id, pos: d.body.position, radius: ENEMY_RADIUS }));
+
+      /** Drop a slain enemy from the world + the list, releasing any lock on it. */
+      const removeEnemy = (d: Enemy) => {
+        const idx = enemies.indexOf(d);
+        if (idx !== -1) enemies.splice(idx, 1);
+        removeBody(physics, d.body);
+        if (c.lockedId === d.id) c.lockedId = null;
+        if (c.targetId === d.id) c.targetId = null;
+      };
+
+      /** Returns whether the hit crit, so callers can voice it haptically. */
+      const applyHit = (d: Enemy, dir: Vec2, knockback: number, attacker: Combatant): boolean => {
+        if (d.combatant.hp <= 0) return false; // already slain this step
         const result = resolveAttack(attacker, d.combatant, rng);
         d.flash = HIT_FLASH_DURATION;
         if (knockback > 0) addVelocityPerSecond(d.body, dir.x * knockback, dir.y * knockback);
         c.numbers.push({
           x: d.body.position.x,
-          y: d.body.position.y - DUMMY_RADIUS - 16,
+          y: d.body.position.y - ENEMY_RADIUS - 16,
           text: String(result.damage),
           crit: result.crit,
+          hostile: false,
           age: 0,
         });
-        if (result.lethal) {
-          d.respawnIn = DUMMY_RESPAWN;
-          removeBody(physics, d.body);
-          if (c.lockedId === d.id) c.lockedId = null;
-        }
+        if (result.lethal) removeEnemy(d);
+        return result.crit;
       };
+
+      /**
+       * Apply one incoming hit to the player (contact bite or enemy projectile).
+       * Gated by i-frames so overlap/volleys can't drain HP per-step — one hit
+       * per window, first to land wins. No death in the tech demo: an emptied
+       * bar refills. Returns whether the hit landed.
+       */
+      const damagePlayer = (attacker: Combatant, fromX: number, fromY: number, knockback: number): boolean => {
+        if (c.iFrames > 0) return false;
+        const result = resolveAttack(attacker, c.playerCombatant, rng);
+        c.iFrames = PLAYER_IFRAMES;
+        const away = normalize(sub(playerPos, { x: fromX, y: fromY }));
+        if (knockback > 0) addVelocityPerSecond(player, away.x * knockback, away.y * knockback);
+        c.numbers.push({
+          x: playerPos.x,
+          y: playerPos.y - PLAYER_RADIUS - 16,
+          text: String(result.damage),
+          crit: false,
+          hostile: true,
+          age: 0,
+        });
+        // The heavy pulse is reserved for exactly this (see haptics.ts).
+        playStrikeHaptic("heavy");
+        if (result.lethal) c.playerCombatant.hp = c.playerCombatant.stats.maxHp;
+        return true;
+      };
+
+      c.iFrames = Math.max(0, c.iFrames - dt);
+
+      // --- Contact damage: a touching enemy bites (self-gated by i-frames).
+      for (const e of enemies) {
+        if (distance(playerPos, e.body.position) > PLAYER_RADIUS + ENEMY_RADIUS + 1) continue;
+        if (damagePlayer(e.combatant, e.body.position.x, e.body.position.y, CREATURES[e.type].contactKnockback)) {
+          break; // one bite per window; the rest no-op anyway
+        }
+      }
 
       // --- Targeting: nearest hostile with hysteresis, inside the engagement
       // radius (which sits a margin beyond the weapon's attack range).
       const cfg = c.weapon.config;
       const engagement = cfg.reach + ENGAGEMENT_MARGIN;
       c.targetId = selectTarget(
-        aliveDummies().map((d) => ({ id: d.id, pos: d.body.position })),
+        enemies.map((d) => ({ id: d.id, pos: d.body.position })),
         playerPos,
         engagement,
         c.targetId,
       );
-      const target = aliveDummies().find((d) => d.id === c.targetId) ?? null;
+      const target = enemies.find((d) => d.id === c.targetId) ?? null;
 
       // --- Attack cycle. Range gates on the target's edge; the windup lock
       // breaks if the locked target dies or leaves engagement.
-      const locked = aliveDummies().find((d) => d.id === c.lockedId) ?? null;
+      const locked = enemies.find((d) => d.id === c.lockedId) ?? null;
       const step = stepAttackCycle(c.cycle, cfg, dt, {
         targetInRange:
           target !== null &&
-          distance(playerPos, target.body.position) - DUMMY_RADIUS <= cfg.reach,
+          distance(playerPos, target.body.position) - ENEMY_RADIUS <= cfg.reach,
         lockValid: locked !== null && distance(playerPos, locked.body.position) <= engagement,
       });
       c.cycle = step.state;
@@ -324,11 +448,18 @@ export const GameScreen = () => {
         if (cfg.shape === "arc") {
           // Melee is facing-authoritative: cleave whatever is in the cone now,
           // locked target or not (see whiff rules in the movement doc).
+          let landed = false;
+          let crit = false;
           for (const id of hitsInArc(playerPos, c.lockedFacing, cfg.reach, cfg.arcWidth!, hurtCircles())) {
-            const d = dummies.find((dd) => dd.id === id)!;
+            const d = enemies.find((dd) => dd.id === id);
+            if (!d) continue;
             const dir = normalize(sub(d.body.position, playerPos));
-            applyHit(d, dir, cfg.knockback ?? 0, weaponCombatants.get(c.weapon.id)!);
+            crit = applyHit(d, dir, cfg.knockback ?? 0, weaponCombatants.get(c.weapon.id)!) || crit;
+            landed = true;
           }
+          // One pulse per swing however many it cleaves — haptics count
+          // events, not victims. Whiffs are silent: the haptic *is* contact.
+          if (landed) playStrikeHaptic(c.weapon.haptic, crit);
           c.arcFlashes.push({ x: s.currX, y: s.currY, facing: c.lockedFacing, age: 0 });
         } else if (locked) {
           // Ranged auto-aims at the target's position at the moment of Strike.
@@ -352,25 +483,117 @@ export const GameScreen = () => {
               attacker: weaponCombatants.get(c.weapon.id)!,
             });
           }
+          // Ranged haptics are the *recoil*: one pulse per volley at release,
+          // whatever the projectile count. Impacts happen far away and out of
+          // hand, so they stay silent (crits excepted, below).
+          playStrikeHaptic(c.weapon.haptic);
         }
         c.lockedId = null;
       }
 
       // --- Projectiles: move, resolve hits, expire on range/pierce/walls.
+      let projectileCrit = false;
       for (let i = c.projectiles.length - 1; i >= 0; i--) {
         const p = c.projectiles[i]!;
         const result = stepProjectile(p, dt, hurtCircles());
         for (const id of result.hits) {
-          applyHit(dummies.find((dd) => dd.id === id)!, p.dir, p.knockback, p.attacker);
+          const d = enemies.find((dd) => dd.id === id);
+          if (d && applyHit(d, p.dir, p.knockback, p.attacker)) projectileCrit = true;
         }
         const hitWall =
           p.pos.x < 0 || p.pos.x > ARENA_SIZE || p.pos.y < 0 || p.pos.y > ARENA_SIZE;
         if (result.expired || hitWall) c.projectiles.splice(i, 1);
       }
+      // The lone exception to silent remote impacts: a crit anywhere this
+      // step gets the sharp pulse (once, even if several shots crit at once).
+      if (projectileCrit) playStrikeHaptic(null, true);
+
+      // --- Enemy ranged attacks: each ranged creature runs the *same* attack
+      // cycle the player does (combat.md — one shared attack library), aimed at
+      // the player. The windup is the telegraph; the lock breaks if the player
+      // dodges out of range mid-windup. On Strike it looses a volley.
+      for (const e of enemies) {
+        const def = CREATURES[e.type];
+        if (!def.attack || !e.cycle || !e.attackCombatant) continue;
+        const acfg = def.attack.config;
+        const inRange = distance(playerPos, e.body.position) - PLAYER_RADIUS <= acfg.reach;
+        const eStep = stepAttackCycle(e.cycle, acfg, dt, {
+          targetInRange: inRange,
+          lockValid: inRange,
+        });
+        e.cycle = eStep.state;
+        if (eStep.struck) {
+          for (const p of spawnVolley(e.body.position, playerPos, {
+            speed: acfg.projectileSpeed!,
+            radius: def.attack.projectileRadius,
+            maxRange: acfg.reach + 120,
+            pierce: acfg.pierce,
+            count: acfg.projectileCount,
+            flight: acfg.flight,
+            curveAngle: acfg.curveAngle,
+          })) {
+            c.enemyProjectiles.push({
+              ...p,
+              color: def.attack.projectileColor,
+              knockback: acfg.knockback ?? 0,
+              attacker: e.attackCombatant,
+            });
+          }
+        }
+      }
+
+      // --- Enemy projectiles: move, resolve against the player, expire on
+      // range/walls. The player is the lone hurt circle here.
+      const playerCircle: HurtCircle = { id: 0, pos: playerPos, radius: PLAYER_RADIUS };
+      for (let i = c.enemyProjectiles.length - 1; i >= 0; i--) {
+        const p = c.enemyProjectiles[i]!;
+        const result = stepProjectile(p, dt, [playerCircle]);
+        if (result.hits.length > 0) damagePlayer(p.attacker, p.pos.x, p.pos.y, p.knockback);
+        const hitWall =
+          p.pos.x < 0 || p.pos.x > ARENA_SIZE || p.pos.y < 0 || p.pos.y > ARENA_SIZE;
+        if (result.expired || hitWall) c.enemyProjectiles.splice(i, 1);
+      }
+
+      // --- Summoners: each runs a summon cycle (the attack cycle reused) and,
+      // on strike, spawns `count` × its `minionType` near itself — capped per
+      // summoner so it can't flood. `minionType` is data, so a wizard summons
+      // whatever its creature names. Snapshot first: spawning pushes into
+      // `enemies`, and we don't want to iterate into the fresh minions.
+      const summoners = enemies.filter((e) => e.summonCycle !== null);
+      for (const e of summoners) {
+        const summon = CREATURES[e.type].summon!;
+        // Forget minions that have since died.
+        if (e.minionIds.length > 0) {
+          e.minionIds = e.minionIds.filter((id) => enemies.some((o) => o.id === id));
+        }
+        const canSummon =
+          distance(playerPos, e.body.position) <= summon.engageRange &&
+          e.minionIds.length < summon.maxAlive;
+        const step = stepAttackCycle(e.summonCycle!, summon, dt, {
+          targetInRange: canSummon,
+          lockValid: canSummon,
+        });
+        e.summonCycle = step.state;
+        if (step.struck) {
+          const margin = ENEMY_RADIUS + 8;
+          const clamp = (v: number) => Math.max(margin, Math.min(ARENA_SIZE - margin, v));
+          for (let k = 0; k < summon.count; k++) {
+            const ang = rng.next() * Math.PI * 2;
+            const r = rng.next() * summon.spawnRadius;
+            const minion = makeEnemy(
+              summon.minionType,
+              clamp(e.body.position.x + Math.cos(ang) * r),
+              clamp(e.body.position.y + Math.sin(ang) * r),
+            );
+            enemies.push(minion);
+            e.minionIds.push(minion.id);
+          }
+        }
+      }
 
       // --- Facing: locked during windup; re-tracks the target otherwise;
       // falls back to movement direction when nothing is engaged.
-      const faceTarget = aliveDummies().find((d) => d.id === c.targetId);
+      const faceTarget = enemies.find((d) => d.id === c.targetId);
       if (c.cycle.phase === "windup") {
         s.facing = c.lockedFacing;
       } else if (faceTarget) {
@@ -395,37 +618,98 @@ export const GameScreen = () => {
     onRender: (alpha) => {
       const s = sim.current;
       const c = combat.current;
-      playerX.value = s.prevX + (s.currX - s.prevX) * alpha;
-      playerY.value = s.prevY + (s.currY - s.prevY) * alpha;
-      facing.value = s.facing;
+      const enemies = enemiesRef.current;
 
-      const lockedDummy =
-        c.cycle.phase === "windup"
-          ? dummies.find((d) => d.id === c.lockedId && d.respawnIn === null)
-          : undefined;
+      // Interpolate between the last two sim states (player, camera, every
+      // enemy) by the frame alpha. Everything the renderer sees flows through
+      // this one path into the single picture, so nothing can drift apart.
+      const px = s.prevX + (s.currX - s.prevX) * alpha;
+      const py = s.prevY + (s.currY - s.prevY) * alpha;
+      const camX = s.camPrevX + (s.camCurrX - s.camPrevX) * alpha;
+      const camY = s.camPrevY + (s.camCurrY - s.camPrevY) * alpha;
+      const enemyX = (d: Enemy) => d.prevX + (d.currX - d.prevX) * alpha;
+      const enemyY = (d: Enemy) => d.prevY + (d.currY - d.prevY) * alpha;
+      // Ease the zoom toward its target in JS (cosmetic, on weapon swap).
+      zoomCurrent.current += (zoomTarget.current - zoomCurrent.current) * 0.2;
+
+      const lockedEnemy =
+        c.cycle.phase === "windup" ? enemies.find((d) => d.id === c.lockedId) : undefined;
       combatPicture.value = recordCombatScene({
-        player: { x: playerX.value, y: playerY.value },
+        camera: { x: camX, y: camY, zoom: zoomCurrent.current },
+        anchor: { x: anchorX, y: anchorY },
+        player: {
+          x: px,
+          y: py,
+          facing: s.facing,
+          hpFrac: c.playerCombatant.hp / c.playerCombatant.stats.maxHp,
+          hurt: c.iFrames / PLAYER_IFRAMES,
+        },
         weapon: c.weapon,
         windup:
           c.cycle.phase === "windup"
             ? {
                 progress: 1 - c.cycle.remaining / c.weapon.config.windup,
                 facing: c.lockedFacing,
-                targetX: lockedDummy?.body.position.x ?? playerX.value,
-                targetY: lockedDummy?.body.position.y ?? playerY.value,
+                targetX: lockedEnemy ? enemyX(lockedEnemy) : px,
+                targetY: lockedEnemy ? enemyY(lockedEnemy) : py,
               }
             : null,
         targetId: c.targetId,
-        dummies: dummies
-          .filter((d) => d.respawnIn === null)
-          .map((d) => ({
-            id: d.id,
-            x: d.body.position.x,
-            y: d.body.position.y,
-            hpFrac: d.combatant.hp / d.combatant.stats.maxHp,
-            flash: d.flash / HIT_FLASH_DURATION,
-          })),
-        projectiles: c.projectiles.map((p) => ({
+        enemies: enemies.map((d) => ({
+          id: d.id,
+          x: enemyX(d),
+          y: enemyY(d),
+          hpFrac: d.combatant.hp / d.combatant.stats.maxHp,
+          flash: d.flash / HIT_FLASH_DURATION,
+          color: CREATURES[d.type].color,
+        })),
+        enemyCasts: enemies.flatMap((d) => {
+          const def = CREATURES[d.type];
+          const ex = enemyX(d);
+          const ey = enemyY(d);
+          // Ranged wind-up: a line to the player.
+          if (def.attack && d.cycle && d.cycle.phase === "windup") {
+            return [
+              {
+                x: ex,
+                y: ey,
+                targetX: px,
+                targetY: py,
+                progress: 1 - d.cycle.remaining / def.attack.config.windup,
+                color: def.attack.projectileColor,
+              },
+            ];
+          }
+          // Charge wind-up: the committed dash line (from the brain's telegraph).
+          const tele = brainTelegraph(d.brain);
+          if (tele && tele.kind === "charge" && tele.dir !== undefined) {
+            const len = tele.length ?? 360;
+            return [
+              {
+                x: ex,
+                y: ey,
+                targetX: ex + Math.cos(tele.dir) * len,
+                targetY: ey + Math.sin(tele.dir) * len,
+                progress: tele.progress,
+                color: COLORS.chargeTell,
+              },
+            ];
+          }
+          return [];
+        }),
+        summonTelegraphs: enemies.flatMap((d) => {
+          const summon = CREATURES[d.type].summon;
+          if (!summon || !d.summonCycle || d.summonCycle.phase !== "windup") return [];
+          return [
+            {
+              x: enemyX(d),
+              y: enemyY(d),
+              progress: 1 - d.summonCycle.remaining / summon.windup,
+              color: summon.telegraphColor,
+            },
+          ];
+        }),
+        projectiles: [...c.projectiles, ...c.enemyProjectiles].map((p) => ({
           x: p.pos.x,
           y: p.pos.y,
           dirX: p.dir.x,
@@ -438,6 +722,7 @@ export const GameScreen = () => {
           y: n.y,
           text: n.text,
           crit: n.crit,
+          hostile: n.hostile,
           fade: 1 - n.age / DAMAGE_NUMBER_LIFE,
         })),
         arcFlashes: c.arcFlashes.map((f) => ({
@@ -450,68 +735,16 @@ export const GameScreen = () => {
     },
   });
 
-  // World → screen: scale around the anchor (where the player sits), i.e.
-  // translate(anchor) ∘ scale(zoom) ∘ translate(-player).
-  const cameraTransform = useDerivedValue(() => [
-    { translateX: anchorX },
-    { translateY: anchorY },
-    { scale: zoom.value },
-    { translateX: -playerX.value },
-    { translateY: -playerY.value },
-  ]);
-
-  const playerTransform = useDerivedValue(() => [
-    { translateX: playerX.value },
-    { translateY: playerY.value },
-    { rotate: facing.value },
-  ]);
-
-  // The checkerboard: a light base rect plus the dark squares on top. Static
-  // elements — only the camera transform changes per frame.
-  const darkTiles = useMemo(() => {
-    const tiles: { x: number; y: number }[] = [];
-    for (let row = 0; row < ARENA_TILES; row++) {
-      for (let col = 0; col < ARENA_TILES; col++) {
-        if ((row + col) % 2 === 1) tiles.push({ x: col * TILE_SIZE, y: row * TILE_SIZE });
-      }
-    }
-    return tiles;
-  }, []);
-
+  // The whole world is drawn into `combatPicture` each frame (camera baked in),
+  // so the Canvas just blits the void backdrop and that one picture.
   return (
     <View style={styles.container}>
       <View style={[styles.playArea, { height: playHeight }]}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Fill color={COLORS.void} />
-          <Group transform={cameraTransform}>
-            <Rect x={0} y={0} width={ARENA_SIZE} height={ARENA_SIZE} color={COLORS.tileLight} />
-            {darkTiles.map((t) => (
-              <Rect
-                key={`${t.x}:${t.y}`}
-                x={t.x}
-                y={t.y}
-                width={TILE_SIZE}
-                height={TILE_SIZE}
-                color={COLORS.tileDark}
-              />
-            ))}
-            {WALLS.map((w) => (
-              <Rect
-                key={`${w.x}:${w.y}`}
-                x={w.x - w.w / 2}
-                y={w.y - w.h / 2}
-                width={w.w}
-                height={w.h}
-                color={COLORS.wall}
-              />
-            ))}
-            <Picture picture={combatPicture} />
-            <Group transform={playerTransform}>
-              <Circle cx={0} cy={0} r={PLAYER_RADIUS} color={COLORS.player} />
-              <Path path={NOTCH_PATH} color={COLORS.playerNotch} />
-            </Group>
-          </Group>
+          <Picture picture={combatPicture} />
         </Canvas>
+        <SpawnPicker onSpawn={spawnEnemy} onClear={clearEnemies} />
       </View>
 
       <View style={styles.controls}>

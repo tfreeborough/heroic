@@ -1,4 +1,5 @@
 import type { AttackConfig, CombatStats } from "@heroic/core";
+import type { HapticWeight } from "./haptics";
 
 /**
  * Test weapons, one per attack feel: melee cleave, fast physical projectile,
@@ -19,6 +20,13 @@ export interface WeaponDef {
   /** Projectile visual size; arcs ignore it. */
   projectileRadius: number;
   color: string;
+  /**
+   * Tactile weight of the basic attack — melee feels it on connect, ranged
+   * on release (recoil). null = silent: fast light weapons say nothing on a
+   * normal hit so their crit pulse has contrast (and so frequent attackers
+   * never turn the phone into a rumble box).
+   */
+  haptic: HapticWeight | null;
 }
 
 export const WEAPONS: readonly WeaponDef[] = [
@@ -38,6 +46,7 @@ export const WEAPONS: readonly WeaponDef[] = [
     stats: { maxHp: 1, attack: 13, defense: 0, critChance: 0.15, critMultiplier: 2 },
     projectileRadius: 0,
     color: "#e8e3d4",
+    haptic: "light", // mid-weight blade; "heavy" is saved for warhammer-class
   },
   {
     id: "bow",
@@ -58,6 +67,7 @@ export const WEAPONS: readonly WeaponDef[] = [
     stats: { maxHp: 1, attack: 10, defense: 0, critChance: 0.25, critMultiplier: 2.2 },
     projectileRadius: 4,
     color: "#d8e6f2",
+    haptic: null, // light fast shooter: crit-only, the "dagger" pattern
   },
   {
     id: "staff",
@@ -77,6 +87,7 @@ export const WEAPONS: readonly WeaponDef[] = [
     stats: { maxHp: 1, attack: 17, defense: 0, critChance: 0.1, critMultiplier: 2 },
     projectileRadius: 7,
     color: "#7fb7ff",
+    haptic: "medium", // slowest cycle, heaviest hit — the cast should thump
   },
   {
     id: "talons",
@@ -100,6 +111,7 @@ export const WEAPONS: readonly WeaponDef[] = [
     stats: { maxHp: 1, attack: 7, defense: 0, critChance: 0.15, critMultiplier: 2 },
     projectileRadius: 5,
     color: "#ff9d6f",
+    haptic: "soft", // two light arms loosed at once: a gentle flick
   },
 ];
 

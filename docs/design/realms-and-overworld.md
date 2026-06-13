@@ -11,11 +11,12 @@ A **realm** is the spatial unit both games use — Arena is simply a single one.
 
 - **Level-banded** — sits in a level range; the [progression](./progression.md) level-gap is what makes
   fighting above your band deadly.
-- Populated by **enemy archetypes** scaled to its band ([enemy-behaviour](./enemy-behaviour.md); the
-  roster & spawning is its own future doc).
+- Populated by **enemy archetypes** scaled to its band ([enemy-behaviour](./enemy-behaviour.md);
+  population & spawning = [spawners](./spawners.md); the roster is its own future doc).
 - A **loot pool** = the item level-bands that overlap the realm's band ([equipment](./equipment.md)).
 - **Handcrafted geography** (fixed, authored — *not* procedural), with **dynamically repopulating
-  enemies** so the world stays alive across runs.
+  enemies** so the world stays alive across runs — via destructible **spawners** that regrow
+  between visits ([spawners](./spawners.md)).
 
 ## The overworld (Journey to Greatness)
 
@@ -80,7 +81,8 @@ static; enemy population is dynamic.
 ## Open / deferred (own docs or tuning)
 
 - Dungeons / bosses / points-of-interest within realms; exact realm count & the world map.
-- **Quest system**; **enemy roster & spawning**; **mounts** (field traversal speed) — each its own doc.
+- **Quest system**; **enemy roster** (spawning is now [spawners](./spawners.md)); **mounts**
+  (field traversal speed) — each its own doc.
 - Whether fast-travel has any constraint (e.g. in-combat lockout).
 - **Enter the Gauntlet's structure** (linear realm sequence) — see [enter-the-gauntlet](./enter-the-gauntlet.md).
 
