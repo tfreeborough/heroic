@@ -9,6 +9,7 @@ import {
   approachVelocity,
   ATTACK_CYCLE_READY,
   brainTelegraph,
+  buildNavGrid,
   createBlockerBody,
   createFogGrid,
   createMoverBody,
@@ -60,6 +61,7 @@ import {
   ENGAGEMENT_MARGIN,
   FOG_CELL,
   HIT_FLASH_DURATION,
+  NAV_CELL,
   OCCLUDERS,
   PLAY_HEIGHT_RATIO,
   PLAYER_ACCEL,
@@ -273,6 +275,11 @@ export const GameScreen = () => {
   // demo); a new realm would call resetFog.
   const fog = useMemo(() => createFogGrid(ARENA_SIZE, FOG_CELL), []);
 
+  // Enemy navigation grid: built once from the interior pillars (inflated by the
+  // enemy radius). The AI runtime routes brains around walls on this when their
+  // sightline to the player is blocked.
+  const navGrid = useMemo(() => buildNavGrid(ARENA_SIZE, NAV_CELL, PILLARS, ENEMY_RADIUS), []);
+
   // The only thing the Skia tree reads: one picture holding the whole world,
   // re-recorded each frame from the game loop. No React re-renders in play.
   const combatPicture = useSharedValue(EMPTY_COMBAT_PICTURE);
@@ -330,6 +337,10 @@ export const GameScreen = () => {
             playerPos: player.position,
             playerFacing: s.facing,
             neighbors: living.filter((o) => o !== e).map((o) => o.body.position),
+            // When a wall blocks the sightline, the runtime routes around it via
+            // A* on navGrid instead of steering straight into it.
+            hasLineOfSight: segmentClear(e.body.position, player.position, OCCLUDERS),
+            navGrid,
           },
           dt,
         );
@@ -431,11 +442,16 @@ export const GameScreen = () => {
       }
 
       // --- Targeting: nearest hostile with hysteresis, inside the engagement
-      // radius (which sits a margin beyond the weapon's attack range).
+      // radius (which sits a margin beyond the weapon's attack range). Only
+      // hostiles in line of sight are candidates — the player never locks onto,
+      // faces, or auto-fires at something behind a wall (and a target that ducks
+      // behind cover is dropped, mirroring how enemies lose their shot on you).
       const cfg = c.weapon.config;
       const engagement = cfg.reach + ENGAGEMENT_MARGIN;
       c.targetId = selectTarget(
-        enemies.map((d) => ({ id: d.id, pos: d.body.position })),
+        enemies
+          .filter((d) => segmentClear(playerPos, d.body.position, OCCLUDERS))
+          .map((d) => ({ id: d.id, pos: d.body.position })),
         playerPos,
         engagement,
         c.targetId,

@@ -1,4 +1,5 @@
 import { angleDiff, angleTo, distance, type Vec2 } from "../math/vec2";
+import type { NavGrid } from "../pathfinding/navgrid";
 
 /**
  * Perception + the config every archetype shares (see
@@ -14,6 +15,15 @@ export interface EnemyPerception {
   playerFacing: number;
   /** Positions of nearby living allies, for separation. */
   neighbors: readonly Vec2[];
+  /**
+   * Clear straight line to the player? When false (a wall is between), the
+   * runtime routes engaging movers around it via A* instead of steering into
+   * the wall. Optional: omitted ⇒ treated as visible (no pathfinding) — keeps
+   * archetypes and their tests oblivious to navigation.
+   */
+  hasLineOfSight?: boolean;
+  /** The level's navigation grid, for routing when `hasLineOfSight` is false. */
+  navGrid?: NavGrid | null;
 }
 
 /**

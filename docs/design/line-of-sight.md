@@ -106,11 +106,15 @@ These are the forks worth deciding deliberately rather than by default:
    they won't start (or hold) a windup through a wall, so ducking behind a pillar mid-cast
    cancels the shot. `OCCLUDERS` (arena box + pillar edges) now lives in `constants.ts`, shared
    by the renderer and the sim.
-   *Still open:* the **movement** AI is sight-blind — chasers/ambushers still home on the player
-   through walls (an ambusher doesn't yet wait for line of sight). And the **player** side is
-   ungated: auto-targeting/auto-fire still locks enemies behind pillars (the shot just dies on
-   the wall now), and melee arcs aren't wall-checked. Those are the remaining `segmentClear`
-   integrations.
+   The **movement** AI now routes too: when an engaging enemy loses line of sight it follows an
+   A* path around the wall to the player's live position instead of sliding against it (see
+   [enemy-behaviour](./enemy-behaviour.md) → Pathing). The **player** is gated symmetrically:
+   auto-targeting only considers hostiles in line of sight, so you never lock onto, face, or
+   auto-fire at something behind a wall, and a target that ducks behind cover is dropped. The
+   **ambusher** now springs only when a clear line opens within its trigger radius (you walk into
+   its eyeline), then commits and pursues — giving up only on distance.
+   *Still open (minor):* a melee *cleave* arc isn't wall-checked, so a swing at a visible target
+   could in theory clip an unseen enemy sharing the cone through a thin corner.
 2. **Fog look & feel — now tunable.** Fog of war is built (flat dark layers + soft edges). Open
    polish: a gradient/vignette vision falloff instead of a hard polygon edge; a colour shift for
    explored vs. unseen so "remembered" reads differently from "unknown"; and whether explored

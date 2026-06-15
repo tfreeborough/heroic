@@ -48,4 +48,26 @@ describe("ambusher archetype", () => {
     expect(state.mode).toBe("dormant");
     expect(v).toEqual(vec2(0, 0));
   });
+
+  test("stays dormant when in trigger range but sight is blocked", () => {
+    const state = ambusher.initState(CFG, 0);
+    const v = ambusher.tick(state, CFG, { ...perceive(vec2(120, 0)), hasLineOfSight: false }, DT);
+    expect(state.mode).toBe("dormant"); // hasn't seen you yet
+    expect(v).toEqual(vec2(0, 0));
+  });
+
+  test("springs the instant a clear line opens within range", () => {
+    const state = ambusher.initState(CFG, 0);
+    const v = ambusher.tick(state, CFG, { ...perceive(vec2(120, 0)), hasLineOfSight: true }, DT);
+    expect(state.mode).toBe("lunging");
+    expect(length(v)).toBeCloseTo(CFG.speed);
+  });
+
+  test("once sprung it commits — losing sight doesn't re-hide it (gives up only on distance)", () => {
+    const state = ambusher.initState(CFG, 0);
+    ambusher.tick(state, CFG, { ...perceive(vec2(120, 0)), hasLineOfSight: true }, DT); // spring
+    const v = ambusher.tick(state, CFG, { ...perceive(vec2(200, 0)), hasLineOfSight: false }, DT);
+    expect(state.mode).toBe("lunging"); // still committed, within release
+    expect(length(v)).toBeCloseTo(CFG.speed);
+  });
 });

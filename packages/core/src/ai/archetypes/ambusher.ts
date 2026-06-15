@@ -30,7 +30,11 @@ export const ambusher: Archetype<AmbusherConfig, AmbusherState> = {
   tick: (state, config, p): Vec2 => {
     const d = distance(p.selfPos, p.playerPos);
     if (state.mode === "dormant") {
-      if (d > config.triggerRadius) return ZERO_VELOCITY;
+      // Spring only when the player is close AND in a clear line — they walked
+      // into its eyeline. Once lunging it commits and pursues (the runtime routes
+      // it around walls), giving up only on distance. No sight info ⇒ fall back
+      // to a pure distance trigger (keeps the archetype testable in isolation).
+      if (d > config.triggerRadius || p.hasLineOfSight === false) return ZERO_VELOCITY;
       state.mode = "lunging";
     } else if (d > config.releaseRadius) {
       state.mode = "dormant";

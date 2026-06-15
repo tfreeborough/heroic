@@ -36,6 +36,19 @@ describe("kiter archetype", () => {
     expect(v).toEqual(vec2(0, 0));
   });
 
+  test("closes in to find a clear line when sight is blocked, even in-band", () => {
+    // At its preferred range it would normally hold, but with no line of sight
+    // it must reposition (the runtime then routes this around the obstacle).
+    const v = kiter.tick(
+      kiter.initState(CFG, 0),
+      CFG,
+      { ...perceive(vec2(250, 0)), hasLineOfSight: false },
+      DT,
+    );
+    expect(v.x).toBeLessThan(0); // toward the player, not standing still
+    expect(length(v)).toBeCloseTo(CFG.speed);
+  });
+
   test("idles beyond aggro", () => {
     const v = kiter.tick(kiter.initState(CFG, 0), CFG, perceive(vec2(800, 0)), DT);
     expect(v).toEqual(vec2(0, 0));

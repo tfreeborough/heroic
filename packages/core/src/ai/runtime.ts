@@ -1,5 +1,6 @@
-import { add, type Vec2 } from "../math/vec2";
+import { add, length, type Vec2 } from "../math/vec2";
 import { clampSpeed, separation } from "./steering";
+import { initPathState, pursue, type PathState } from "./pursue";
 import type { CommonConfig, EnemyPerception } from "./perception";
 
 /**
@@ -62,6 +63,8 @@ export interface Brain {
   readonly archetype: Archetype<CommonConfig, unknown>;
   readonly config: CommonConfig;
   state: unknown;
+  /** Runtime-owned routing cache, used when the runtime pathfinds around walls. */
+  nav: PathState;
 }
 
 /** Bind an archetype to a config and spawn an instance's starting state. */
@@ -74,6 +77,7 @@ export const makeBrain = <Config extends CommonConfig, State>(
     archetype: archetype as Archetype<CommonConfig, unknown>,
     config,
     state: archetype.initState(config, index),
+    nav: initPathState(),
   });
 
 /**
@@ -85,6 +89,24 @@ export const makeBrain = <Config extends CommonConfig, State>(
  */
 export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number): Vec2 => {
   const intent = brain.archetype.tick(brain.state, brain.config, perception, dt);
+
+  // Route around walls: when the archetype wants to engage (normal-speed intent)
+  // but a wall blocks line of sight, replace its straight-line intent with an A*
+  // path to the player. Skipped for idle intent (≈0, e.g. a dormant ambusher —
+  // it stays hidden) and for committed bursts (intent above normal speed, e.g. a
+  // charger's dash — it stays a dodgeable straight line). When it can see the
+  // player, the archetype's own steering (orbit/kite/seek) runs untouched.
+  let move = intent;
+  const speed = length(intent);
+  if (
+    perception.hasLineOfSight === false &&
+    perception.navGrid &&
+    speed > 1 &&
+    speed <= brain.config.speed + 1e-6
+  ) {
+    move = pursue(perception.selfPos, perception.playerPos, speed, perception.navGrid, brain.nav, dt);
+  }
+
   // Separation is scaled to the *normal* speed (so a dasher doesn't shove allies
   // at dash speed); the final clamp allows a committed burst up to maxSpeed.
   const spread = separation(
@@ -93,7 +115,7 @@ export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number)
     brain.config.speed,
     brain.config.separationRadius,
   );
-  return clampSpeed(add(intent, spread), brain.config.maxSpeed ?? brain.config.speed);
+  return clampSpeed(add(move, spread), brain.config.maxSpeed ?? brain.config.speed);
 };
 
 /** Read a brain's render-time telegraph, if its archetype exposes one. */

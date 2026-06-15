@@ -28,9 +28,13 @@ export const kiter: Archetype<KiterConfig, KiterState> = {
   initState: () => ({}),
   tick: (_state, config, p): Vec2 => {
     if (beyondAggro(p, config.aggroRadius)) return ZERO_VELOCITY;
+    // No shot through a wall: when sight is blocked, close in to find a clear
+    // line (the runtime routes this around the obstacle) rather than holding a
+    // useless standoff. Resumes ranging the moment it can see the player again.
+    if (p.hasLineOfSight === false) return seek(p.selfPos, p.playerPos, config.speed);
     const d = distance(p.selfPos, p.playerPos);
     if (d > config.preferredRange + config.rangeBand) return seek(p.selfPos, p.playerPos, config.speed);
     if (d < config.preferredRange - config.rangeBand) return flee(p.selfPos, p.playerPos, config.speed);
-    return ZERO_VELOCITY; // inside the band: hold (and, once wired, shoot)
+    return ZERO_VELOCITY; // inside the band, clear shot: hold and fire
   },
 };

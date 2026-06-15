@@ -124,6 +124,14 @@ export const VISION = {
  */
 export const FOG_CELL = 32;
 
+/**
+ * Enemy navigation grid resolution, world px per cell. Enemies route around
+ * walls via A* on this grid (built from PILLARS, inflated by ENEMY_RADIUS).
+ * Finer = paths hug obstacles more tightly but cost more per re-path; pillars
+ * are as small as one tile, so keep it well under TILE_SIZE.
+ */
+export const NAV_CELL = 32;
+
 // --- Layout -----------------------------------------------------------------
 // Vertical play: the top portion is the play space, the bottom is the control
 // deck. The play space targets a 3:4 (w:h) ratio; whatever screen height is
@@ -324,15 +332,28 @@ const AMBUSHER_BRAIN: AmbusherConfig = {
 
 /**
  * Ranged creatures kite (the circler inverted): hold near firing range, close
- * when too far, back off when crowded. Preferred range sits inside the attack
- * reach so they're already in range while holding. Slower than the player so
- * they can be cornered.
+ * when too far, back off when crowded. Slower than the player so they can be
+ * cornered.
+ *
+ * The standoff is *derived from the attack reach* so the whole range band stays
+ * inside firing distance — otherwise a kiter parks just out of range and never
+ * shoots. The shoot gate is `centre-distance ≤ reach + PLAYER_RADIUS`; holding
+ * the band's far edge `STANDOFF_MARGIN` inside that keeps every position in the
+ * band a live shot, with slack for jitter and the windup lock. Bigger margin =
+ * holds closer (safer); smaller = hangs nearer max range.
  */
+const STANDOFF_MARGIN = 24;
+const standoff = (reach: number, rangeBand: number): number =>
+  reach + PLAYER_RADIUS - rangeBand - STANDOFF_MARGIN;
+
+const ARCHER_REACH = 260;
+const CASTER_REACH = 240;
+
 const ARCHER_BRAIN: KiterConfig = {
   speed: 205,
   separationRadius: 56,
   aggroRadius: 620,
-  preferredRange: 220,
+  preferredRange: standoff(ARCHER_REACH, 50),
   rangeBand: 50,
 };
 
@@ -340,7 +361,7 @@ const CASTER_BRAIN: KiterConfig = {
   speed: 200,
   separationRadius: 56,
   aggroRadius: 640,
-  preferredRange: 210,
+  preferredRange: standoff(CASTER_REACH, 50),
   rangeBand: 50,
 };
 
@@ -407,7 +428,7 @@ export const CREATURES: Record<EnemyTypeId, CreatureDef> = {
       config: {
         shape: "projectile",
         school: "physical",
-        reach: 260,
+        reach: ARCHER_REACH,
         projectileSpeed: 520,
         pierce: 0,
         windup: 0.5, // the telegraph — long enough to read and dodge
@@ -430,7 +451,7 @@ export const CREATURES: Record<EnemyTypeId, CreatureDef> = {
       config: {
         shape: "projectile",
         school: "magic",
-        reach: 240,
+        reach: CASTER_REACH,
         projectileSpeed: 420,
         pierce: 1, // a slower, piercing bolt
         windup: 0.65,
