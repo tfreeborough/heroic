@@ -10,6 +10,7 @@ import {
   ATTACK_CYCLE_READY,
   brainTelegraph,
   createBlockerBody,
+  createFogGrid,
   createMoverBody,
   createPhysicsWorld,
   createRng,
@@ -21,6 +22,7 @@ import {
   normalize,
   removeBody,
   resolveAttack,
+  segmentClear,
   selectTarget,
   setVelocityPerSecond,
   spawnVolley,
@@ -56,7 +58,9 @@ import {
   ENEMY_DECEL,
   ENEMY_RADIUS,
   ENGAGEMENT_MARGIN,
+  FOG_CELL,
   HIT_FLASH_DURATION,
+  OCCLUDERS,
   PLAY_HEIGHT_RATIO,
   PLAYER_ACCEL,
   PLAYER_DECEL,
@@ -64,6 +68,7 @@ import {
   PLAYER_MAX_SPEED,
   PLAYER_RADIUS,
   PLAYER_STATS,
+  PILLARS,
   WALLS,
   type EnemyTypeId,
 } from "./constants";
@@ -156,6 +161,7 @@ export const GameScreen = () => {
     const player = createMoverBody(ARENA_SIZE / 2, ARENA_SIZE / 2, PLAYER_RADIUS);
     addBody(physics, player);
     for (const w of WALLS) addBody(physics, createBlockerBody(w.x, w.y, w.w, w.h));
+    for (const p of PILLARS) addBody(physics, createBlockerBody(p.x, p.y, p.w, p.h));
 
     // One attacker stat block per weapon, reused across strikes (resolveAttack
     // only reads the attacker's stats — hp is irrelevant on this side).
@@ -258,7 +264,14 @@ export const GameScreen = () => {
     camPrevY: ARENA_SIZE / 2,
     camCurrX: ARENA_SIZE / 2,
     camCurrY: ARENA_SIZE / 2,
+    // Monotonic seconds, advanced each step — the drifting-mist shader's clock.
+    time: 0,
   });
+
+  // Fog-of-war memory: a persistent grid the renderer sweeps with the sight
+  // polygon each frame. Created once and never reset (the arena is fixed for the
+  // demo); a new realm would call resetFog.
+  const fog = useMemo(() => createFogGrid(ARENA_SIZE, FOG_CELL), []);
 
   // The only thing the Skia tree reads: one picture holding the whole world,
   // re-recorded each frame from the game loop. No React re-renders in play.
@@ -279,6 +292,7 @@ export const GameScreen = () => {
       const c = combat.current;
       const stick = stickRef.current;
       const enemies = enemiesRef.current;
+      s.time += dt;
       s.prevX = s.currX;
       s.prevY = s.currY;
       // Mirror the player's prev/curr snapshot for every enemy, so the renderer
@@ -495,13 +509,19 @@ export const GameScreen = () => {
       let projectileCrit = false;
       for (let i = c.projectiles.length - 1; i >= 0; i--) {
         const p = c.projectiles[i]!;
+        const from = { x: p.pos.x, y: p.pos.y };
         const result = stepProjectile(p, dt, hurtCircles());
-        for (const id of result.hits) {
-          const d = enemies.find((dd) => dd.id === id);
-          if (d && applyHit(d, p.dir, p.knockback, p.attacker)) projectileCrit = true;
-        }
+        // A shot dies on a wall/pillar it crossed this step — so the hit it might
+        // have landed on the far side doesn't count.
         const hitWall =
+          !segmentClear(from, p.pos, OCCLUDERS) ||
           p.pos.x < 0 || p.pos.x > ARENA_SIZE || p.pos.y < 0 || p.pos.y > ARENA_SIZE;
+        if (!hitWall) {
+          for (const id of result.hits) {
+            const d = enemies.find((dd) => dd.id === id);
+            if (d && applyHit(d, p.dir, p.knockback, p.attacker)) projectileCrit = true;
+          }
+        }
         if (result.expired || hitWall) c.projectiles.splice(i, 1);
       }
       // The lone exception to silent remote impacts: a crit anywhere this
@@ -511,15 +531,18 @@ export const GameScreen = () => {
       // --- Enemy ranged attacks: each ranged creature runs the *same* attack
       // cycle the player does (combat.md — one shared attack library), aimed at
       // the player. The windup is the telegraph; the lock breaks if the player
-      // dodges out of range mid-windup. On Strike it looses a volley.
+      // dodges out of range OR behind cover mid-windup. On Strike it looses a
+      // volley. Gated on line of sight: no firing (or holding a windup) through
+      // a wall — duck behind a pillar and the shot is cancelled.
       for (const e of enemies) {
         const def = CREATURES[e.type];
         if (!def.attack || !e.cycle || !e.attackCombatant) continue;
         const acfg = def.attack.config;
         const inRange = distance(playerPos, e.body.position) - PLAYER_RADIUS <= acfg.reach;
+        const engaged = inRange && segmentClear(e.body.position, playerPos, OCCLUDERS);
         const eStep = stepAttackCycle(e.cycle, acfg, dt, {
-          targetInRange: inRange,
-          lockValid: inRange,
+          targetInRange: engaged,
+          lockValid: engaged,
         });
         e.cycle = eStep.state;
         if (eStep.struck) {
@@ -547,10 +570,12 @@ export const GameScreen = () => {
       const playerCircle: HurtCircle = { id: 0, pos: playerPos, radius: PLAYER_RADIUS };
       for (let i = c.enemyProjectiles.length - 1; i >= 0; i--) {
         const p = c.enemyProjectiles[i]!;
+        const from = { x: p.pos.x, y: p.pos.y };
         const result = stepProjectile(p, dt, [playerCircle]);
-        if (result.hits.length > 0) damagePlayer(p.attacker, p.pos.x, p.pos.y, p.knockback);
         const hitWall =
+          !segmentClear(from, p.pos, OCCLUDERS) ||
           p.pos.x < 0 || p.pos.x > ARENA_SIZE || p.pos.y < 0 || p.pos.y > ARENA_SIZE;
+        if (!hitWall && result.hits.length > 0) damagePlayer(p.attacker, p.pos.x, p.pos.y, p.knockback);
         if (result.expired || hitWall) c.enemyProjectiles.splice(i, 1);
       }
 
@@ -731,6 +756,8 @@ export const GameScreen = () => {
           facing: f.facing,
           fade: 1 - f.age / ARC_FLASH_DURATION,
         })),
+        fog,
+        time: s.time,
       });
     },
   });

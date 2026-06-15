@@ -9,6 +9,7 @@ import {
   circler,
   kiter,
   makeBrain,
+  rectEdges,
   type AmbusherConfig,
   type AttackConfig,
   type Brain,
@@ -17,6 +18,7 @@ import {
   type CirclerConfig,
   type CombatStats,
   type KiterConfig,
+  type VisionSegment,
 } from "@heroic/engine";
 
 /** World units are pixels at 1:1 camera zoom. */
@@ -37,6 +39,90 @@ export const WALLS: { x: number; y: number; w: number; h: number }[] = (() => {
     { x: s + t / 2, y: s / 2, w: t, h: s + 2 * t },
   ];
 })();
+
+/**
+ * Interior pillars: solid blocks that both collide with bodies and occlude line
+ * of sight. Centre-based like WALLS. Scattered a few tiles off the arena centre
+ * (where the player spawns) so you immediately have blind spots to peek around.
+ * This is a LOS demo layout — real arenas would author obstacles per realm.
+ */
+export const PILLARS: { x: number; y: number; w: number; h: number }[] = (() => {
+  const c = ARENA_SIZE / 2;
+  const u = TILE_SIZE;
+  return [
+    { x: c - 3.5 * u, y: c - 3.5 * u, w: 1.5 * u, h: 1.5 * u },
+    { x: c + 3.5 * u, y: c - 3 * u, w: 2 * u, h: u },
+    { x: c + 5 * u, y: c + 1.5 * u, w: u, h: 3 * u },
+    { x: c - 0.5 * u, y: c + 4 * u, w: 3 * u, h: 1.5 * u },
+    { x: c - 5 * u, y: c + 1 * u, w: u, h: 2.5 * u },
+  ];
+})();
+
+/**
+ * Sight / projectile occluders, shared by the renderer (fog-of-war rays) and the
+ * sim (projectile-vs-wall collisions and enemy line-of-sight): the arena
+ * rectangle plus every pillar's edges. The arena box never lies between two
+ * interior points, so it doesn't affect enemy↔player sightlines — it only stops
+ * projectiles at the boundary and bounds the fog rays.
+ */
+export const OCCLUDERS: VisionSegment[] = [
+  { ax: 0, ay: 0, bx: ARENA_SIZE, by: 0 },
+  { ax: ARENA_SIZE, ay: 0, bx: ARENA_SIZE, by: ARENA_SIZE },
+  { ax: ARENA_SIZE, ay: ARENA_SIZE, bx: 0, by: ARENA_SIZE },
+  { ax: 0, ay: ARENA_SIZE, bx: 0, by: 0 },
+  ...PILLARS.flatMap((p) => rectEdges(p.x, p.y, p.w, p.h)),
+];
+
+/**
+ * Fog-of-war presentation. Three states layered over the world: areas you can
+ * see *now* are clear; areas you've seen before but can't see now are dimmed to
+ * `exploredAlpha` (their static geometry stays faintly readable — live enemies
+ * are clipped out, so memory ≠ current intel); never-seen areas sit near-black
+ * at `unexploredAlpha`. `edgeFeather` softens every fog boundary.
+ */
+export const VISION = {
+  /** Fog fill colour (slightly bluer than the void so depth still reads). */
+  shadowColor: "#060810",
+  /** Opacity over explored-but-unseen area, 0..1 — the dim "memory" layer. */
+  exploredAlpha: 0.80,
+  /** Opacity over never-seen area, 0..1. 0.98 keeps the faint hint of unknown
+   *  geometry you liked on the original blind spots. */
+  unexploredAlpha: 0.98,
+  /** Softness of the *current-sight* boundary, world px of blur. Kept tight so
+   *  the sightline still reads as a crisp edge. */
+  edgeFeather: 5,
+  /** Softness of the *fog frontier* (explored ↔ unseen), world px of blur. Large
+   *  on purpose: it dissolves the underlying memory grid into soft mist instead
+   *  of visible cells. Roughly cell-sized or bigger is what kills the blockiness. */
+  fogSoftness: 30,
+  /** Drifting-mist wisp colour — the lighter veins that roll through the fog.
+   *  A touch lighter/bluer than `shadowColor` so they read against the dark. */
+  mistColor: "#27324f",
+  /** Mist feature size, world px. Bigger = larger, lazier-looking clouds. */
+  mistScale: 150,
+  /** Mist drift speed, world px/s — now maps ~directly to visible travel. Slow
+   *  reads as atmospheric; 0 = static (curls in place). */
+  mistSpeed: 7,
+  /** Current clear-vision range, world px. Beyond this — even down an open
+   *  sightline — the view fades into fog, so vision closes in around you. */
+  sightRadius: 360,
+  /** Where the clear→fog fade begins, as a fraction of sightRadius (0..1).
+   *  Inside this you see fully; from here to sightRadius it ramps to the dim. */
+  sightFalloff: 0.55,
+  /** Exploration range, world px. Cells within this AND in line of sight become
+   *  "explored" (dim memory). Larger than sightRadius, so a ring just past what
+   *  you can clearly see still gets discovered as you move. */
+  discoverRadius: 500,
+} as const;
+
+/**
+ * Fog-of-war memory grid resolution, world px per cell. The visibility polygon
+ * is rasterised into this grid to remember where you've been. The grid is never
+ * seen directly — `VISION.fogSoftness` blurs it away — so this only controls how
+ * tightly the remembered area hugs where you actually looked. Smaller = tighter
+ * but more cells to sweep/draw per frame.
+ */
+export const FOG_CELL = 32;
 
 // --- Layout -----------------------------------------------------------------
 // Vertical play: the top portion is the play space, the bottom is the control
@@ -89,9 +175,10 @@ export const CAMERA_MIN_RADIUS = 230;
  * Extra breathing room: the framed world radius is scaled up by this factor so
  * the player never sits right on top of the lens. Higher = more world on
  * screen (smaller player). Multiplies rather than floors, so per-weapon zoom
- * differences survive.
+ * differences survive. Pulled back from 1.25 so the sight-radius fog ring sits
+ * comfortably on-screen rather than past the edge.
  */
-export const CAMERA_FRAME_PADDING = 1.25;
+export const CAMERA_FRAME_PADDING = 1.6;
 
 /**
  * Camera chase stiffness, 1/s: each second the camera closes this multiple
@@ -412,6 +499,7 @@ export const COLORS = {
   tileLight: "#222a3c",
   tileDark: "#1a2030",
   wall: "#4a5470",
+  pillar: "#5b6685",
   player: "#f2c14e",
   playerNotch: "#1d2433",
   hpBarBack: "#10141c",

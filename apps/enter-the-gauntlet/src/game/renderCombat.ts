@@ -1,12 +1,26 @@
 import { Platform } from "react-native";
-import { createPicture, matchFont, PaintStyle, Skia, type SkPicture } from "@shopify/react-native-skia";
+import {
+  BlurStyle,
+  ClipOp,
+  createPicture,
+  FillType,
+  matchFont,
+  PaintStyle,
+  Skia,
+  TileMode,
+  type SkPicture,
+} from "@shopify/react-native-skia";
+import { computeVisibility, markVisible, type FogGrid } from "@heroic/engine";
 import {
   ARENA_SIZE,
   ARENA_TILES,
   COLORS,
   ENEMY_RADIUS,
+  OCCLUDERS,
+  PILLARS,
   PLAYER_RADIUS,
   TILE_SIZE,
+  VISION,
   WALLS,
 } from "./constants";
 import type { WeaponDef } from "./weapons";
@@ -39,6 +53,10 @@ export interface CombatScene {
   /** `fade` runs 1 → 0 over each effect's lifetime; `hostile` = damage taken. */
   numbers: { x: number; y: number; text: string; crit: boolean; hostile: boolean; fade: number }[];
   arcFlashes: { x: number; y: number; facing: number; fade: number }[];
+  /** Persistent fog-of-war memory, swept by the sight polygon and mutated here. */
+  fog: FogGrid;
+  /** Seconds elapsed, fed to the drifting-mist shader as its animation clock. */
+  time: number;
 }
 
 const fontFamily = Platform.select({ ios: "Helvetica", default: "sans-serif" });
@@ -63,6 +81,96 @@ const DARK_TILES: { x: number; y: number }[] = (() => {
   }
   return tiles;
 })();
+
+// Two blurs (respectCTM=true → world units, so they scale with camera zoom): a
+// tight one for the current-sight edge, and a heavy one for the explored↔unseen
+// frontier that melts the memory grid into mist.
+const sightBlur =
+  VISION.edgeFeather > 0 ? Skia.MaskFilter.MakeBlur(BlurStyle.Normal, VISION.edgeFeather, true) : null;
+const fogBlur =
+  VISION.fogSoftness > 0 ? Skia.MaskFilter.MakeBlur(BlurStyle.Normal, VISION.fogSoftness, true) : null;
+
+/** "#rrggbb" → "r, g, b" floats in 0..1, for inlining into SkSL source. */
+const skslRgb = (hex: string): string => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => (v / 255).toFixed(4)).join(", ");
+};
+
+/** "#rrggbb" + alpha → an "rgba(...)" string Skia.Color can parse. */
+const rgbaCss = (hex: string, a: number): string => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+
+// Sight-range falloff gradient stops: the fog colour, transparent at the player
+// and fully opaque by the sight radius (held past it by Clamp). Built once.
+const FOG_CLEAR = Skia.Color(rgbaCss(VISION.shadowColor, 0));
+const FOG_OPAQUE = Skia.Color(rgbaCss(VISION.shadowColor, 1));
+
+// Drifting-mist shader for the fogged area. Evaluated in WORLD space (the camera
+// transform is baked into the canvas when we draw it), so the noise is anchored
+// to the world and only the time-driven drift moves it — it doesn't swim when the
+// camera pans. Returns opaque colour; the paint's alpha sets how much shows, and
+// the fog paths/blur decide WHERE. Tunables are inlined as constants so the only
+// per-frame uniform is the clock. Falls back to a flat fill if it fails to compile.
+const fogEffect = Skia.RuntimeEffect.Make(`
+uniform float u_time;
+
+const float INV_SCALE = ${(1 / VISION.mistScale).toFixed(6)};
+const float DRIFT = ${(VISION.mistSpeed / VISION.mistScale).toFixed(6)};
+const half3 DARK = half3(${skslRgb(VISION.shadowColor)});
+const half3 MIST = half3(${skslRgb(VISION.mistColor)});
+
+// Per-octave rotation: keeps each octave's lattice from lining up with the
+// axes (and with the others), which is what kills the straight-line/grid look.
+const mat2 ROT = mat2(0.80, 0.60, -0.60, 0.80);
+
+// Random gradient vector per lattice point. Gradient (Perlin-style) noise is
+// zero at the lattice points and interpolates *gradients*, so it has none of the
+// blocky value-noise artefacts.
+float2 grad(float2 ip) {
+  float2 h = fract(sin(float2(dot(ip, float2(127.1, 311.7)), dot(ip, float2(269.5, 183.3)))) * 43758.5453);
+  return h * 2.0 - 1.0;
+}
+float gnoise(float2 p) {
+  float2 i = floor(p);
+  float2 f = fract(p);
+  float2 u = f * f * (3.0 - 2.0 * f);
+  float a = dot(grad(i + float2(0.0, 0.0)), f - float2(0.0, 0.0));
+  float b = dot(grad(i + float2(1.0, 0.0)), f - float2(1.0, 0.0));
+  float c = dot(grad(i + float2(0.0, 1.0)), f - float2(0.0, 1.0));
+  float d = dot(grad(i + float2(1.0, 1.0)), f - float2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float fbm(float2 p) {
+  float v = 0.0;
+  float amp = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += amp * gnoise(p);
+    p = ROT * p * 2.0;
+    amp *= 0.5;
+  }
+  return v;
+}
+half4 main(float2 coord) {
+  float2 p = coord * INV_SCALE;
+  // flow translates the whole field, so DRIFT (= mistSpeed) maps directly to
+  // visible drift speed. Domain warp curls it like vapour on top of that travel.
+  float2 flow = float2(u_time * DRIFT, u_time * DRIFT * 0.5);
+  float2 q = float2(fbm(p + flow), fbm(p + float2(4.3, 1.7) + flow * 0.7));
+  float n = fbm(p + 1.4 * q + flow);
+  float wisp = smoothstep(0.35, 0.8, n * 0.5 + 0.5);
+  return half4(mix(DARK, MIST, wisp), 1.0);
+}
+`);
+
+// The never-seen fog is painted as a second dark layer *over* the dim explored
+// layer, so this is the extra opacity that composites the two up to
+// `unexploredAlpha`: 1 − (1 − unexplored)/(1 − explored).
+const UNEXPLORED_EXTRA_ALPHA = Math.max(
+  0,
+  Math.min(1, 1 - (1 - VISION.unexploredAlpha) / (1 - VISION.exploredAlpha)),
+);
 
 /** Arrowhead inside the player circle pointing along +x (rotated by facing). */
 const NOTCH = (() => {
@@ -96,7 +204,9 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     canvas.scale(camera.zoom, camera.zoom);
     canvas.translate(-camera.x, -camera.y);
 
-    // --- Arena: light floor, dark checkerboard, walls.
+    // --- Arena: light floor, dark checkerboard, walls, pillars. Static geometry
+    // is drawn UNCLIPPED — in explored-but-fogged areas the fog dims it but you
+    // still read the layout you remember.
     fill.setColor(Skia.Color(COLORS.tileLight));
     fill.setAlphaf(1);
     canvas.drawRect(Skia.XYWHRect(0, 0, ARENA_SIZE, ARENA_SIZE), fill);
@@ -104,17 +214,32 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     for (const t of DARK_TILES) canvas.drawRect(Skia.XYWHRect(t.x, t.y, TILE_SIZE, TILE_SIZE), fill);
     fill.setColor(Skia.Color(COLORS.wall));
     for (const w of WALLS) canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h), fill);
+    fill.setColor(Skia.Color(COLORS.pillar));
+    for (const p of PILLARS) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
 
     // An enemy is hittable when its *edge* is within reach, i.e. its centre is
     // within reach + ENEMY_RADIUS — draw rings/wedges at that radius so the
     // visuals match the actual gate.
     const hitRadius = cfg.reach + ENEMY_RADIUS;
 
-    // Attack-range ring — barely-there tuning aid.
-    stroke.setColor(Skia.Color(COLORS.rangeRing));
-    stroke.setAlphaf(0.07);
-    stroke.setStrokeWidth(1);
-    canvas.drawCircle(player.x, player.y, hitRadius, stroke);
+    // The visibility polygon from the (interpolated) player: the area in direct
+    // line of sight. Built into a path used both to clip the live world and to
+    // cut the lit hole out of the fog.
+    const litPoly = computeVisibility({ x: player.x, y: player.y }, OCCLUDERS);
+    const hasSight = litPoly.length > 2;
+    const litPath = Skia.Path.Make();
+    if (hasSight) {
+      litPath.moveTo(litPoly[0]!.x, litPoly[0]!.y);
+      for (let i = 1; i < litPoly.length; i++) litPath.lineTo(litPoly[i]!.x, litPoly[i]!.y);
+      litPath.close();
+    }
+
+    // --- Live world, clipped to current sight. Enemies, their telegraphs,
+    // projectiles and damage numbers render only where the player can see RIGHT
+    // NOW, so they never linger in remembered (fogged) areas — memory shows you
+    // the room, not who's currently in it.
+    canvas.save();
+    if (hasSight) canvas.clipPath(litPath, ClipOp.Intersect, true);
 
     // Selection ring under the current target.
     const target = scene.enemies.find((d) => d.id === scene.targetId);
@@ -145,6 +270,151 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       fill.setAlphaf(1);
       canvas.drawRect(Skia.XYWHRect(barX, barY, HP_BAR_WIDTH * d.hpFrac, HP_BAR_HEIGHT), fill);
     }
+
+    // Enemy windup telegraphs: an aim line to the player + a charge dot growing
+    // at the caster's edge. The whole point of a ranged enemy is that you can
+    // see the shot coming and dodge it (combat.md: the windup IS the telegraph).
+    for (const cast of scene.enemyCasts) {
+      stroke.setColor(Skia.Color(cast.color));
+      stroke.setAlphaf(0.12 + 0.4 * cast.progress);
+      stroke.setStrokeWidth(1.5);
+      canvas.drawLine(cast.x, cast.y, cast.targetX, cast.targetY, stroke);
+      const aim = Math.atan2(cast.targetY - cast.y, cast.targetX - cast.x);
+      fill.setColor(Skia.Color(cast.color));
+      fill.setAlphaf(0.35 + 0.5 * cast.progress);
+      canvas.drawCircle(
+        cast.x + Math.cos(aim) * (ENEMY_RADIUS + 5),
+        cast.y + Math.sin(aim) * (ENEMY_RADIUS + 5),
+        1.5 + 3.5 * cast.progress,
+        fill,
+      );
+    }
+
+    // Summon telegraphs: a ring that grows as the cast charges, then pops.
+    for (const s of scene.summonTelegraphs) {
+      stroke.setColor(Skia.Color(s.color));
+      stroke.setAlphaf(0.15 + 0.5 * s.progress);
+      stroke.setStrokeWidth(2);
+      canvas.drawCircle(s.x, s.y, ENEMY_RADIUS + 4 + 34 * s.progress, stroke);
+    }
+
+    // Projectiles with a short trail (player shots and enemy shots alike).
+    for (const p of scene.projectiles) {
+      fill.setColor(Skia.Color(p.color));
+      fill.setAlphaf(0.35);
+      canvas.drawCircle(p.x - p.dirX * 9, p.y - p.dirY * 9, p.radius * 0.6, fill);
+      fill.setAlphaf(1);
+      canvas.drawCircle(p.x, p.y, p.radius, fill);
+    }
+
+    // Floating damage numbers; crits are bigger and gold, damage taken is red.
+    for (const n of scene.numbers) {
+      const font = n.crit ? critFont : damageFont;
+      const width = font.measureText(n.text).width;
+      fill.setColor(Skia.Color(n.crit ? COLORS.critText : n.hostile ? COLORS.hurtText : COLORS.damageText));
+      fill.setAlphaf(Math.max(0, n.fade));
+      canvas.drawText(n.text, n.x - width / 2, n.y, fill, font);
+    }
+
+    canvas.restore(); // end the current-sight clip
+
+    // --- Fog of war: dark layers over everything outside current sight. The
+    // memory grid is rendered with a heavy blur (VISION.fogSoftness) so its
+    // square cells melt into soft mist rather than reading as blocks.
+    {
+      const halfW = anchor.x / camera.zoom;
+      const halfH = anchor.y / camera.zoom;
+      // Overscan past the blur radius so the layers' own outer edges — which the
+      // blur softens — stay safely off-screen instead of darkening the margins.
+      const over = Math.ceil(VISION.fogSoftness) + 8;
+      const vl = camera.x - halfW - over;
+      const vt = camera.y - halfH - over;
+      const vw = (halfW + over) * 2;
+      const vh = (halfH + over) * 2;
+
+      // Drifting mist drives the fog colour; the shader is shared by the dim and
+      // dark layers (same noise + clock), so unexplored just reads as a denser
+      // version of the same churn. Null if the effect failed to compile (the flat
+      // shadowColor then stands in).
+      const mistShader = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+      fill.setColor(Skia.Color(VISION.shadowColor));
+
+      // (1) Dim memory layer: line-of-sight-blocked area (behind pillars/walls),
+      // dim regardless of distance. Drawn FLAT (no mist) — once you've discovered
+      // somewhere it reads as a calm remembered dim; only the unknown drifts.
+      // Even-odd punches the sight polygon out of the view rect; a tight blur
+      // softens the shadow edge.
+      fill.setShader(null);
+      if (hasSight) {
+        const dim = Skia.Path.Make();
+        dim.setFillType(FillType.EvenOdd);
+        dim.addRect(Skia.XYWHRect(vl, vt, vw, vh));
+        dim.addPath(litPath);
+        fill.setAlphaf(VISION.exploredAlpha);
+        fill.setMaskFilter(sightBlur);
+        canvas.drawPath(dim, fill);
+      }
+
+      // (2) Sight-range falloff: WITHIN the sightline, fade clear → dim with
+      // distance so vision closes in at sightRadius even down an open corridor. A
+      // radial gradient (clipped to the sightline) does it smoothly and meets the
+      // dim layer at exploredAlpha, so the two are seamless.
+      if (hasSight) {
+        fill.setShader(
+          Skia.Shader.MakeRadialGradient(
+            { x: player.x, y: player.y },
+            VISION.sightRadius,
+            [FOG_CLEAR, FOG_OPAQUE],
+            [VISION.sightFalloff, 1],
+            TileMode.Clamp,
+          ),
+        );
+        fill.setAlphaf(VISION.exploredAlpha);
+        fill.setMaskFilter(null);
+        canvas.save();
+        canvas.clipPath(litPath, ClipOp.Intersect, true);
+        canvas.drawRect(Skia.XYWHRect(vl, vt, vw, vh), fill);
+        canvas.restore();
+      }
+
+      // Discover what's in sight now (line-of-sight, within the discover radius),
+      // then (3) lay extra dark over every cell never discovered (and the void).
+      // Explored cells are holes, so they keep just the dim level; current sight
+      // is a subset of explored, so it stays clear without an extra clip.
+      markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius);
+      const fog = scene.fog;
+      const cs = fog.cellSize;
+      const dark = Skia.Path.Make();
+      dark.setFillType(FillType.EvenOdd);
+      dark.addRect(Skia.XYWHRect(vl, vt, vw, vh));
+      const c0 = Math.max(0, Math.floor(vl / cs));
+      const c1 = Math.min(fog.cols - 1, Math.floor((vl + vw) / cs));
+      const r0 = Math.max(0, Math.floor(vt / cs));
+      const r1 = Math.min(fog.rows - 1, Math.floor((vt + vh) / cs));
+      for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) {
+          if (fog.seen[r * fog.cols + c] === 1) {
+            dark.addRect(Skia.XYWHRect(c * cs, r * cs, cs, cs));
+          }
+        }
+      }
+      fill.setShader(mistShader); // only the never-discovered layer drifts
+      fill.setAlphaf(UNEXPLORED_EXTRA_ALPHA);
+      fill.setMaskFilter(fogBlur);
+      canvas.drawPath(dark, fill);
+
+      fill.setMaskFilter(null); // shared paint — clear before player UI draws
+      fill.setShader(null);
+    }
+
+    // --- Player and player-only UI, always drawn on top of the fog: the player,
+    // their attack-range ring, HP, and action telegraphs are never obscured.
+
+    // Attack-range ring — barely-there tuning aid.
+    stroke.setColor(Skia.Color(COLORS.rangeRing));
+    stroke.setAlphaf(0.07);
+    stroke.setStrokeWidth(1);
+    canvas.drawCircle(player.x, player.y, hitRadius, stroke);
 
     // Player HP bar + a red wash while the post-hit i-frames tick down.
     {
@@ -203,52 +473,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       }
     }
 
-    // Enemy windup telegraphs: an aim line to the player + a charge dot growing
-    // at the caster's edge. The whole point of a ranged enemy is that you can
-    // see the shot coming and dodge it (combat.md: the windup IS the telegraph).
-    for (const cast of scene.enemyCasts) {
-      stroke.setColor(Skia.Color(cast.color));
-      stroke.setAlphaf(0.12 + 0.4 * cast.progress);
-      stroke.setStrokeWidth(1.5);
-      canvas.drawLine(cast.x, cast.y, cast.targetX, cast.targetY, stroke);
-      const aim = Math.atan2(cast.targetY - cast.y, cast.targetX - cast.x);
-      fill.setColor(Skia.Color(cast.color));
-      fill.setAlphaf(0.35 + 0.5 * cast.progress);
-      canvas.drawCircle(
-        cast.x + Math.cos(aim) * (ENEMY_RADIUS + 5),
-        cast.y + Math.sin(aim) * (ENEMY_RADIUS + 5),
-        1.5 + 3.5 * cast.progress,
-        fill,
-      );
-    }
-
-    // Summon telegraphs: a ring that grows as the cast charges, then pops.
-    for (const s of scene.summonTelegraphs) {
-      stroke.setColor(Skia.Color(s.color));
-      stroke.setAlphaf(0.15 + 0.5 * s.progress);
-      stroke.setStrokeWidth(2);
-      canvas.drawCircle(s.x, s.y, ENEMY_RADIUS + 4 + 34 * s.progress, stroke);
-    }
-
-    // Projectiles with a short trail (player shots and enemy shots alike).
-    for (const p of scene.projectiles) {
-      fill.setColor(Skia.Color(p.color));
-      fill.setAlphaf(0.35);
-      canvas.drawCircle(p.x - p.dirX * 9, p.y - p.dirY * 9, p.radius * 0.6, fill);
-      fill.setAlphaf(1);
-      canvas.drawCircle(p.x, p.y, p.radius, fill);
-    }
-
-    // Floating damage numbers; crits are bigger and gold, damage taken is red.
-    for (const n of scene.numbers) {
-      const font = n.crit ? critFont : damageFont;
-      const width = font.measureText(n.text).width;
-      fill.setColor(Skia.Color(n.crit ? COLORS.critText : n.hostile ? COLORS.hurtText : COLORS.damageText));
-      fill.setAlphaf(Math.max(0, n.fade));
-      canvas.drawText(n.text, n.x - width / 2, n.y, fill, font);
-    }
-
-    // Player body + facing notch, drawn last so it sits on top of the field.
+    // Player body + facing notch, drawn last so it sits on top of everything.
     fill.setColor(Skia.Color(COLORS.player));
     fill.setAlphaf(1);
     canvas.drawCircle(player.x, player.y, PLAYER_RADIUS, fill);
@@ -259,5 +484,5 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     canvas.drawPath(NOTCH, fill);
     canvas.restore();
 
-    canvas.restore();
+    canvas.restore(); // end the camera transform
   });

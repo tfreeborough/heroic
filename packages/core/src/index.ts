@@ -12,6 +12,8 @@ export * from "./ai/steering";
 export * from "./ai/perception";
 export * from "./ai/runtime";
 export * from "./ai/archetypes";
+export * from "./vision/visibility";
+export * from "./vision/fog";
 export * from "./combat/combat";
 export * from "./combat/attack";
 export * from "./combat/targeting";
