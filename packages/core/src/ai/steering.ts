@@ -81,15 +81,27 @@ export const separation = (
   maxSpeed: number,
   radius: number,
 ): Vec2 => {
-  let push = { x: 0, y: 0 };
+  // Hot path: runs for every enemy against every other enemy each step, so it
+  // accumulates into scalars instead of allocating a Vec2 per neighbour, and
+  // compares squared distances to skip the sqrt for the (usually many)
+  // neighbours outside `radius`. `pos` itself may appear in `neighbors` (callers
+  // pass one shared position list); the dist-0 self entry is skipped like any
+  // exact overlap.
+  const radiusSq = radius * radius;
+  let px = 0;
+  let py = 0;
   for (const n of neighbors) {
-    const away = sub(pos, n);
-    const dist = length(away);
-    if (dist >= radius || dist === 0) continue;
-    push = add(push, scale(away, (1 - dist / radius) / dist));
+    const ax = pos.x - n.x;
+    const ay = pos.y - n.y;
+    const distSq = ax * ax + ay * ay;
+    if (distSq >= radiusSq || distSq === 0) continue;
+    const dist = Math.sqrt(distSq);
+    const weight = (1 - dist / radius) / dist;
+    px += ax * weight;
+    py += ay * weight;
   }
-  if (push.x === 0 && push.y === 0) return push;
-  return clampSpeed(scale(push, maxSpeed), maxSpeed);
+  if (px === 0 && py === 0) return { x: 0, y: 0 };
+  return clampSpeed({ x: px * maxSpeed, y: py * maxSpeed }, maxSpeed);
 };
 
 /** Cap a blended desired velocity so stacked behaviours can't exceed `maxSpeed`. */

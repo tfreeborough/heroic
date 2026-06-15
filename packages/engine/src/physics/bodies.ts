@@ -51,6 +51,15 @@ export interface MoverOptions {
    * stop instead of sliding forever.
    */
   frictionAir?: number;
+  /**
+   * Matter collision group. Bodies that share the same *negative* group never
+   * collide with each other, but still collide with everything else (the player,
+   * walls). Give a whole swarm one negative group so they pass through one another
+   * — spacing handled by steering separation, not physics — which removes the
+   * crowd's O(n²) contact pairs (the dominant cost when many enemies pile up).
+   * Default 0: normal collisions with everyone.
+   */
+  collisionGroup?: number;
 }
 
 /**

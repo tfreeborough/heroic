@@ -8,6 +8,7 @@ import {
   PaintStyle,
   Skia,
   TileMode,
+  type SkPath,
   type SkPicture,
 } from "@shopify/react-native-skia";
 import { computeVisibility, markVisible, type FogGrid } from "@heroic/engine";
@@ -71,16 +72,33 @@ stroke.setStyle(PaintStyle.Stroke);
 const HP_BAR_WIDTH = 30;
 const HP_BAR_HEIGHT = 4;
 
-/** Static checkerboard: the dark squares laid over the light arena floor. */
-const DARK_TILES: { x: number; y: number }[] = (() => {
-  const tiles: { x: number; y: number }[] = [];
+/**
+ * Static checkerboard: the dark squares laid over the light arena floor, pre-baked
+ * into one reusable path. The board never changes, so drawing a single path each
+ * frame replaces ~300 per-tile drawRect calls — each its own JS→native hop, a
+ * meaningful slice of the constant per-frame render cost.
+ */
+const DARK_TILES_PATH = (() => {
+  const path = Skia.Path.Make();
   for (let row = 0; row < ARENA_TILES; row++) {
     for (let col = 0; col < ARENA_TILES; col++) {
-      if ((row + col) % 2 === 1) tiles.push({ x: col * TILE_SIZE, y: row * TILE_SIZE });
+      if ((row + col) % 2 === 1) {
+        path.addRect(Skia.XYWHRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE));
+      }
     }
   }
-  return tiles;
+  return path;
 })();
+
+/**
+ * Cached "never-discovered" fog geometry: a large backdrop rect with every
+ * explored cell punched out (even-odd fill). Rebuilt only when the explored set
+ * actually grows — markVisible reports that, and exploration plateaus once you've
+ * toured the arena, so on the overwhelming majority of frames we redraw this one
+ * cached path (clipped to the viewport) instead of re-adding a rect per visible
+ * fog cell every frame. Assumes fog only grows; a resetFog would need to null it.
+ */
+let cachedFogPath: SkPath | null = null;
 
 // Two blurs (respectCTM=true → world units, so they scale with camera zoom): a
 // tight one for the current-sight edge, and a heavy one for the explored↔unseen
@@ -211,7 +229,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     fill.setAlphaf(1);
     canvas.drawRect(Skia.XYWHRect(0, 0, ARENA_SIZE, ARENA_SIZE), fill);
     fill.setColor(Skia.Color(COLORS.tileDark));
-    for (const t of DARK_TILES) canvas.drawRect(Skia.XYWHRect(t.x, t.y, TILE_SIZE, TILE_SIZE), fill);
+    canvas.drawPath(DARK_TILES_PATH, fill);
     fill.setColor(Skia.Color(COLORS.wall));
     for (const w of WALLS) canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h), fill);
     fill.setColor(Skia.Color(COLORS.pillar));
@@ -381,27 +399,38 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       // then (3) lay extra dark over every cell never discovered (and the void).
       // Explored cells are holes, so they keep just the dim level; current sight
       // is a subset of explored, so it stays clear without an extra clip.
-      markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius);
+      // Discover newly-visible cells, and rebuild the cached fog path only if that
+      // actually grew the explored set (rare once the arena's been toured). The
+      // path is world-space and camera-independent, so on unchanged frames we just
+      // redraw it, clipped to the current viewport below.
       const fog = scene.fog;
-      const cs = fog.cellSize;
-      const dark = Skia.Path.Make();
-      dark.setFillType(FillType.EvenOdd);
-      dark.addRect(Skia.XYWHRect(vl, vt, vw, vh));
-      const c0 = Math.max(0, Math.floor(vl / cs));
-      const c1 = Math.min(fog.cols - 1, Math.floor((vl + vw) / cs));
-      const r0 = Math.max(0, Math.floor(vt / cs));
-      const r1 = Math.min(fog.rows - 1, Math.floor((vt + vh) / cs));
-      for (let r = r0; r <= r1; r++) {
-        for (let c = c0; c <= c1; c++) {
-          if (fog.seen[r * fog.cols + c] === 1) {
-            dark.addRect(Skia.XYWHRect(c * cs, r * cs, cs, cs));
+      const grew = markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius);
+      if (grew || cachedFogPath === null) {
+        const cs = fog.cellSize;
+        const path = Skia.Path.Make();
+        path.setFillType(FillType.EvenOdd);
+        // Backdrop large enough to cover any viewport (the visible slice is taken
+        // by the clip at draw time); explored cells are punched out as holes.
+        path.addRect(Skia.XYWHRect(-ARENA_SIZE * 2, -ARENA_SIZE * 2, ARENA_SIZE * 5, ARENA_SIZE * 5));
+        for (let r = 0; r < fog.rows; r++) {
+          for (let c = 0; c < fog.cols; c++) {
+            if (fog.seen[r * fog.cols + c] === 1) {
+              path.addRect(Skia.XYWHRect(c * cs, r * cs, cs, cs));
+            }
           }
         }
+        cachedFogPath = path;
       }
       fill.setShader(mistShader); // only the never-discovered layer drifts
       fill.setAlphaf(UNEXPLORED_EXTRA_ALPHA);
       fill.setMaskFilter(fogBlur);
-      canvas.drawPath(dark, fill);
+      // Clip to the (overscanned) viewport: the overscan margin exceeds the blur
+      // radius, so the on-screen result is identical to drawing only in-view cells,
+      // but the backdrop's off-screen bulk and out-of-view holes cost nothing.
+      canvas.save();
+      canvas.clipRect(Skia.XYWHRect(vl, vt, vw, vh), ClipOp.Intersect, false);
+      canvas.drawPath(cachedFogPath, fill);
+      canvas.restore();
 
       fill.setMaskFilter(null); // shared paint — clear before player UI draws
       fill.setShader(null);

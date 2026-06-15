@@ -9,6 +9,19 @@ export interface PhysicsOptions {
   /** Default 0/0 — top-down action games usually want no gravity. */
   gravityX?: number;
   gravityY?: number;
+  /**
+   * Constraint-solver iteration counts (position/velocity/constraint). The
+   * solver runs these *per contact pair*, and the pair count spikes when a
+   * crowd piles up — so these are the main knob on collision cost in dense
+   * fights. Matter's defaults (6/4/2) target stacked rigid bodies under
+   * gravity; our movers are velocity-driven, frictionless, restitution-free
+   * circles with no joints, which need far fewer. Defaults below are tuned for
+   * that. Raise positionIterations if bodies visibly sink into each other in a
+   * crush; the others can usually stay low.
+   */
+  positionIterations?: number;
+  velocityIterations?: number;
+  constraintIterations?: number;
 }
 
 /** Creates an isolated Matter.js world. One per game scene. */
@@ -16,6 +29,9 @@ export const createPhysicsWorld = (options: PhysicsOptions = {}): PhysicsWorld =
   const engine = Matter.Engine.create();
   engine.gravity.x = options.gravityX ?? 0;
   engine.gravity.y = options.gravityY ?? 0;
+  engine.positionIterations = options.positionIterations ?? 4;
+  engine.velocityIterations = options.velocityIterations ?? 2;
+  engine.constraintIterations = options.constraintIterations ?? 1;
   return { engine, world: engine.world };
 };
 

@@ -133,6 +133,10 @@ interface ArcFlash {
   age: number;
 }
 
+/** High-resolution clock with a coarse fallback (sub-ms matters for per-step timing). */
+const nowMs = (): number =>
+  typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+
 export const GameScreen = () => {
   const { width, height } = useWindowDimensions();
   // Vertical layout: the play space targets 3:4 (w:h); the control deck takes
@@ -186,7 +190,11 @@ export const GameScreen = () => {
     const def = CREATURES[type];
     // No frictionAir: enemies are velocity-driven each step like the player,
     // so knockback decays through the locomotion decel, not physics damping.
-    const body = createMoverBody(x, y, ENEMY_RADIUS);
+    // collisionGroup -1: the whole swarm passes through itself (spacing is the
+    // job of steering separation), which removes the O(n²) physics contacts a
+    // crowd would otherwise generate — the dominant per-step cost when many
+    // enemies pile up. They still collide with the player and the walls.
+    const body = createMoverBody(x, y, ENEMY_RADIUS, { collisionGroup: -1 });
     addBody(physics, body);
     const id = nextEnemyId.current++;
     return {
@@ -293,8 +301,16 @@ export const GameScreen = () => {
     zoomTarget.current = zoomFor(weapon);
   }, [weaponId, width]);
 
+  // --- TEMP perf instrumentation (remove once the bottleneck is identified).
+  // Rolling per-second averages of JS-thread cost, split into the enemy AI loop,
+  // the physics step, the rest of the sim step, and the render recording. `steps`
+  // vs `frames` reveals the catch-up spiral: steps/frame > 1 means the loop is
+  // already behind and running multiple sim steps to catch up.
+  const perf = useRef({ ai: 0, phys: 0, step: 0, render: 0, frames: 0, steps: 0, lastLog: 0 });
+
   useGameLoop({
     onStep: (dt) => {
+      const _stepStart = nowMs();
       const s = sim.current;
       const c = combat.current;
       const stick = stickRef.current;
@@ -328,7 +344,14 @@ export const GameScreen = () => {
       // impulses decay through decel instead of physics damping. Positions
       // and facing are last step's resolved values; one step of lag is
       // imperceptible and keeps the order simple.
+      const _aiStart = nowMs();
       const living = enemies;
+      // One shared list of every enemy position, built once per step. Previously
+      // each enemy rebuilt its own `living.filter(...).map(...)` neighbour list,
+      // which is O(n²) array + closure allocation per step and the dominant
+      // source of crowd-time GC churn. separation() treats the self entry as a
+      // zero-distance overlap and skips it, so passing the whole list is safe.
+      const neighborPositions = living.map((o) => o.body.position);
       for (const e of living) {
         const desired = tickBrain(
           e.brain,
@@ -336,7 +359,7 @@ export const GameScreen = () => {
             selfPos: e.body.position,
             playerPos: player.position,
             playerFacing: s.facing,
-            neighbors: living.filter((o) => o !== e).map((o) => o.body.position),
+            neighbors: neighborPositions,
             // When a wall blocks the sightline, the runtime routes around it via
             // A* on navGrid instead of steering straight into it.
             hasLineOfSight: segmentClear(e.body.position, player.position, OCCLUDERS),
@@ -353,8 +376,11 @@ export const GameScreen = () => {
         );
         setVelocityPerSecond(e.body, eVel.x, eVel.y);
       }
+      perf.current.ai += nowMs() - _aiStart;
 
+      const _physStart = nowMs();
       stepPhysics(physics, dt);
+      perf.current.phys += nowMs() - _physStart;
 
       s.currX = player.position.x;
       s.currY = player.position.y;
@@ -655,8 +681,12 @@ export const GameScreen = () => {
         f.age += dt;
         if (f.age >= ARC_FLASH_DURATION) c.arcFlashes.splice(i, 1);
       }
+
+      perf.current.step += nowMs() - _stepStart;
+      perf.current.steps += 1;
     },
     onRender: (alpha) => {
+      const _renderStart = nowMs();
       const s = sim.current;
       const c = combat.current;
       const enemies = enemiesRef.current;
@@ -775,6 +805,24 @@ export const GameScreen = () => {
         fog,
         time: s.time,
       });
+
+      const p = perf.current;
+      p.render += nowMs() - _renderStart;
+      p.frames += 1;
+      const t = nowMs();
+      if (p.lastLog === 0) p.lastLog = t;
+      if (t - p.lastLog >= 1000) {
+        const f = Math.max(1, p.frames);
+        const st = Math.max(1, p.steps);
+        console.log(
+          `[perf] enemies=${enemies.length} fps=${p.frames} ` +
+            `step=${(p.step / st).toFixed(2)}ms (ai=${(p.ai / st).toFixed(2)} phys=${(p.phys / st).toFixed(2)}) ` +
+            `render=${(p.render / f).toFixed(2)}ms steps/frame=${(p.steps / p.frames).toFixed(2)}`,
+        );
+        p.ai = p.phys = p.step = p.render = 0;
+        p.frames = p.steps = 0;
+        p.lastLog = t;
+      }
     },
   });
 
