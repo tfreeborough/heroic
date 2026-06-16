@@ -42,8 +42,13 @@ export const Thumbstick = ({ onChange, size = DEFAULT_PAD_SIZE }: ThumbstickProp
       onChange(resolveStick(offset, travel));
     };
     const release = (): void => {
-      knobX.value = withSpring(0, { damping: 20, stiffness: 400 });
-      knobY.value = withSpring(0, { damping: 20, stiffness: 400 });
+      // Critically damped (damping = 2·√stiffness = 40): the knob returns to
+      // centre fast with no overshoot/oscillation — a clean snap-back, not a
+      // springy wobble. The movement input is zeroed instantly below; this is
+      // purely the knob's visual return.
+      const SNAP = { damping: 40, stiffness: 400 };
+      knobX.value = withSpring(0, SNAP);
+      knobY.value = withSpring(0, SNAP);
       onChange(STICK_ZERO);
     };
     return Gesture.Pan()

@@ -181,8 +181,8 @@ export const CONTROLS_MIN_HEIGHT = 250;
 export const PLAYER_RADIUS = 18;
 /** Top speed in px/s when the stick is at full deflection. */
 export const PLAYER_MAX_SPEED = 280;
-/** Ramp-up rate, px/s². 0 → max in ~0.18s — a short, readable wind-up. */
-export const PLAYER_ACCEL = 2100;
+/** Ramp-up rate, px/s². 0 → max in ~0.09s — a quick, responsive wind-up. */
+export const PLAYER_ACCEL = 3000;
 /**
  * Slow-down rate, px/s². Much higher than accel: releasing at full speed
  * stops in ~0.1s, skidding ~14px (v²/2a) — a hint of weight, not ice.
@@ -226,10 +226,10 @@ export const CAMERA_FRAME_PADDING = 1.6;
  * of its remaining gap to the player (exponential decay, so it eases in —
  * fast when far behind, gentle as it re-centres). While the player holds a
  * constant speed the camera settles at speed/rate behind them: at top speed
- * that's PLAYER_MAX_SPEED / CAMERA_FOLLOW_RATE = 35 world px of trail.
+ * that's PLAYER_MAX_SPEED / CAMERA_FOLLOW_RATE = ~23 world px of trail.
  * Higher = stiffer/snappier, lower = floatier camera operator.
  */
-export const CAMERA_FOLLOW_RATE = 8;
+export const CAMERA_FOLLOW_RATE = 12;
 
 // --- Enemies ------------------------------------------------------------------
 // A creature (docs/design/enemy-behaviour.md, layer 3) is data: it picks a

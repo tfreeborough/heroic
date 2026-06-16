@@ -97,11 +97,6 @@ const color = (hex: string): ReturnType<typeof Skia.Color> => {
 const HP_BAR_WIDTH = 30;
 const HP_BAR_HEIGHT = 4;
 
-// TEMP measurement toggle: set false to skip drawing the fog-of-war layers, to
-// measure how much of the frame they actually cost (JS + GPU). Remove once the
-// fog rendering budget is settled.
-const FOG_ENABLED = true;
-
 /**
  * Static checkerboard: the dark squares laid over the light arena floor, pre-baked
  * into one reusable path. The board never changes, so drawing a single path each
@@ -401,7 +396,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // --- Fog of war: dark layers over everything outside current sight. The
     // memory grid is rendered with a heavy blur (VISION.fogSoftness) so its
     // square cells melt into soft mist rather than reading as blocks.
-    if (FOG_ENABLED) {
+    {
       const halfW = anchor.x / camera.zoom;
       const halfH = anchor.y / camera.zoom;
       // Overscan past the blur radius so the layers' own outer edges — which the

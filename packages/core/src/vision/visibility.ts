@@ -40,30 +40,6 @@ export const rectEdges = (cx: number, cy: number, w: number, h: number): VisionS
   ];
 };
 
-/**
- * Nearest hit of the ray `origin + t·(dx, dy)` (t ≥ 0, direction assumed unit
- * length) against one segment, or null if the ray misses. `t` is the distance
- * along the ray to the hit.
- */
-const rayHit = (
-  ox: number,
-  oy: number,
-  dx: number,
-  dy: number,
-  s: VisionSegment,
-): { t: number; x: number; y: number } | null => {
-  const ex = s.bx - s.ax;
-  const ey = s.by - s.ay;
-  const det = ex * dy - ey * dx;
-  if (Math.abs(det) < 1e-9) return null; // ray parallel to the segment
-  const wx = s.ax - ox;
-  const wy = s.ay - oy;
-  const t = (ex * wy - ey * wx) / det; // distance along the ray
-  const u = (dx * wy - dy * wx) / det; // 0..1 along the segment
-  if (t < 0 || u < 0 || u > 1) return null;
-  return { t, x: ox + dx * t, y: oy + dy * t };
-};
-
 // One ray straight at each corner can graze it ambiguously; a pair offset by
 // this much (radians) reliably lands just inside the edge and just past it.
 const CORNER_NUDGE = 1e-4;
@@ -75,28 +51,46 @@ const CORNER_NUDGE = 1e-4;
  * outward rays terminate — otherwise corners with open sky are dropped.
  */
 export const computeVisibility = (origin: Vec2, segments: VisionSegment[]): Vec2[] => {
+  const ox = origin.x;
+  const oy = origin.y;
+  const n = segments.length;
+
   const angles: number[] = [];
-  for (const s of segments) {
-    const a1 = Math.atan2(s.ay - origin.y, s.ax - origin.x);
-    const a2 = Math.atan2(s.by - origin.y, s.bx - origin.x);
-    angles.push(a1 - CORNER_NUDGE, a1, a1 + CORNER_NUDGE);
-    angles.push(a2 - CORNER_NUDGE, a2, a2 + CORNER_NUDGE);
+  for (let i = 0; i < n; i++) {
+    const s = segments[i]!;
+    const a1 = Math.atan2(s.ay - oy, s.ax - ox);
+    const a2 = Math.atan2(s.by - oy, s.bx - ox);
+    angles.push(a1 - CORNER_NUDGE, a1, a1 + CORNER_NUDGE, a2 - CORNER_NUDGE, a2, a2 + CORNER_NUDGE);
   }
 
+  // Cast each ray and keep its nearest hit. The inner loop is the hot path (rays
+  // × segments every frame), so it's inlined and allocation-free — no per-hit
+  // object, just a running best `t`; the hit point is computed once at the end.
   const hits: { x: number; y: number; angle: number }[] = [];
-  for (const angle of angles) {
+  for (let k = 0; k < angles.length; k++) {
+    const angle = angles[k]!;
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-    let best: { t: number; x: number; y: number } | null = null;
-    for (const s of segments) {
-      const hit = rayHit(origin.x, origin.y, dx, dy, s);
-      if (hit !== null && (best === null || hit.t < best.t)) best = hit;
+    let bestT = Infinity;
+    for (let i = 0; i < n; i++) {
+      const s = segments[i]!;
+      const ex = s.bx - s.ax;
+      const ey = s.by - s.ay;
+      const det = ex * dy - ey * dx;
+      if (det < 1e-9 && det > -1e-9) continue; // ray parallel to the segment
+      const wx = s.ax - ox;
+      const wy = s.ay - oy;
+      const t = (ex * wy - ey * wx) / det; // distance along the ray
+      const u = (dx * wy - dy * wx) / det; // 0..1 along the segment
+      if (t >= 0 && u >= 0 && u <= 1 && t < bestT) bestT = t;
     }
-    if (best !== null) hits.push({ x: best.x, y: best.y, angle });
+    if (bestT !== Infinity) hits.push({ x: ox + dx * bestT, y: oy + dy * bestT, angle });
   }
 
+  // Sorted by angle, the hits already form the visibility polygon's vertices;
+  // the extra `angle` field is harmless to the Vec2[] consumers.
   hits.sort((p, q) => p.angle - q.angle);
-  return hits.map((p) => ({ x: p.x, y: p.y }));
+  return hits;
 };
 
 /**

@@ -147,10 +147,6 @@ interface ArcFlash {
   age: number;
 }
 
-/** High-resolution clock with a coarse fallback (sub-ms matters for per-step timing). */
-const nowMs = (): number =>
-  typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
-
 export const GameScreen = () => {
   const { width, height } = useWindowDimensions();
   // Vertical layout: the play space targets 3:4 (w:h); the control deck takes
@@ -323,16 +319,8 @@ export const GameScreen = () => {
     zoomTarget.current = zoomFor(weapon);
   }, [weaponId, width]);
 
-  // --- TEMP perf instrumentation (remove once the bottleneck is identified).
-  // Rolling per-second averages of JS-thread cost, split into the enemy AI loop,
-  // the physics step, the rest of the sim step, and the render recording. `steps`
-  // vs `frames` reveals the catch-up spiral: steps/frame > 1 means the loop is
-  // already behind and running multiple sim steps to catch up.
-  const perf = useRef({ ai: 0, phys: 0, step: 0, render: 0, frames: 0, steps: 0, lastLog: 0 });
-
   useGameLoop({
     onStep: (dt) => {
-      const _stepStart = nowMs();
       const s = sim.current;
       const c = combat.current;
       const stick = stickRef.current;
@@ -366,7 +354,6 @@ export const GameScreen = () => {
       // impulses decay through decel instead of physics damping. Positions
       // and facing are last step's resolved values; one step of lag is
       // imperceptible and keeps the order simple.
-      const _aiStart = nowMs();
       const living = enemies;
       // Bucket every enemy into the spatial grid once per step (O(n)), so each
       // enemy's separation below scans only its 3×3 cell neighbourhood rather than
@@ -418,9 +405,7 @@ export const GameScreen = () => {
         e.mover.vel.x = eVel.x;
         e.mover.vel.y = eVel.y;
       }
-      perf.current.ai += nowMs() - _aiStart;
 
-      const _physStart = nowMs();
       // Matter now steps only the player (+ static walls) — ~10 bodies, trivial.
       stepPhysics(physics, dt);
 
@@ -443,7 +428,6 @@ export const GameScreen = () => {
           pushStrength: CROWD_PUSH,
         },
       );
-      perf.current.phys += nowMs() - _physStart;
 
       for (const e of enemies) {
         e.currX = e.mover.pos.x;
@@ -747,12 +731,8 @@ export const GameScreen = () => {
         f.age += dt;
         if (f.age >= ARC_FLASH_DURATION) c.arcFlashes.splice(i, 1);
       }
-
-      perf.current.step += nowMs() - _stepStart;
-      perf.current.steps += 1;
     },
     onRender: (alpha) => {
-      const _renderStart = nowMs();
       const s = sim.current;
       const c = combat.current;
       const enemies = enemiesRef.current;
@@ -871,24 +851,6 @@ export const GameScreen = () => {
         fog,
         time: s.time,
       });
-
-      const p = perf.current;
-      p.render += nowMs() - _renderStart;
-      p.frames += 1;
-      const t = nowMs();
-      if (p.lastLog === 0) p.lastLog = t;
-      if (t - p.lastLog >= 1000) {
-        const f = Math.max(1, p.frames);
-        const st = Math.max(1, p.steps);
-        console.log(
-          `[perf] enemies=${enemies.length} fps=${p.frames} ` +
-            `step=${(p.step / st).toFixed(2)}ms (ai=${(p.ai / st).toFixed(2)} phys=${(p.phys / st).toFixed(2)}) ` +
-            `render=${(p.render / f).toFixed(2)}ms steps/frame=${(p.steps / p.frames).toFixed(2)}`,
-        );
-        p.ai = p.phys = p.step = p.render = 0;
-        p.frames = p.steps = 0;
-        p.lastLog = t;
-      }
     },
   });
 
