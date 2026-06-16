@@ -132,6 +132,39 @@ export const FOG_CELL = 32;
  */
 export const NAV_CELL = 32;
 
+/**
+ * Enemy separation grid resolution, world px per cell. The sim buckets enemies
+ * into this grid each step so separation only checks the 3×3 neighbourhood
+ * instead of every other enemy (O(n²) → ~O(n)). Must be ≥ the largest creature
+ * `separationRadius` (56) for the 3×3 query to be exhaustive; 64 (= TILE_SIZE)
+ * is the smallest such round value. See docs/design/enemy-physics-and-crowds.md.
+ */
+export const ENEMY_GRID_CELL = 64;
+
+/**
+ * Crowd push-apart strength (0..1): the fraction of an overlap resolved per step
+ * when two enemies interpenetrate. 1 fully separates an isolated pair in one
+ * step; lower is softer and smoother through dense chains. Tunable feel knob —
+ * see docs/design/enemy-physics-and-crowds.md.
+ */
+export const CROWD_PUSH = 0.5;
+
+/**
+ * How many sim steps between line-of-sight rechecks per enemy. LOS (a ray test
+ * against every occluder) only decides steer-direct vs. pathfind, so it tolerates
+ * a few frames of lag; recomputing every step for every enemy is wasted work.
+ * Checks are staggered across enemies so they don't all land on the same step.
+ */
+export const LOS_RECHECK_STEPS = 6;
+
+/**
+ * Max enemies that may run A* pathfinding in a single sim step. When many lose
+ * line of sight at once (you duck behind a pillar), this caps the pathfinding
+ * cost per step — the rest keep following their cached route and re-path a step
+ * or two later, which is invisible. Spreads the spikes that made moving laggy.
+ */
+export const MAX_REPATHS_PER_STEP = 6;
+
 // --- Layout -----------------------------------------------------------------
 // Vertical play: the top portion is the play space, the bottom is the control
 // deck. The play space targets a 3:4 (w:h) ratio; whatever screen height is

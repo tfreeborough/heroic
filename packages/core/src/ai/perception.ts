@@ -1,5 +1,6 @@
 import { angleDiff, angleTo, distance, type Vec2 } from "../math/vec2";
 import type { NavGrid } from "../pathfinding/navgrid";
+import type { RepathBudget } from "./pursue";
 
 /**
  * Perception + the config every archetype shares (see
@@ -24,6 +25,12 @@ export interface EnemyPerception {
   hasLineOfSight?: boolean;
   /** The level's navigation grid, for routing when `hasLineOfSight` is false. */
   navGrid?: NavGrid | null;
+  /**
+   * Optional shared per-step A* allowance. Passed to `pursue` so the whole crowd
+   * re-paths at most N times per step (the rest defer to a later step), bounding
+   * the pathfinding cost when many movers lose sight together. Omitted ⇒ no cap.
+   */
+  repathBudget?: RepathBudget;
 }
 
 /**

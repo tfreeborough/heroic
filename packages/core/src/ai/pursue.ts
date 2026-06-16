@@ -26,10 +26,21 @@ export const initPathState = (): PathState => ({ waypoints: [], index: 0, cooldo
 /** Seconds between A* re-paths while pursuing out of sight. */
 const REPATH_INTERVAL = 0.35;
 
+/** A shared per-step allowance for how many movers may run A* this step. */
+export interface RepathBudget {
+  remaining: number;
+}
+
 /**
  * Desired velocity (magnitude `speed`) toward `goal`, routed around walls via
  * the nav grid. Mutates `path` (the per-mover cache). Re-paths to the goal's
  * *live* cell on a throttle, so the mover keeps coming as the target moves.
+ *
+ * `budget`, if given, caps how many movers may re-path per step across the whole
+ * crowd: when it's spent, a mover due to re-path instead keeps following its
+ * cached route (cooldown stays expired, so it retries next step). This spreads
+ * the spikes that happen when many movers lose line of sight at once — A* is the
+ * expensive part, and a few frames of staler routing is invisible.
  */
 export const pursue = (
   self: Vec2,
@@ -38,10 +49,12 @@ export const pursue = (
   nav: NavGrid,
   path: PathState,
   dt: number,
+  budget?: RepathBudget,
 ): Vec2 => {
   path.cooldown -= dt;
-  if (path.cooldown <= 0) {
+  if (path.cooldown <= 0 && (budget === undefined || budget.remaining > 0)) {
     path.cooldown = REPATH_INTERVAL;
+    if (budget !== undefined) budget.remaining -= 1;
     const start = nearestWalkable(nav, worldToCell(nav, self));
     const goalCell = nearestWalkable(nav, worldToCell(nav, goal));
     if (start && goalCell) {

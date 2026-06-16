@@ -35,9 +35,22 @@ export const createPhysicsWorld = (options: PhysicsOptions = {}): PhysicsWorld =
   return { engine, world: engine.world };
 };
 
-/** Advance physics by one fixed step. `dt` is in seconds (Matter wants ms). */
+/**
+ * Advance physics by one fixed step. `dt` is in seconds (Matter wants ms).
+ * Matter integrates best at ≤16.667ms; when the game loop drops to a coarser sim
+ * rate (e.g. 30Hz → 33ms steps), we sub-step so each Engine.update stays in that
+ * range — same total motion, no large-delta instability or warnings.
+ */
+const MATTER_MAX_DELTA_MS = 1000 / 60;
 export const stepPhysics = (physics: PhysicsWorld, dt: number): void => {
-  Matter.Engine.update(physics.engine, dt * 1000);
+  const ms = dt * 1000;
+  if (ms <= MATTER_MAX_DELTA_MS + 1e-6) {
+    Matter.Engine.update(physics.engine, ms);
+    return;
+  }
+  const subSteps = Math.ceil(ms / MATTER_MAX_DELTA_MS);
+  const subMs = ms / subSteps;
+  for (let i = 0; i < subSteps; i++) Matter.Engine.update(physics.engine, subMs);
 };
 
 export const addBody = (physics: PhysicsWorld, body: Matter.Body): void => {

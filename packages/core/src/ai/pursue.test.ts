@@ -33,4 +33,25 @@ describe("pursue", () => {
     expect(detoured).toBe(true); // by going around, not through
     expect(steps).toBeLessThan(2000); // didn't get stuck
   });
+
+  test("skips A* when the shared repath budget is spent, then re-paths once it's refilled", () => {
+    const nav = buildNavGrid(600, 40, [{ x: 300, y: 300, w: 80, h: 400 }], 12);
+    const goal: Vec2 = { x: 500, y: 300 };
+    const self: Vec2 = { x: 100, y: 300 }; // straight line to goal is wall-blocked
+    const path = initPathState();
+
+    // Budget spent → no pathfinding this step: no route is cached and the budget
+    // is left untouched (so it isn't double-counted), but it still returns a move.
+    const budget = { remaining: 0 };
+    const v = pursue(self, goal, 200, nav, path, DT, budget);
+    expect(path.waypoints.length).toBe(0);
+    expect(budget.remaining).toBe(0);
+    expect(v.x).toBeGreaterThan(0); // falls back to seeking the goal, never freezes
+
+    // Budget available → it re-paths around the wall and spends one allowance.
+    budget.remaining = 1;
+    pursue(self, goal, 200, nav, path, DT, budget);
+    expect(path.waypoints.length).toBeGreaterThan(0);
+    expect(budget.remaining).toBe(0);
+  });
 });

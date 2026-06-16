@@ -14,20 +14,24 @@ import {
   createFogGrid,
   createMoverBody,
   createPhysicsWorld,
+  createMover,
   createRng,
+  createSpatialGrid,
   distance,
   faceMovement,
+  forEachNeighbor,
   getVelocityPerSecond,
   hitsInArc,
   makeCombatant,
   normalize,
-  removeBody,
+  rebuildGrid,
   resolveAttack,
   segmentClear,
   selectTarget,
   setVelocityPerSecond,
   spawnVolley,
   stepAttackCycle,
+  stepCrowd,
   stepPhysics,
   stepProjectile,
   STICK_ZERO,
@@ -38,6 +42,7 @@ import {
   type Brain,
   type Combatant,
   type HurtCircle,
+  type Mover,
   type ProjectileState,
   type StickSample,
   type Vec2,
@@ -53,14 +58,18 @@ import {
   COLORS,
   CONTROLS_MIN_HEIGHT,
   CREATURES,
+  CROWD_PUSH,
   DAMAGE_NUMBER_LIFE,
   DAMAGE_NUMBER_RISE,
   ENEMY_ACCEL,
   ENEMY_DECEL,
+  ENEMY_GRID_CELL,
   ENEMY_RADIUS,
   ENGAGEMENT_MARGIN,
   FOG_CELL,
   HIT_FLASH_DURATION,
+  LOS_RECHECK_STEPS,
+  MAX_REPATHS_PER_STEP,
   NAV_CELL,
   OCCLUDERS,
   PLAY_HEIGHT_RATIO,
@@ -85,9 +94,14 @@ import { EMPTY_COMBAT_PICTURE, recordCombatScene } from "./renderCombat";
 interface Enemy {
   id: number;
   type: EnemyTypeId;
-  body: ReturnType<typeof createMoverBody>;
+  /** Kinematic mover (position + velocity, px/s): integrated and collided in core. */
+  mover: Mover;
   combatant: Combatant;
   brain: Brain;
+  /** Cached line-of-sight to the player, refreshed every LOS_RECHECK_STEPS steps. */
+  los: boolean;
+  /** Steps until the next LOS recheck (staggered per enemy so they don't all align). */
+  losTimer: number;
   /** Seconds of white hit-flash left. */
   flash: number;
   /** Ranged creatures only (else null): their attack cycle + attacker stats. */
@@ -188,21 +202,23 @@ export const GameScreen = () => {
   /** Build one enemy and add its body to the world (does not enlist it). */
   const makeEnemy = (type: EnemyTypeId, x: number, y: number): Enemy => {
     const def = CREATURES[type];
-    // No frictionAir: enemies are velocity-driven each step like the player,
-    // so knockback decays through the locomotion decel, not physics damping.
-    // collisionGroup -1: the whole swarm passes through itself (spacing is the
-    // job of steering separation), which removes the O(n²) physics contacts a
-    // crowd would otherwise generate — the dominant per-step cost when many
-    // enemies pile up. They still collide with the player and the walls.
-    const body = createMoverBody(x, y, ENEMY_RADIUS, { collisionGroup: -1 });
-    addBody(physics, body);
+    // Enemies live outside the matter.js world: their movement, crowd spacing,
+    // and collision against pillars + the player are integrated in core each step
+    // (stepCrowd). Velocity is px/s, driven by the brain through the same
+    // acceleration-limited locomotion as the player; knockback adds to it and
+    // decays through decel. See docs/design/enemy-physics-and-crowds.md (Phase 2).
+    const mover = createMover(x, y, ENEMY_RADIUS);
     const id = nextEnemyId.current++;
     return {
       id,
       type,
-      body,
+      mover,
       combatant: makeCombatant(def.stats),
       brain: def.makeBrain(id),
+      // Assume visible until the first recheck; stagger timers by id so the
+      // population's LOS checks spread evenly across steps rather than bunching.
+      los: true,
+      losTimer: id % LOS_RECHECK_STEPS,
       flash: 0,
       cycle: def.attack ? { ...ATTACK_CYCLE_READY } : null,
       attackCombatant: def.attack ? makeCombatant(def.attack.stats) : null,
@@ -227,7 +243,6 @@ export const GameScreen = () => {
   };
 
   const clearEnemies = () => {
-    for (const e of enemiesRef.current) removeBody(physics, e.body);
     enemiesRef.current = [];
   };
 
@@ -288,6 +303,13 @@ export const GameScreen = () => {
   // sightline to the player is blocked.
   const navGrid = useMemo(() => buildNavGrid(ARENA_SIZE, NAV_CELL, PILLARS, ENEMY_RADIUS), []);
 
+  // Spatial grid for enemy separation: every enemy is bucketed into it each step,
+  // so separation only scans its 3×3 cell neighbourhood instead of the whole
+  // swarm (the old O(n²) all-pairs scan). Created once; `neighborScratch` is the
+  // reused per-query result buffer, so neighbour lookups allocate nothing.
+  const enemyGrid = useMemo(() => createSpatialGrid(ARENA_SIZE, ENEMY_GRID_CELL), []);
+  const neighborScratch = useRef<Vec2[]>([]);
+
   // The only thing the Skia tree reads: one picture holding the whole world,
   // re-recorded each frame from the game loop. No React re-renders in play.
   const combatPicture = useSharedValue(EMPTY_COMBAT_PICTURE);
@@ -346,48 +368,86 @@ export const GameScreen = () => {
       // imperceptible and keeps the order simple.
       const _aiStart = nowMs();
       const living = enemies;
-      // One shared list of every enemy position, built once per step. Previously
-      // each enemy rebuilt its own `living.filter(...).map(...)` neighbour list,
-      // which is O(n²) array + closure allocation per step and the dominant
-      // source of crowd-time GC churn. separation() treats the self entry as a
-      // zero-distance overlap and skips it, so passing the whole list is safe.
-      const neighborPositions = living.map((o) => o.body.position);
-      for (const e of living) {
+      // Bucket every enemy into the spatial grid once per step (O(n)), so each
+      // enemy's separation below scans only its 3×3 cell neighbourhood rather than
+      // the whole swarm — the old per-enemy neighbour list was O(n²) and the main
+      // crowd-time AI cost. See docs/design/enemy-physics-and-crowds.md (Phase 1).
+      rebuildGrid(enemyGrid, living.length, (idx) => living[idx]!.mover.pos);
+      // Shared A* allowance for this step: at most MAX_REPATHS_PER_STEP enemies
+      // re-path, the rest defer — bounds the pathfinding spike when a crowd loses
+      // line of sight together (e.g. you round a pillar). See pursue().
+      const repathBudget = { remaining: MAX_REPATHS_PER_STEP };
+      const neighbors = neighborScratch.current;
+      // Hoisted so it's one closure per step, not one per enemy; `selfIndex` is
+      // set before each query and skipped so an enemy never separates from itself.
+      let selfIndex = 0;
+      const collectNeighbor = (j: number): void => {
+        if (j !== selfIndex) neighbors.push(living[j]!.mover.pos);
+      };
+      for (let i = 0; i < living.length; i++) {
+        const e = living[i]!;
+        selfIndex = i;
+        neighbors.length = 0;
+        forEachNeighbor(enemyGrid, e.mover.pos.x, e.mover.pos.y, collectNeighbor);
+        // Refresh line-of-sight on a throttle (staggered per enemy): it's a ray
+        // test against every occluder and only gates pathing, so a few frames of
+        // lag is invisible. When a wall blocks the sightline, the runtime routes
+        // around it via A* on navGrid instead of steering straight into it.
+        if (e.losTimer <= 0) {
+          e.los = segmentClear(e.mover.pos, player.position, OCCLUDERS);
+          e.losTimer = LOS_RECHECK_STEPS;
+        } else {
+          e.losTimer -= 1;
+        }
         const desired = tickBrain(
           e.brain,
           {
-            selfPos: e.body.position,
+            selfPos: e.mover.pos,
             playerPos: player.position,
             playerFacing: s.facing,
-            neighbors: neighborPositions,
-            // When a wall blocks the sightline, the runtime routes around it via
-            // A* on navGrid instead of steering straight into it.
-            hasLineOfSight: segmentClear(e.body.position, player.position, OCCLUDERS),
+            neighbors,
+            hasLineOfSight: e.los,
             navGrid,
+            repathBudget,
           },
           dt,
         );
-        const eVel = approachVelocity(
-          getVelocityPerSecond(e.body),
-          desired,
-          dt,
-          ENEMY_ACCEL,
-          ENEMY_DECEL,
-        );
-        setVelocityPerSecond(e.body, eVel.x, eVel.y);
+        // Enemy velocity lives on the mover (px/s); the same acceleration-limited
+        // locomotion as the player shapes it, then stepCrowd integrates it below.
+        const eVel = approachVelocity(e.mover.vel, desired, dt, ENEMY_ACCEL, ENEMY_DECEL);
+        e.mover.vel.x = eVel.x;
+        e.mover.vel.y = eVel.y;
       }
       perf.current.ai += nowMs() - _aiStart;
 
       const _physStart = nowMs();
+      // Matter now steps only the player (+ static walls) — ~10 bodies, trivial.
       stepPhysics(physics, dt);
-      perf.current.phys += nowMs() - _physStart;
 
       s.currX = player.position.x;
       s.currY = player.position.y;
       const playerPos = { x: s.currX, y: s.currY };
+
+      // Enemies are integrated + collided in core, off matter.js (whose broadphase
+      // is O(n²) for a pile — see docs/design/enemy-physics-and-crowds.md). Apply
+      // velocities, push the crowd apart via the grid, resolve against the pillars
+      // and the just-moved player, then clamp to the arena. This is the Phase 2 win.
+      stepCrowd(
+        enemies.map((e) => e.mover),
+        dt,
+        {
+          grid: enemyGrid,
+          walls: PILLARS,
+          player: { pos: playerPos, radius: PLAYER_RADIUS },
+          worldSize: ARENA_SIZE,
+          pushStrength: CROWD_PUSH,
+        },
+      );
+      perf.current.phys += nowMs() - _physStart;
+
       for (const e of enemies) {
-        e.currX = e.body.position.x;
-        e.currY = e.body.position.y;
+        e.currX = e.mover.pos.x;
+        e.currY = e.mover.pos.y;
       }
 
       // --- Camera: exponentially close the gap to the player. Stepped at the
@@ -402,13 +462,12 @@ export const GameScreen = () => {
       // population; the dead are removed outright).
       for (const d of enemies) d.flash = Math.max(0, d.flash - dt);
       const hurtCircles = (): HurtCircle[] =>
-        enemies.map((d) => ({ id: d.id, pos: d.body.position, radius: ENEMY_RADIUS }));
+        enemies.map((d) => ({ id: d.id, pos: d.mover.pos, radius: ENEMY_RADIUS }));
 
       /** Drop a slain enemy from the world + the list, releasing any lock on it. */
       const removeEnemy = (d: Enemy) => {
         const idx = enemies.indexOf(d);
         if (idx !== -1) enemies.splice(idx, 1);
-        removeBody(physics, d.body);
         if (c.lockedId === d.id) c.lockedId = null;
         if (c.targetId === d.id) c.targetId = null;
       };
@@ -418,10 +477,15 @@ export const GameScreen = () => {
         if (d.combatant.hp <= 0) return false; // already slain this step
         const result = resolveAttack(attacker, d.combatant, rng);
         d.flash = HIT_FLASH_DURATION;
-        if (knockback > 0) addVelocityPerSecond(d.body, dir.x * knockback, dir.y * knockback);
+        // Knockback is an impulse straight onto the mover's velocity (px/s); it
+        // decays back toward the brain's intent through the locomotion decel.
+        if (knockback > 0) {
+          d.mover.vel.x += dir.x * knockback;
+          d.mover.vel.y += dir.y * knockback;
+        }
         c.numbers.push({
-          x: d.body.position.x,
-          y: d.body.position.y - ENEMY_RADIUS - 16,
+          x: d.mover.pos.x,
+          y: d.mover.pos.y - ENEMY_RADIUS - 16,
           text: String(result.damage),
           crit: result.crit,
           hostile: false,
@@ -461,8 +525,8 @@ export const GameScreen = () => {
 
       // --- Contact damage: a touching enemy bites (self-gated by i-frames).
       for (const e of enemies) {
-        if (distance(playerPos, e.body.position) > PLAYER_RADIUS + ENEMY_RADIUS + 1) continue;
-        if (damagePlayer(e.combatant, e.body.position.x, e.body.position.y, CREATURES[e.type].contactKnockback)) {
+        if (distance(playerPos, e.mover.pos) > PLAYER_RADIUS + ENEMY_RADIUS + 1) continue;
+        if (damagePlayer(e.combatant, e.mover.pos.x, e.mover.pos.y, CREATURES[e.type].contactKnockback)) {
           break; // one bite per window; the rest no-op anyway
         }
       }
@@ -474,14 +538,16 @@ export const GameScreen = () => {
       // behind cover is dropped, mirroring how enemies lose their shot on you).
       const cfg = c.weapon.config;
       const engagement = cfg.reach + ENGAGEMENT_MARGIN;
-      c.targetId = selectTarget(
-        enemies
-          .filter((d) => segmentClear(playerPos, d.body.position, OCCLUDERS))
-          .map((d) => ({ id: d.id, pos: d.body.position })),
-        playerPos,
-        engagement,
-        c.targetId,
-      );
+      // Only enemies within engagement can ever be the target, so distance-gate
+      // (cheap) *before* the line-of-sight ray test — otherwise we'd ray every
+      // enemy in the arena every step just to discard the far ones.
+      const targetCandidates: { id: number; pos: Vec2 }[] = [];
+      for (const d of enemies) {
+        if (distance(playerPos, d.mover.pos) > engagement) continue;
+        if (!segmentClear(playerPos, d.mover.pos, OCCLUDERS)) continue;
+        targetCandidates.push({ id: d.id, pos: d.mover.pos });
+      }
+      c.targetId = selectTarget(targetCandidates, playerPos, engagement, c.targetId);
       const target = enemies.find((d) => d.id === c.targetId) ?? null;
 
       // --- Attack cycle. Range gates on the target's edge; the windup lock
@@ -490,13 +556,13 @@ export const GameScreen = () => {
       const step = stepAttackCycle(c.cycle, cfg, dt, {
         targetInRange:
           target !== null &&
-          distance(playerPos, target.body.position) - ENEMY_RADIUS <= cfg.reach,
-        lockValid: locked !== null && distance(playerPos, locked.body.position) <= engagement,
+          distance(playerPos, target.mover.pos) - ENEMY_RADIUS <= cfg.reach,
+        lockValid: locked !== null && distance(playerPos, locked.mover.pos) <= engagement,
       });
       c.cycle = step.state;
       if (step.windupStarted && target) {
         c.lockedId = target.id;
-        c.lockedFacing = angleTo(playerPos, target.body.position);
+        c.lockedFacing = angleTo(playerPos, target.mover.pos);
       }
       if (step.lockBroken) c.lockedId = null;
 
@@ -509,7 +575,7 @@ export const GameScreen = () => {
           for (const id of hitsInArc(playerPos, c.lockedFacing, cfg.reach, cfg.arcWidth!, hurtCircles())) {
             const d = enemies.find((dd) => dd.id === id);
             if (!d) continue;
-            const dir = normalize(sub(d.body.position, playerPos));
+            const dir = normalize(sub(d.mover.pos, playerPos));
             crit = applyHit(d, dir, cfg.knockback ?? 0, weaponCombatants.get(c.weapon.id)!) || crit;
             landed = true;
           }
@@ -520,7 +586,7 @@ export const GameScreen = () => {
         } else if (locked) {
           // Ranged auto-aims at the target's position at the moment of Strike.
           // The volley's flight pattern (straight, pincer, ...) is weapon data.
-          for (const p of spawnVolley(playerPos, locked.body.position, {
+          for (const p of spawnVolley(playerPos, locked.mover.pos, {
             speed: cfg.projectileSpeed!,
             radius: c.weapon.projectileRadius,
             // Fly a little past attack range so a kiting target can't outrun
@@ -580,15 +646,15 @@ export const GameScreen = () => {
         const def = CREATURES[e.type];
         if (!def.attack || !e.cycle || !e.attackCombatant) continue;
         const acfg = def.attack.config;
-        const inRange = distance(playerPos, e.body.position) - PLAYER_RADIUS <= acfg.reach;
-        const engaged = inRange && segmentClear(e.body.position, playerPos, OCCLUDERS);
+        const inRange = distance(playerPos, e.mover.pos) - PLAYER_RADIUS <= acfg.reach;
+        const engaged = inRange && segmentClear(e.mover.pos, playerPos, OCCLUDERS);
         const eStep = stepAttackCycle(e.cycle, acfg, dt, {
           targetInRange: engaged,
           lockValid: engaged,
         });
         e.cycle = eStep.state;
         if (eStep.struck) {
-          for (const p of spawnVolley(e.body.position, playerPos, {
+          for (const p of spawnVolley(e.mover.pos, playerPos, {
             speed: acfg.projectileSpeed!,
             radius: def.attack.projectileRadius,
             maxRange: acfg.reach + 120,
@@ -634,7 +700,7 @@ export const GameScreen = () => {
           e.minionIds = e.minionIds.filter((id) => enemies.some((o) => o.id === id));
         }
         const canSummon =
-          distance(playerPos, e.body.position) <= summon.engageRange &&
+          distance(playerPos, e.mover.pos) <= summon.engageRange &&
           e.minionIds.length < summon.maxAlive;
         const step = stepAttackCycle(e.summonCycle!, summon, dt, {
           targetInRange: canSummon,
@@ -649,8 +715,8 @@ export const GameScreen = () => {
             const r = rng.next() * summon.spawnRadius;
             const minion = makeEnemy(
               summon.minionType,
-              clamp(e.body.position.x + Math.cos(ang) * r),
-              clamp(e.body.position.y + Math.sin(ang) * r),
+              clamp(e.mover.pos.x + Math.cos(ang) * r),
+              clamp(e.mover.pos.y + Math.sin(ang) * r),
             );
             enemies.push(minion);
             e.minionIds.push(minion.id);
@@ -664,7 +730,7 @@ export const GameScreen = () => {
       if (c.cycle.phase === "windup") {
         s.facing = c.lockedFacing;
       } else if (faceTarget) {
-        s.facing = angleTo(playerPos, faceTarget.body.position);
+        s.facing = angleTo(playerPos, faceTarget.mover.pos);
       } else {
         s.facing = faceMovement(s.facing, stick);
       }

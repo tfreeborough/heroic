@@ -76,6 +76,19 @@ describe("markVisible", () => {
     const fog = createFogGrid(100, 10);
     expect(markVisible(fog, [{ x: 50, y: 50 }, { x: 60, y: 50 }], { x: 50, y: 50 }, wide)).toBe(false);
   });
+
+  test("reports the indices that became seen this call, for incremental rendering", () => {
+    const fog = createFogGrid(100, 10);
+    const newly: number[] = [];
+    markVisible(fog, square, { x: 50, y: 50 }, wide, newly);
+    // Every reported index is one of the cells now marked seen, and the count matches.
+    expect(newly.length).toBeGreaterThan(0);
+    expect(newly.every((idx) => fog.seen[idx] === 1)).toBe(true);
+    expect(newly.length).toBe(fog.seen.reduce((n, v) => n + v, 0));
+    // Re-marking the same area sees nothing new → the buffer is cleared, not appended.
+    markVisible(fog, square, { x: 50, y: 50 }, wide, newly);
+    expect(newly).toHaveLength(0);
+  });
 });
 
 describe("resetFog", () => {

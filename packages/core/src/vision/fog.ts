@@ -42,13 +42,20 @@ export const resetFog = (fog: FogGrid): void => {
  * correctly. Returns true if any previously-unseen cell became seen, so a caller
  * can skip rebuilding cached render data on the (common) frames where the
  * explored area didn't actually grow.
+ *
+ * `newlySeen`, if given, is cleared and filled with the flat indices (`r*cols+c`)
+ * of the cells that became seen this call — so a renderer can update its cached
+ * fog geometry *incrementally* (punch out only the new cells) instead of
+ * rescanning the whole grid, which matters while the player is moving/exploring.
  */
 export const markVisible = (
   fog: FogGrid,
   poly: Vec2[],
   origin: Vec2,
   maxRadius: number,
+  newlySeen?: number[],
 ): boolean => {
+  if (newlySeen) newlySeen.length = 0;
   if (poly.length < 3) return false;
   const { cols, rows, cellSize, seen } = fog;
   const r2 = maxRadius * maxRadius;
@@ -90,6 +97,7 @@ export const markVisible = (
         if (seen[idx] === 0) {
           seen[idx] = 1;
           changed = true;
+          if (newlySeen) newlySeen.push(idx);
         }
       }
     }

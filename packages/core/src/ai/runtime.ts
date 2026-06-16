@@ -104,7 +104,15 @@ export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number)
     speed > 1 &&
     speed <= brain.config.speed + 1e-6
   ) {
-    move = pursue(perception.selfPos, perception.playerPos, speed, perception.navGrid, brain.nav, dt);
+    move = pursue(
+      perception.selfPos,
+      perception.playerPos,
+      speed,
+      perception.navGrid,
+      brain.nav,
+      dt,
+      perception.repathBudget,
+    );
   }
 
   // Separation is scaled to the *normal* speed (so a dasher doesn't shove allies
