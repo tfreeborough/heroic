@@ -548,6 +548,17 @@ export const DAMAGE_NUMBER_RISE = 42;
 /** Seconds the melee swing flash lingers after a strike. */
 export const ARC_FLASH_DURATION = 0.15;
 
+// --- Low-health warning vignette. Below the threshold a red inset glow pulses
+// around the play area; the beat quickens and brightens from `MIN` (just under
+// the threshold) toward `MAX` (near death). Pulse rate is in full beats/sec.
+/** HP fraction at/under which the low-health vignette appears. */
+export const LOW_HP_THRESHOLD = 0.35;
+export const LOW_HP_PULSE_MIN_HZ = 0.2;
+export const LOW_HP_PULSE_MAX_HZ = 2.6;
+/** Peak opacity of the vignette at its brightest point in a beat. */
+export const LOW_HP_VIGNETTE_MIN_ALPHA = 0.1;
+export const LOW_HP_VIGNETTE_MAX_ALPHA = 0.62;
+
 export const COLORS = {
   void: "#0e1116",
   tileLight: "#222a3c",

@@ -70,6 +70,9 @@ import {
   FOG_CELL,
   HIT_FLASH_DURATION,
   LOS_RECHECK_STEPS,
+  LOW_HP_PULSE_MAX_HZ,
+  LOW_HP_PULSE_MIN_HZ,
+  LOW_HP_THRESHOLD,
   MAX_REPATHS_PER_STEP,
   NAV_CELL,
   OCCLUDERS,
@@ -295,6 +298,12 @@ export const GameScreen = () => {
     camCurrY: ARENA_SIZE / 2,
     // Monotonic seconds, advanced each step — the drifting-mist shader's clock.
     time: 0,
+    // Low-health pulse phase (whole beats). Advanced only while below the HP
+    // threshold, at a rate that climbs with danger; prev/curr so the renderer
+    // interpolates it like every other simulated value (no beat stutter at the
+    // coarser sim tiers).
+    lowHpPhasePrev: 0,
+    lowHpPhaseCurr: 0,
   });
 
   // Fog-of-war memory: a persistent grid the renderer sweeps with the sight
@@ -336,6 +345,7 @@ export const GameScreen = () => {
       s.time += dt;
       s.prevX = s.currX;
       s.prevY = s.currY;
+      s.lowHpPhasePrev = s.lowHpPhaseCurr;
       // Mirror the player's prev/curr snapshot for every enemy, so the renderer
       // can interpolate their positions too (see Enemy.prevX).
       for (const e of enemies) {
@@ -739,6 +749,17 @@ export const GameScreen = () => {
         f.age += dt;
         if (f.age >= ARC_FLASH_DURATION) c.arcFlashes.splice(i, 1);
       }
+
+      // --- Low-health pulse: while under the threshold, advance the beat at a
+      // rate that ramps from MIN_HZ (just under it) to MAX_HZ (near death), so
+      // the warning vignette throbs faster the lower you get. Left untouched
+      // above the threshold (prev==curr → the renderer reads a steady phase).
+      const hpFrac = c.playerCombatant.hp / c.playerCombatant.stats.maxHp;
+      if (hpFrac < LOW_HP_THRESHOLD) {
+        const severity = (LOW_HP_THRESHOLD - hpFrac) / LOW_HP_THRESHOLD; // 0 → 1 toward death
+        const hz = LOW_HP_PULSE_MIN_HZ + (LOW_HP_PULSE_MAX_HZ - LOW_HP_PULSE_MIN_HZ) * severity;
+        s.lowHpPhaseCurr += dt * hz;
+      }
     },
     onRender: (alpha) => {
       const s = sim.current;
@@ -858,6 +879,7 @@ export const GameScreen = () => {
         })),
         fog,
         time: s.time,
+        lowHealthPhase: s.lowHpPhasePrev + (s.lowHpPhaseCurr - s.lowHpPhasePrev) * alpha,
       });
     },
   });
@@ -875,8 +897,8 @@ export const GameScreen = () => {
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
-        <WeaponPicker selected={weaponId} onSelect={selectWeapon} />
         <Thumbstick size={stickSize} onChange={(sample) => (stickRef.current = sample)} />
+        <WeaponPicker selected={weaponId} onSelect={selectWeapon} />
       </View>
     </View>
   );

@@ -1,4 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+// RNGH's Pressable (not RN's): it lives in the gesture-handler touch system, so
+// it still registers taps while the thumbstick's pan gesture is active. RN's
+// Pressable rides the legacy JS responder, which is blocked from claiming a
+// second touch mid-gesture — so weapons couldn't be switched without first
+// lifting off the stick.
+import { Pressable } from "react-native-gesture-handler";
 import { WEAPONS, type WeaponId } from "./weapons";
 
 export interface WeaponPickerProps {

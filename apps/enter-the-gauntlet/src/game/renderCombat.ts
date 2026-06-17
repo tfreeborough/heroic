@@ -19,6 +19,9 @@ import {
   ARENA_TILES,
   COLORS,
   ENEMY_RADIUS,
+  LOW_HP_THRESHOLD,
+  LOW_HP_VIGNETTE_MAX_ALPHA,
+  LOW_HP_VIGNETTE_MIN_ALPHA,
   OCCLUDERS,
   PILLARS,
   PLAYER_RADIUS,
@@ -60,6 +63,12 @@ export interface CombatScene {
   fog: FogGrid;
   /** Seconds elapsed, fed to the drifting-mist shader as its animation clock. */
   time: number;
+  /**
+   * Low-health pulse phase in whole beats (accumulated in the sim so the beat
+   * stays smooth as its rate ramps with danger). Only the fractional part
+   * matters; the renderer draws the vignette when `player.hpFrac` is low.
+   */
+  lowHealthPhase: number;
 }
 
 const fontFamily = Platform.select({ ios: "Helvetica", default: "sans-serif" });
@@ -151,6 +160,11 @@ const rgbaCss = (hex: string, a: number): string => {
 // and fully opaque by the sight radius (held past it by Clamp). Built once.
 const FOG_CLEAR = color(rgbaCss(VISION.shadowColor, 0));
 const FOG_OPAQUE = color(rgbaCss(VISION.shadowColor, 1));
+
+// Low-health vignette gradient stops: clear at the play-area centre, full red at
+// the rim. The per-frame alpha (pulse × severity) scales the whole thing.
+const LOW_HP_CLEAR = color(rgbaCss(COLORS.playerHurt, 0));
+const LOW_HP_OPAQUE = color(rgbaCss(COLORS.playerHurt, 1));
 
 // Drifting-mist shader for the fogged area. Evaluated in WORLD space (the camera
 // transform is baked into the canvas when we draw it), so the noise is anchored
@@ -578,4 +592,39 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     canvas.restore();
 
     canvas.restore(); // end the camera transform
+
+    // --- Low-health vignette (screen space, outside the camera transform so it's
+    // pinned to the play area, not the world). A red inset glow that pulses when
+    // the player drops below LOW_HP_THRESHOLD — brighter and beating faster the
+    // closer to death (the beat rate is baked into lowHealthPhase by the sim).
+    if (player.hpFrac < LOW_HP_THRESHOLD) {
+      // 0 at the threshold → 1 at empty: drives both brightness and (via the
+      // sim's phase rate) the beat speed.
+      const severity = Math.min(1, (LOW_HP_THRESHOLD - player.hpFrac) / LOW_HP_THRESHOLD);
+      // Soft swell, not a hard blink: 0.5 − 0.5·cos over the beat. A floor keeps
+      // some glow between beats so the danger never fully reads as "clear".
+      const pulse = 0.5 - 0.5 * Math.cos(scene.lowHealthPhase * Math.PI * 2);
+      const peak =
+        LOW_HP_VIGNETTE_MIN_ALPHA + (LOW_HP_VIGNETTE_MAX_ALPHA - LOW_HP_VIGNETTE_MIN_ALPHA) * severity;
+      const alpha = peak * (0.35 + 0.65 * pulse);
+
+      // The play area is the picture's whole surface: anchor is its centre
+      // (anchorX = width/2, anchorY = playHeight/2 in GameScreen), so ×2 is its
+      // size. A radial gradient reaching the corners rims the frame in red.
+      const w = anchor.x * 2;
+      const h = anchor.y * 2;
+      fill.setShader(
+        Skia.Shader.MakeRadialGradient(
+          { x: anchor.x, y: anchor.y },
+          Math.hypot(w, h) / 2,
+          [LOW_HP_CLEAR, LOW_HP_OPAQUE],
+          [0.45, 1],
+          TileMode.Clamp,
+        ),
+      );
+      fill.setAlphaf(alpha);
+      fill.setMaskFilter(null);
+      canvas.drawRect(Skia.XYWHRect(0, 0, w, h), fill);
+      fill.setShader(null);
+    }
   });
