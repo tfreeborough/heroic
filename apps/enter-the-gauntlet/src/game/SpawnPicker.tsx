@@ -4,6 +4,8 @@ import { CREATURES, type EnemyTypeId } from "./constants";
 export interface SpawnPickerProps {
   onSpawn: (type: EnemyTypeId) => void;
   onClear: () => void;
+  /** Top safe-area inset (px), so the bar clears a status bar / display cutout. */
+  topInset?: number;
 }
 
 const TYPES = Object.keys(CREATURES) as EnemyTypeId[];
@@ -14,8 +16,8 @@ const TYPES = Object.keys(CREATURES) as EnemyTypeId[];
  * Clear to wipe them. Not a shipping control — the real game spawns from
  * encounter data.
  */
-export const SpawnPicker = ({ onSpawn, onClear }: SpawnPickerProps) => (
-  <View style={styles.bar} pointerEvents="box-none">
+export const SpawnPicker = ({ onSpawn, onClear, topInset = 0 }: SpawnPickerProps) => (
+  <View style={[styles.bar, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
     {TYPES.map((type) => {
       const def = CREATURES[type];
       return (

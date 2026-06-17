@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { Canvas, Fill, Picture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   addBody,
   addVelocityPerSecond,
@@ -149,11 +150,18 @@ interface ArcFlash {
 
 export const GameScreen = () => {
   const { width, height } = useWindowDimensions();
+  // System-bar insets: the app draws edge-to-edge (Android default), so the
+  // bottom navigation bar would otherwise overlap the control deck. We reserve
+  // the bottom inset out of the play space (below) and pad the deck past it.
+  const insets = useSafeAreaInsets();
   // Vertical layout: the play space targets 3:4 (w:h); the control deck takes
-  // the remaining height but never less than CONTROLS_MIN_HEIGHT — on short
-  // screens the play space shrinks instead. Taller screens just see more
-  // world above/below, which is fine in singleplayer.
-  const playHeight = Math.min(Math.round(width * PLAY_HEIGHT_RATIO), height - CONTROLS_MIN_HEIGHT);
+  // the remaining height but never less than CONTROLS_MIN_HEIGHT *above the nav
+  // bar* — on short screens the play space shrinks instead. Taller screens just
+  // see more world above/below, which is fine in singleplayer.
+  const playHeight = Math.min(
+    Math.round(width * PLAY_HEIGHT_RATIO),
+    height - CONTROLS_MIN_HEIGHT - insets.bottom,
+  );
   const anchorX = width / 2;
   const anchorY = playHeight / 2;
   const stickSize = Math.min(200, Math.round(width * 0.44));
@@ -863,10 +871,10 @@ export const GameScreen = () => {
           <Fill color={COLORS.void} />
           <Picture picture={combatPicture} />
         </Canvas>
-        <SpawnPicker onSpawn={spawnEnemy} onClear={clearEnemies} />
+        <SpawnPicker onSpawn={spawnEnemy} onClear={clearEnemies} topInset={insets.top} />
       </View>
 
-      <View style={styles.controls}>
+      <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
         <WeaponPicker selected={weaponId} onSelect={selectWeapon} />
         <Thumbstick size={stickSize} onChange={(sample) => (stickRef.current = sample)} />
       </View>
