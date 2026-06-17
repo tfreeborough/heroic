@@ -24,6 +24,7 @@ export * from "./combat/targeting";
 export * from "./combat/hitbox";
 export * from "./combat/projectile";
 export * from "./combat/flight";
+export * from "./abilities/ability";
 export * from "./ecs/world";
 export * from "./sim/loop";
 export * from "./rng";

@@ -189,6 +189,39 @@ export const PLAYER_ACCEL = 3000;
  */
 export const PLAYER_DECEL = 2800;
 
+// --- Dash / roll -------------------------------------------------------------
+// A committed burst in the stick direction (or facing, if the stick is idle):
+// the player's velocity is pinned to DASH_SPEED for DASH_DURATION, bypassing the
+// usual acceleration ramp, then normal locomotion's decel skids it back out.
+/** Roll distance, world px (≈10 player diameters — a real repositioning dodge). */
+export const DASH_DISTANCE = 180;
+/** Roll duration, seconds: distance is covered over this window. */
+export const DASH_DURATION = 0.2;
+/** Roll speed, px/s — derived so distance/duration stay the things you tune. */
+export const DASH_SPEED = DASH_DISTANCE / DASH_DURATION;
+/** Seconds before the roll can be used again (the cooldown clock fills this). */
+export const DASH_COOLDOWN = 8;
+/**
+ * Invulnerability window, seconds — a touch longer than the roll itself so the
+ * dodge stays forgiving at the tail. Tracked separately from the post-hit
+ * i-frames so a roll never triggers the red "hurt" flash.
+ */
+export const DASH_IFRAMES = 0.25;
+/**
+ * Outward shove applied to any enemy the roll barges into, px/s (a velocity
+ * impulse that decays through the enemy's locomotion decel, same as a melee
+ * knockback). Firm — between a contact bite and the sword's heavy swing.
+ */
+export const DASH_KNOCKBACK = 840;
+/**
+ * The player's *effective* barge radius while dashing — the "bowling ball" size,
+ * deliberately wider than PLAYER_RADIUS (18) so a roll sweeps up a whole clump
+ * and scatters it, not just the one enemy you physically touch. The shove
+ * triggers within DASH_SHOVE_RADIUS + ENEMY_RADIUS of the player centre. ~one
+ * tile (64) wide is a satisfying sweep; only applies during the active roll.
+ */
+export const DASH_SHOVE_RADIUS = 46;
+
 // --- Targeting & combat -------------------------------------------------------
 
 /**

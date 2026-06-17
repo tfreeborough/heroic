@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
-import { Canvas, Fill, Picture } from "@shopify/react-native-skia";
+import { Canvas, Fill, Picture, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -31,6 +31,7 @@ import {
   selectTarget,
   setVelocityPerSecond,
   spawnVolley,
+  stepAbility,
   stepAttackCycle,
   stepCrowd,
   stepPhysics,
@@ -90,7 +91,19 @@ import {
 import { WEAPONS, type WeaponDef, type WeaponId } from "./weapons";
 import { playStrikeHaptic } from "./haptics";
 import { Thumbstick } from "./Thumbstick";
-import { WeaponPicker } from "./WeaponPicker";
+import { WeaponButton } from "./WeaponButton";
+import { DashButton, DASH_READY_PICTURE, recordDashButton } from "./DashButton";
+import {
+  applyDashShove,
+  beginDash,
+  createDashRuntime,
+  dashCooldownFrac,
+  dashInvulnerable,
+  dashVelocity,
+  DASH_CONFIG,
+  isDashing,
+  tickDashInvuln,
+} from "./skills/dash";
 import { SpawnPicker } from "./SpawnPicker";
 import { EMPTY_COMBAT_PICTURE, recordCombatScene } from "./renderCombat";
 
@@ -271,6 +284,11 @@ export const GameScreen = () => {
     iFrames: 0,
   });
 
+  // Dash skill runtime: the generic ability lifecycle plus the dash's own effect
+  // state (locked direction, dodge i-frames). A ref — the sim owns it, no render.
+  // The first of what will be a skill roster; each new skill gets a runtime here.
+  const dashRuntime = useRef(createDashRuntime());
+
   const [weaponId, setWeaponId] = useState<WeaponId>(combat.current.weapon.id);
   const selectWeapon = (id: WeaponId) => {
     setWeaponId(id);
@@ -279,6 +297,11 @@ export const GameScreen = () => {
     // Swapping resets the cycle — no carrying a greatsword windup into a bow.
     c.cycle = ATTACK_CYCLE_READY;
     c.lockedId = null;
+  };
+  /** Equip the next weapon in WEAPONS, wrapping at the end. */
+  const cycleWeapon = () => {
+    const idx = WEAPONS.findIndex((w) => w.id === combat.current.weapon.id);
+    selectWeapon(WEAPONS[(idx + 1) % WEAPONS.length]!.id);
   };
 
   // Previous + current simulated state, so the renderer can interpolate
@@ -327,6 +350,16 @@ export const GameScreen = () => {
   // re-recorded each frame from the game loop. No React re-renders in play.
   const combatPicture = useSharedValue(EMPTY_COMBAT_PICTURE);
 
+  // Dash button: a one-shot request flag the button raises and the sim consumes
+  // (so the sim stays the authority on whether the roll is actually ready), plus
+  // the button face the sim re-records while the cooldown clock sweeps.
+  const dashRequest = useRef(false);
+  const requestDash = () => {
+    dashRequest.current = true;
+  };
+  const dashOverlay = useSharedValue<SkPicture>(DASH_READY_PICTURE);
+  const dashCooling = useRef(false);
+
   // Zoom is a plain number eased in JS (the picture recorder needs it per
   // frame); a swap sets the target and onRender glides toward it.
   const zoomTarget = useRef(zoomFor(combat.current.weapon));
@@ -342,6 +375,7 @@ export const GameScreen = () => {
       const c = combat.current;
       const stick = stickRef.current;
       const enemies = enemiesRef.current;
+      const dash = dashRuntime.current;
       s.time += dt;
       s.prevX = s.currX;
       s.prevY = s.currY;
@@ -353,18 +387,41 @@ export const GameScreen = () => {
         e.prevY = e.currY;
       }
 
-      // --- Movement: the stick sets a *desired* velocity; the actual velocity
-      // chases it at a capped rate (short ramp-up, small skid on release).
-      const speed = PLAYER_MAX_SPEED * stick.magnitude;
-      const desired = { x: stick.dir.x * speed, y: stick.dir.y * speed };
-      const vel = approachVelocity(
-        getVelocityPerSecond(player),
-        desired,
-        dt,
-        PLAYER_ACCEL,
-        PLAYER_DECEL,
-      );
-      setVelocityPerSecond(player, vel.x, vel.y);
+      // --- Dash skill: advance its lifecycle (ready → active → cooldown). The
+      // queued button press only fires from Ready, so presses mid-roll or on
+      // cooldown are ignored. On the activation step we lock the roll direction
+      // (the stick's, or facing when the stick is idle) and open the dodge
+      // i-frames — the skill's on-activate effects (see skills/dash.ts).
+      const dashStep = stepAbility(dash.ability, DASH_CONFIG, dt, dashRequest.current);
+      dashRequest.current = false;
+      dash.ability = dashStep.state;
+      if (dashStep.activated) {
+        if (stick.magnitude > 0) beginDash(dash, stick.dir.x, stick.dir.y);
+        else beginDash(dash, Math.cos(s.facing), Math.sin(s.facing));
+        playStrikeHaptic("light");
+      }
+      tickDashInvuln(dash, dt);
+
+      // --- Movement: while rolling, velocity is pinned to the committed dash
+      // (bypassing the ramp) and matter.js collides it against walls as usual;
+      // otherwise the stick sets a *desired* velocity the actual velocity chases
+      // at a capped rate (short ramp-up, a small skid on release — which also
+      // carries the roll's momentum out into a brief slide).
+      if (isDashing(dash)) {
+        const v = dashVelocity(dash);
+        setVelocityPerSecond(player, v.x, v.y);
+      } else {
+        const speed = PLAYER_MAX_SPEED * stick.magnitude;
+        const desired = { x: stick.dir.x * speed, y: stick.dir.y * speed };
+        const vel = approachVelocity(
+          getVelocityPerSecond(player),
+          desired,
+          dt,
+          PLAYER_ACCEL,
+          PLAYER_DECEL,
+        );
+        setVelocityPerSecond(player, vel.x, vel.y);
+      }
 
       // --- Enemy AI: each brain reads perception and yields a desired
       // velocity, shaped through the same acceleration-limited locomotion as
@@ -500,11 +557,12 @@ export const GameScreen = () => {
       /**
        * Apply one incoming hit to the player (contact bite or enemy projectile).
        * Gated by i-frames so overlap/volleys can't drain HP per-step — one hit
-       * per window, first to land wins. No death in the tech demo: an emptied
+       * per window, first to land wins. Also ignored entirely during a roll's
+       * invulnerability window (a dodge). No death in the tech demo: an emptied
        * bar refills. Returns whether the hit landed.
        */
       const damagePlayer = (attacker: Combatant, fromX: number, fromY: number, knockback: number): boolean => {
-        if (c.iFrames > 0) return false;
+        if (c.iFrames > 0 || dashInvulnerable(dash)) return false;
         const result = resolveAttack(attacker, c.playerCombatant, rng);
         c.iFrames = PLAYER_IFRAMES;
         const away = normalize(sub(playerPos, { x: fromX, y: fromY }));
@@ -525,13 +583,18 @@ export const GameScreen = () => {
 
       c.iFrames = Math.max(0, c.iFrames - dt);
 
-      // --- Contact damage: a touching enemy bites (self-gated by i-frames).
+      // --- Contact damage: a touching enemy bites (self-gated by i-frames, and
+      // by the roll's invulnerability — you can't be bitten mid-dodge).
       for (const e of enemies) {
         if (distance(playerPos, e.mover.pos) > PLAYER_RADIUS + ENEMY_RADIUS + 1) continue;
         if (damagePlayer(e.combatant, e.mover.pos.x, e.mover.pos.y, CREATURES[e.type].contactKnockback)) {
           break; // one bite per window; the rest no-op anyway
         }
       }
+
+      // --- Dash barge: while rolling, shove any enemy in contact outward (no
+      // damage — it's a reposition, not an attack). See skills/dash.ts.
+      applyDashShove(dash, playerPos, enemies);
 
       // --- Targeting: nearest hostile with hysteresis, inside the engagement
       // radius (which sits a margin beyond the weapon's attack range). Only
@@ -765,6 +828,7 @@ export const GameScreen = () => {
       const s = sim.current;
       const c = combat.current;
       const enemies = enemiesRef.current;
+      const dash = dashRuntime.current;
 
       // Interpolate between the last two sim states (player, camera, every
       // enemy) by the frame alpha. Everything the renderer sees flows through
@@ -881,6 +945,19 @@ export const GameScreen = () => {
         time: s.time,
         lowHealthPhase: s.lowHpPhasePrev + (s.lowHpPhaseCurr - s.lowHpPhasePrev) * alpha,
       });
+
+      // Drive the dash button's cooldown clock from the skill. While cooling,
+      // re-record the wedge each frame for a smooth sweep; the moment it's ready,
+      // push the cached ready face once — so an idle button never redraws (same
+      // SkPicture ref each frame is a no-op for the <Picture>).
+      const frac = dashCooldownFrac(dash);
+      if (frac > 0) {
+        dashOverlay.value = recordDashButton(frac);
+        dashCooling.current = true;
+      } else if (dashCooling.current) {
+        dashOverlay.value = DASH_READY_PICTURE;
+        dashCooling.current = false;
+      }
     },
   });
 
@@ -898,7 +975,10 @@ export const GameScreen = () => {
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
         <Thumbstick size={stickSize} onChange={(sample) => (stickRef.current = sample)} />
-        <WeaponPicker selected={weaponId} onSelect={selectWeapon} />
+        <View style={styles.actions}>
+          <WeaponButton selected={weaponId} onCycle={cycleWeapon} />
+          <DashButton overlay={dashOverlay} onPress={requestDash} />
+        </View>
       </View>
     </View>
   );
@@ -922,5 +1002,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 24,
     paddingBottom: 12,
+  },
+  // Bottom-right action stack: weapon swap on top, the dash roll below it (the
+  // primary right-thumb action sits lowest/most reachable). A column keeps the
+  // wide weapon chip from crowding the thumbstick on narrow phones.
+  actions: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 12,
   },
 });
