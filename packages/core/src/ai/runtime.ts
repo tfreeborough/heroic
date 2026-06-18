@@ -46,6 +46,15 @@ export interface Archetype<Config extends CommonConfig, State> {
    */
   tick(state: State, config: Config, perception: EnemyPerception, dt: number): Vec2;
   /**
+   * Optional: this instance's *current* normal (non-burst) top speed, when it
+   * isn't the static `config.speed` — e.g. a chaser that accelerates the longer
+   * it hunts. The runtime reads it for the speed clamp and the wall-routing gate,
+   * so a sped-up mover isn't clipped back to `config.speed` and still paths
+   * around walls. Omitted ⇒ `config.speed`. Committed-burst ceilings still come
+   * from `maxSpeed`.
+   */
+  normalSpeed?(state: State, config: Config): number;
+  /**
    * Optional: a render hint for the brain's current internal state (a charge
    * wind-up, etc.), or null when there's nothing to show. Lets the renderer
    * draw a tell without decoding `state`.
@@ -90,6 +99,11 @@ export const makeBrain = <Config extends CommonConfig, State>(
 export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number): Vec2 => {
   const intent = brain.archetype.tick(brain.state, brain.config, perception, dt);
 
+  // This instance's current normal (non-burst) top speed. Usually the static
+  // config speed, but some archetypes vary it per individual and over time (a
+  // chaser ramps it up the longer it hunts); the gate and clamp below track that.
+  const normalSpeed = brain.archetype.normalSpeed?.(brain.state, brain.config) ?? brain.config.speed;
+
   // Route around walls: when the archetype wants to engage (normal-speed intent)
   // but a wall blocks line of sight, replace its straight-line intent with an A*
   // path to the player. Skipped for idle intent (≈0, e.g. a dormant ambusher —
@@ -102,7 +116,7 @@ export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number)
     perception.hasLineOfSight === false &&
     perception.navGrid &&
     speed > 1 &&
-    speed <= brain.config.speed + 1e-6
+    speed <= normalSpeed + 1e-6
   ) {
     move = pursue(
       perception.selfPos,
@@ -115,15 +129,17 @@ export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number)
     );
   }
 
-  // Separation is scaled to the *normal* speed (so a dasher doesn't shove allies
-  // at dash speed); the final clamp allows a committed burst up to maxSpeed.
+  // Separation is scaled to the *base* config speed (not a chaser's ramped speed
+  // or a dasher's burst), so the crowd-spreading force stays stable. The final
+  // clamp allows this instance's current top speed — its ramped normal speed, or
+  // a committed burst up to maxSpeed, whichever is higher.
   const spread = separation(
     perception.selfPos,
     perception.neighbors,
     brain.config.speed,
     brain.config.separationRadius,
   );
-  return clampSpeed(add(move, spread), brain.config.maxSpeed ?? brain.config.speed);
+  return clampSpeed(add(move, spread), Math.max(normalSpeed, brain.config.maxSpeed ?? normalSpeed));
 };
 
 /** Read a brain's render-time telegraph, if its archetype exposes one. */

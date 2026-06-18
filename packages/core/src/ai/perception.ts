@@ -62,6 +62,38 @@ export const beyondAggro = (p: EnemyPerception, aggroRadius: number): boolean =>
   distance(p.selfPos, p.playerPos) > aggroRadius;
 
 /**
+ * How far past `aggroRadius` an engaged creature will keep pursuing before it
+ * gives up — the "leash", as a multiple of its notice range. Deliberately large:
+ * once something aggros you it chases across (soon) a much bigger world, letting
+ * go only if you get hopelessly far away (e.g. it's stuck behind geometry). One
+ * knob for every pursuer; raise/lower to make hounding more or less relentless.
+ */
+export const LEASH_MULT = 30;
+
+/**
+ * Sticky aggro with hysteresis. Engages when the player first comes within
+ * `aggroRadius`, then *stays* engaged — pursuing far past where it first noticed
+ * — until the player passes `leashRadius` (default `aggroRadius × LEASH_MULT`),
+ * at which point it releases. The gap between the two thresholds is the point: a
+ * tight notice range can coexist with a huge give-up range, and a creature
+ * loitering at the boundary can't flip-flop between chase and idle every step.
+ *
+ * Mutates and reads `state.engaged` (carry it on the archetype's per-instance
+ * state), and returns the new engaged value — the caller acts when true, idles
+ * when false. Stays deterministic: pure function of position + prior flag.
+ */
+export const updateAggro = (
+  p: EnemyPerception,
+  state: { engaged: boolean },
+  aggroRadius: number,
+  leashRadius: number = aggroRadius * LEASH_MULT,
+): boolean => {
+  const d = distance(p.selfPos, p.playerPos);
+  state.engaged = state.engaged ? d <= leashRadius : d <= aggroRadius;
+  return state.engaged;
+};
+
+/**
  * How far (radians, unsigned) the enemy sits from the centre of the player's
  * facing direction. 0 = dead ahead of the player. Drives the circler.
  */

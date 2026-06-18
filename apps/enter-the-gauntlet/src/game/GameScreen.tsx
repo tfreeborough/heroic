@@ -76,6 +76,7 @@ import {
   LOW_HP_THRESHOLD,
   MAX_REPATHS_PER_STEP,
   NAV_CELL,
+  OFFSCREEN_SIM_MARGIN,
   OCCLUDERS,
   PLAY_HEIGHT_RATIO,
   PLAYER_ACCEL,
@@ -446,19 +447,36 @@ export const GameScreen = () => {
       const collectNeighbor = (j: number): void => {
         if (j !== selfIndex) neighbors.push(living[j]!.mover.pos);
       };
+      // Level-of-detail cutoff for the *uncapped* per-enemy AI costs (the LOS
+      // raycast + wall pathfinding): the visible world's half-diagonal — derived
+      // from the live zoom, so it tracks how much is actually on screen — grown
+      // by OFFSCREEN_SIM_MARGIN. Compared squared, so no per-enemy sqrt.
+      const zoom = zoomCurrent.current || 1;
+      const viewRadius = (0.5 / zoom) * Math.hypot(width, playHeight);
+      const simRadiusSq = (viewRadius * OFFSCREEN_SIM_MARGIN) ** 2;
       for (let i = 0; i < living.length; i++) {
         const e = living[i]!;
         selfIndex = i;
         neighbors.length = 0;
         forEachNeighbor(enemyGrid, e.mover.pos.x, e.mover.pos.y, collectNeighbor);
-        // Refresh line-of-sight on a throttle (staggered per enemy): it's a ray
-        // test against every occluder and only gates pathing, so a few frames of
-        // lag is invisible. When a wall blocks the sightline, the runtime routes
-        // around it via A* on navGrid instead of steering straight into it.
-        if (e.losTimer <= 0) {
-          e.los = segmentClear(e.mover.pos, player.position, OCCLUDERS);
-          e.losTimer = LOS_RECHECK_STEPS;
-        } else {
+        // On-screen enemies refresh line-of-sight on a throttle (staggered per
+        // enemy): it's a ray test against every occluder and only gates pathing,
+        // so a few frames of lag is invisible. When a wall blocks the sightline,
+        // the runtime routes around it via A* on navGrid. Off-screen enemies skip
+        // both the raycast and A* — they're treated as sighted (steer straight,
+        // the leash keeps them coming), and their LOS timer keeps ticking down so
+        // they re-check the instant they come back on screen.
+        const dxp = e.mover.pos.x - player.position.x;
+        const dyp = e.mover.pos.y - player.position.y;
+        const near = dxp * dxp + dyp * dyp <= simRadiusSq;
+        if (near) {
+          if (e.losTimer <= 0) {
+            e.los = segmentClear(e.mover.pos, player.position, OCCLUDERS);
+            e.losTimer = LOS_RECHECK_STEPS;
+          } else {
+            e.losTimer -= 1;
+          }
+        } else if (e.losTimer > 0) {
           e.losTimer -= 1;
         }
         const desired = tickBrain(
@@ -468,8 +486,8 @@ export const GameScreen = () => {
             playerPos: player.position,
             playerFacing: s.facing,
             neighbors,
-            hasLineOfSight: e.los,
-            navGrid,
+            hasLineOfSight: near ? e.los : true,
+            navGrid: near ? navGrid : null,
             repathBudget,
           },
           dt,

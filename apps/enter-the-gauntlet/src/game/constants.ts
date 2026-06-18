@@ -165,6 +165,18 @@ export const LOS_RECHECK_STEPS = 6;
  */
 export const MAX_REPATHS_PER_STEP = 6;
 
+/**
+ * Distance-of-detail cutoff for the *uncapped* per-enemy AI cost — the line-of-
+ * sight raycast (against every occluder, every LOS_RECHECK_STEPS) and the wall-
+ * routing pathfinding. Enemies within this multiple of the on-screen radius (the
+ * visible world's half-diagonal, so it tracks zoom) get the full treatment;
+ * those beyond it — off-screen — skip the raycast and A* and simply steer
+ * straight at the player. The leash still reels them in (they keep moving); they
+ * just don't navigate around walls until they're back near the camera, where it
+ * shows. >1 so a creature at the screen edge is already fully simulated.
+ */
+export const OFFSCREEN_SIM_MARGIN = 1.25;
+
 // --- Layout -----------------------------------------------------------------
 // Vertical play: the top portion is the play space, the bottom is the control
 // deck. The play space targets a 3:4 (w:h) ratio; whatever screen height is

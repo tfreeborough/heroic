@@ -1,6 +1,6 @@
 import { add, type Vec2 } from "../../math/vec2";
 import { keepDistance, orbit, seek } from "../steering";
-import { angleOffPlayerFacing, beyondAggro, ZERO_VELOCITY, type CommonConfig } from "../perception";
+import { angleOffPlayerFacing, updateAggro, ZERO_VELOCITY, type CommonConfig } from "../perception";
 import type { Archetype } from "../runtime";
 
 /**
@@ -37,6 +37,8 @@ export interface CirclerState {
   modeTime: number;
   /** Which way this individual circles — fixed at spawn, reads as personality. */
   orbitDirection: 1 | -1;
+  /** Sticky aggro flag for the leash hysteresis (see updateAggro). */
+  engaged: boolean;
 }
 
 export const circler: Archetype<CirclerConfig, CirclerState> = {
@@ -46,9 +48,10 @@ export const circler: Archetype<CirclerConfig, CirclerState> = {
     mode: "approach",
     modeTime: 0,
     orbitDirection: index % 2 === 0 ? 1 : -1,
+    engaged: false,
   }),
   tick: (state, config, p, dt): Vec2 => {
-    if (beyondAggro(p, config.aggroRadius)) return ZERO_VELOCITY;
+    if (!updateAggro(p, state, config.aggroRadius)) return ZERO_VELOCITY;
     state.modeTime += dt;
 
     const off = angleOffPlayerFacing(p);

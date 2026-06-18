@@ -1,6 +1,6 @@
 import { distance, type Vec2 } from "../../math/vec2";
 import { flee, seek } from "../steering";
-import { beyondAggro, ZERO_VELOCITY, type CommonConfig } from "../perception";
+import { updateAggro, ZERO_VELOCITY, type CommonConfig } from "../perception";
 import type { Archetype } from "../runtime";
 
 /**
@@ -21,13 +21,16 @@ export interface KiterConfig extends CommonConfig {
   rangeBand: number;
 }
 
-type KiterState = Record<string, never>;
+export interface KiterState {
+  /** Sticky aggro flag for the leash hysteresis (see updateAggro). */
+  engaged: boolean;
+}
 
 export const kiter: Archetype<KiterConfig, KiterState> = {
   id: "kiter",
-  initState: () => ({}),
-  tick: (_state, config, p): Vec2 => {
-    if (beyondAggro(p, config.aggroRadius)) return ZERO_VELOCITY;
+  initState: () => ({ engaged: false }),
+  tick: (state, config, p): Vec2 => {
+    if (!updateAggro(p, state, config.aggroRadius)) return ZERO_VELOCITY;
     // No shot through a wall: when sight is blocked, close in to find a clear
     // line (the runtime routes this around the obstacle) rather than holding a
     // useless standoff. Resumes ranging the moment it can see the player again.

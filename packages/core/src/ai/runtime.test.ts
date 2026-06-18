@@ -55,4 +55,18 @@ describe("tickBrain", () => {
     const v = tickBrain(brain, perceive(vec2(0, 5), [vec2(0, 10)]), DT); // + separation
     expect(length(v)).toBeLessThanOrEqual(CONFIG.speed + 1e-9);
   });
+
+  test("clamps to a dynamic normalSpeed when the archetype exposes one", () => {
+    // An archetype whose current normal speed (350) exceeds config.speed (200):
+    // the clamp must follow the live value, not clip back to config.speed.
+    const ramped: Archetype<CommonConfig, null> = {
+      id: "ramped",
+      initState: () => null,
+      tick: () => vec2(500, 0), // intent over both speeds
+      normalSpeed: () => 350,
+    };
+    const brain = makeBrain(ramped, CONFIG);
+    const v = tickBrain(brain, perceive(vec2(100, 0)), DT);
+    expect(length(v)).toBeCloseTo(350);
+  });
 });

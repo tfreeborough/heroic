@@ -1,6 +1,6 @@
 import { distance, normalize, scale, sub, type Vec2 } from "../../math/vec2";
 import { seek } from "../steering";
-import { beyondAggro, ZERO_VELOCITY, type CommonConfig } from "../perception";
+import { updateAggro, ZERO_VELOCITY, type CommonConfig } from "../perception";
 import type { Archetype, Telegraph } from "../runtime";
 
 /**
@@ -33,15 +33,19 @@ export interface ChargerState {
   timer: number;
   /** Dash direction, locked when WINDUP begins. */
   dashDir: Vec2;
+  /** Sticky aggro flag for the leash hysteresis (see updateAggro). */
+  engaged: boolean;
 }
 
 export const charger: Archetype<ChargerConfig, ChargerState> = {
   id: "charger",
-  initState: () => ({ mode: "approach", timer: 0, dashDir: { x: 1, y: 0 } }),
+  initState: () => ({ mode: "approach", timer: 0, dashDir: { x: 1, y: 0 }, engaged: false }),
   tick: (state, config, p, dt): Vec2 => {
     switch (state.mode) {
       case "approach": {
-        if (beyondAggro(p, config.aggroRadius)) return ZERO_VELOCITY;
+        // Aggro is only evaluated while approaching; once committed to a charge
+        // it sees the cycle through. The leash keeps it after you between dashes.
+        if (!updateAggro(p, state, config.aggroRadius)) return ZERO_VELOCITY;
         if (distance(p.selfPos, p.playerPos) <= config.chargeRange) {
           // Commit: lock the dash line at the player's position now.
           state.dashDir = normalize(sub(p.playerPos, p.selfPos));
