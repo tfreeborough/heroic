@@ -18,6 +18,13 @@ describe("buildNavGrid", () => {
     expect(clear.grid.isWalkable(3, 3)).toBe(true);
     expect(fat.grid.isWalkable(3, 3)).toBe(false);
   });
+
+  test("supports a non-square (width × height) world", () => {
+    const nav = buildNavGrid(3200, 64, [], 0, 768); // 50 × 12 tiles — wide, thin
+    expect(nav.cols).toBe(50);
+    expect(nav.rows).toBe(12);
+    expect(nav.grid.isWalkable(49, 11)).toBe(true); // last cell exists and is clear
+  });
 });
 
 describe("worldToCell / cellCentre", () => {

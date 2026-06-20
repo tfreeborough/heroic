@@ -86,6 +86,13 @@ describe("clampCircleToBounds", () => {
     clampCircleToBounds(a, 10, 200);
     expect(a).toEqual({ x: 100, y: 100 });
   });
+
+  test("clamps to a non-square (width × height) world", () => {
+    // Wide, thin world 3200 × 768: y past the short axis is pulled in, x is fine.
+    const a = { x: 100, y: 900 };
+    clampCircleToBounds(a, 10, 3200, 768);
+    expect(a).toEqual({ x: 100, y: 758 }); // 768 - radius 10
+  });
 });
 
 describe("pushApartCrowd", () => {

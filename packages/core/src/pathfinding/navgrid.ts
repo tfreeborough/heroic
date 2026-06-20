@@ -30,20 +30,23 @@ const inInflatedRect = (x: number, y: number, b: NavBlocker, inflate: number): b
   Math.abs(x - b.x) <= b.w / 2 + inflate && Math.abs(y - b.y) <= b.h / 2 + inflate;
 
 /**
- * Build a nav grid over [0, worldSize]² at `cellSize`. A cell is unwalkable when
- * its centre lies within `inflate` of any blocker — inflating by the agent's
+ * Build a nav grid over `[0, width] × [0, height]` at `cellSize` (pass only
+ * `width` for a square world — `height` defaults to it). A cell is unwalkable
+ * when its centre lies within `inflate` of any blocker — inflating by the agent's
  * radius keeps routed paths a body-width clear of walls, so movers don't clip
  * corners. Blockers are centre-based rects (like the arena's `PILLARS`).
  */
 export const buildNavGrid = (
-  worldSize: number,
+  width: number,
   cellSize: number,
   blockers: readonly NavBlocker[],
   inflate: number,
+  height = width,
 ): NavGrid => {
-  const cols = Math.ceil(worldSize / cellSize);
+  const cols = Math.ceil(width / cellSize);
+  const rows = Math.ceil(height / cellSize);
   const matrix: boolean[][] = [];
-  for (let r = 0; r < cols; r++) {
+  for (let r = 0; r < rows; r++) {
     const cy = (r + 0.5) * cellSize;
     const row: boolean[] = [];
     for (let c = 0; c < cols; c++) {
@@ -52,7 +55,7 @@ export const buildNavGrid = (
     }
     matrix.push(row);
   }
-  return { grid: gridFromMatrix(matrix), cellSize, cols, rows: cols };
+  return { grid: gridFromMatrix(matrix), cellSize, cols, rows };
 };
 
 /** World point → the grid cell containing it (may be out of bounds; callers clamp). */

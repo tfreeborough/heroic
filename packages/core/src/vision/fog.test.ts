@@ -14,6 +14,13 @@ describe("createFogGrid", () => {
     expect(fog.seen).toHaveLength(100);
     expect(fog.seen.some((v) => v === 1)).toBe(false);
   });
+
+  test("supports a non-square (width × height) grid", () => {
+    const fog = createFogGrid(3200, 64, 768); // 50 × 12 tiles — a wide, thin zone
+    expect(fog.cols).toBe(50);
+    expect(fog.rows).toBe(12);
+    expect(fog.seen).toHaveLength(600);
+  });
 });
 
 describe("markVisible", () => {

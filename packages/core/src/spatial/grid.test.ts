@@ -29,6 +29,13 @@ describe("createSpatialGrid", () => {
     expect(createSpatialGrid(10, 64).cols).toBe(1);
   });
 
+  test("supports a non-square (width × height) grid", () => {
+    const grid = createSpatialGrid(3200, 64, 768); // 50 × 12 tiles — a wide, thin zone
+    expect(grid.cols).toBe(50);
+    expect(grid.rows).toBe(12);
+    expect(grid.cells.length).toBe(600);
+  });
+
   test("rejects a non-positive cell size", () => {
     expect(() => createSpatialGrid(640, 0)).toThrow();
     expect(() => createSpatialGrid(640, -8)).toThrow();

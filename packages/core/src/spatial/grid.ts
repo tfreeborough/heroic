@@ -32,13 +32,17 @@ export interface SpatialGrid {
   readonly cells: number[][];
 }
 
-/** A square grid covering `worldSize × worldSize`, all cells empty. */
-export const createSpatialGrid = (worldSize: number, cellSize: number): SpatialGrid => {
+/**
+ * A grid covering `width × height`, all cells empty. Pass only `width` for a
+ * square grid — `height` defaults to it.
+ */
+export const createSpatialGrid = (width: number, cellSize: number, height = width): SpatialGrid => {
   if (cellSize <= 0) throw new Error("SpatialGrid cellSize must be > 0");
-  const cols = Math.max(1, Math.ceil(worldSize / cellSize));
-  const cells: number[][] = new Array(cols * cols);
+  const cols = Math.max(1, Math.ceil(width / cellSize));
+  const rows = Math.max(1, Math.ceil(height / cellSize));
+  const cells: number[][] = new Array(cols * rows);
   for (let i = 0; i < cells.length; i++) cells[i] = [];
-  return { cellSize, cols, rows: cols, cells };
+  return { cellSize, cols, rows, cells };
 };
 
 /** Column index for a world x, clamped to the grid (out-of-bounds → edge cell). */

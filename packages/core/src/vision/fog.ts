@@ -22,10 +22,14 @@ export interface FogGrid {
   readonly seen: Uint8Array;
 }
 
-/** A square fog grid covering `worldSize × worldSize`, initially all unseen. */
-export const createFogGrid = (worldSize: number, cellSize: number): FogGrid => {
-  const cols = Math.ceil(worldSize / cellSize);
-  return { cols, rows: cols, cellSize, seen: new Uint8Array(cols * cols) };
+/**
+ * A fog grid covering `width × height` (world px), initially all unseen. Pass
+ * only `width` for a square grid — `height` defaults to it.
+ */
+export const createFogGrid = (width: number, cellSize: number, height = width): FogGrid => {
+  const cols = Math.ceil(width / cellSize);
+  const rows = Math.ceil(height / cellSize);
+  return { cols, rows, cellSize, seen: new Uint8Array(cols * rows) };
 };
 
 /** Forget everything — back to fully unexplored (e.g. on a new arena). */

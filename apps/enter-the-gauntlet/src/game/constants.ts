@@ -8,6 +8,7 @@ import {
   chaser,
   circler,
   kiter,
+  loadZone,
   makeBrain,
   rectEdges,
   type AmbusherConfig,
@@ -20,56 +21,65 @@ import {
   type KiterConfig,
   type VisionSegment,
 } from "@heroic/engine";
+import { REALM_00 } from "./zones/realm-00";
+
+// The arena is authored as a zone file and loaded through the Realmsmith pipeline
+// (docs/design/world-representation.md). loadZone reproduces the exact geometry the
+// old hand-coded constants did; the exports below are derived from it, so the rest
+// of the app is untouched while the world becomes data-driven. Square zone, so
+// size.x === size.y throughout.
+const ARENA = loadZone(REALM_00);
 
 /** World units are pixels at 1:1 camera zoom. */
-export const TILE_SIZE = 64;
-/** Arena is square: this many tiles per side. */
-export const ARENA_TILES = 25;
-export const ARENA_SIZE = TILE_SIZE * ARENA_TILES;
+export const TILE_SIZE = ARENA.tileSize;
+/** Zone dimensions in tiles (no longer assumed square). */
+export const ARENA_COLS = REALM_00.size.cols;
+export const ARENA_ROWS = REALM_00.size.rows;
+/** Zone dimensions in world px. */
+export const ARENA_WIDTH = ARENA.size.x;
+export const ARENA_HEIGHT = ARENA.size.y;
 export const WALL_THICKNESS = 48;
 
-/** Arena boundary walls (centred rects), shared by physics bodies and rendering. */
+/** Where the player starts — the zone's authored player spawn. */
+export const SPAWN = ARENA.spawn;
+
+/**
+ * Arena boundary walls (centred rects), shared by physics bodies and rendering.
+ * Derived from the zone's rectangular bounds (interior obstacles are the zone's
+ * collision — PILLARS below). Enemies are kept in by the bounds clamp, so these
+ * only block the player (Matter) and get drawn.
+ */
 export const WALLS: { x: number; y: number; w: number; h: number }[] = (() => {
-  const s = ARENA_SIZE;
+  const w = ARENA.size.x;
+  const h = ARENA.size.y;
   const t = WALL_THICKNESS;
   return [
-    { x: s / 2, y: -t / 2, w: s + 2 * t, h: t },
-    { x: s / 2, y: s + t / 2, w: s + 2 * t, h: t },
-    { x: -t / 2, y: s / 2, w: t, h: s + 2 * t },
-    { x: s + t / 2, y: s / 2, w: t, h: s + 2 * t },
+    { x: w / 2, y: -t / 2, w: w + 2 * t, h: t },
+    { x: w / 2, y: h + t / 2, w: w + 2 * t, h: t },
+    { x: -t / 2, y: h / 2, w: t, h: h + 2 * t },
+    { x: w + t / 2, y: h / 2, w: t, h: h + 2 * t },
   ];
 })();
 
 /**
- * Interior pillars: solid blocks that both collide with bodies and occlude line
- * of sight. Centre-based like WALLS. Scattered a few tiles off the arena centre
- * (where the player spawns) so you immediately have blind spots to peek around.
- * This is a LOS demo layout — real arenas would author obstacles per realm.
+ * Interior obstacles: the zone's static collision — solid blocks that collide
+ * with bodies and occlude line of sight. Authored in realm-00 (the original LOS
+ * demo layout) and greedy-meshed by loadZone (plain rects here).
  */
-export const PILLARS: { x: number; y: number; w: number; h: number }[] = (() => {
-  const c = ARENA_SIZE / 2;
-  const u = TILE_SIZE;
-  return [
-    { x: c - 3.5 * u, y: c - 3.5 * u, w: 1.5 * u, h: 1.5 * u },
-    { x: c + 3.5 * u, y: c - 3 * u, w: 2 * u, h: u },
-    { x: c + 5 * u, y: c + 1.5 * u, w: u, h: 3 * u },
-    { x: c - 0.5 * u, y: c + 4 * u, w: 3 * u, h: 1.5 * u },
-    { x: c - 5 * u, y: c + 1 * u, w: u, h: 2.5 * u },
-  ];
-})();
+export const PILLARS = ARENA.collision;
 
 /**
  * Sight / projectile occluders, shared by the renderer (fog-of-war rays) and the
- * sim (projectile-vs-wall collisions and enemy line-of-sight): the arena
- * rectangle plus every pillar's edges. The arena box never lies between two
+ * sim (projectile-vs-wall collisions and enemy line-of-sight): the zone-bounds
+ * rectangle plus every pillar's edges. The bounds box never lies between two
  * interior points, so it doesn't affect enemy↔player sightlines — it only stops
  * projectiles at the boundary and bounds the fog rays.
  */
 export const OCCLUDERS: VisionSegment[] = [
-  { ax: 0, ay: 0, bx: ARENA_SIZE, by: 0 },
-  { ax: ARENA_SIZE, ay: 0, bx: ARENA_SIZE, by: ARENA_SIZE },
-  { ax: ARENA_SIZE, ay: ARENA_SIZE, bx: 0, by: ARENA_SIZE },
-  { ax: 0, ay: ARENA_SIZE, bx: 0, by: 0 },
+  { ax: 0, ay: 0, bx: ARENA.size.x, by: 0 },
+  { ax: ARENA.size.x, ay: 0, bx: ARENA.size.x, by: ARENA.size.y },
+  { ax: ARENA.size.x, ay: ARENA.size.y, bx: 0, by: ARENA.size.y },
+  { ax: 0, ay: ARENA.size.y, bx: 0, by: 0 },
   ...PILLARS.flatMap((p) => rectEdges(p.x, p.y, p.w, p.h)),
 ];
 

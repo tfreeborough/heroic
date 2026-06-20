@@ -51,8 +51,8 @@ import {
 } from "@heroic/engine";
 import {
   ARC_FLASH_DURATION,
-  ARENA_SIZE,
-  ARENA_TILES,
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
   CAMERA_FIT_MARGIN,
   CAMERA_FOLLOW_RATE,
   CAMERA_FRAME_PADDING,
@@ -86,6 +86,7 @@ import {
   PLAYER_RADIUS,
   PLAYER_STATS,
   PILLARS,
+  SPAWN,
   WALLS,
   type EnemyTypeId,
 } from "./constants";
@@ -199,7 +200,7 @@ export const GameScreen = () => {
 
   const { physics, player, weaponCombatants, rng } = useMemo(() => {
     const physics = createPhysicsWorld();
-    const player = createMoverBody(ARENA_SIZE / 2, ARENA_SIZE / 2, PLAYER_RADIUS);
+    const player = createMoverBody(SPAWN.x, SPAWN.y, PLAYER_RADIUS);
     addBody(physics, player);
     for (const w of WALLS) addBody(physics, createBlockerBody(w.x, w.y, w.w, w.h));
     for (const p of PILLARS) addBody(physics, createBlockerBody(p.x, p.y, p.w, p.h));
@@ -257,9 +258,10 @@ export const GameScreen = () => {
     const angle = rng.next() * Math.PI * 2;
     const dist = 300 + rng.next() * 120;
     const margin = ENEMY_RADIUS + 8;
-    const clamp = (v: number) => Math.max(margin, Math.min(ARENA_SIZE - margin, v));
-    const x = clamp(player.position.x + Math.cos(angle) * dist);
-    const y = clamp(player.position.y + Math.sin(angle) * dist);
+    const clampX = (v: number) => Math.max(margin, Math.min(ARENA_WIDTH - margin, v));
+    const clampY = (v: number) => Math.max(margin, Math.min(ARENA_HEIGHT - margin, v));
+    const x = clampX(player.position.x + Math.cos(angle) * dist);
+    const y = clampY(player.position.y + Math.sin(angle) * dist);
     enemiesRef.current.push(makeEnemy(type, x, y));
   };
 
@@ -308,18 +310,18 @@ export const GameScreen = () => {
   // Previous + current simulated state, so the renderer can interpolate
   // between fixed steps (render fps and sim fps are decoupled).
   const sim = useRef({
-    prevX: ARENA_SIZE / 2,
-    prevY: ARENA_SIZE / 2,
-    currX: ARENA_SIZE / 2,
-    currY: ARENA_SIZE / 2,
+    prevX: SPAWN.x,
+    prevY: SPAWN.y,
+    currX: SPAWN.x,
+    currY: SPAWN.y,
     facing: -Math.PI / 2, // face "up" until the first input
     // The camera is its own simulated object that chases the player rather
     // than pinning to them — moving lets the player drift off-centre and the
     // camera catch up, like a human operator (see CAMERA_FOLLOW_RATE).
-    camPrevX: ARENA_SIZE / 2,
-    camPrevY: ARENA_SIZE / 2,
-    camCurrX: ARENA_SIZE / 2,
-    camCurrY: ARENA_SIZE / 2,
+    camPrevX: SPAWN.x,
+    camPrevY: SPAWN.y,
+    camCurrX: SPAWN.x,
+    camCurrY: SPAWN.y,
     // Monotonic seconds, advanced each step — the drifting-mist shader's clock.
     time: 0,
     // Low-health pulse phase (whole beats). Advanced only while below the HP
@@ -333,18 +335,18 @@ export const GameScreen = () => {
   // Fog-of-war memory: a persistent grid the renderer sweeps with the sight
   // polygon each frame. Created once and never reset (the arena is fixed for the
   // demo); a new realm would call resetFog.
-  const fog = useMemo(() => createFogGrid(ARENA_SIZE, FOG_CELL), []);
+  const fog = useMemo(() => createFogGrid(ARENA_WIDTH, FOG_CELL, ARENA_HEIGHT), []);
 
   // Enemy navigation grid: built once from the interior pillars (inflated by the
   // enemy radius). The AI runtime routes brains around walls on this when their
   // sightline to the player is blocked.
-  const navGrid = useMemo(() => buildNavGrid(ARENA_SIZE, NAV_CELL, PILLARS, ENEMY_RADIUS), []);
+  const navGrid = useMemo(() => buildNavGrid(ARENA_WIDTH, NAV_CELL, PILLARS, ENEMY_RADIUS, ARENA_HEIGHT), []);
 
   // Spatial grid for enemy separation: every enemy is bucketed into it each step,
   // so separation only scans its 3×3 cell neighbourhood instead of the whole
   // swarm (the old O(n²) all-pairs scan). Created once; `neighborScratch` is the
   // reused per-query result buffer, so neighbour lookups allocate nothing.
-  const enemyGrid = useMemo(() => createSpatialGrid(ARENA_SIZE, ENEMY_GRID_CELL), []);
+  const enemyGrid = useMemo(() => createSpatialGrid(ARENA_WIDTH, ENEMY_GRID_CELL, ARENA_HEIGHT), []);
   const neighborScratch = useRef<Vec2[]>([]);
 
   // The only thing the Skia tree reads: one picture holding the whole world,
@@ -517,7 +519,8 @@ export const GameScreen = () => {
           grid: enemyGrid,
           walls: PILLARS,
           player: { pos: playerPos, radius: PLAYER_RADIUS },
-          worldSize: ARENA_SIZE,
+          worldSize: ARENA_WIDTH,
+          worldHeight: ARENA_HEIGHT,
           pushStrength: CROWD_PUSH,
         },
       );
@@ -706,7 +709,7 @@ export const GameScreen = () => {
         // have landed on the far side doesn't count.
         const hitWall =
           !segmentClear(from, p.pos, OCCLUDERS) ||
-          p.pos.x < 0 || p.pos.x > ARENA_SIZE || p.pos.y < 0 || p.pos.y > ARENA_SIZE;
+          p.pos.x < 0 || p.pos.x > ARENA_WIDTH || p.pos.y < 0 || p.pos.y > ARENA_HEIGHT;
         if (!hitWall) {
           for (const id of result.hits) {
             const d = enemies.find((dd) => dd.id === id);
@@ -765,7 +768,7 @@ export const GameScreen = () => {
         const result = stepProjectile(p, dt, [playerCircle]);
         const hitWall =
           !segmentClear(from, p.pos, OCCLUDERS) ||
-          p.pos.x < 0 || p.pos.x > ARENA_SIZE || p.pos.y < 0 || p.pos.y > ARENA_SIZE;
+          p.pos.x < 0 || p.pos.x > ARENA_WIDTH || p.pos.y < 0 || p.pos.y > ARENA_HEIGHT;
         if (!hitWall && result.hits.length > 0) damagePlayer(p.attacker, p.pos.x, p.pos.y, p.knockback);
         if (result.expired || hitWall) c.enemyProjectiles.splice(i, 1);
       }
@@ -792,14 +795,15 @@ export const GameScreen = () => {
         e.summonCycle = step.state;
         if (step.struck) {
           const margin = ENEMY_RADIUS + 8;
-          const clamp = (v: number) => Math.max(margin, Math.min(ARENA_SIZE - margin, v));
+          const clampX = (v: number) => Math.max(margin, Math.min(ARENA_WIDTH - margin, v));
+          const clampY = (v: number) => Math.max(margin, Math.min(ARENA_HEIGHT - margin, v));
           for (let k = 0; k < summon.count; k++) {
             const ang = rng.next() * Math.PI * 2;
             const r = rng.next() * summon.spawnRadius;
             const minion = makeEnemy(
               summon.minionType,
-              clamp(e.mover.pos.x + Math.cos(ang) * r),
-              clamp(e.mover.pos.y + Math.sin(ang) * r),
+              clampX(e.mover.pos.x + Math.cos(ang) * r),
+              clampY(e.mover.pos.y + Math.sin(ang) * r),
             );
             enemies.push(minion);
             e.minionIds.push(minion.id);

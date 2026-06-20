@@ -104,13 +104,23 @@ export const resolveCircleVsCircle = (
   return true;
 };
 
-/** Keep a circle's centre inside `[radius, worldSize - radius]` on both axes. */
-export const clampCircleToBounds = (pos: Vec2, radius: number, worldSize: number): void => {
-  const max = worldSize - radius;
+/**
+ * Keep a circle's centre inside the world rect `[radius, width-radius] ×
+ * [radius, height-radius]`. Pass only `width` for a square world — `height`
+ * defaults to it.
+ */
+export const clampCircleToBounds = (
+  pos: Vec2,
+  radius: number,
+  width: number,
+  height = width,
+): void => {
+  const maxX = width - radius;
+  const maxY = height - radius;
   if (pos.x < radius) pos.x = radius;
-  else if (pos.x > max) pos.x = max;
+  else if (pos.x > maxX) pos.x = maxX;
   if (pos.y < radius) pos.y = radius;
-  else if (pos.y > max) pos.y = max;
+  else if (pos.y > maxY) pos.y = maxY;
 };
 
 /**
@@ -156,8 +166,10 @@ export interface CrowdParams {
   walls: readonly Aabb[];
   /** The player to ring enemies around (enemies move out of it; it doesn't move). */
   player: { pos: Vec2; radius: number } | null;
-  /** Arena size (square); movers are clamped inside it. */
+  /** World width; movers are clamped inside it. */
   worldSize: number;
+  /** World height; defaults to `worldSize` (square) when omitted. */
+  worldHeight?: number;
   /** Crowd push-apart strength (0..1). See pushApartCrowd. */
   pushStrength: number;
 }
@@ -192,5 +204,7 @@ export const stepCrowd = (movers: readonly Mover[], dt: number, p: CrowdParams):
     }
   }
 
-  for (let i = 0; i < n; i++) clampCircleToBounds(movers[i]!.pos, movers[i]!.radius, p.worldSize);
+  for (let i = 0; i < n; i++) {
+    clampCircleToBounds(movers[i]!.pos, movers[i]!.radius, p.worldSize, p.worldHeight ?? p.worldSize);
+  }
 };

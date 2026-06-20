@@ -15,8 +15,10 @@ import {
 } from "@shopify/react-native-skia";
 import { computeVisibility, markVisible, type FogGrid } from "@heroic/engine";
 import {
-  ARENA_SIZE,
-  ARENA_TILES,
+  ARENA_COLS,
+  ARENA_HEIGHT,
+  ARENA_ROWS,
+  ARENA_WIDTH,
   COLORS,
   ENEMY_RADIUS,
   LOW_HP_THRESHOLD,
@@ -114,8 +116,8 @@ const HP_BAR_HEIGHT = 4;
  */
 const DARK_TILES_PATH = (() => {
   const path = Skia.Path.Make();
-  for (let row = 0; row < ARENA_TILES; row++) {
-    for (let col = 0; col < ARENA_TILES; col++) {
+  for (let row = 0; row < ARENA_ROWS; row++) {
+    for (let col = 0; col < ARENA_COLS; col++) {
       if ((row + col) % 2 === 1) {
         path.addRect(Skia.XYWHRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE));
       }
@@ -271,7 +273,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // still read the layout you remember.
     fill.setColor(color(COLORS.tileLight));
     fill.setAlphaf(1);
-    canvas.drawRect(Skia.XYWHRect(0, 0, ARENA_SIZE, ARENA_SIZE), fill);
+    canvas.drawRect(Skia.XYWHRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT), fill);
     fill.setColor(color(COLORS.tileDark));
     canvas.drawPath(DARK_TILES_PATH, fill);
     fill.setColor(color(COLORS.wall));
@@ -483,7 +485,8 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
         cachedFogPath.setFillType(FillType.EvenOdd);
         // Backdrop large enough to cover any viewport (the visible slice is taken
         // by the clip at draw time); explored cells are punched out as holes.
-        cachedFogPath.addRect(Skia.XYWHRect(-ARENA_SIZE * 2, -ARENA_SIZE * 2, ARENA_SIZE * 5, ARENA_SIZE * 5));
+        const span = Math.max(ARENA_WIDTH, ARENA_HEIGHT);
+        cachedFogPath.addRect(Skia.XYWHRect(-span * 2, -span * 2, span * 5, span * 5));
         for (let r = 0; r < fog.rows; r++) {
           for (let c = 0; c < fog.cols; c++) {
             if (fog.seen[r * fog.cols + c] === 1) {
