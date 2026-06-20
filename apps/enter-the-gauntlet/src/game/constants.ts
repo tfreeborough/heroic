@@ -24,24 +24,24 @@ import {
 import { REALM_00 } from "./zones/realm-00";
 
 // The arena is authored as a zone file and loaded through the Realmsmith pipeline
-// (docs/design/world-representation.md). loadZone reproduces the exact geometry the
-// old hand-coded constants did; the exports below are derived from it, so the rest
-// of the app is untouched while the world becomes data-driven. Square zone, so
-// size.x === size.y throughout.
-const ARENA = loadZone(REALM_00);
+// (docs/design/world-representation.md). loadZone reproduces the geometry the old
+// hand-coded constants did; the exports below are derived from it, so the rest of
+// the app is untouched while the world becomes data-driven. Exported whole so the
+// renderer can bake and cull the zone's chunks.
+export const ZONE = loadZone(REALM_00);
 
 /** World units are pixels at 1:1 camera zoom. */
-export const TILE_SIZE = ARENA.tileSize;
+export const TILE_SIZE = ZONE.tileSize;
 /** Zone dimensions in tiles (no longer assumed square). */
 export const ARENA_COLS = REALM_00.size.cols;
 export const ARENA_ROWS = REALM_00.size.rows;
 /** Zone dimensions in world px. */
-export const ARENA_WIDTH = ARENA.size.x;
-export const ARENA_HEIGHT = ARENA.size.y;
+export const ARENA_WIDTH = ZONE.size.x;
+export const ARENA_HEIGHT = ZONE.size.y;
 export const WALL_THICKNESS = 48;
 
 /** Where the player starts — the zone's authored player spawn. */
-export const SPAWN = ARENA.spawn;
+export const SPAWN = ZONE.spawn;
 
 /**
  * Arena boundary walls (centred rects), shared by physics bodies and rendering.
@@ -50,8 +50,8 @@ export const SPAWN = ARENA.spawn;
  * only block the player (Matter) and get drawn.
  */
 export const WALLS: { x: number; y: number; w: number; h: number }[] = (() => {
-  const w = ARENA.size.x;
-  const h = ARENA.size.y;
+  const w = ZONE.size.x;
+  const h = ZONE.size.y;
   const t = WALL_THICKNESS;
   return [
     { x: w / 2, y: -t / 2, w: w + 2 * t, h: t },
@@ -66,7 +66,7 @@ export const WALLS: { x: number; y: number; w: number; h: number }[] = (() => {
  * with bodies and occlude line of sight. Authored in realm-00 (the original LOS
  * demo layout) and greedy-meshed by loadZone (plain rects here).
  */
-export const PILLARS = ARENA.collision;
+export const PILLARS = ZONE.collision;
 
 /**
  * Sight / projectile occluders, shared by the renderer (fog-of-war rays) and the
@@ -76,10 +76,10 @@ export const PILLARS = ARENA.collision;
  * projectiles at the boundary and bounds the fog rays.
  */
 export const OCCLUDERS: VisionSegment[] = [
-  { ax: 0, ay: 0, bx: ARENA.size.x, by: 0 },
-  { ax: ARENA.size.x, ay: 0, bx: ARENA.size.x, by: ARENA.size.y },
-  { ax: ARENA.size.x, ay: ARENA.size.y, bx: 0, by: ARENA.size.y },
-  { ax: 0, ay: ARENA.size.y, bx: 0, by: 0 },
+  { ax: 0, ay: 0, bx: ZONE.size.x, by: 0 },
+  { ax: ZONE.size.x, ay: 0, bx: ZONE.size.x, by: ZONE.size.y },
+  { ax: ZONE.size.x, ay: ZONE.size.y, bx: 0, by: ZONE.size.y },
+  { ax: 0, ay: ZONE.size.y, bx: 0, by: 0 },
   ...PILLARS.flatMap((p) => rectEdges(p.x, p.y, p.w, p.h)),
 ];
 

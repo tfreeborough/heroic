@@ -88,6 +88,7 @@ import {
   PILLARS,
   SPAWN,
   WALLS,
+  ZONE,
   type EnemyTypeId,
 } from "./constants";
 import { WEAPONS, type WeaponDef, type WeaponId } from "./weapons";
@@ -108,6 +109,7 @@ import {
 } from "./skills/dash";
 import { SpawnPicker } from "./SpawnPicker";
 import { EMPTY_COMBAT_PICTURE, recordCombatScene } from "./renderCombat";
+import { bakeFloorChunks } from "./zoneRender";
 
 /** A hostile with a brain: chases/circles/kites per its type, soaks hits. */
 interface Enemy {
@@ -336,6 +338,10 @@ export const GameScreen = () => {
   // polygon each frame. Created once and never reset (the arena is fixed for the
   // demo); a new realm would call resetFog.
   const fog = useMemo(() => createFogGrid(ARENA_WIDTH, FOG_CELL, ARENA_HEIGHT), []);
+
+  // Baked per-chunk floor pictures: recorded once from the zone's tile data, then
+  // replayed (culled to the view) each frame — the big static-render lever.
+  const floorChunks = useMemo(() => bakeFloorChunks(ZONE), []);
 
   // Enemy navigation grid: built once from the interior pillars (inflated by the
   // enemy radius). The AI runtime routes brains around walls on this when their
@@ -869,6 +875,12 @@ export const GameScreen = () => {
       combatPicture.value = recordCombatScene({
         camera: { x: camX, y: camY, zoom: zoomCurrent.current },
         anchor: { x: anchorX, y: anchorY },
+        floor: {
+          chunks: floorChunks,
+          chunkCols: ZONE.chunkCols,
+          chunkRows: ZONE.chunkRows,
+          chunkSize: ZONE.chunkSize,
+        },
         player: {
           x: px,
           y: py,

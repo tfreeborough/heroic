@@ -33,9 +33,22 @@ const pillars = [
   { x: cx - 5 * u, y: cy + 1 * u, w: u, h: 2.5 * u },
 ];
 
-// Floor: every cell the same floor tile (id 1) for now. The renderer still draws
-// the procedural checkerboard; tile-id/atlas rendering is Phase 2.
-const floor = Array.from({ length: ROWS }, () => Array<number>(COLS).fill(1));
+// Floor *shape*: paint floor (id 1) where `isFloor`, else void (id 0). loadZone
+// auto-fences the void and Phase-2 rendering draws it as the backdrop — so this
+// predicate literally IS the zone's shape. Edit it to try other shapes; just keep
+// the centre (the spawn + pillars) floored. Here: a wide band with the top-right
+// and bottom-left corners bitten out, so it's obviously not a rectangle.
+const isFloor = (col: number, row: number): boolean => {
+  const topRight = row < ROWS * 0.5 && col > COLS * 0.66;
+  const bottomLeft = row >= ROWS * 0.5 && col < COLS * 0.3;
+  return !topRight && !bottomLeft;
+};
+const floor: number[][] = [];
+for (let row = 0; row < ROWS; row++) {
+  const cells: number[] = [];
+  for (let col = 0; col < COLS; col++) cells.push(isFloor(col, row) ? 1 : 0);
+  floor.push(cells);
+}
 
 export const REALM_00: ZoneFile = {
   format: ZONE_FORMAT_VERSION,

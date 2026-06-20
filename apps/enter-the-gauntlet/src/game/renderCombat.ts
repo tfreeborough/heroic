@@ -13,11 +13,9 @@ import {
   type SkPath,
   type SkPicture,
 } from "@shopify/react-native-skia";
-import { computeVisibility, markVisible, type FogGrid } from "@heroic/engine";
+import { chunksInView, computeVisibility, markVisible, type FogGrid } from "@heroic/engine";
 import {
-  ARENA_COLS,
   ARENA_HEIGHT,
-  ARENA_ROWS,
   ARENA_WIDTH,
   COLORS,
   ENEMY_RADIUS,
@@ -27,7 +25,6 @@ import {
   OCCLUDERS,
   PILLARS,
   PLAYER_RADIUS,
-  TILE_SIZE,
   VISION,
   WALLS,
 } from "./constants";
@@ -46,6 +43,13 @@ export interface CombatScene {
   /** World→screen: scale by `zoom` around `anchor`, centred on the camera. */
   camera: { x: number; y: number; zoom: number };
   anchor: { x: number; y: number };
+  /** Baked per-chunk floor pictures + grid geometry; only the in-view chunks are replayed. */
+  floor: {
+    chunks: SkPicture[];
+    chunkCols: number;
+    chunkRows: number;
+    chunkSize: number;
+  };
   /** `hurt` runs 1 → 0 after a contact hit; `facing` rotates the notch. */
   player: { x: number; y: number; facing: number; hpFrac: number; hurt: number };
   weapon: WeaponDef;
@@ -107,24 +111,6 @@ const color = (hex: string): ReturnType<typeof Skia.Color> => {
 
 const HP_BAR_WIDTH = 30;
 const HP_BAR_HEIGHT = 4;
-
-/**
- * Static checkerboard: the dark squares laid over the light arena floor, pre-baked
- * into one reusable path. The board never changes, so drawing a single path each
- * frame replaces ~300 per-tile drawRect calls — each its own JS→native hop, a
- * meaningful slice of the constant per-frame render cost.
- */
-const DARK_TILES_PATH = (() => {
-  const path = Skia.Path.Make();
-  for (let row = 0; row < ARENA_ROWS; row++) {
-    for (let col = 0; col < ARENA_COLS; col++) {
-      if ((row + col) % 2 === 1) {
-        path.addRect(Skia.XYWHRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE));
-      }
-    }
-  }
-  return path;
-})();
 
 /**
  * Cached "never-discovered" fog geometry: a large backdrop rect with every
@@ -268,15 +254,26 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     canvas.scale(camera.zoom, camera.zoom);
     canvas.translate(-camera.x, -camera.y);
 
-    // --- Arena: light floor, dark checkerboard, walls, pillars. Static geometry
-    // is drawn UNCLIPPED — in explored-but-fogged areas the fog dims it but you
-    // still read the layout you remember.
-    fill.setColor(color(COLORS.tileLight));
-    fill.setAlphaf(1);
-    canvas.drawRect(Skia.XYWHRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT), fill);
-    fill.setColor(color(COLORS.tileDark));
-    canvas.drawPath(DARK_TILES_PATH, fill);
+    // --- Arena floor: replay the baked per-chunk pictures overlapping the view
+    // (culling), then walls + pillars. Void cells were never baked, so the backdrop
+    // shows through and an irregular zone reads as its shape. Static geometry is
+    // drawn UNCLIPPED — in explored-but-fogged areas the fog dims it but you still
+    // read the layout you remember.
+    {
+      const f = scene.floor;
+      const halfVW = anchor.x / camera.zoom;
+      const halfVH = anchor.y / camera.zoom;
+      const visible = chunksInView(
+        f,
+        camera.x - halfVW,
+        camera.y - halfVH,
+        camera.x + halfVW,
+        camera.y + halfVH,
+      );
+      for (let k = 0; k < visible.length; k++) canvas.drawPicture(f.chunks[visible[k]!]!);
+    }
     fill.setColor(color(COLORS.wall));
+    fill.setAlphaf(1);
     for (const w of WALLS) canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h), fill);
     fill.setColor(color(COLORS.pillar));
     for (const p of PILLARS) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
