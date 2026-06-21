@@ -31,4 +31,5 @@ export * from "./zone/format";
 export * from "./zone/mesh";
 export * from "./zone/load";
 export * from "./zone/view";
+export * from "./zone/theme";
 export * from "./rng";

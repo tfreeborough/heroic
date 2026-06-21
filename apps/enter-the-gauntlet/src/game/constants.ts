@@ -11,6 +11,7 @@ import {
   loadZone,
   makeBrain,
   rectEdges,
+  ZONE_PALETTE,
   type AmbusherConfig,
   type AttackConfig,
   type Brain,
@@ -644,18 +645,10 @@ export const LOW_HP_VIGNETTE_MIN_ALPHA = 0.1;
 export const LOW_HP_VIGNETTE_MAX_ALPHA = 0.62;
 
 export const COLORS = {
-  void: "#0e1116",
-  tileLight: "#222a3c",
-  tileDark: "#1a2030",
-  wall: "#4a5470",
-  pillar: "#5b6685",
-  // Breakables, keyed loosely by kind (renderCombat falls back to crate).
-  breakableWood: "#7a5230",
-  breakableBarrel: "#a9702f",
-  breakableCrate: "#8f6a3c",
-  // Bright warm accent for a destructible *wall*: its frame + crack lines, so it
-  // reads as breakable against the dark floor (where translucency alone vanished).
-  breakableEdge: "#e0b878",
+  // World/zone palette — the single source of truth shared with the Realmsmith
+  // editor (see ZONE_PALETTE in @heroic/core): void / tileLight / tileDark / wall /
+  // pillar / breakableWood / breakableBarrel / breakableCrate / breakableEdge.
+  ...ZONE_PALETTE,
   // Explosion VFX palette (additive fireball core→mid, plus ring + debris sparks).
   explosionCore: "#fff6d5",
   explosionMid: "#ff6a1a",
