@@ -78,6 +78,30 @@ export const resolveCircleAabb = (pos: Vec2, radius: number, box: Aabb): boolean
 };
 
 /**
+ * The point on (or inside) an axis-aligned box closest to `p` — `p` clamped to
+ * the box's extent on each axis. Returns `p` itself when it's inside the box.
+ * Pure (allocates a fresh point); the shared primitive for circle/point-vs-box
+ * distance tests (hit detection, AoE) outside the crowd solver.
+ */
+export const closestPointOnAabb = (p: Vec2, box: Aabb): Vec2 => {
+  const hw = box.w / 2;
+  const hh = box.h / 2;
+  return {
+    x: Math.max(box.x - hw, Math.min(p.x, box.x + hw)),
+    y: Math.max(box.y - hh, Math.min(p.y, box.y + hh)),
+  };
+};
+
+/** Distance from a point to an axis-aligned box (0 when the point is inside). */
+export const distanceToAabb = (p: Vec2, box: Aabb): number => {
+  const hw = box.w / 2;
+  const hh = box.h / 2;
+  const dx = Math.max(Math.abs(p.x - box.x) - hw, 0);
+  const dy = Math.max(Math.abs(p.y - box.y) - hh, 0);
+  return Math.hypot(dx, dy);
+};
+
+/**
  * Push `pos` out of another circle if they overlap (mutates `pos`; the other
  * circle is unmoved — used to ring enemies around the player without shoving the
  * player). Returns whether it moved.

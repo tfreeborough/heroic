@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { spawnProjectile, stepProjectile } from "./projectile";
-import type { HurtCircle } from "./hitbox";
+import type { HurtBox, HurtCircle } from "./hitbox";
 
 const DT = 1 / 60;
 
@@ -8,6 +8,11 @@ const circle = (id: number, x: number, y = 0, radius = 10): HurtCircle => ({
   id,
   pos: { x, y },
   radius,
+});
+
+const box = (id: number, x: number, y = 0, w = 10, h = 10): HurtBox => ({
+  id,
+  box: { x, y, w, h },
 });
 
 const spawn = (overrides: Partial<Parameters<typeof spawnProjectile>[2]> = {}) =>
@@ -65,5 +70,29 @@ describe("stepProjectile", () => {
     const p = spawn({ maxRange: 15 });
     expect(stepProjectile(p, DT, []).expired).toBe(false);
     expect(stepProjectile(p, DT, []).expired).toBe(true);
+  });
+
+  test("hits a box target in its path (circle-vs-box overlap)", () => {
+    const p = spawn();
+    // After one step p.pos≈(10,0); box spans x[7,17] so the point is inside it.
+    const result = stepProjectile(p, DT, [box(1, 12)]);
+    expect(result.hits).toEqual([1]);
+    expect(result.expired).toBe(true);
+  });
+
+  test("misses a box just beyond the projectile's radius", () => {
+    const p = spawn();
+    // Box near face at y=10; projectile at (10,0) radius 5 → gap 10 > 5.
+    const result = stepProjectile(p, DT, [box(1, 10, 15)]);
+    expect(result.hits).toEqual([]);
+    expect(result.expired).toBe(false);
+  });
+
+  test("resolves a box and a circle nearest-first", () => {
+    const p = spawn({ pierce: 1 });
+    // Circle centre at 9 (nearest), box centre at 14 (near face 9 too) — circle
+    // edge is closer, so it lands first.
+    const result = stepProjectile(p, DT, [box(2, 16, 0, 8, 8), circle(1, 9, 0, 4)]);
+    expect(result.hits).toEqual([1, 2]);
   });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   clampCircleToBounds,
+  closestPointOnAabb,
   createMover,
+  distanceToAabb,
   pushApartCrowd,
   resolveCircleAabb,
   resolveCircleVsCircle,
@@ -10,6 +12,25 @@ import {
   type Mover,
 } from "./crowd";
 import { createSpatialGrid, rebuildGrid } from "../spatial/grid";
+
+describe("closestPointOnAabb / distanceToAabb", () => {
+  const box: Aabb = { x: 100, y: 100, w: 40, h: 40 }; // spans [80,120]×[80,120]
+
+  test("clamps an outside point to the nearest face", () => {
+    expect(closestPointOnAabb({ x: 50, y: 100 }, box)).toEqual({ x: 80, y: 100 });
+    expect(distanceToAabb({ x: 50, y: 100 }, box)).toBeCloseTo(30);
+  });
+
+  test("clamps to the nearest corner past the diagonal", () => {
+    expect(closestPointOnAabb({ x: 140, y: 140 }, box)).toEqual({ x: 120, y: 120 });
+    expect(distanceToAabb({ x: 140, y: 140 }, box)).toBeCloseTo(Math.hypot(20, 20));
+  });
+
+  test("a point inside the box maps to itself, distance 0", () => {
+    expect(closestPointOnAabb({ x: 105, y: 95 }, box)).toEqual({ x: 105, y: 95 });
+    expect(distanceToAabb({ x: 105, y: 95 }, box)).toBe(0);
+  });
+});
 
 describe("resolveCircleAabb", () => {
   const box: Aabb = { x: 100, y: 100, w: 40, h: 40 }; // spans [80,120]×[80,120]

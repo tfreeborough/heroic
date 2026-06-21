@@ -1,5 +1,6 @@
 import { distance, normalize, rotate, scale, sub, type Vec2 } from "../math/vec2";
-import type { HurtCircle } from "./hitbox";
+import { distanceToAabb } from "../physics/crowd";
+import type { HurtTarget } from "./hitbox";
 
 /**
  * Projectile simulation (the `projectile` attack shape from combat.md): a
@@ -69,7 +70,7 @@ export interface ProjectileStepResult {
 export const stepProjectile = (
   p: ProjectileState,
   dt: number,
-  targets: readonly HurtCircle[],
+  targets: readonly HurtTarget[],
 ): ProjectileStepResult => {
   if (p.turnLeft > 0) {
     const turn = Math.min(Math.abs(p.turnRate) * dt, p.turnLeft);
@@ -80,11 +81,17 @@ export const stepProjectile = (
   p.pos = { x: p.pos.x + p.dir.x * moved, y: p.pos.y + p.dir.y * moved };
   p.traveled += moved;
 
-  // Collect fresh overlaps, nearest first, consuming pierce as we go.
-  const overlaps = targets
-    .filter((t) => !p.hitIds.includes(t.id) && distance(p.pos, t.pos) <= p.radius + t.radius)
-    .map((t) => ({ id: t.id, d: distance(p.pos, t.pos) }))
-    .sort((a, b) => a.d - b.d);
+  // Collect fresh overlaps, nearest first, consuming pierce as we go. Overlap is
+  // circle-vs-circle for bodies, circle-vs-box for breakables (distance to the
+  // box's nearest point ≤ the projectile's radius).
+  const overlaps: { id: number; d: number }[] = [];
+  for (const t of targets) {
+    if (p.hitIds.includes(t.id)) continue;
+    const d = "box" in t ? distanceToAabb(p.pos, t.box) : distance(p.pos, t.pos);
+    const reach = "box" in t ? p.radius : p.radius + t.radius;
+    if (d <= reach) overlaps.push({ id: t.id, d });
+  }
+  overlaps.sort((a, b) => a.d - b.d);
 
   const hits: number[] = [];
   let expired = p.traveled >= p.maxRange;

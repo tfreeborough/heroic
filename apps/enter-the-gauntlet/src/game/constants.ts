@@ -603,6 +603,35 @@ export const DAMAGE_NUMBER_RISE = 42;
 /** Seconds the melee swing flash lingers after a strike. */
 export const ARC_FLASH_DURATION = 0.15;
 
+// --- Breakables ----------------------------------------------------------------
+// Destructible blockers authored into the zone (docs/design/world-representation.md):
+// a Combatant + a static Aabb, no Mover/Brain. The player breaks them with melee
+// and projectiles; an `onBreak` explosion deals AoE to enemies, the player, and
+// other breakables (so barrels chain-detonate).
+
+/**
+ * Outward shove an explosion's AoE applies to caught enemies/player, px/s — a
+ * velocity impulse that decays through locomotion decel like a melee knockback.
+ * Firm enough to scatter a clump that was hugging a barrel.
+ */
+export const EXPLOSION_KNOCKBACK = 520;
+
+/**
+ * Lifetime of the explosion *visual* (flash + fireball + shockwave ring + sparks),
+ * seconds. Purely cosmetic — the damage is dealt instantly on break; this is just
+ * how long the blast lingers on screen. See renderCombat.
+ */
+export const EXPLOSION_FX_DURATION = 0.45;
+
+/**
+ * Fuse: the beat between an explosive breakable reaching 0 hp and actually
+ * detonating, seconds. Because a blast primes its neighbours' fuses (rather than
+ * bursting them instantly), a cluster chain-reacts as a visible cascade — pop,
+ * pop, pop — instead of all going off on the same frame. Also a moment to back off
+ * a barrel you just shot. A primed barrel glows hotter as the fuse burns down.
+ */
+export const EXPLOSION_FUSE_DELAY = 0.18;
+
 // --- Low-health warning vignette. Below the threshold a red inset glow pulses
 // around the play area; the beat quickens and brightens from `MIN` (just under
 // the threshold) toward `MAX` (near death). Pulse rate is in full beats/sec.
@@ -620,6 +649,18 @@ export const COLORS = {
   tileDark: "#1a2030",
   wall: "#4a5470",
   pillar: "#5b6685",
+  // Breakables, keyed loosely by kind (renderCombat falls back to crate).
+  breakableWood: "#7a5230",
+  breakableBarrel: "#a9702f",
+  breakableCrate: "#8f6a3c",
+  // Bright warm accent for a destructible *wall*: its frame + crack lines, so it
+  // reads as breakable against the dark floor (where translucency alone vanished).
+  breakableEdge: "#e0b878",
+  // Explosion VFX palette (additive fireball core→mid, plus ring + debris sparks).
+  explosionCore: "#fff6d5",
+  explosionMid: "#ff6a1a",
+  explosionRing: "#ffcf8a",
+  explosionSpark: "#ffb24a",
   player: "#f2c14e",
   playerNotch: "#1d2433",
   hpBarBack: "#10141c",

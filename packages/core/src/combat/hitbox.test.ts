@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hitsInArc, type HurtCircle } from "./hitbox";
+import { hitsInArc, type HurtBox, type HurtCircle } from "./hitbox";
 
 const ORIGIN = { x: 0, y: 0 };
 const REACH = 100;
@@ -9,6 +9,11 @@ const circle = (id: number, x: number, y: number, radius = 10): HurtCircle => ({
   id,
   pos: { x, y },
   radius,
+});
+
+const box = (id: number, x: number, y: number, w = 40, h = 40): HurtBox => ({
+  id,
+  box: { x, y, w, h },
 });
 
 describe("hitsInArc", () => {
@@ -43,5 +48,26 @@ describe("hitsInArc", () => {
   test("cleaves every target inside the cone", () => {
     const targets = [circle(1, 60, 10), circle(2, 70, -15), circle(3, 60, 90)];
     expect(hitsInArc(ORIGIN, 0, REACH, ARC, targets)).toEqual([1, 2]);
+  });
+
+  test("hits a box dead ahead, range to its nearest face", () => {
+    // Centre 80, half-width 20 → near face at x=60, well inside reach.
+    expect(hitsInArc(ORIGIN, 0, REACH, ARC, [box(1, 80, 0)])).toEqual([1]);
+    // Near face at x=99 hits; at x=101 it's out of reach.
+    expect(hitsInArc(ORIGIN, 0, REACH, ARC, [box(1, 119, 0)])).toEqual([1]);
+    expect(hitsInArc(ORIGIN, 0, REACH, ARC, [box(1, 121, 0)])).toEqual([]);
+  });
+
+  test("misses a box off to the side of the cone", () => {
+    // Centred above the origin: nearest point (0,60) sits at 90° off a 0 facing.
+    expect(hitsInArc(ORIGIN, 0, REACH, ARC, [box(1, 0, 80)])).toEqual([]);
+  });
+
+  test("a box the origin stands inside is an unambiguous hit, any facing", () => {
+    expect(hitsInArc(ORIGIN, Math.PI, REACH, ARC, [box(1, 0, 0)])).toEqual([1]);
+  });
+
+  test("cleaves circles and boxes together", () => {
+    expect(hitsInArc(ORIGIN, 0, REACH, ARC, [circle(1, 60, 10), box(2, 70, -10)])).toEqual([1, 2]);
   });
 });

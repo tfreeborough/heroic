@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import {
+  BlendMode,
   BlurStyle,
   ClipOp,
   createPicture,
@@ -13,7 +14,13 @@ import {
   type SkPath,
   type SkPicture,
 } from "@shopify/react-native-skia";
-import { chunksInView, computeVisibility, markVisible, type FogGrid } from "@heroic/engine";
+import {
+  chunksInView,
+  computeVisibility,
+  markVisible,
+  type FogGrid,
+  type VisionSegment,
+} from "@heroic/engine";
 import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
@@ -22,7 +29,6 @@ import {
   LOW_HP_THRESHOLD,
   LOW_HP_VIGNETTE_MAX_ALPHA,
   LOW_HP_VIGNETTE_MIN_ALPHA,
-  OCCLUDERS,
   PILLARS,
   PLAYER_RADIUS,
   VISION,
@@ -57,6 +63,12 @@ export interface CombatScene {
   windup: { progress: number; facing: number; targetX: number; targetY: number } | null;
   targetId: number | null;
   enemies: { id: number; x: number; y: number; hpFrac: number; flash: number; color: string }[];
+  /**
+   * Destructible blockers in live state (alive ones only — a broken one just
+   * isn't in the list). Centre + size, hp fraction (for a damage bar), `kind`
+   * (→ colour) and `flash` (1 → 0 hit pulse).
+   */
+  breakables: { x: number; y: number; w: number; h: number; hpFrac: number; flash: number; kind: string; occludes: boolean; prime: number; targeted: boolean }[];
   /** Ranged enemies mid-windup (and chargers): the telegraph line + charge. */
   enemyCasts: { x: number; y: number; targetX: number; targetY: number; progress: number; color: string }[];
   /** Summoners mid-cast: an expanding ring at the summoner. */
@@ -65,8 +77,12 @@ export interface CombatScene {
   /** `fade` runs 1 → 0 over each effect's lifetime; `hostile` = damage taken. */
   numbers: { x: number; y: number; text: string; crit: boolean; hostile: boolean; fade: number }[];
   arcFlashes: { x: number; y: number; facing: number; fade: number }[];
+  /** Active explosion VFX. `progress` runs 0 → 1 over the blast's life; `radius` is the AoE. */
+  explosions: { x: number; y: number; radius: number; progress: number; seed: number }[];
   /** Persistent fog-of-war memory, swept by the sight polygon and mutated here. */
   fog: FogGrid;
+  /** Live sight/projectile occluders: static geometry + alive occluding breakables. */
+  occluders: VisionSegment[];
   /** Seconds elapsed, fed to the drifting-mist shader as its animation clock. */
   time: number;
   /**
@@ -113,6 +129,26 @@ const HP_BAR_WIDTH = 30;
 const HP_BAR_HEIGHT = 4;
 
 /**
+ * Fill opacity for an *occluding* breakable (a destructible wall). Below 1 so the
+ * floor bleeds through and it reads as "not solid" — a tell that there's something
+ * to break here (often a secret passage), without giving away what's behind it (it
+ * still fully blocks line of sight). Tune toward 1 for more solid, down for ghostlier.
+ */
+const BREAKABLE_WALL_ALPHA = 0.6;
+
+/** Breakable fill colour by kind (placeholder art); unknown kinds read as a crate. */
+const breakableColor = (kind: string): string => {
+  switch (kind) {
+    case "wood-wall":
+      return COLORS.breakableWood;
+    case "barrel":
+      return COLORS.breakableBarrel;
+    default:
+      return COLORS.breakableCrate;
+  }
+};
+
+/**
  * Cached "never-discovered" fog geometry: a large backdrop rect with every
  * explored cell punched out (even-odd fill). Rebuilt only when the explored set
  * actually grows — markVisible reports that, and exploration plateaus once you've
@@ -153,6 +189,13 @@ const FOG_OPAQUE = color(rgbaCss(VISION.shadowColor, 1));
 // the rim. The per-frame alpha (pulse × severity) scales the whole thing.
 const LOW_HP_CLEAR = color(rgbaCss(COLORS.playerHurt, 0));
 const LOW_HP_OPAQUE = color(rgbaCss(COLORS.playerHurt, 1));
+
+// Fireball radial-gradient stops, built once (the per-blast fade is applied via the
+// paint's alpha, not by re-stringing colours — that would flood the colour cache).
+// White-hot centre → orange mid → transparent edge.
+const EXPLO_CORE = color(rgbaCss(COLORS.explosionCore, 1));
+const EXPLO_MID = color(rgbaCss(COLORS.explosionMid, 0.7));
+const EXPLO_EDGE = color(rgbaCss(COLORS.explosionMid, 0));
 
 // Drifting-mist shader for the fogged area. Evaluated in WORLD space (the camera
 // transform is baked into the canvas when we draw it), so the noise is anchored
@@ -278,6 +321,72 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     fill.setColor(color(COLORS.pillar));
     for (const p of PILLARS) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
 
+    // Breakables: dynamic destructible blockers, drawn with the static geometry
+    // (unclipped — a wall you remember still reads in the fog) but from live
+    // state, so a broken one simply vanishes and opens the path. Body by kind,
+    // then a white hit-flash, then a damage bar once chipped — the same feedback
+    // an enemy gives, so "I'm breaking this" reads the same as "I'm hurting that".
+    for (const b of scene.breakables) {
+      const bx = b.x - b.w / 2;
+      const by = b.y - b.h / 2;
+      // A destructible *wall* (occludes) renders translucent + cracked so it reads
+      // as breakable, not as permanent bedrock; barrels/crates stay solid.
+      fill.setColor(color(breakableColor(b.kind)));
+      fill.setAlphaf(b.occludes ? BREAKABLE_WALL_ALPHA : 1);
+      canvas.drawRect(Skia.XYWHRect(bx, by, b.w, b.h), fill);
+      if (b.occludes) {
+        // Fracture lines: a zig-zag down the box plus two short branches, sized in
+        // fractions of the box so it works for a tall thin wall or a square block.
+        // Drawn in the bright accent (not dark-on-dark) so they actually read.
+        const cracks = Skia.Path.Make();
+        cracks.moveTo(bx + 0.5 * b.w, by);
+        cracks.lineTo(bx + 0.35 * b.w, by + 0.28 * b.h);
+        cracks.lineTo(bx + 0.6 * b.w, by + 0.52 * b.h);
+        cracks.lineTo(bx + 0.42 * b.w, by + 0.76 * b.h);
+        cracks.lineTo(bx + 0.55 * b.w, by + b.h);
+        cracks.moveTo(bx + 0.35 * b.w, by + 0.28 * b.h);
+        cracks.lineTo(bx + 0.12 * b.w, by + 0.36 * b.h);
+        cracks.moveTo(bx + 0.6 * b.w, by + 0.52 * b.h);
+        cracks.lineTo(bx + 0.86 * b.w, by + 0.6 * b.h);
+        stroke.setColor(color(COLORS.breakableEdge));
+        stroke.setAlphaf(0.85);
+        stroke.setStrokeWidth(2);
+        canvas.drawPath(cracks, stroke);
+      }
+      if (b.flash > 0) {
+        fill.setColor(color("#ffffff"));
+        fill.setAlphaf(b.flash * 0.8);
+        canvas.drawRect(Skia.XYWHRect(bx, by, b.w, b.h), fill);
+      }
+      if (b.prime > 0) {
+        // Primed: a hot orange glow that ramps in (ease-in) as the fuse burns
+        // down, so a barrel about to blow telegraphs the next link in the chain.
+        fill.setColor(color(COLORS.explosionMid));
+        fill.setBlendMode(BlendMode.Plus);
+        fill.setAlphaf(0.85 * b.prime * b.prime);
+        canvas.drawRect(Skia.XYWHRect(bx, by, b.w, b.h), fill);
+        fill.setBlendMode(BlendMode.SrcOver);
+      }
+      if (b.hpFrac < 1 && b.prime === 0) {
+        const barX = b.x - HP_BAR_WIDTH / 2;
+        const barY = by - 10;
+        fill.setColor(color(COLORS.hpBarBack));
+        fill.setAlphaf(0.9);
+        canvas.drawRect(Skia.XYWHRect(barX, barY, HP_BAR_WIDTH, HP_BAR_HEIGHT), fill);
+        fill.setColor(color(COLORS.hpBarFill));
+        fill.setAlphaf(1);
+        canvas.drawRect(Skia.XYWHRect(barX, barY, HP_BAR_WIDTH * b.hpFrac, HP_BAR_HEIGHT), fill);
+      }
+      if (b.targeted) {
+        // Auto-attack selection: the same accent the enemy target ring uses, as an
+        // outline 3px proud of the footprint so it reads as "this is what I'm hitting".
+        stroke.setColor(color(COLORS.targetRing));
+        stroke.setAlphaf(0.85);
+        stroke.setStrokeWidth(2);
+        canvas.drawRect(Skia.XYWHRect(bx - 3, by - 3, b.w + 6, b.h + 6), stroke);
+      }
+    }
+
     // An enemy is hittable when its *edge* is within reach, i.e. its centre is
     // within reach + ENEMY_RADIUS — draw rings/wedges at that radius so the
     // visuals match the actual gate.
@@ -286,7 +395,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // The visibility polygon from the (interpolated) player: the area in direct
     // line of sight. Built into a path used both to clip the live world and to
     // cut the lit hole out of the fog.
-    const litPoly = computeVisibility({ x: player.x, y: player.y }, OCCLUDERS);
+    const litPoly = computeVisibility({ x: player.x, y: player.y }, scene.occluders);
     const hasSight = litPoly.length > 2;
     const litPath = Skia.Path.Make();
     if (hasSight) {
@@ -577,6 +686,62 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
         fill.setColor(color(weapon.color));
         fill.setAlphaf(0.45 * f.fade);
         canvas.drawPath(wedgePath(f.x, f.y, hitRadius, f.facing, cfg.arcWidth), fill);
+      }
+    }
+
+    // Explosions: a multi-part blast drawn on top (over fog, under the player) so
+    // it always reads. Four layers — an additive fireball + white flash (light),
+    // then a normal-blend shockwave ring (sized to the AoE) + debris sparks.
+    for (const ex of scene.explosions) {
+      const p = ex.progress; // 0 → 1 over the blast's life
+      const fade = 1 - p;
+      const eo = 1 - fade * fade; // ease-out: shoots out fast, then settles
+      const R = ex.radius;
+
+      // Fireball: a radial gradient that grows then fades. Additive so it glows;
+      // the fade rides the paint alpha (stops are fixed → no colour-cache churn).
+      const coreR = R * (0.18 + 0.5 * eo);
+      if (coreR > 0.5) {
+        fill.setBlendMode(BlendMode.Plus);
+        fill.setShader(
+          Skia.Shader.MakeRadialGradient(
+            { x: ex.x, y: ex.y },
+            coreR,
+            [EXPLO_CORE, EXPLO_MID, EXPLO_EDGE],
+            [0, 0.55, 1],
+            TileMode.Clamp,
+          ),
+        );
+        fill.setAlphaf(fade);
+        canvas.drawCircle(ex.x, ex.y, coreR, fill);
+        fill.setShader(null);
+        // White detonation flash — punchy, gone by ~30% of the life.
+        const flash = Math.max(0, 1 - p / 0.3);
+        if (flash > 0) {
+          fill.setColor(color("#ffffff"));
+          fill.setAlphaf(0.85 * flash);
+          canvas.drawCircle(ex.x, ex.y, R * 0.32, fill);
+        }
+        fill.setBlendMode(BlendMode.SrcOver);
+      }
+
+      // Shockwave ring (normal blend): expands to the AoE radius, thinning + fading.
+      stroke.setColor(color(COLORS.explosionRing));
+      stroke.setAlphaf(0.85 * fade);
+      stroke.setStrokeWidth(2 + 5 * fade);
+      canvas.drawCircle(ex.x, ex.y, R * eo, stroke);
+
+      // Debris sparks: evenly-spaced + per-blast offset (no RNG here), flung out and
+      // shrinking. A few drawCircles per blast, only while alive — negligible cost.
+      if (fade > 0.05) {
+        const dist = R * (0.35 + 0.85 * eo);
+        const sparkR = 3 * fade;
+        fill.setColor(color(COLORS.explosionSpark));
+        fill.setAlphaf(0.9 * fade);
+        for (let k = 0; k < 9; k++) {
+          const a = ex.seed + (k / 9) * Math.PI * 2;
+          canvas.drawCircle(ex.x + Math.cos(a) * dist, ex.y + Math.sin(a) * dist, sparkR, fill);
+        }
       }
     }
 

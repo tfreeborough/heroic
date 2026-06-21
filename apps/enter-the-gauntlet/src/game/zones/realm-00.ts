@@ -50,6 +50,39 @@ for (let row = 0; row < ROWS; row++) {
   floor.push(cells);
 }
 
+// Breakables (docs/design/world-representation.md): destructible blockers placed
+// by the designer. A wood wall just right of spawn that you knock down to open the
+// right side — it `occludes`, so it blocks sightlines until broken — and a ROW of
+// barrels to the upper-left that chain-detonate. They sit in the clear band above
+// spawn (no pillars at that row), receding left, spaced BARREL_GAP apart: with a
+// 120px blast that reaches each barrel's immediate neighbour but not the one beyond
+// it, so shooting the nearest sets off a visible 1→2→3 cascade rippling away from
+// you (each link waits its own fuse). Equip a ranged weapon — melee can't target an
+// explosive barrel (it would catch you in the blast). Move them closer together to
+// detonate as one, further apart (past ~144px) to break the chain.
+const BARREL_GAP = 1.75 * u; // ≈112px: inside the 120 blast (chains the next), but
+//                              a two-away barrel (~200px edge) stays out of range.
+const barrelY = cy - 1.5 * u; // clear row above spawn
+const barrel = (n: number, x: number) => ({
+  id: `barrel-${n}`,
+  kind: "barrel",
+  box: { x, y: barrelY, w: 0.75 * u, h: 0.75 * u },
+  maxHp: 12,
+  onBreak: [{ type: "explode" as const, radius: 120, damage: 25 }],
+});
+const breakables: ZoneFile["breakables"] = [
+  {
+    id: "wood-wall-0",
+    kind: "wood-wall",
+    box: { x: cx + 2 * u, y: cy, w: 0.5 * u, h: 4 * u },
+    maxHp: 45,
+    occludes: true,
+  },
+  barrel(0, cx - 2.5 * u), // nearest spawn — shoot this one
+  barrel(1, cx - 2.5 * u - BARREL_GAP),
+  barrel(2, cx - 2.5 * u - 2 * BARREL_GAP),
+];
+
 export const REALM_00: ZoneFile = {
   format: ZONE_FORMAT_VERSION,
   id: "realm-00",
@@ -61,6 +94,6 @@ export const REALM_00: ZoneFile = {
   tileset: "placeholder",
   layers: { floor },
   collision: { rects: pillars },
-  breakables: [],
+  breakables,
   objects: [{ id: "spawn", kind: "playerSpawn", x: cx, y: cy, props: {} }],
 };

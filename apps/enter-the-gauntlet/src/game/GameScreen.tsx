@@ -11,6 +11,7 @@ import {
   ATTACK_CYCLE_READY,
   brainTelegraph,
   buildNavGrid,
+  closestPointOnAabb,
   createBlockerBody,
   createFogGrid,
   createMoverBody,
@@ -19,6 +20,7 @@ import {
   createRng,
   createSpatialGrid,
   distance,
+  distanceToAabb,
   faceMovement,
   forEachNeighbor,
   getVelocityPerSecond,
@@ -26,6 +28,8 @@ import {
   makeCombatant,
   normalize,
   rebuildGrid,
+  rectEdges,
+  removeBody,
   resolveAttack,
   segmentClear,
   selectTarget,
@@ -40,14 +44,20 @@ import {
   sub,
   tickBrain,
   useGameLoop,
+  type Aabb,
   type AttackCycleState,
   type Brain,
+  type Breakable,
   type Combatant,
+  type CombatStats,
   type HurtCircle,
+  type HurtTarget,
   type Mover,
+  type NavGrid,
   type ProjectileState,
   type StickSample,
   type Vec2,
+  type VisionSegment,
 } from "@heroic/engine";
 import {
   ARC_FLASH_DURATION,
@@ -68,6 +78,9 @@ import {
   ENEMY_GRID_CELL,
   ENEMY_RADIUS,
   ENGAGEMENT_MARGIN,
+  EXPLOSION_FUSE_DELAY,
+  EXPLOSION_FX_DURATION,
+  EXPLOSION_KNOCKBACK,
   FOG_CELL,
   HIT_FLASH_DURATION,
   LOS_RECHECK_STEPS,
@@ -168,6 +181,72 @@ interface ArcFlash {
   age: number;
 }
 
+/** A transient explosion VFX (cosmetic only — damage is dealt instantly on break). */
+interface Explosion {
+  x: number;
+  y: number;
+  /** The AoE radius it dealt damage in; the shockwave ring grows to this. */
+  radius: number;
+  age: number;
+  /** Per-blast angle offset so the debris sparks don't all point the same way. */
+  seed: number;
+}
+
+/** A breakable resolved for this session: zone state plus transient battle state. */
+interface LiveBreakable extends Breakable {
+  /** Seconds of white hit-flash left (the same feedback a struck enemy gets). */
+  flash: number;
+  /**
+   * Fuse: seconds until detonation once primed (hp hit 0 on an explosive one),
+   * else null. While set the barrel still blocks but can't be re-hit/re-primed,
+   * and glows hotter as it counts down; at 0 it actually bursts (see breakOne).
+   */
+  fuse: number | null;
+}
+
+/**
+ * Recompute the dynamic world geometry from the *alive* breakables. The crowd
+ * walls, the sight/projectile occluders, and the enemy nav grid each fold every
+ * standing breakable in on top of the static zone (PILLARS / OCCLUDERS). Run once
+ * at load and again on every break — so a downed wall genuinely opens the path:
+ * its collision drops, its sightline reopens, and enemies re-path through the gap
+ * (see docs/design/world-representation.md, "the world becomes mutable").
+ */
+const computeWorld = (
+  breakables: readonly LiveBreakable[],
+): { walls: Aabb[]; occluders: VisionSegment[]; navGrid: NavGrid } => {
+  const liveBoxes = breakables.filter((b) => b.alive).map((b) => b.box);
+  const walls = liveBoxes.length > 0 ? [...PILLARS, ...liveBoxes] : PILLARS;
+  const occludingEdges = breakables
+    .filter((b) => b.alive && b.occludes)
+    .flatMap((b) => rectEdges(b.box.x, b.box.y, b.box.w, b.box.h));
+  const occluders =
+    occludingEdges.length > 0 ? [...OCCLUDERS, ...occludingEdges] : OCCLUDERS;
+  const navGrid = buildNavGrid(ARENA_WIDTH, NAV_CELL, walls, ENEMY_RADIUS, ARENA_HEIGHT);
+  return { walls, occluders, navGrid };
+};
+
+/**
+ * Defender stats for a breakable taking a hit: no defense, so it takes damage at
+ * face value through resolveAttack (only `hp` matters; the rest is unused here).
+ */
+const BREAKABLE_STATS: CombatStats = {
+  maxHp: 1,
+  attack: 0,
+  defense: 0,
+  critChance: 0,
+  critMultiplier: 1,
+};
+
+/** The thing the player is currently auto-attacking — an enemy or a breakable. */
+type ActiveTarget =
+  | { kind: "enemy"; id: number; enemy: Enemy; pos: Vec2 }
+  | { kind: "breakable"; id: number; breakable: LiveBreakable; pos: Vec2 };
+
+/** Largest explosion radius across a breakable's onBreak effects (0 if it doesn't explode). */
+const blastRadius = (b: LiveBreakable): number =>
+  b.onBreak.reduce((m, e) => (e.type === "explode" ? Math.max(m, e.radius) : m), 0);
+
 export const GameScreen = () => {
   const { width, height } = useWindowDimensions();
   // System-bar insets: the app draws edge-to-edge (Android default), so the
@@ -200,12 +279,33 @@ export const GameScreen = () => {
   // step. A ref (not state) so input never causes a React render.
   const stickRef = useRef<StickSample>(STICK_ZERO);
 
-  const { physics, player, weaponCombatants, rng } = useMemo(() => {
+  const { physics, player, weaponCombatants, rng, breakables, breakableBodies } = useMemo(() => {
     const physics = createPhysicsWorld();
     const player = createMoverBody(SPAWN.x, SPAWN.y, PLAYER_RADIUS);
     addBody(physics, player);
     for (const w of WALLS) addBody(physics, createBlockerBody(w.x, w.y, w.w, w.h));
     for (const p of PILLARS) addBody(physics, createBlockerBody(p.x, p.y, p.w, p.h));
+
+    // Breakables: a per-session live copy of the zone's authored blockers, so a
+    // remount/hot-reload starts fresh and we never mutate the shared loaded zone.
+    // Each gets a matter.js static body so it stops the *player* like a wall (the
+    // crowd sim handles enemies); the body is removed when it breaks. The array
+    // index is the breakable's hit id (negated below, so it can't collide with
+    // the positive enemy ids that share the hurt-target list).
+    const breakables: LiveBreakable[] = ZONE.breakables.map((b) => ({
+      ...b,
+      box: { ...b.box },
+      hp: b.maxHp,
+      alive: true,
+      flash: 0,
+      fuse: null,
+    }));
+    const breakableBodies = new Map<string, ReturnType<typeof createBlockerBody>>();
+    for (const b of breakables) {
+      const body = createBlockerBody(b.box.x, b.box.y, b.box.w, b.box.h);
+      breakableBodies.set(b.id, body);
+      addBody(physics, body);
+    }
 
     // One attacker stat block per weapon, reused across strikes (resolveAttack
     // only reads the attacker's stats — hp is irrelevant on this side).
@@ -213,7 +313,14 @@ export const GameScreen = () => {
       WEAPONS.map((w) => [w.id, makeCombatant(w.stats)]),
     );
 
-    return { physics, player, weaponCombatants, rng: createRng(0xc0ffee) };
+    return {
+      physics,
+      player,
+      weaponCombatants,
+      rng: createRng(0xc0ffee),
+      breakables,
+      breakableBodies,
+    };
   }, []);
 
   // Enemies are spawned on demand from the test HUD (no auto-population, no
@@ -284,6 +391,7 @@ export const GameScreen = () => {
     enemyProjectiles: [] as FlightProjectile[],
     numbers: [] as FlyingNumber[],
     arcFlashes: [] as ArcFlash[],
+    explosions: [] as Explosion[],
     playerCombatant: makeCombatant(PLAYER_STATS),
     /** Post-hit invulnerability time left; any hit is ignored while > 0. */
     iFrames: 0,
@@ -343,10 +451,24 @@ export const GameScreen = () => {
   // replayed (culled to the view) each frame — the big static-render lever.
   const floorChunks = useMemo(() => bakeFloorChunks(ZONE), []);
 
-  // Enemy navigation grid: built once from the interior pillars (inflated by the
-  // enemy radius). The AI runtime routes brains around walls on this when their
-  // sightline to the player is blocked.
-  const navGrid = useMemo(() => buildNavGrid(ARENA_WIDTH, NAV_CELL, PILLARS, ENEMY_RADIUS, ARENA_HEIGHT), []);
+  // Dynamic world geometry — the crowd walls, the sight/projectile occluders, and
+  // the enemy nav grid — each = the static zone (PILLARS / OCCLUDERS) plus every
+  // alive breakable. Held in refs so a break rebuilds them in place (no React
+  // render); the per-frame sim reads `.current` rather than the static consts, so
+  // a downed wall opens collision, sightlines, and pathing at once. Built once
+  // here (useMemo, not per-render) including the breakables that start alive.
+  const initialWorld = useMemo(() => computeWorld(breakables), []);
+  const worldWalls = useRef<Aabb[]>(initialWorld.walls);
+  const worldOccluders = useRef<VisionSegment[]>(initialWorld.occluders);
+  const navGridRef = useRef<NavGrid>(initialWorld.navGrid);
+
+  /** Re-derive the dynamic world after a breakable's alive-state changed. */
+  const rebuildWorld = () => {
+    const next = computeWorld(breakables);
+    worldWalls.current = next.walls;
+    worldOccluders.current = next.occluders;
+    navGridRef.current = next.navGrid;
+  };
 
   // Spatial grid for enemy separation: every enemy is bucketed into it each step,
   // so separation only scans its 3×3 cell neighbourhood instead of the whole
@@ -479,7 +601,7 @@ export const GameScreen = () => {
         const near = dxp * dxp + dyp * dyp <= simRadiusSq;
         if (near) {
           if (e.losTimer <= 0) {
-            e.los = segmentClear(e.mover.pos, player.position, OCCLUDERS);
+            e.los = segmentClear(e.mover.pos, player.position, worldOccluders.current);
             e.losTimer = LOS_RECHECK_STEPS;
           } else {
             e.losTimer -= 1;
@@ -495,7 +617,7 @@ export const GameScreen = () => {
             playerFacing: s.facing,
             neighbors,
             hasLineOfSight: near ? e.los : true,
-            navGrid: near ? navGrid : null,
+            navGrid: near ? navGridRef.current : null,
             repathBudget,
           },
           dt,
@@ -523,7 +645,7 @@ export const GameScreen = () => {
         dt,
         {
           grid: enemyGrid,
-          walls: PILLARS,
+          walls: worldWalls.current,
           player: { pos: playerPos, radius: PLAYER_RADIUS },
           worldSize: ARENA_WIDTH,
           worldHeight: ARENA_HEIGHT,
@@ -545,10 +667,26 @@ export const GameScreen = () => {
       s.camCurrY += (s.currY - s.camCurrY) * catchUp;
 
       // --- Enemy upkeep: just flash decay now (no respawn — the test HUD owns
-      // population; the dead are removed outright).
+      // population; the dead are removed outright). Breakables decay their flash too.
       for (const d of enemies) d.flash = Math.max(0, d.flash - dt);
-      const hurtCircles = (): HurtCircle[] =>
-        enemies.map((d) => ({ id: d.id, pos: d.mover.pos, radius: ENEMY_RADIUS }));
+      for (const b of breakables) if (b.flash > 0) b.flash = Math.max(0, b.flash - dt);
+
+      // Hittable targets for the player's melee + shots: every enemy as a circle,
+      // plus each alive breakable as its box. A breakable takes a *negative* hit
+      // id (−index−1) so the shared id space never collides with the positive
+      // enemy ids — that's how a returned hit is routed back to the right thing.
+      const hurtTargets = (): HurtTarget[] => {
+        const targets: HurtTarget[] = enemies.map((d) => ({
+          id: d.id,
+          pos: d.mover.pos,
+          radius: ENEMY_RADIUS,
+        }));
+        for (let i = 0; i < breakables.length; i++) {
+          const b = breakables[i]!;
+          if (b.alive && b.fuse === null) targets.push({ id: -(i + 1), box: b.box });
+        }
+        return targets;
+      };
 
       /** Drop a slain enemy from the world + the list, releasing any lock on it. */
       const removeEnemy = (d: Enemy) => {
@@ -608,6 +746,88 @@ export const GameScreen = () => {
         return true;
       };
 
+      // --- Breakables. The player damages them through the same path as enemies
+      // (their box is a hurt target); `breakOne` is the single destruction sink —
+      // it drops the matter.js blocker, rebuilds the world geometry (collision /
+      // nav / occluders), then fires onBreak. An `explode` AoE catches enemies,
+      // the player, and *other* breakables, so barrels chain-detonate; the alive
+      // guard makes breaking idempotent, so a chain can't loop back on itself.
+      const breakOne = (b: LiveBreakable) => {
+        if (!b.alive) return;
+        b.alive = false;
+        b.hp = 0;
+        const body = breakableBodies.get(b.id);
+        if (body) {
+          removeBody(physics, body);
+          breakableBodies.delete(b.id);
+        }
+        rebuildWorld();
+        for (const eff of b.onBreak) {
+          if (eff.type === "explode") explode(b.box.x, b.box.y, eff.radius, eff.damage);
+          // "drop" (loot) waits on an item system — see the design doc.
+        }
+      };
+
+      /** Apply a hit to a breakable; at 0 hp it primes a fuse (explosive) or breaks now. */
+      const damageBreakable = (b: LiveBreakable, attacker: Combatant): boolean => {
+        if (!b.alive || b.fuse !== null) return false; // already primed → ignore
+        // Wrap its hp in a throwaway Combatant so it takes damage through the
+        // exact resolveAttack path enemies do (variance, crits, defense=0).
+        const defender: Combatant = { hp: b.hp, stats: BREAKABLE_STATS };
+        const result = resolveAttack(attacker, defender, rng);
+        b.hp = defender.hp;
+        b.flash = HIT_FLASH_DURATION;
+        c.numbers.push({
+          x: b.box.x,
+          y: b.box.y - b.box.h / 2 - 8,
+          text: String(result.damage),
+          crit: result.crit,
+          hostile: false,
+          age: 0,
+        });
+        if (defender.hp <= 0) {
+          // Explosive → light the fuse (it bursts after EXPLOSION_FUSE_DELAY, so a
+          // cluster cascades); anything else just vanishes now.
+          if (blastRadius(b) > 0) b.fuse = EXPLOSION_FUSE_DELAY;
+          else breakOne(b);
+        }
+        return result.crit;
+      };
+
+      /** AoE blast at (cx,cy): damages enemies, the player, and other breakables. */
+      const explode = (cx: number, cy: number, radius: number, damage: number) => {
+        const at = { x: cx, y: cy };
+        // Cosmetic blast (flash + fireball + shockwave ring sized to the AoE +
+        // sparks); the damage below is instant. seed varies the spark fan per blast.
+        c.explosions.push({ x: cx, y: cy, radius, age: 0, seed: rng.next() * Math.PI * 2 });
+        // A flat-damage attacker (no defense interplay): the blast hits for its
+        // authored number, reusing applyHit / damagePlayer for flash + knockback.
+        const blast = makeCombatant({
+          maxHp: 1,
+          attack: damage,
+          defense: 0,
+          critChance: 0,
+          critMultiplier: 1,
+        });
+        // Enemies (range to their edge). Snapshot — applyHit can splice the list.
+        for (const e of [...enemies]) {
+          if (distance(at, e.mover.pos) - ENEMY_RADIUS > radius) continue;
+          applyHit(e, normalize(sub(e.mover.pos, at)), EXPLOSION_KNOCKBACK, blast);
+        }
+        // The player (risk/reward: pop a barrel too close and it stings). Gated by
+        // the same i-frames / dodge rules as any other incoming hit.
+        if (distance(at, playerPos) - PLAYER_RADIUS <= radius) {
+          damagePlayer(blast, cx, cy, EXPLOSION_KNOCKBACK);
+        }
+        // Other breakables in range → chain. Distance is to the box, so a wide
+        // wall is caught by a blast against any of its faces.
+        for (const other of breakables) {
+          if (!other.alive) continue;
+          if (distanceToAabb(at, other.box) > radius) continue;
+          damageBreakable(other, blast);
+        }
+      };
+
       c.iFrames = Math.max(0, c.iFrames - dt);
 
       // --- Contact damage: a touching enemy bites (self-gated by i-frames, and
@@ -623,38 +843,82 @@ export const GameScreen = () => {
       // damage — it's a reposition, not an attack). See skills/dash.ts.
       applyDashShove(dash, playerPos, enemies);
 
-      // --- Targeting: nearest hostile with hysteresis, inside the engagement
-      // radius (which sits a margin beyond the weapon's attack range). Only
-      // hostiles in line of sight are candidates — the player never locks onto,
-      // faces, or auto-fires at something behind a wall (and a target that ducks
-      // behind cover is dropped, mirroring how enemies lose their shot on you).
+      // --- Targeting: nearest target with hysteresis, inside the engagement
+      // radius (a margin beyond attack range) and in line of sight — the player
+      // never locks onto, faces, or auto-fires at something behind a wall, and a
+      // target that ducks behind cover is dropped. Enemies are the priority;
+      // breakables are considered ONLY when no enemy is in play, so the player
+      // auto-clears scenery in a lull but never wastes a swing on a crate mid-fight.
       const cfg = c.weapon.config;
       const engagement = cfg.reach + ENGAGEMENT_MARGIN;
-      // Only enemies within engagement can ever be the target, so distance-gate
-      // (cheap) *before* the line-of-sight ray test — otherwise we'd ray every
-      // enemy in the arena every step just to discard the far ones.
-      const targetCandidates: { id: number; pos: Vec2 }[] = [];
+
+      /** Resolve a (possibly negative) target id to the live enemy/breakable it names. */
+      const resolveTarget = (id: number | null): ActiveTarget | null => {
+        if (id === null) return null;
+        if (id < 0) {
+          const b = breakables[-id - 1];
+          return b && b.alive
+            ? { kind: "breakable", id, breakable: b, pos: { x: b.box.x, y: b.box.y } }
+            : null;
+        }
+        const e = enemies.find((d) => d.id === id);
+        return e ? { kind: "enemy", id, enemy: e, pos: e.mover.pos } : null;
+      };
+      // Distance to the target's *edge* — what attack range gates on: centre minus
+      // body radius for an enemy, distance to the footprint for a breakable.
+      const edgeDistance = (t: ActiveTarget): number =>
+        t.kind === "enemy"
+          ? distance(playerPos, t.pos) - ENEMY_RADIUS
+          : distanceToAabb(playerPos, t.breakable.box);
+
+      // Distance-gate (cheap) *before* the line-of-sight ray, so we don't ray every
+      // candidate in the zone every step just to discard the far ones.
+      const enemyCandidates: { id: number; pos: Vec2 }[] = [];
       for (const d of enemies) {
         if (distance(playerPos, d.mover.pos) > engagement) continue;
-        if (!segmentClear(playerPos, d.mover.pos, OCCLUDERS)) continue;
-        targetCandidates.push({ id: d.id, pos: d.mover.pos });
+        if (!segmentClear(playerPos, d.mover.pos, worldOccluders.current)) continue;
+        enemyCandidates.push({ id: d.id, pos: d.mover.pos });
       }
-      c.targetId = selectTarget(targetCandidates, playerPos, engagement, c.targetId);
-      const target = enemies.find((d) => d.id === c.targetId) ?? null;
+      let candidates = enemyCandidates;
+      if (enemyCandidates.length === 0) {
+        // No enemies → fall back to breakables. An explosive one is only a target
+        // when the player is beyond its blast: melee range is always inside the
+        // blast, so melee never auto-pops a barrel in your face — only ranged, from
+        // a safe distance, locks one. Non-explosive walls/crates are always eligible.
+        const breakableCandidates: { id: number; pos: Vec2 }[] = [];
+        for (let i = 0; i < breakables.length; i++) {
+          const b = breakables[i]!;
+          if (!b.alive || b.fuse !== null) continue; // primed → already going off
+          const centre = { x: b.box.x, y: b.box.y };
+          if (distanceToAabb(playerPos, b.box) > engagement) continue;
+          // Sight to the box's NEAREST point, not its centre: a ray to the centre
+          // would cross the box's own occluder edges, so an occluding wall would
+          // block sight to itself and never be targetable. The near-face touch is
+          // an endpoint, which segmentClear doesn't count — yet another wall in the
+          // way still blocks correctly.
+          if (!segmentClear(playerPos, closestPointOnAabb(playerPos, b.box), worldOccluders.current)) {
+            continue;
+          }
+          const blast = blastRadius(b);
+          if (blast > 0 && distance(playerPos, centre) - PLAYER_RADIUS <= blast) continue;
+          breakableCandidates.push({ id: -(i + 1), pos: centre });
+        }
+        candidates = breakableCandidates;
+      }
+      c.targetId = selectTarget(candidates, playerPos, engagement, c.targetId);
+      const target = resolveTarget(c.targetId);
 
-      // --- Attack cycle. Range gates on the target's edge; the windup lock
-      // breaks if the locked target dies or leaves engagement.
-      const locked = enemies.find((d) => d.id === c.lockedId) ?? null;
+      // --- Attack cycle. Range gates on the target's edge; the windup lock breaks
+      // if the locked target dies/breaks or leaves engagement.
+      const locked = resolveTarget(c.lockedId);
       const step = stepAttackCycle(c.cycle, cfg, dt, {
-        targetInRange:
-          target !== null &&
-          distance(playerPos, target.mover.pos) - ENEMY_RADIUS <= cfg.reach,
-        lockValid: locked !== null && distance(playerPos, locked.mover.pos) <= engagement,
+        targetInRange: target !== null && edgeDistance(target) <= cfg.reach,
+        lockValid: locked !== null && distance(playerPos, locked.pos) <= engagement,
       });
       c.cycle = step.state;
       if (step.windupStarted && target) {
         c.lockedId = target.id;
-        c.lockedFacing = angleTo(playerPos, target.mover.pos);
+        c.lockedFacing = angleTo(playerPos, target.pos);
       }
       if (step.lockBroken) c.lockedId = null;
 
@@ -664,11 +928,18 @@ export const GameScreen = () => {
           // locked target or not (see whiff rules in the movement doc).
           let landed = false;
           let crit = false;
-          for (const id of hitsInArc(playerPos, c.lockedFacing, cfg.reach, cfg.arcWidth!, hurtCircles())) {
+          const attacker = weaponCombatants.get(c.weapon.id)!;
+          for (const id of hitsInArc(playerPos, c.lockedFacing, cfg.reach, cfg.arcWidth!, hurtTargets())) {
+            if (id < 0) {
+              // Negative id → a breakable (−index−1); a cleave through it counts.
+              crit = damageBreakable(breakables[-id - 1]!, attacker) || crit;
+              landed = true;
+              continue;
+            }
             const d = enemies.find((dd) => dd.id === id);
             if (!d) continue;
             const dir = normalize(sub(d.mover.pos, playerPos));
-            crit = applyHit(d, dir, cfg.knockback ?? 0, weaponCombatants.get(c.weapon.id)!) || crit;
+            crit = applyHit(d, dir, cfg.knockback ?? 0, attacker) || crit;
             landed = true;
           }
           // One pulse per swing however many it cleaves — haptics count
@@ -678,7 +949,7 @@ export const GameScreen = () => {
         } else if (locked) {
           // Ranged auto-aims at the target's position at the moment of Strike.
           // The volley's flight pattern (straight, pincer, ...) is weapon data.
-          for (const p of spawnVolley(playerPos, locked.mover.pos, {
+          for (const p of spawnVolley(playerPos, locked.pos, {
             speed: cfg.projectileSpeed!,
             radius: c.weapon.projectileRadius,
             // Fly a little past attack range so a kiting target can't outrun
@@ -710,14 +981,20 @@ export const GameScreen = () => {
       for (let i = c.projectiles.length - 1; i >= 0; i--) {
         const p = c.projectiles[i]!;
         const from = { x: p.pos.x, y: p.pos.y };
-        const result = stepProjectile(p, dt, hurtCircles());
-        // A shot dies on a wall/pillar it crossed this step — so the hit it might
-        // have landed on the far side doesn't count.
+        const result = stepProjectile(p, dt, hurtTargets());
+        // A shot dies on *static* wall/pillar it crossed this step — so a hit it
+        // might have landed on the far side doesn't count. Breakables are NOT in
+        // this test (only the static OCCLUDERS): a shot that reaches a breakable
+        // registers as a box hit below and damages it, even an occluding wall one.
         const hitWall =
           !segmentClear(from, p.pos, OCCLUDERS) ||
           p.pos.x < 0 || p.pos.x > ARENA_WIDTH || p.pos.y < 0 || p.pos.y > ARENA_HEIGHT;
         if (!hitWall) {
           for (const id of result.hits) {
+            if (id < 0) {
+              if (damageBreakable(breakables[-id - 1]!, p.attacker)) projectileCrit = true;
+              continue;
+            }
             const d = enemies.find((dd) => dd.id === id);
             if (d && applyHit(d, p.dir, p.knockback, p.attacker)) projectileCrit = true;
           }
@@ -739,7 +1016,7 @@ export const GameScreen = () => {
         if (!def.attack || !e.cycle || !e.attackCombatant) continue;
         const acfg = def.attack.config;
         const inRange = distance(playerPos, e.mover.pos) - PLAYER_RADIUS <= acfg.reach;
-        const engaged = inRange && segmentClear(e.mover.pos, playerPos, OCCLUDERS);
+        const engaged = inRange && segmentClear(e.mover.pos, playerPos, worldOccluders.current);
         const eStep = stepAttackCycle(e.cycle, acfg, dt, {
           targetInRange: engaged,
           lockValid: engaged,
@@ -773,7 +1050,7 @@ export const GameScreen = () => {
         const from = { x: p.pos.x, y: p.pos.y };
         const result = stepProjectile(p, dt, [playerCircle]);
         const hitWall =
-          !segmentClear(from, p.pos, OCCLUDERS) ||
+          !segmentClear(from, p.pos, worldOccluders.current) ||
           p.pos.x < 0 || p.pos.x > ARENA_WIDTH || p.pos.y < 0 || p.pos.y > ARENA_HEIGHT;
         if (!hitWall && result.hits.length > 0) damagePlayer(p.attacker, p.pos.x, p.pos.y, p.knockback);
         if (result.expired || hitWall) c.enemyProjectiles.splice(i, 1);
@@ -840,6 +1117,21 @@ export const GameScreen = () => {
         f.age += dt;
         if (f.age >= ARC_FLASH_DURATION) c.arcFlashes.splice(i, 1);
       }
+      for (let i = c.explosions.length - 1; i >= 0; i--) {
+        const e = c.explosions[i]!;
+        e.age += dt;
+        if (e.age >= EXPLOSION_FX_DURATION) c.explosions.splice(i, 1);
+      }
+      // Burn down primed fuses; at 0 the barrel finally bursts (which, via its
+      // blast, primes any neighbours → the chain cascades a fuse-length apart).
+      for (const b of breakables) {
+        if (b.fuse === null) continue;
+        b.fuse -= dt;
+        if (b.fuse <= 0) {
+          b.fuse = null;
+          breakOne(b);
+        }
+      }
 
       // --- Low-health pulse: while under the threshold, advance the beat at a
       // rate that ramps from MIN_HZ (just under it) to MAX_HZ (near death), so
@@ -870,8 +1162,25 @@ export const GameScreen = () => {
       // Ease the zoom toward its target in JS (cosmetic, on weapon swap).
       zoomCurrent.current += (zoomTarget.current - zoomCurrent.current) * 0.2;
 
-      const lockedEnemy =
-        c.cycle.phase === "windup" ? enemies.find((d) => d.id === c.lockedId) : undefined;
+      // Where the windup telegraph points: the locked enemy (interpolated) or, for
+      // a breakable lock (negative id), its static box centre — else the player.
+      let windupTargetX = px;
+      let windupTargetY = py;
+      if (c.cycle.phase === "windup" && c.lockedId !== null) {
+        if (c.lockedId < 0) {
+          const b = breakables[-c.lockedId - 1];
+          if (b) {
+            windupTargetX = b.box.x;
+            windupTargetY = b.box.y;
+          }
+        } else {
+          const e = enemies.find((d) => d.id === c.lockedId);
+          if (e) {
+            windupTargetX = enemyX(e);
+            windupTargetY = enemyY(e);
+          }
+        }
+      }
       combatPicture.value = recordCombatScene({
         camera: { x: camX, y: camY, zoom: zoomCurrent.current },
         anchor: { x: anchorX, y: anchorY },
@@ -894,8 +1203,8 @@ export const GameScreen = () => {
             ? {
                 progress: 1 - c.cycle.remaining / c.weapon.config.windup,
                 facing: c.lockedFacing,
-                targetX: lockedEnemy ? enemyX(lockedEnemy) : px,
-                targetY: lockedEnemy ? enemyY(lockedEnemy) : py,
+                targetX: windupTargetX,
+                targetY: windupTargetY,
               }
             : null,
         targetId: c.targetId,
@@ -907,6 +1216,27 @@ export const GameScreen = () => {
           flash: d.flash / HIT_FLASH_DURATION,
           color: CREATURES[d.type].color,
         })),
+        // Breakables are static (no interpolation): pass the alive ones with their
+        // box, hp fraction (for a damage bar), kind (→ colour), hit-flash, and
+        // whether they're the current auto-attack target (index → negative id).
+        breakables: breakables
+          .map((b, i) => ({ b, id: -(i + 1) }))
+          .filter(({ b }) => b.alive)
+          .map(({ b, id }) => ({
+            x: b.box.x,
+            y: b.box.y,
+            w: b.box.w,
+            h: b.box.h,
+            hpFrac: b.hp / b.maxHp,
+            flash: b.flash / HIT_FLASH_DURATION,
+            kind: b.kind,
+            // Occluding breakables (secret/destructible walls) get the "soft wall"
+            // look so they read as breakable rather than as permanent geometry.
+            occludes: b.occludes,
+            // Fuse progress 0 → 1 (0 when not primed): drives the hot pre-blast glow.
+            prime: b.fuse === null ? 0 : 1 - b.fuse / EXPLOSION_FUSE_DELAY,
+            targeted: id === c.targetId,
+          })),
         enemyCasts: enemies.flatMap((d) => {
           const def = CREATURES[d.type];
           const ex = enemyX(d);
@@ -975,7 +1305,18 @@ export const GameScreen = () => {
           facing: f.facing,
           fade: 1 - f.age / ARC_FLASH_DURATION,
         })),
+        explosions: c.explosions.map((e) => ({
+          x: e.x,
+          y: e.y,
+          radius: e.radius,
+          progress: e.age / EXPLOSION_FX_DURATION,
+          seed: e.seed,
+        })),
         fog,
+        // The live occluder set (static geometry + alive occluding breakables) so
+        // a standing wood wall casts a shadow / blocks sight, and a downed one
+        // reopens it — the renderer's visibility polygon matches the sim's LOS.
+        occluders: worldOccluders.current,
         time: s.time,
         lowHealthPhase: s.lowHpPhasePrev + (s.lowHpPhaseCurr - s.lowHpPhasePrev) * alpha,
       });
