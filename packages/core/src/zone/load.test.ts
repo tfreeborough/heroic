@@ -83,6 +83,57 @@ describe("loadZone", () => {
     expect(zone.collision).toEqual([{ x: 5, y: 5, w: 10, h: 10 }]);
   });
 
+  test("splits collision by material: walls drawn/occlude, voids movement-only", () => {
+    const zone = loadZone(
+      makeFile({
+        collision: {
+          rects: [
+            { x: 100, y: 100, w: 20, h: 20 }, // no material → wall
+            { x: 200, y: 200, w: 10, h: 10, material: "void" },
+          ],
+          cells: [
+            [0, 0, 0, 0],
+            [0, 1, 0, 0], // a wall cell
+            [0, 0, 2, 0], // a void cell
+            [0, 0, 0, 0],
+          ],
+          cellSize: 10,
+        },
+        fenceVoid: false, // isolate explicit collision from the floorless fence
+      }),
+    );
+    // walls = wall rect + meshed wall cell; the material tag is stripped.
+    expect(zone.walls).toEqual([
+      { x: 100, y: 100, w: 20, h: 20 },
+      { x: 15, y: 15, w: 10, h: 10 }, // cell (1,1)
+    ]);
+    expect(zone.voids).toEqual([
+      { x: 200, y: 200, w: 10, h: 10 },
+      { x: 25, y: 25, w: 10, h: 10 }, // cell (2,2)
+    ]);
+    // collision is their union (walls first), so physics/nav block both.
+    expect(zone.collision).toEqual([...zone.walls, ...zone.voids]);
+  });
+
+  test("fenced floorless cells become VOID, not walls (see/shoot-across)", () => {
+    const zone = loadZone(
+      makeFile({
+        layers: {
+          floor: [
+            [1, 1, 1, 1],
+            [1, 1, 1, 1],
+            [1, 1, 0, 0],
+            [1, 1, 0, 0],
+          ],
+        },
+        collision: { rects: [] },
+      }),
+    );
+    expect(zone.walls).toEqual([]); // nothing occludes
+    expect(zone.voids).toEqual([{ x: 30, y: 30, w: 20, h: 20 }]); // the floorless corner
+    expect(zone.collision).toEqual(zone.voids); // still blocks movement
+  });
+
   test("fences the void: floorless cells become solid collision (zone shape)", () => {
     // An L-shape: floor everywhere except the bottom-right 2×2 corner.
     const zone = loadZone(

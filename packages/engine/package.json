@@ -16,6 +16,7 @@
     "matter-js": "^0.20.0"
   },
   "peerDependencies": {
+    "expo-audio": "*",
     "react": "*"
   },
   "devDependencies": {

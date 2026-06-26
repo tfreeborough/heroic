@@ -17,13 +17,19 @@ export interface EnemyPerception {
   /** Positions of nearby living allies, for separation. */
   neighbors: readonly Vec2[];
   /**
-   * Clear straight line to the player? When false (a wall is between), the
-   * runtime routes engaging movers around it via A* instead of steering into
-   * the wall. Optional: omitted ⇒ treated as visible (no pathfinding) — keeps
-   * archetypes and their tests oblivious to navigation.
+   * Clear straight line of *sight* to the player (an occluding wall between ⇒
+   * false)? This is the **sight** sense — a kiter that loses sight closes in, an
+   * ambusher won't spring on a target it can't see. It does NOT drive pathfinding
+   * (a non-occluding barrel/pit is fully visible yet still blocks movement); the
+   * runtime decides steer-vs-route from the nav grid (`pathClear`). Optional:
+   * omitted ⇒ treated as visible — keeps archetypes and their tests simple.
    */
   hasLineOfSight?: boolean;
-  /** The level's navigation grid, for routing when `hasLineOfSight` is false. */
+  /**
+   * The level's navigation grid. The runtime routes an engaging mover around any
+   * movement obstacle on it (walls, voids, breakables, nests) when the straight
+   * path is blocked. Omitted/null ⇒ no pathfinding (the off-screen LOD just steers).
+   */
   navGrid?: NavGrid | null;
   /**
    * Optional shared per-step A* allowance. Passed to `pursue` so the whole crowd

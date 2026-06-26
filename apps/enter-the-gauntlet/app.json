@@ -23,6 +23,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": ["expo-audio"],
     "owner": "free-the-borough-games",
     "extra": {
       "eas": {

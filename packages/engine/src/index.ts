@@ -7,3 +7,4 @@ export * from "@heroic/core";
 export * from "./useGameLoop";
 export * from "./physics/matterWorld";
 export * from "./physics/bodies";
+export * from "./audio/director";

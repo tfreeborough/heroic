@@ -25,6 +25,7 @@ body {
 }
 
 .app {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -50,8 +51,32 @@ body {
   color: var(--muted);
 }
 
+.toolbar .size-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
+
+.toolbar .size-ctl input {
+  width: 3.4em;
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
 .toolbar .spacer {
   flex: 1;
+}
+
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .viewport {
@@ -61,15 +86,241 @@ body {
   overflow: hidden;
 }
 
+/* Floated over the right edge of the body, NOT in the flex row — so showing or
+   hiding it never resizes the viewport (which would reflow/jump the map). It
+   overlays the rightmost ~260px of the canvas instead. */
+.inspector {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  width: 260px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: -10px 0 28px rgba(0, 0, 0, 0.38);
+  padding: 14px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.inspector h3 {
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspector-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspector-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.inspector-actions button {
+  flex: 1;
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inspector-actions button:hover {
+  border-color: #3a4a64;
+  background: #232c3e;
+}
+
+.inspector label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.inspector label.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.inspector .pair {
+  display: flex;
+  gap: 8px;
+}
+
+.inspector .pair label {
+  flex: 1;
+}
+
+.inspector .pair input {
+  width: 100%;
+}
+
+.inspector input[type="number"],
+.inspector select {
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.inspector .pos {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
 .viewport canvas {
   display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
+  cursor: crosshair;
 }
 
-.viewport canvas:active {
-  cursor: grabbing;
+.toolbar button {
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toolbar button:hover:not(:disabled) {
+  border-color: #3a4a64;
+  background: #232c3e;
+}
+
+.toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbar button.on {
+  background: #2e6cf0;
+  border-color: #2e6cf0;
+  color: #fff;
+}
+
+.toolbar button.badge.ok {
+  background: #15301c;
+  border-color: #2c6b3f;
+  color: #7fe0a0;
+}
+
+.toolbar button.badge.warn {
+  background: #3a2d12;
+  border-color: #7a5e2e;
+  color: #f2c14e;
+}
+
+.issues {
+  position: absolute;
+  top: 46px;
+  right: 12px;
+  z-index: 10;
+  width: 320px;
+  max-height: 60%;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.issues .issue {
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.issues .issue:hover {
+  background: #1d2433;
+}
+
+.issues .issue.warn {
+  border-left: 3px solid #f2c14e;
+}
+
+.issues .issue.error {
+  border-left: 3px solid #e8503a;
+}
+
+.toolbar .tools {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar select {
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.toolbar .sel {
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar .spacer-sm {
+  width: 8px;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.empty code {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 13px;
+}
+
+.error {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  background: #3a1d22;
+  border: 1px solid #7a2e38;
+  color: #ffc9cf;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  max-width: 80%;
 }
 
 .hint {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildNavGrid, cellCentre, nearestWalkable, worldToCell } from "./navgrid";
+import { buildNavGrid, cellCentre, nearestWalkable, pathClear, worldToCell } from "./navgrid";
 
 describe("buildNavGrid", () => {
   const blocker = { x: 100, y: 100, w: 40, h: 40 }; // spans world 80..120
@@ -47,5 +47,31 @@ describe("nearestWalkable", () => {
     const out = nearestWalkable(nav, { x: 4, y: 4 }); // blocked
     expect(out).not.toBeNull();
     expect(nav.grid.isWalkable(out!.x, out!.y)).toBe(true);
+  });
+});
+
+describe("pathClear", () => {
+  // Blocker spans world 80..120 → cells (4..5, 4..5) are unwalkable.
+  const nav = buildNavGrid(200, 20, [{ x: 100, y: 100, w: 40, h: 40 }], 0);
+
+  test("clear straight line returns true", () => {
+    expect(pathClear(nav, { x: 10, y: 10 }, { x: 190, y: 10 })).toBe(true); // top row, no blocker
+  });
+
+  test("a line through the blocker returns false", () => {
+    expect(pathClear(nav, { x: 10, y: 90 }, { x: 190, y: 90 })).toBe(false); // row 4 crosses the block
+  });
+
+  test("a line that skirts around the blocker is clear", () => {
+    expect(pathClear(nav, { x: 10, y: 10 }, { x: 10, y: 190 })).toBe(true); // column 0, well clear
+  });
+
+  test("endpoints inside an inflated cell don't count — only the path between", () => {
+    // Start sits in a blocked cell (4,4) but the route straight out is clear.
+    expect(pathClear(nav, { x: 90, y: 90 }, { x: 90, y: 10 })).toBe(true);
+  });
+
+  test("same start/goal cell is trivially clear", () => {
+    expect(pathClear(nav, { x: 11, y: 12 }, { x: 15, y: 9 })).toBe(true);
   });
 });

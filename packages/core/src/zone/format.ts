@@ -49,10 +49,14 @@ export interface ZoneFile {
   breakables: BreakableDef[];
   /** Placed entities — spawners, waystones, the player spawn, exits, POIs. */
   objects: ZoneObject[];
+  /** Music this zone plays, by situation. Absent → the zone is silent. See docs/design/audio.md. */
+  audio?: ZoneAudio;
   /**
-   * Treat floorless cells (`floor` id `0`) as solid, fencing the zone into the
-   * shape you painted — an L, a blob, an outdoor field — with no manual boundary
-   * walls. Default `true`; set `false` only for a floorless-but-walkable zone.
+   * Treat floorless cells (`floor` id `0`) as **void** collision, fencing the zone
+   * into the shape you painted — an L, a blob, a bridge over a chasm — with no
+   * manual boundary walls. Floorless cells already show the void backdrop; this
+   * makes them impassable too (but still see/shoot-across, since void doesn't
+   * occlude). Default `true`; set `false` only for a floorless-but-walkable zone.
    */
   fenceVoid?: boolean;
 }
@@ -64,14 +68,57 @@ export interface ZoneLayers {
   decor?: number[][];
 }
 
+/**
+ * Which looping music bed plays. The app's music decider picks one each step
+ * (idle until an enemy engages, then combat with a hangover — see
+ * `audio/musicState`); the runtime crossfades to whichever the zone supplies.
+ * Open to extension (boss, ambient…) — a situation a zone has no bed for just
+ * keeps the current bed playing.
+ */
+export type MusicSituation = "idle" | "combat";
+
+/** A zone's music: a bed per situation plus how long to crossfade between them. */
+export interface ZoneAudio {
+  /** Situation → clip name in the app's audio manifest. Any subset; absent ones are silent. */
+  beds: Partial<Record<MusicSituation, string>>;
+  /** Seconds to crossfade when the active bed changes. Default 2. */
+  crossfade?: number;
+}
+
+/**
+ * What a solid *is* — its collision material. The geometry (an `Aabb`) is the same
+ * either way; the material decides how it behaves and reads:
+ *   - `"wall"` — solid floor-to-ceiling: blocks movement, **and** blocks sight,
+ *     projectiles, and targeting. Drawn as a pillar/wall.
+ *   - `"void"` — a chasm: blocks *movement* only. Sight, projectiles, and ranged
+ *     targeting pass straight across it (you can shoot to the far side of a bridge).
+ *     Drawn as a dark, drifting-mist pit — the swirling cloud, not a wall.
+ * Open to extension (e.g. `"water"`) — add the material, then decide which sets
+ * (movement / occluders / a slow field) it joins in `loadZone`.
+ */
+export type CollisionMaterial = "wall" | "void";
+
+/** A free collision rectangle (centre + size, world px) plus what it's made of. */
+export interface CollisionRect extends Aabb {
+  /** Material; absent → `"wall"` (so legacy files of bare `Aabb`s are walls). */
+  material?: CollisionMaterial;
+}
+
 export interface ZoneCollision {
-  /** Free rectangles (centre + size, world px) — walls, columns, thin geometry. */
-  rects: Aabb[];
-  /** Painted solid cells, `[row][col]` of `0`/`1`. Greedy-meshed into rects at load. */
+  /** Free rectangles — walls, columns, thin geometry, or void gaps (per `material`). */
+  rects: CollisionRect[];
+  /**
+   * Painted solid cells, `[row][col]` of material codes: `0` empty, `1` wall,
+   * `2` void. Greedy-meshed per material into rects at load. (Legacy `0/1`
+   * grids stay correct — `1` has always meant a wall.)
+   */
   cells?: number[][];
   /** Px per collision cell — independent of `tileSize`. Defaults to `tileSize`. */
   cellSize?: number;
 }
+
+/** Painted-cell material codes (the non-empty values in `ZoneCollision.cells`). */
+export const COLLISION_CELL = { none: 0, wall: 1, void: 2 } as const;
 
 /** Extra effect run when a breakable is destroyed (it always vanishes regardless). */
 export type BreakEffect =
@@ -94,6 +141,10 @@ export interface BreakableDef {
 
 export type ZoneObjectKind =
   | "spawner"
+  /** A single authored enemy: one creature placed at this spot, present from load.
+   *  `props.creature` names the roster `CreatureId`. The spawner's static sibling —
+   *  no nest, no cadence, it just stands where you put it. */
+  | "creature"
   | "waystone"
   | "settlement"
   | "playerSpawn"
@@ -130,13 +181,33 @@ export interface Zone {
   tileset: string;
   /** Row-major: `chunks[cy * chunkCols + cx]`. */
   chunks: ZoneChunk[];
-  /** Static collision, greedy-meshed — feeds Matter / `stepCrowd` / `buildNavGrid` / LoS. */
+  /**
+   * Everything that blocks **movement**, greedy-meshed — the union of `walls` and
+   * `voids`. This is what Matter / `stepCrowd` / `buildNavGrid` consume (they don't
+   * care what a solid is *made of*, only that it stops a body), so they're fed
+   * exactly as before. For line-of-sight / projectiles / targeting, use `walls`
+   * (void is see-through).
+   */
   collision: Aabb[];
+  /**
+   * The `"wall"` subset of `collision`: solid, drawn as pillars, **and** occluding
+   * (blocks sight, projectiles, targeting). Build occluders from these.
+   */
+  walls: Aabb[];
+  /**
+   * The `"void"` subset of `collision`: blocks movement but does *not* occlude — you
+   * can see/shoot across it — and is drawn as a dark, drifting-mist pit (a chasm),
+   * not a wall. Includes the auto-fenced floorless cells (unless `fenceVoid` is
+   * `false`).
+   */
+  voids: Aabb[];
   /** Dynamic, destructible collision — live state, dropped on break. */
   breakables: Breakable[];
   objects: ZoneObject[];
   /** The `playerSpawn` object's position, or the zone centre if none authored. */
   spawn: Vec2;
+  /** Music beds for this zone, copied verbatim from the file. Absent → silent. */
+  audio?: ZoneAudio;
 }
 
 export interface ZoneChunk {

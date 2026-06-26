@@ -11,19 +11,20 @@ import {
   Skia,
   StrokeCap,
   TileMode,
-  type SkPath,
   type SkPicture,
 } from "@shopify/react-native-skia";
 import {
   chunksInView,
   computeVisibility,
+  extrudeRect,
   markVisible,
+  voidRimBands,
+  wallLeanVector,
+  ZONE_DEPTH,
   type FogGrid,
   type VisionSegment,
 } from "@heroic/engine";
 import {
-  ARENA_HEIGHT,
-  ARENA_WIDTH,
   COLORS,
   ENEMY_RADIUS,
   LOW_HP_THRESHOLD,
@@ -32,6 +33,7 @@ import {
   PILLARS,
   PLAYER_RADIUS,
   VISION,
+  VOIDS,
   WALLS,
 } from "./constants";
 import type { WeaponDef } from "./weapons";
@@ -62,7 +64,7 @@ export interface CombatScene {
   /** Present only while winding up. `progress` runs 0 → 1 toward the strike. */
   windup: { progress: number; facing: number; targetX: number; targetY: number } | null;
   targetId: number | null;
-  enemies: { id: number; x: number; y: number; hpFrac: number; flash: number; color: string }[];
+  enemies: { id: number; x: number; y: number; hpFrac: number; flash: number; color: string; flying: boolean }[];
   /**
    * Destructible blockers in live state (alive ones only — a broken one just
    * isn't in the list). Centre + size, hp fraction (for a damage bar), `kind`
@@ -136,6 +138,28 @@ const HP_BAR_HEIGHT = 4;
  */
 const BREAKABLE_WALL_ALPHA = 0.6;
 
+// Flying-enemy drop shadow: a soft dark ellipse cast on the ground below the body, so
+// a flyer reads as airborne (and as hovering, when it's out over a void). Offset south
+// (light from the north) and flattened; the gap between body and shadow sells the lift.
+const FLYER_SHADOW_DROP = ENEMY_RADIUS * 0.95; // how far south of the body the shadow sits
+const FLYER_SHADOW_RADIUS = ENEMY_RADIUS * 1.1; // shadow size (slightly wider than the body)
+const FLYER_SHADOW_SQUASH = 0.5; // vertical flatten (1 = round, 0 = a line)
+const FLYER_SHADOW_ALPHA = 0.55;
+
+/**
+ * How strongly the drifting mist tints a void pit. The pit is a deep `void`-colour
+ * base with this much of the fog-of-war mist laid over it, so it reads as a darker,
+ * foggy chasm rather than the bright unexplored churn. Up → mistier, down → flatter.
+ */
+const VOID_MIST_ALPHA = 0.35;
+
+/**
+ * Padding (world px) on the viewport-cull tests for static geometry, so a wall whose
+ * camera-leaned skirt pokes a few px past its rect into view isn't wrongly culled at
+ * the screen edge. Comfortably exceeds the max skirt lean.
+ */
+const CULL_MARGIN = 64;
+
 /** Breakable fill colour by kind (placeholder art); unknown kinds read as a crate. */
 const breakableColor = (kind: string): string => {
   switch (kind) {
@@ -143,22 +167,12 @@ const breakableColor = (kind: string): string => {
       return COLORS.breakableWood;
     case "barrel":
       return COLORS.breakableBarrel;
+    case "spawner":
+      return COLORS.spawnerNest;
     default:
       return COLORS.breakableCrate;
   }
 };
-
-/**
- * Cached "never-discovered" fog geometry: a large backdrop rect with every
- * explored cell punched out (even-odd fill). Rebuilt only when the explored set
- * actually grows — markVisible reports that, and exploration plateaus once you've
- * toured the arena, so on the overwhelming majority of frames we redraw this one
- * cached path (clipped to the viewport) instead of re-adding a rect per visible
- * fog cell every frame. Assumes fog only grows; a resetFog would need to null it.
- */
-let cachedFogPath: SkPath | null = null;
-/** Reused buffer: flat indices of cells that became visible this frame (markVisible fills it). */
-const newFogCells: number[] = [];
 
 // Two blurs (respectCTM=true → world units, so they scale with camera zoom): a
 // tight one for the current-sight edge, and a heavy one for the explored↔unseen
@@ -184,6 +198,16 @@ const rgbaCss = (hex: string, a: number): string => {
 // and fully opaque by the sight radius (held past it by Clamp). Built once.
 const FOG_CLEAR = color(rgbaCss(VISION.shadowColor, 0));
 const FOG_OPAQUE = color(rgbaCss(VISION.shadowColor, 1));
+
+// Pit inner-wall gradient: solid wall colour from the rim down through `voidWallSolid`
+// of its depth, THEN dissolving into the fog — so the wall reads as a surface first,
+// feather second. Colours/stops never change, so build once.
+const VOID_WALL_STOPS = [
+  color(rgbaCss(COLORS.voidWall, 1)),
+  color(rgbaCss(COLORS.voidWall, 1)),
+  color(rgbaCss(COLORS.voidWall, 0)),
+];
+const VOID_WALL_POS = [0, ZONE_DEPTH.voidWallSolid, 1];
 
 // Low-health vignette gradient stops: clear at the play-area centre, full red at
 // the rim. The per-frame alpha (pulse × severity) scales the whole thing.
@@ -298,10 +322,11 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     canvas.translate(-camera.x, -camera.y);
 
     // --- Arena floor: replay the baked per-chunk pictures overlapping the view
-    // (culling), then walls + pillars. Void cells were never baked, so the backdrop
-    // shows through and an irregular zone reads as its shape. Static geometry is
-    // drawn UNCLIPPED — in explored-but-fogged areas the fog dims it but you still
-    // read the layout you remember.
+    // (culling), then void pits (the swirling chasm), then boundary + interior walls
+    // (PILLARS). Floorless cells were never baked, so the void pit / backdrop shows
+    // through and an irregular zone — or a bridge over a chasm — reads as its shape.
+    // Static geometry is drawn UNCLIPPED — in explored-but-fogged areas the fog dims
+    // it but you still read the layout you remember.
     {
       const f = scene.floor;
       const halfVW = anchor.x / camera.zoom;
@@ -315,11 +340,111 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       );
       for (let k = 0; k < visible.length; k++) canvas.drawPicture(f.chunks[visible[k]!]!);
     }
+
+    // Void pits: a dark, drifting-mist chasm. Cover each void rect with the deep
+    // void colour (hiding any floor under it), then lay the SAME fog mist over it at
+    // reduced alpha — so a void reads as a foggy pit you can see and shoot across,
+    // dimmer than the fog-of-war's unexplored churn. Anchored in world space like the
+    // fog, so it doesn't swim when the camera pans; the fog layers below still dim or
+    // hide it by discovery state, so an undiscovered pit stays unseen.
+    // View-cull: only voids overlapping the viewport are touched. Each void runs an
+    // O(voids) rim/abutment scan and allocates a gradient per cliff band, so sweeping
+    // the whole map-wide void set every frame (not just the few on screen) was the
+    // framerate sink. The abutment test inside voidRimBands still gets the FULL set,
+    // so a partial shared edge with an off-screen rect still suppresses correctly.
+    const vMinX = camera.x - anchor.x / camera.zoom;
+    const vMaxX = camera.x + anchor.x / camera.zoom;
+    const vMinY = camera.y - anchor.y / camera.zoom;
+    const vMaxY = camera.y + anchor.y / camera.zoom;
+    const visibleVoids = VOIDS.filter(
+      (v) =>
+        v.x - v.w / 2 < vMaxX &&
+        v.x + v.w / 2 > vMinX &&
+        v.y - v.h / 2 < vMaxY &&
+        v.y + v.h / 2 > vMinY,
+    );
+    if (visibleVoids.length > 0) {
+      fill.setShader(null);
+      fill.setColor(color(COLORS.void));
+      fill.setAlphaf(1);
+      for (const v of visibleVoids) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
+      const pit = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+      if (pit) {
+        fill.setShader(pit);
+        fill.setAlphaf(VOID_MIST_ALPHA);
+        for (const v of visibleVoids) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
+        fill.setShader(null);
+        fill.setAlphaf(1);
+      }
+      // Pit depth: draw each rim as a piece of cliff — a lit ground lip, then a wall
+      // surface descending from it and dissolving into the fog. The wall is fullest on
+      // the edges facing AWAY from the camera (the far cliff you look across at) and
+      // fades to just-the-lip on the near edges; which edge is "away" tracks the camera
+      // focus, so the lit wall glides round as you move. Clipped to the void so the
+      // cliffs never spill onto the floor.
+      canvas.save();
+      const voidClip = Skia.Path.Make();
+      for (const v of visibleVoids) voidClip.addRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h));
+      canvas.clipPath(voidClip, ClipOp.Intersect, true);
+      for (const v of visibleVoids) {
+        for (const b of voidRimBands(v, VOIDS, camera.x, camera.y)) {
+          if (b.intensity > 0.01) {
+            fill.setShader(
+              Skia.Shader.MakeLinearGradient(
+                { x: b.x0, y: b.y0 },
+                { x: b.x1, y: b.y1 },
+                VOID_WALL_STOPS,
+                VOID_WALL_POS,
+                TileMode.Clamp,
+              ),
+            );
+            fill.setAlphaf(b.intensity * ZONE_DEPTH.voidWallAlpha);
+            canvas.drawRect(Skia.XYWHRect(b.x, b.y, b.w, b.h), fill);
+            fill.setShader(null);
+          }
+          fill.setColor(color(COLORS.voidLip));
+          fill.setAlphaf(ZONE_DEPTH.lipAlpha);
+          canvas.drawRect(Skia.XYWHRect(b.lipX, b.lipY, b.lipW, b.lipH), fill);
+        }
+      }
+      fill.setAlphaf(1);
+      canvas.restore();
+    }
+
     fill.setColor(color(COLORS.wall));
     fill.setAlphaf(1);
     for (const w of WALLS) canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h), fill);
+
+    // Interior walls as raised blocks: each wall drops a darker side face TOWARD the
+    // camera focus — the near face you see — lengthening with distance from centre, so
+    // walls at the screen edge lean and read tall while one under you stays flat (the
+    // parallax). Skirts first as one path, then the lit caps over them.
+    // View-cull interior walls (+ their skirts) to the viewport; the skirt leans a
+    // few px past the wall toward the camera focus, so pad the test by CULL_MARGIN.
+    const visiblePillars = PILLARS.filter(
+      (p) =>
+        p.x - p.w / 2 < vMaxX + CULL_MARGIN &&
+        p.x + p.w / 2 > vMinX - CULL_MARGIN &&
+        p.y - p.h / 2 < vMaxY + CULL_MARGIN &&
+        p.y + p.h / 2 > vMinY - CULL_MARGIN,
+    );
+    if (visiblePillars.length > 0) {
+      const skirt = Skia.Path.Make();
+      for (const p of visiblePillars) {
+        const lean = wallLeanVector(p, camera.x, camera.y);
+        for (const q of extrudeRect(p, lean.x, lean.y)) {
+          skirt.moveTo(q[0]!, q[1]!);
+          skirt.lineTo(q[2]!, q[3]!);
+          skirt.lineTo(q[4]!, q[5]!);
+          skirt.lineTo(q[6]!, q[7]!);
+          skirt.close();
+        }
+      }
+      fill.setColor(color(COLORS.pillarShadow));
+      canvas.drawPath(skirt, fill);
+    }
     fill.setColor(color(COLORS.pillar));
-    for (const p of PILLARS) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
+    for (const p of visiblePillars) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
 
     // Breakables: dynamic destructible blockers, drawn with the static geometry
     // (unclipped — a wall you remember still reads in the fog) but from live
@@ -327,6 +452,14 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // then a white hit-flash, then a damage bar once chipped — the same feedback
     // an enemy gives, so "I'm breaking this" reads the same as "I'm hurting that".
     for (const b of scene.breakables) {
+      // View-cull: skip breakables fully outside the viewport (box is exact — no margin).
+      if (
+        b.x - b.w / 2 > vMaxX ||
+        b.x + b.w / 2 < vMinX ||
+        b.y - b.h / 2 > vMaxY ||
+        b.y + b.h / 2 < vMinY
+      )
+        continue;
       const bx = b.x - b.w / 2;
       const by = b.y - b.h / 2;
       // A destructible *wall* (occludes) renders translucent + cracked so it reads
@@ -395,7 +528,37 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // The visibility polygon from the (interpolated) player: the area in direct
     // line of sight. Built into a path used both to clip the live world and to
     // cut the lit hole out of the fog.
-    const litPoly = computeVisibility({ x: player.x, y: player.y }, scene.occluders);
+    //
+    // Cull occluders to a box around the player BEFORE the solve: computeVisibility
+    // is O(segments²) (a ray per corner × every segment), so on a wall-dense zone it
+    // explodes if fed every wall edge in the map. Only walls within sight/discover
+    // range can shape what you see, so we keep just the segments whose AABB overlaps
+    // a player box, plus the box's own 4 edges (they terminate rays in open
+    // directions). The half-side is ≥ discoverRadius, so discovery within that radius
+    // is identical to using the full set — far walls only ever mattered in already-
+    // fogged area. All occluders here are axis-aligned, so the AABB test is exact.
+    const visR = VISION.discoverRadius + 240;
+    const vbxMin = player.x - visR;
+    const vbxMax = player.x + visR;
+    const vbyMin = player.y - visR;
+    const vbyMax = player.y + visR;
+    const nearOccluders: VisionSegment[] = [
+      { ax: vbxMin, ay: vbyMin, bx: vbxMax, by: vbyMin },
+      { ax: vbxMax, ay: vbyMin, bx: vbxMax, by: vbyMax },
+      { ax: vbxMax, ay: vbyMax, bx: vbxMin, by: vbyMax },
+      { ax: vbxMin, ay: vbyMax, bx: vbxMin, by: vbyMin },
+    ];
+    for (let i = 0; i < scene.occluders.length; i++) {
+      const s = scene.occluders[i]!;
+      const sMinX = s.ax < s.bx ? s.ax : s.bx;
+      const sMaxX = s.ax > s.bx ? s.ax : s.bx;
+      const sMinY = s.ay < s.by ? s.ay : s.by;
+      const sMaxY = s.ay > s.by ? s.ay : s.by;
+      if (sMaxX >= vbxMin && sMinX <= vbxMax && sMaxY >= vbyMin && sMinY <= vbyMax) {
+        nearOccluders.push(s);
+      }
+    }
+    const litPoly = computeVisibility({ x: player.x, y: player.y }, nearOccluders);
     const hasSight = litPoly.length > 2;
     const litPath = Skia.Path.Make();
     if (hasSight) {
@@ -410,6 +573,25 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // the room, not who's currently in it.
     canvas.save();
     if (hasSight) canvas.clipPath(litPath, ClipOp.Intersect, true);
+
+    // Drop shadows for flying enemies, beneath everything else: a flattened dark
+    // ellipse on the ground south of the body, so a flyer reads as above the floor
+    // (and as hovering when it's out over a void). Drawn from a unit circle via a
+    // squash transform; only flyers have them, so grounded hordes pay nothing.
+    if (scene.enemies.some((d) => d.flying)) {
+      fill.setShader(null);
+      fill.setColor(color("#000000"));
+      fill.setAlphaf(FLYER_SHADOW_ALPHA);
+      for (const d of scene.enemies) {
+        if (!d.flying) continue;
+        canvas.save();
+        canvas.translate(d.x, d.y + FLYER_SHADOW_DROP);
+        canvas.scale(1, FLYER_SHADOW_SQUASH);
+        canvas.drawCircle(0, 0, FLYER_SHADOW_RADIUS, fill);
+        canvas.restore();
+      }
+      fill.setAlphaf(1);
+    }
 
     // Selection ring under the current target.
     const target = scene.enemies.find((d) => d.id === scene.targetId);
@@ -574,49 +756,49 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
         canvas.restore();
       }
 
-      // Discover what's in sight now (line-of-sight, within the discover radius),
-      // then (3) lay extra dark over every cell never discovered (and the void).
-      // Explored cells are holes, so they keep just the dim level; current sight
+      // Discover what's newly in sight (updates the fog grid's `seen`), then (3) lay
+      // the extra-dark mist over every never-discovered cell in view. Explored cells
+      // are punched out as holes (they keep just the dim memory level); current sight
       // is a subset of explored, so it stays clear without an extra clip.
-      // Discover newly-visible cells and keep the cached fog path up to date
-      // *incrementally*: build the backdrop + already-seen cells once, then each
-      // frame punch out only the cells that just became visible. This is the key
-      // to staying cheap while MOVING — exploring used to rebuild all ~2500 cells
-      // every frame (the render spike); now it's a handful of new cells per frame.
+      //
+      // The mask is rebuilt **every frame but only over the viewport** — an
+      // overscanned cell window — so its cost is bounded by screen size, NOT by how
+      // much of the map you've explored. (The old approach accumulated one rect per
+      // explored cell into a single path and redrew the whole thing blurred each
+      // frame, so it grew without bound on a large zone — the slow-creep we saw.)
+      // Cells are greedy-meshed into one rect per horizontal run, so a swept-clear
+      // region costs a few addRects per row, not one per cell.
       const fog = scene.fog;
       const cs = fog.cellSize;
-      const grew = markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius, newFogCells);
-      if (cachedFogPath === null) {
-        cachedFogPath = Skia.Path.Make();
-        cachedFogPath.setFillType(FillType.EvenOdd);
-        // Backdrop large enough to cover any viewport (the visible slice is taken
-        // by the clip at draw time); explored cells are punched out as holes.
-        const span = Math.max(ARENA_WIDTH, ARENA_HEIGHT);
-        cachedFogPath.addRect(Skia.XYWHRect(-span * 2, -span * 2, span * 5, span * 5));
-        for (let r = 0; r < fog.rows; r++) {
-          for (let c = 0; c < fog.cols; c++) {
-            if (fog.seen[r * fog.cols + c] === 1) {
-              cachedFogPath.addRect(Skia.XYWHRect(c * cs, r * cs, cs, cs));
-            }
+      markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius);
+      const cMin = Math.max(0, Math.floor(vl / cs));
+      const cMax = Math.min(fog.cols - 1, Math.floor((vl + vw) / cs));
+      const rMin = Math.max(0, Math.floor(vt / cs));
+      const rMax = Math.min(fog.rows - 1, Math.floor((vt + vh) / cs));
+      const fogPath = Skia.Path.Make();
+      fogPath.setFillType(FillType.EvenOdd);
+      fogPath.addRect(Skia.XYWHRect(vl, vt, vw, vh)); // viewport backdrop; explored = holes
+      for (let r = rMin; r <= rMax; r++) {
+        const base = r * fog.cols;
+        let c = cMin;
+        while (c <= cMax) {
+          if (fog.seen[base + c] === 0) {
+            c++;
+            continue;
           }
-        }
-      } else if (grew) {
-        for (let k = 0; k < newFogCells.length; k++) {
-          const idx = newFogCells[k]!;
-          const r = Math.floor(idx / fog.cols);
-          const c = idx - r * fog.cols;
-          cachedFogPath.addRect(Skia.XYWHRect(c * cs, r * cs, cs, cs));
+          const runStart = c;
+          while (c <= cMax && fog.seen[base + c] === 1) c++;
+          fogPath.addRect(Skia.XYWHRect(runStart * cs, r * cs, (c - runStart) * cs, cs));
         }
       }
       fill.setShader(mistShader); // only the never-discovered layer drifts
       fill.setAlphaf(UNEXPLORED_EXTRA_ALPHA);
       fill.setMaskFilter(fogBlur);
       // Clip to the (overscanned) viewport: the overscan margin exceeds the blur
-      // radius, so the on-screen result is identical to drawing only in-view cells,
-      // but the backdrop's off-screen bulk and out-of-view holes cost nothing.
+      // radius, so the on-screen result is identical to drawing only in-view cells.
       canvas.save();
       canvas.clipRect(Skia.XYWHRect(vl, vt, vw, vh), ClipOp.Intersect, false);
-      canvas.drawPath(cachedFogPath, fill);
+      canvas.drawPath(fogPath, fill);
       canvas.restore();
 
       fill.setMaskFilter(null); // shared paint — clear before player UI draws

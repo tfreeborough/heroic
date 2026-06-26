@@ -16,13 +16,29 @@ import type { Vec2 } from "../math/vec2";
 import type { Aabb } from "../physics/crowd";
 import { greedyMesh } from "./mesh";
 import {
+  COLLISION_CELL,
   ZONE_FORMAT_VERSION,
   type Breakable,
   type BreakableDef,
+  type CollisionRect,
   type Zone,
   type ZoneChunk,
   type ZoneFile,
 } from "./format";
+
+/** Drop the `material` tag — runtime collision is plain geometry. */
+const toAabb = (r: CollisionRect): Aabb => ({ x: r.x, y: r.y, w: r.w, h: r.h });
+
+/** Greedy-mesh just the cells equal to `value` (one collision material) into rects. */
+const meshMaterial = (
+  cells: readonly (readonly number[])[],
+  cellSize: number,
+  value: number,
+): Aabb[] =>
+  greedyMesh(
+    cells.map((row) => (row ?? []).map((v) => (v === value ? 1 : 0))),
+    cellSize,
+  );
 
 /** Slice one full-zone tile grid (`[row][col]`) into a chunk's row-major `Uint16Array`. */
 const sliceLayer = (
@@ -68,28 +84,43 @@ export const loadZone = (file: ZoneFile): Zone => {
     throw new Error(`floor layer has ${file.layers.floor.length} rows, expected ${rows}`);
   }
 
-  // 1. Static collision: free rects, then greedy-meshed painted cells.
-  const collision: Aabb[] = [...(file.collision.rects ?? [])];
+  // 1. Static collision, split by material. Physics/nav want one flat list of
+  // movement-blockers (`collision`), but the renderer + line-of-sight want walls
+  // and voids apart: a wall is drawn and blocks sight; a void is a chasm —
+  // impassable, but invisible and see/shoot-across. So mesh each material on its
+  // own, then union them. (Free rects with no `material` are walls → legacy files,
+  // whose rects are bare `Aabb`s, stay walls.)
+  const cellSize = file.collision.cellSize ?? tileSize;
+  const rects = file.collision.rects ?? [];
+  const walls: Aabb[] = rects.filter((r) => (r.material ?? "wall") === "wall").map(toAabb);
+  const voids: Aabb[] = rects.filter((r) => r.material === "void").map(toAabb);
   const cells = file.collision.cells;
   if (cells && cells.length > 0) {
-    collision.push(...greedyMesh(cells, file.collision.cellSize ?? tileSize));
+    walls.push(...meshMaterial(cells, cellSize, COLLISION_CELL.wall));
+    voids.push(...meshMaterial(cells, cellSize, COLLISION_CELL.void));
   }
 
-  // 1b. Fence the void: floorless cells (id 0) are outside the zone, so make them
-  // solid. This is what lets a designer author an L-shape or irregular outdoor zone
-  // just by painting the floor in that shape — no manual boundary walls (greedy-
-  // meshed, so a notch is one rect, not hundreds of cells). Off only for the rare
-  // floorless-but-walkable case. See docs/design/world-representation.md.
+  // 1b. Fence the void: floorless cells (floor id 0) are outside the painted shape,
+  // so make them VOID — impassable, but invisible (the void backdrop already shows
+  // there) and see/shoot-across. This is what lets a designer author an L-shape, an
+  // outdoor field, or a bridge over a chasm just by painting the floor in that shape
+  // — no manual boundary walls (greedy-meshed, so a notch is one rect, not hundreds
+  // of cells). Off only for the rare floorless-but-walkable case. See
+  // docs/design/world-representation.md.
   if (file.fenceVoid !== false) {
-    const voidCells: number[][] = [];
+    const floorless: number[][] = [];
     for (let r = 0; r < rows; r++) {
       const floorRow = file.layers.floor[r];
       const row = new Array<number>(cols);
       for (let cc = 0; cc < cols; cc++) row[cc] = floorRow && floorRow[cc] ? 0 : 1;
-      voidCells.push(row);
+      floorless.push(row);
     }
-    collision.push(...greedyMesh(voidCells, tileSize));
+    voids.push(...greedyMesh(floorless, tileSize));
   }
+
+  // Movement collision = every solid, regardless of material (walls first, to match
+  // authored order). Occluders are built from `walls` alone, app-side.
+  const collision: Aabb[] = [...walls, ...voids];
 
   // 2. Slice visual layers into chunks (row-major: chunks[cy * chunkCols + cx]).
   const chunkCols = Math.ceil(cols / chunkTiles);
@@ -130,8 +161,11 @@ export const loadZone = (file: ZoneFile): Zone => {
     tileset: file.tileset,
     chunks,
     collision,
+    walls,
+    voids,
     breakables,
     objects: file.objects ?? [],
     spawn,
+    audio: file.audio,
   };
 };

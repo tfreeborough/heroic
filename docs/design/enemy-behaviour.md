@@ -285,28 +285,54 @@ concerns, and they live in different places because of `@heroic/core`'s purity r
 - **Distance** to the player.
 - **Player front-arc** — is this enemy inside the cone the player is facing? (drives the
   circler; reads the player `facing` state from the movement doc).
-- **Line of sight (LOS)** — clear straight line to the player, or a wall between? (decides
-  steer-direct vs. pathfind; also gates ranged fire, and the future patroller). *Built:*
+- **Line of sight (LOS)** — clear straight line of *sight* to the player, or an occluding wall
+  between? Gates ranged fire, the kiter's hold-vs-close, the ambusher's spring, and the future
+  patroller. (It does **not** decide steer-vs-pathfind — that's the *movement* nav grid, since a
+  barrel/pit blocks movement without blocking sight; see Pathing below.) *Built:*
   `EnemyPerception.hasLineOfSight`, computed by the app with `segmentClear` against the arena's
   occluders; see [line-of-sight](./line-of-sight.md).
 - **Nearby allies** — for separation now; for pack/coordination behaviour later.
 
 ## Pathing (combining steering with A*) — *implemented*
 
-Steering is *local* (moment-to-moment); pathfinding is *global* (routing around walls). They
+Steering is *local* (moment-to-moment); pathfinding is *global* (routing around obstacles). They
 combine, decided **once in the runtime** (`tickBrain`) rather than per archetype, so every
-ground enemy benefits without bespoke code:
+ground enemy benefits without bespoke code. The steer-vs-route test is the **movement** nav grid,
+not sight (`pathClear` walks the grid line) — so a mover routes around anything the grid was built
+from (walls, voids/pits, breakables, spawner nests), even a non-occluding barrel it can see the
+player straight through. (Using *sight* here was the old behaviour, and the bug: enemies ground
+against a barrel/crate/nest because it didn't block the sightline.)
 
-- **Clear line to the player → just steer** (the archetype's own seek/orbit/kite runs untouched).
-- **Wall in the way → A\*** (`findPath` over a `NavGrid` built from the pillars, inflated by the
-  enemy radius) gives waypoints; `pursue` follows them to the player's *live* position, re-pathing
-  on a throttle. Routes to where you actually are, so enemies don't give up out of sight.
+- **Clear movement path to the player → just steer** (the archetype's own seek/orbit/kite runs untouched).
+- **An obstacle in the way → A\*** (`findPath` over a `NavGrid` built from the level's collision,
+  inflated by the enemy radius) gives waypoints; `pursue` follows them to the player's *live*
+  position, re-pathing on a throttle. Routes to where you actually are, so enemies don't give up
+  out of sight. (Flyers use their own grid — walls + breakables, no voids — so they beeline over pits.)
 
 Two intents are *not* re-routed, by design:
 - **Idle/dormant** (intent ≈ 0) — a dormant ambusher stays hidden; it doesn't path toward a
   player it hasn't triggered on.
 - **Committed bursts** (intent above normal `speed`, e.g. a charger's dash) — stay a straight,
   dodgeable line; `pursue` would otherwise curve them around walls.
+
+### Movement domains — flying (over voids)
+
+"Flying" is **not an archetype** — it's a *movement domain* layered under any behaviour (a flying
+chaser, a flying circler…). The behaviour decides where to go; the domain decides what geometry
+stops it. Two domains, set by a `flying` flag on the creature def:
+
+- **Grounded** routes and crowd-collides against **walls + voids** (`SOLIDS`) — fenced out of chasms.
+- **Flying** routes and crowd-collides against **walls only** (`PILLARS`) — it beelines over a void
+  a grounder must go around, and hovers above a pit. Still stopped by walls, breakables, and the
+  arena bounds; sight/projectiles/targeting are unchanged (voids never blocked those), so a flyer
+  over a pit is still fully shootable.
+
+Mechanically it's just *which wall list* a mover sees: the app builds a second `flyingNavGrid`
+(from `PILLARS`, no voids) and runs the crowd in **two passes** (grounded vs flying, each against its
+own walls). The layers are separate, so flyers crowd-separate only among themselves (they're
+"above") — but both still resolve against the player and the bounds. No core/archetype change; the
+`bat` is the worked example (a flying chaser). This is also the natural hook for future domains
+(amphibious over water, etc.).
 
 ### Performance reality (many enemies on a phone)
 

@@ -3,23 +3,11 @@
 // and docs/design/combat.md).
 
 import {
-  ambusher,
-  charger,
-  chaser,
-  circler,
-  kiter,
+  CREATURES,
   loadZone,
-  makeBrain,
   rectEdges,
   ZONE_PALETTE,
-  type AmbusherConfig,
-  type AttackConfig,
-  type Brain,
-  type ChargerConfig,
-  type ChaserConfig,
-  type CirclerConfig,
-  type CombatStats,
-  type KiterConfig,
+  type CreatureId,
   type VisionSegment,
 } from "@heroic/engine";
 import { REALM_00 } from "./zones/realm-00";
@@ -63,18 +51,35 @@ export const WALLS: { x: number; y: number; w: number; h: number }[] = (() => {
 })();
 
 /**
- * Interior obstacles: the zone's static collision — solid blocks that collide
- * with bodies and occlude line of sight. Authored in realm-00 (the original LOS
- * demo layout) and greedy-meshed by loadZone (plain rects here).
+ * Interior **walls**: solid blocks that collide with bodies, are drawn, AND occlude
+ * line of sight / projectiles / targeting. The zone's `"wall"`-material collision
+ * (greedy-meshed by loadZone). Voids are NOT here — they block movement only, via
+ * SOLIDS below — so the game only ever draws and occludes against walls.
  */
-export const PILLARS = ZONE.collision;
+export const PILLARS = ZONE.walls;
+
+/**
+ * Everything that blocks **movement** — walls *and* voids (chasms). Feeds the
+ * player's Matter blocker bodies, the crowd, and the enemy nav grid, so nothing
+ * can walk into a void; but voids stay out of OCCLUDERS, so you still see and shoot
+ * across them. Equals `PILLARS` whenever a zone has no void collision.
+ */
+export const SOLIDS = ZONE.collision;
+
+/**
+ * Void collision: chasms that block movement but are drawn as a dark, drifting-mist
+ * pit (see renderCombat) — not occluders, so you see/shoot across them. The fenced
+ * floorless border lives here too. Empty when a zone has no void.
+ */
+export const VOIDS = ZONE.voids;
 
 /**
  * Sight / projectile occluders, shared by the renderer (fog-of-war rays) and the
  * sim (projectile-vs-wall collisions and enemy line-of-sight): the zone-bounds
- * rectangle plus every pillar's edges. The bounds box never lies between two
- * interior points, so it doesn't affect enemy↔player sightlines — it only stops
- * projectiles at the boundary and bounds the fog rays.
+ * rectangle plus every wall's edges. Built from PILLARS (walls) only — voids don't
+ * occlude, so a bridge over a chasm lets you see/shoot to the far side. The bounds
+ * box never lies between two interior points, so it doesn't affect enemy↔player
+ * sightlines — it only stops projectiles at the boundary and bounds the fog rays.
  */
 export const OCCLUDERS: VisionSegment[] = [
   { ax: 0, ay: 0, bx: ZONE.size.x, by: 0 },
@@ -95,7 +100,7 @@ export const VISION = {
   /** Fog fill colour (slightly bluer than the void so depth still reads). */
   shadowColor: "#060810",
   /** Opacity over explored-but-unseen area, 0..1 — the dim "memory" layer. */
-  exploredAlpha: 0.80,
+  exploredAlpha: 0.95,
   /** Opacity over never-seen area, 0..1. 0.98 keeps the faint hint of unknown
    *  geometry you liked on the original blind spots. */
   unexploredAlpha: 0.98,
@@ -105,25 +110,30 @@ export const VISION = {
   /** Softness of the *fog frontier* (explored ↔ unseen), world px of blur. Large
    *  on purpose: it dissolves the underlying memory grid into soft mist instead
    *  of visible cells. Roughly cell-sized or bigger is what kills the blockiness. */
-  fogSoftness: 30,
+  fogSoftness: 60,
   /** Drifting-mist wisp colour — the lighter veins that roll through the fog.
    *  A touch lighter/bluer than `shadowColor` so they read against the dark. */
-  mistColor: "#27324f",
+  mistColor: "#1e1e1e",
   /** Mist feature size, world px. Bigger = larger, lazier-looking clouds. */
-  mistScale: 150,
+  mistScale: 200,
   /** Mist drift speed, world px/s — now maps ~directly to visible travel. Slow
    *  reads as atmospheric; 0 = static (curls in place). */
   mistSpeed: 7,
   /** Current clear-vision range, world px. Beyond this — even down an open
-   *  sightline — the view fades into fog, so vision closes in around you. */
-  sightRadius: 360,
+   *  sightline — the view fades into fog, so vision closes in around you. Pulled
+   *  in from 360 to tighten the lit bubble for a more claustrophobic feel. */
+  sightRadius: 320,
   /** Where the clear→fog fade begins, as a fraction of sightRadius (0..1).
-   *  Inside this you see fully; from here to sightRadius it ramps to the dim. */
-  sightFalloff: 0.55,
+   *  Inside this you see fully; from here to sightRadius it ramps to the dim.
+   *  Dropped from 0.55 so the dimming starts much closer to the player — distant
+   *  geometry reads markedly darker, the view crowding in around you. */
+  sightFalloff: 0.38,
   /** Exploration range, world px. Cells within this AND in line of sight become
-   *  "explored" (dim memory). Larger than sightRadius, so a ring just past what
-   *  you can clearly see still gets discovered as you move. */
-  discoverRadius: 500,
+   *  "explored" (dim memory). Kept a hair above sightRadius so a thin ring just
+   *  past clear vision still gets discovered as you move. Tightened from 500 so
+   *  you must get close to permanently clear fog — most of what you glimpse at a
+   *  distance stays unrevealed. */
+  discoverRadius: 340,
 } as const;
 
 /**
@@ -255,6 +265,15 @@ export const DASH_SHOVE_RADIUS = 46;
 export const ENGAGEMENT_MARGIN = 160;
 
 /**
+ * Combat *music* trigger: any living enemy within this radius of the player
+ * counts as "in a fight", switching the soundtrack to the combat bed (with a
+ * hangover — see audio/musicState). Deliberately generous (≈7 tiles) so the
+ * music swells a touch before things are in your face. A coarse proxy for the
+ * AI's own engagement; refine to brain-engaged state if it ever feels off.
+ */
+export const COMBAT_MUSIC_RADIUS = 480;
+
+/**
  * The camera zooms out just enough that the *equipped* weapon's attack-range
  * ring fits on screen with this much margin (screen px) — auto-firing at
  * things you can't see reads as a glitch.
@@ -306,278 +325,36 @@ export const HIT_FLASH_DURATION = 0.12;
 export const ENEMY_ACCEL = 1300;
 export const ENEMY_DECEL = 1900;
 
-export type EnemyTypeId =
-  | "zombie"
-  | "wolf"
-  | "ambusher"
-  | "archer"
-  | "caster"
-  | "charger"
-  | "wizard";
+/**
+ * The creature roster is **pure data** and now lives in `@heroic/core`
+ * (`creature/roster`): archetype + tuning + combat stats + actions. Both games
+ * share that one bestiary, and Realmsmith reads it to offer a real creature
+ * picker (a spawner names a `CreatureId`). It's re-exported here — with the
+ * stable `EnemyTypeId` alias — so existing app imports from "./constants" are
+ * unchanged. See docs/design/enemy-behaviour.md (layer 3).
+ */
+export type EnemyTypeId = CreatureId;
+export { CREATURES };
 
 /**
- * A creature's ranged attack: the *same* AttackConfig + stats a weapon uses.
- * Per combat.md there's one shared attack library — a skeleton archer fires
- * the projectile a player bow would. `school` already carries physical vs.
- * magic, so "weapon-like, typed" stats come for free.
+ * App-side **presentation**, layered over the pure roster per creature id. Core
+ * is renderer-free, so anything visual lives here: the body fill now, plus the
+ * projectile / summon-telegraph tints for ranged and summoning creatures, and
+ * sprites/haptics later. Keyed by id so it can't drift out of sync with the
+ * roster (a missing key is a type error).
  */
-export interface CreatureAttack {
-  config: AttackConfig;
-  /** Attacker-side stats (school sources power/crit later); maxHp unused here. */
-  stats: CombatStats;
-  projectileRadius: number;
-  projectileColor: string;
-}
-
-/**
- * A creature's summon action — the mirror of an attack, but the "strike" spawns
- * creatures instead of projectiles (docs/design/enemy-behaviour.md). Fully
- * data-driven: `minionType` is any creature in the roster, so a kiter wizard
- * with `minionType: "wolf"` calls wolves. `maxAlive` caps its live brood.
- */
-export interface SummonAction {
-  minionType: EnemyTypeId;
-  /** Minions spawned per cast. */
-  count: number;
-  /** Telegraph (cast) duration before minions appear, seconds. */
-  windup: number;
-  /** Cooldown after a cast before the next, seconds. */
-  recovery: number;
-  /** Hard cap on this summoner's living minions. */
-  maxAlive: number;
-  /** Minions appear within this radius of the summoner. */
-  spawnRadius: number;
-  /** Only summons while the player is within this distance. */
-  engageRange: number;
-  /** Telegraph ring colour. */
-  telegraphColor: string;
-}
-
-export interface CreatureDef {
-  label: string;
-  /** Short archetype × school tag for the spawn picker. */
-  tag: string;
-  /** makeCombatant stats — `attack` doubles as the contact-damage stat. */
-  stats: {
-    maxHp: number;
-    attack: number;
-    defense: number;
-    critChance: number;
-    critMultiplier: number;
-  };
-  /** px/s shove applied to the player on a contact hit. */
-  contactKnockback: number;
-  /** Presentation — app-side only (core stays renderer-free). */
-  color: string;
-  /** Fresh brain for a spawning instance; `index` varies per-instance quirks. */
-  makeBrain: (index: number) => Brain;
-  /** Ranged attack profile; absent for melee/contact-only creatures. */
-  attack?: CreatureAttack;
-  /** Summon action; absent for creatures that don't call minions. */
-  summon?: SummonAction;
-}
-
-/** Chaser tuning: one state — walk at the player. Slow, tanky, relentless. */
-const ZOMBIE_BRAIN: ChaserConfig = {
-  speed: 110,
-  separationRadius: 56,
-  aggroRadius: 480,
-};
-
-/**
- * Circler tuning: approaches while unwatched, circles inside the player's
- * front arc. Slightly slower than the player's top speed so it can be outrun;
- * orbit ring sits just outside melee reach.
- */
-const WOLF_BRAIN: CirclerConfig = {
-  speed: 240,
-  separationRadius: 56,
-  aggroRadius: 640,
-  orbitDistance: 170,
-  /**
-   * Prowl: circling runs at this fraction of full speed. Full-speed strafing
-   * made wolves nearly unhittable (ranged auto-aim leads to where they *were*);
-   * the lunge in/out still uses full speed.
-   */
-  circleSpeedScale: 0.55,
-  /** ~126°: matches the "is the player looking at me" feel, found in playtest. */
-  frontArcWidth: Math.PI * 0.7,
-  /** ~7° of arc-edge stickiness. */
-  arcMargin: 0.12,
-  minModeTime: 0.3,
-};
-
-/**
- * Ambusher tuning: lies dormant, then bursts when the player strays close.
- * Faster than anything else once committed; release radius sits well beyond
- * the trigger so it commits to a chase rather than flickering at the edge.
- */
-const AMBUSHER_BRAIN: AmbusherConfig = {
-  speed: 320,
-  separationRadius: 56,
-  triggerRadius: 300,
-  releaseRadius: 500,
-};
-
-/**
- * Ranged creatures kite (the circler inverted): hold near firing range, close
- * when too far, back off when crowded. Slower than the player so they can be
- * cornered.
- *
- * The standoff is *derived from the attack reach* so the whole range band stays
- * inside firing distance — otherwise a kiter parks just out of range and never
- * shoots. The shoot gate is `centre-distance ≤ reach + PLAYER_RADIUS`; holding
- * the band's far edge `STANDOFF_MARGIN` inside that keeps every position in the
- * band a live shot, with slack for jitter and the windup lock. Bigger margin =
- * holds closer (safer); smaller = hangs nearer max range.
- */
-const STANDOFF_MARGIN = 24;
-const standoff = (reach: number, rangeBand: number): number =>
-  reach + PLAYER_RADIUS - rangeBand - STANDOFF_MARGIN;
-
-const ARCHER_REACH = 260;
-const CASTER_REACH = 240;
-
-const ARCHER_BRAIN: KiterConfig = {
-  speed: 205,
-  separationRadius: 56,
-  aggroRadius: 620,
-  preferredRange: standoff(ARCHER_REACH, 50),
-  rangeBand: 50,
-};
-
-const CASTER_BRAIN: KiterConfig = {
-  speed: 200,
-  separationRadius: 56,
-  aggroRadius: 640,
-  preferredRange: standoff(CASTER_REACH, 50),
-  rangeBand: 50,
-};
-
-/**
- * Charger: shuffles forward, then commits a telegraphed dash that blows past a
- * player who sidesteps. `speed` is the approach (and separation strength);
- * `maxSpeed` is the dash burst — kept separate so it doesn't shove allies at
- * dash speed. Dash distance = maxSpeed × dashDuration ≈ 576px, well past the
- * ~300px lock, so it sails clear of you when you step off the line.
- */
-const CHARGER_BRAIN: ChargerConfig = {
-  speed: 130,
-  maxSpeed: 640,
-  separationRadius: 56,
-  aggroRadius: 560,
-  chargeRange: 300,
-  windupTime: 0.55,
-  dashDuration: 0.9,
-  recoverTime: 0.7,
-};
-
-/** Wizard: a kiter that hangs well back (big preferredRange) and summons. */
-const WIZARD_BRAIN: KiterConfig = {
-  speed: 175,
-  separationRadius: 56,
-  aggroRadius: 760,
-  preferredRange: 360,
-  rangeBand: 60,
-};
-
-export const CREATURES: Record<EnemyTypeId, CreatureDef> = {
-  zombie: {
-    label: "Zombie",
-    tag: "chaser",
-    stats: { maxHp: 40, attack: 6, defense: 2, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 220,
-    color: "#7fa05f",
-    makeBrain: (index) => makeBrain(chaser, ZOMBIE_BRAIN, index),
-  },
-  wolf: {
-    label: "Wolf",
-    tag: "circler",
-    stats: { maxHp: 26, attack: 10, defense: 0, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 320,
-    color: "#9fb4d8",
-    makeBrain: (index) => makeBrain(circler, WOLF_BRAIN, index),
-  },
-  ambusher: {
-    label: "Ambusher",
-    tag: "ambusher",
-    stats: { maxHp: 22, attack: 14, defense: 0, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 360,
-    color: "#b06a8c",
-    makeBrain: (index) => makeBrain(ambusher, AMBUSHER_BRAIN, index),
-  },
-  archer: {
-    label: "Archer",
-    tag: "kiter · physical",
-    stats: { maxHp: 24, attack: 0, defense: 0, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 160,
-    color: "#caa86a",
-    makeBrain: (index) => makeBrain(kiter, ARCHER_BRAIN, index),
-    attack: {
-      config: {
-        shape: "projectile",
-        school: "physical",
-        reach: ARCHER_REACH,
-        projectileSpeed: 520,
-        pierce: 0,
-        windup: 0.5, // the telegraph — long enough to read and dodge
-        recovery: 0.9,
-        knockback: 140,
-      },
-      stats: { maxHp: 1, attack: 8, defense: 0, critChance: 0, critMultiplier: 1 },
-      projectileRadius: 5,
-      projectileColor: "#e8d7a6",
-    },
-  },
-  caster: {
-    label: "Caster",
-    tag: "kiter · magic",
-    stats: { maxHp: 20, attack: 0, defense: 0, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 160,
-    color: "#8a6fc0",
-    makeBrain: (index) => makeBrain(kiter, CASTER_BRAIN, index),
-    attack: {
-      config: {
-        shape: "projectile",
-        school: "magic",
-        reach: CASTER_REACH,
-        projectileSpeed: 420,
-        pierce: 1, // a slower, piercing bolt
-        windup: 0.65,
-        recovery: 1.0,
-        knockback: 180,
-      },
-      stats: { maxHp: 1, attack: 12, defense: 0, critChance: 0, critMultiplier: 1 },
-      projectileRadius: 7,
-      projectileColor: "#9b7bff",
-    },
-  },
-  charger: {
-    label: "Charger",
-    tag: "charger",
-    stats: { maxHp: 34, attack: 12, defense: 1, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 440, // the dash hits hard
-    color: "#d2683f",
-    makeBrain: (index) => makeBrain(charger, CHARGER_BRAIN, index),
-  },
-  wizard: {
-    label: "Wizard",
-    tag: "kiter · summon",
-    stats: { maxHp: 28, attack: 0, defense: 0, critChance: 0, critMultiplier: 1 },
-    contactKnockback: 160,
-    color: "#4a63c0",
-    makeBrain: (index) => makeBrain(kiter, WIZARD_BRAIN, index),
-    summon: {
-      minionType: "wolf",
-      count: 2,
-      windup: 0.8,
-      recovery: 2.2,
-      maxAlive: 6,
-      spawnRadius: 90,
-      engageRange: 700,
-      telegraphColor: "#b98cff",
-    },
-  },
+export const CREATURE_VISUALS: Record<
+  EnemyTypeId,
+  { color: string; projectileColor?: string; telegraphColor?: string }
+> = {
+  zombie: { color: "#7fa05f" },
+  wolf: { color: "#9fb4d8" },
+  ambusher: { color: "#b06a8c" },
+  archer: { color: "#caa86a", projectileColor: "#e8d7a6" },
+  caster: { color: "#8a6fc0", projectileColor: "#9b7bff" },
+  charger: { color: "#d2683f" },
+  bat: { color: "#9b7fc0" },
+  wizard: { color: "#4a63c0", telegraphColor: "#b98cff" },
 };
 
 // --- Player health -------------------------------------------------------------

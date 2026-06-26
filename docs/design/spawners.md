@@ -30,18 +30,26 @@ with the level-gap for free: a nest placed deep in higher-band territory is a ri
 ## The spawner lifecycle
 
 ```
-DORMANT ──player enters activation radius──► ACTIVE ──HP to 0──► DESTROYED
+DORMANT ──seen once  AND  player within activation radius──► ACTIVE ──HP to 0──► DESTROYED
    ▲                                            │                    │
-   └────────player leaves radius────────────────┘         stays destroyed this visit;
-                                                           regrown next run / next visit
+   └────────player leaves radius (countdown ────┘         stays destroyed this visit;
+            PAUSES, not resets)                            regrown next run / next visit
 ```
 
 - **Dormant** — inert. No spawning, no simulation cost, no XP-budget drain. Every nest the
-  player discovers is at full value.
+  player discovers is at full value. A nest stays dormant until the player has **seen it at least
+  once** (had clear line of sight to it) — so a nest behind a wall (or a breakable wood-wall) is
+  silent until revealed, making *breaking through to expose a nest* the "oh damn, it's pumping out
+  monsters" beat. Proximity (the activation radius) then gates the actual spawning.
 - **Active** — spawns its creature type on a **cadence** (every N seconds), up to a
   **max-alive cap** (at most M of *its* creatures alive at once — the pressure stays constant
-  instead of snowballing, and keeps entity counts phone-safe). Spawned creatures use the normal
-  [enemy-behaviour](./enemy-behaviour.md) brains.
+  instead of snowballing, and keeps entity counts phone-safe). The **first** entry to a fresh nest
+  spawns **immediately**, then it settles into the cadence — so a long-cadence nest reacts the
+  instant you reveal it rather than being killed before it does anything. Spawned creatures emerge
+  **hugging the nest** (within ~one tile of its footprint) so they pour out of it rather than popping
+  in around it, then use the normal [enemy-behaviour](./enemy-behaviour.md) brains. Leaving the
+  activation radius drops the nest back to dormant but **pauses** its cadence countdown rather than
+  resetting it, so you can't stall a slow nest by skirting its edge.
 - **Destroyed** — has HP; the player kills it like anything else. **Dead stays dead for the
   visit** — clearing is real and satisfying. On the next run (Gauntlet) / next visit (Journey),
   nests have regrown: the world repopulates across runs, as
@@ -103,8 +111,10 @@ for the same damage dealt.
 
 - Budget size (expressed in spawn-counts of its creature — your "~20 full-value spawns" instinct
   is the starting calibration).
-- Spawn cadence; max-alive cap; activation radius (and whether leaving the radius mid-fight
-  pauses or fully resets the nest).
+- Spawn cadence; max-alive cap; activation radius. (Resolved 2026-06-25: leaving the radius
+  mid-fight **pauses** the cadence countdown rather than resetting it — a reset made a small-radius,
+  long-cadence nest practically impossible to trigger. Reveal gating — a nest must be *seen* once
+  before it can wake — was added the same day; see the lifecycle above.)
 - Defender wave size/composition; threshold granularity + wave cap (v1 = 25% bands, max 2 waves
   — chosen over 10% bands, whose expected ~4.5 waves felt like too many); the exact
   one-shot/overkill rule.
@@ -130,3 +140,6 @@ for the same damage dealt.
 - **Diegetic** — existing inside the game's fiction (creatures emerge from a visible nest)
   rather than imposed from outside it (creatures popping into existence).
 - **Placed roamer** — an authored, pre-placed ambient enemy not tied to a runtime spawner.
+  Implemented as a `creature` object (a `ZoneObject` whose `props.creature` names a roster
+  `CreatureId`), placed in Realmsmith and spawned once at zone load. The spawner's static
+  sibling: no nest, no cadence — it just stands where you put it until killed.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Canvas, Fill, Picture, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import {
   brainTelegraph,
   buildNavGrid,
   closestPointOnAabb,
+  createAudioDirector,
   createBlockerBody,
   createFogGrid,
   createMoverBody,
@@ -25,9 +26,12 @@ import {
   forEachNeighbor,
   getVelocityPerSecond,
   hitsInArc,
+  initMusicState,
   makeCombatant,
+  makeCreatureBrain,
   normalize,
   rebuildGrid,
+  releaseNavBlocker,
   rectEdges,
   removeBody,
   resolveAttack,
@@ -37,15 +41,22 @@ import {
   spawnVolley,
   stepAbility,
   stepAttackCycle,
+  stepMusicState,
   stepCrowd,
   stepPhysics,
   stepProjectile,
+  stepSpawner,
+  parseSpawnerConfig,
+  parseCreatureId,
+  initSpawnerState,
+  SPAWNER_NEST_TILES,
   STICK_ZERO,
   sub,
   tickBrain,
   useGameLoop,
   type Aabb,
   type AttackCycleState,
+  type AudioDirector,
   type Brain,
   type Breakable,
   type Combatant,
@@ -55,6 +66,8 @@ import {
   type Mover,
   type NavGrid,
   type ProjectileState,
+  type SpawnerConfig,
+  type SpawnerState,
   type StickSample,
   type Vec2,
   type VisionSegment,
@@ -68,8 +81,10 @@ import {
   CAMERA_FRAME_PADDING,
   CAMERA_MIN_RADIUS,
   COLORS,
+  COMBAT_MUSIC_RADIUS,
   CONTROLS_MIN_HEIGHT,
   CREATURES,
+  CREATURE_VISUALS,
   CROWD_PUSH,
   DAMAGE_NUMBER_LIFE,
   DAMAGE_NUMBER_RISE,
@@ -99,12 +114,15 @@ import {
   PLAYER_RADIUS,
   PLAYER_STATS,
   PILLARS,
+  SOLIDS,
   SPAWN,
+  VISION,
   WALLS,
   ZONE,
   type EnemyTypeId,
 } from "./constants";
 import { WEAPONS, type WeaponDef, type WeaponId } from "./weapons";
+import { AUDIO_MANIFEST } from "./audio/manifest";
 import { playStrikeHaptic } from "./haptics";
 import { Thumbstick } from "./Thumbstick";
 import { WeaponButton } from "./WeaponButton";
@@ -120,14 +138,15 @@ import {
   isDashing,
   tickDashInvuln,
 } from "./skills/dash";
-import { SpawnPicker } from "./SpawnPicker";
-import { EMPTY_COMBAT_PICTURE, recordCombatScene } from "./renderCombat";
+import { EMPTY_COMBAT_PICTURE, recordCombatScene, type CombatScene } from "./renderCombat";
 import { bakeFloorChunks } from "./zoneRender";
 
 /** A hostile with a brain: chases/circles/kites per its type, soaks hits. */
 interface Enemy {
   id: number;
   type: EnemyTypeId;
+  /** Flies over voids: routes/collides against walls only, ignoring chasms. */
+  flying: boolean;
   /** Kinematic mover (position + velocity, px/s): integrated and collided in core. */
   mover: Mover;
   combatant: Combatant;
@@ -205,25 +224,67 @@ interface LiveBreakable extends Breakable {
 }
 
 /**
+ * A spawner nest (docs/design/spawners.md). The destructible *structure* is a
+ * `LiveBreakable` (`kind: "spawner"`) held in the breakables list, so it reuses
+ * the whole hit / auto-target / world-geometry / render path — to the combat
+ * system a nest is just a solid box with hp. This record adds the behaviour: the
+ * pure FSM state, the parsed config, and the ids of the creatures it has spawned
+ * (to enforce the max-alive cap).
+ */
+interface SpawnerRuntime {
+  id: string;
+  config: SpawnerConfig;
+  state: SpawnerState;
+  /** The destructible structure standing in for this nest in `breakables`. */
+  nest: LiveBreakable;
+  /** Ids of this nest's currently-living spawned creatures. */
+  liveIds: number[];
+  /** Latched once the player has had line of sight to the nest — it stays silent
+   *  until revealed, so breaking open a wall to expose it is when it springs to life. */
+  everSeen: boolean;
+}
+
+/**
  * Recompute the dynamic world geometry from the *alive* breakables. The crowd
  * walls, the sight/projectile occluders, and the enemy nav grid each fold every
- * standing breakable in on top of the static zone (PILLARS / OCCLUDERS). Run once
- * at load and again on every break — so a downed wall genuinely opens the path:
- * its collision drops, its sightline reopens, and enemies re-path through the gap
- * (see docs/design/world-representation.md, "the world becomes mutable").
+ * standing breakable in on top of the static zone. Two movement domains:
+ *   - **grounded** builds on SOLIDS (walls + voids — nothing walks into a chasm);
+ *   - **flying** builds on PILLARS (walls only — flyers cross voids), so flying
+ *     enemies path over and hover above a pit while ground enemies are fenced out.
+ * Both fold in standing breakables (a flyer is still stopped by a crate/wall).
+ * Occluders build on OCCLUDERS (walls only — you see/shoot across a void either way).
+ * Built in full at load; on a break the cheap walls/occluders are re-derived
+ * (computeDynamicGeometry) while the nav grids reopen just the downed box's cells
+ * in place (releaseNavBlocker) — so a wall opens collision, sightline, and pathing
+ * at once without a full-grid rebuild (see docs/design/world-representation.md).
  */
-const computeWorld = (
+const computeDynamicGeometry = (
   breakables: readonly LiveBreakable[],
-): { walls: Aabb[]; occluders: VisionSegment[]; navGrid: NavGrid } => {
+): { walls: Aabb[]; flyingWalls: Aabb[]; occluders: VisionSegment[] } => {
   const liveBoxes = breakables.filter((b) => b.alive).map((b) => b.box);
-  const walls = liveBoxes.length > 0 ? [...PILLARS, ...liveBoxes] : PILLARS;
+  const walls = liveBoxes.length > 0 ? [...SOLIDS, ...liveBoxes] : SOLIDS;
+  const flyingWalls = liveBoxes.length > 0 ? [...PILLARS, ...liveBoxes] : PILLARS;
   const occludingEdges = breakables
     .filter((b) => b.alive && b.occludes)
     .flatMap((b) => rectEdges(b.box.x, b.box.y, b.box.w, b.box.h));
   const occluders =
     occludingEdges.length > 0 ? [...OCCLUDERS, ...occludingEdges] : OCCLUDERS;
-  const navGrid = buildNavGrid(ARENA_WIDTH, NAV_CELL, walls, ENEMY_RADIUS, ARENA_HEIGHT);
-  return { walls, occluders, navGrid };
+  return { walls, flyingWalls, occluders };
+};
+
+const computeWorld = (
+  breakables: readonly LiveBreakable[],
+): {
+  walls: Aabb[];
+  flyingWalls: Aabb[];
+  occluders: VisionSegment[];
+  navGrid: NavGrid;
+  flyingNavGrid: NavGrid;
+} => {
+  const dyn = computeDynamicGeometry(breakables);
+  const navGrid = buildNavGrid(ARENA_WIDTH, NAV_CELL, dyn.walls, ENEMY_RADIUS, ARENA_HEIGHT);
+  const flyingNavGrid = buildNavGrid(ARENA_WIDTH, NAV_CELL, dyn.flyingWalls, ENEMY_RADIUS, ARENA_HEIGHT);
+  return { ...dyn, navGrid, flyingNavGrid };
 };
 
 /**
@@ -279,12 +340,13 @@ export const GameScreen = () => {
   // step. A ref (not state) so input never causes a React render.
   const stickRef = useRef<StickSample>(STICK_ZERO);
 
-  const { physics, player, weaponCombatants, rng, breakables, breakableBodies } = useMemo(() => {
+  const { physics, player, weaponCombatants, rng, breakables, breakableBodies, spawners } = useMemo(() => {
     const physics = createPhysicsWorld();
     const player = createMoverBody(SPAWN.x, SPAWN.y, PLAYER_RADIUS);
     addBody(physics, player);
     for (const w of WALLS) addBody(physics, createBlockerBody(w.x, w.y, w.w, w.h));
-    for (const p of PILLARS) addBody(physics, createBlockerBody(p.x, p.y, p.w, p.h));
+    // Every movement-blocker (walls + voids), so the player can't walk into a void.
+    for (const p of SOLIDS) addBody(physics, createBlockerBody(p.x, p.y, p.w, p.h));
 
     // Breakables: a per-session live copy of the zone's authored blockers, so a
     // remount/hot-reload starts fresh and we never mutate the shared loaded zone.
@@ -300,6 +362,34 @@ export const GameScreen = () => {
       flash: 0,
       fuse: null,
     }));
+
+    // Spawners (docs/design/spawners.md): each placed `spawner` object becomes a
+    // destructible NEST — a solid box appended to `breakables` so it reuses the
+    // whole hit / auto-target / world / render path — plus a SpawnerRuntime
+    // carrying the FSM that pumps out creatures while the player is near. Config
+    // (creature, cadence, cap, radii, hp) rides the object's `props`. The nest is
+    // see/shoot-through for v1 (occludes: false) so you can watch it work.
+    const spawners: SpawnerRuntime[] = [];
+    const nestSize = SPAWNER_NEST_TILES * ZONE.tileSize;
+    for (const o of ZONE.objects) {
+      if (o.kind !== "spawner") continue;
+      const config = parseSpawnerConfig(o.props);
+      const nest: LiveBreakable = {
+        id: o.id,
+        kind: "spawner",
+        box: { x: o.x, y: o.y, w: nestSize, h: nestSize },
+        hp: config.maxHp,
+        maxHp: config.maxHp,
+        occludes: false,
+        onBreak: [],
+        alive: true,
+        flash: 0,
+        fuse: null,
+      };
+      breakables.push(nest);
+      spawners.push({ id: o.id, config, state: initSpawnerState(), nest, liveIds: [], everSeen: false });
+    }
+
     const breakableBodies = new Map<string, ReturnType<typeof createBlockerBody>>();
     for (const b of breakables) {
       const body = createBlockerBody(b.box.x, b.box.y, b.box.w, b.box.h);
@@ -320,13 +410,15 @@ export const GameScreen = () => {
       rng: createRng(0xc0ffee),
       breakables,
       breakableBodies,
+      spawners,
     };
   }, []);
 
-  // Enemies are spawned on demand from the test HUD (no auto-population, no
-  // respawn): a mutable list the sim reads and mutates each step, plus a
-  // monotonic id source. A ref, not state — the sim owns it; spawning never
-  // needs a React render.
+  // The live enemy list: seeded once from the zone's authored `creature` objects
+  // (below), then grown over the visit by spawners and summoners. No respawn — the
+  // dead are removed outright. A mutable list the sim reads and mutates each step,
+  // plus a monotonic id source. A ref, not state — the sim owns it; populating
+  // never needs a React render.
   const enemiesRef = useRef<Enemy[]>([]);
   const nextEnemyId = useRef(1);
 
@@ -343,9 +435,10 @@ export const GameScreen = () => {
     return {
       id,
       type,
+      flying: def.flying ?? false,
       mover,
       combatant: makeCombatant(def.stats),
-      brain: def.makeBrain(id),
+      brain: makeCreatureBrain(def, id),
       // Assume visible until the first recheck; stagger timers by id so the
       // population's LOS checks spread evenly across steps rather than bunching.
       los: true,
@@ -362,21 +455,20 @@ export const GameScreen = () => {
     };
   };
 
-  /** Spawn one of `type` at a random bearing a test-distance from the player. */
-  const spawnEnemy = (type: EnemyTypeId) => {
-    const angle = rng.next() * Math.PI * 2;
-    const dist = 300 + rng.next() * 120;
-    const margin = ENEMY_RADIUS + 8;
-    const clampX = (v: number) => Math.max(margin, Math.min(ARENA_WIDTH - margin, v));
-    const clampY = (v: number) => Math.max(margin, Math.min(ARENA_HEIGHT - margin, v));
-    const x = clampX(player.position.x + Math.cos(angle) * dist);
-    const y = clampY(player.position.y + Math.sin(angle) * dist);
-    enemiesRef.current.push(makeEnemy(type, x, y));
-  };
-
-  const clearEnemies = () => {
-    enemiesRef.current = [];
-  };
+  // Seed the standing population once, from the zone's authored `creature` objects
+  // (placed in Realmsmith): one enemy per marker, at its spot, of the creature its
+  // props name. This is the whole starting roster now that the dev spawn HUD is
+  // gone — spawners then add to it over the visit. Guarded so a double render can't
+  // double-seed the ref (and `parseCreatureId` drops any creature a stale zone
+  // names that no longer exists).
+  const seeded = useRef(false);
+  if (!seeded.current) {
+    seeded.current = true;
+    for (const o of ZONE.objects) {
+      if (o.kind !== "creature") continue;
+      enemiesRef.current.push(makeEnemy(parseCreatureId(o.props.creature), o.x, o.y));
+    }
+  }
 
   // Combat state lives in a ref: it's stepped by the game loop, never rendered
   // through React. The weapon picker is the only React-state piece.
@@ -459,15 +551,30 @@ export const GameScreen = () => {
   // here (useMemo, not per-render) including the breakables that start alive.
   const initialWorld = useMemo(() => computeWorld(breakables), []);
   const worldWalls = useRef<Aabb[]>(initialWorld.walls);
+  const flyingWalls = useRef<Aabb[]>(initialWorld.flyingWalls);
   const worldOccluders = useRef<VisionSegment[]>(initialWorld.occluders);
   const navGridRef = useRef<NavGrid>(initialWorld.navGrid);
+  const flyingNavGridRef = useRef<NavGrid>(initialWorld.flyingNavGrid);
 
-  /** Re-derive the dynamic world after a breakable's alive-state changed. */
-  const rebuildWorld = () => {
-    const next = computeWorld(breakables);
-    worldWalls.current = next.walls;
-    worldOccluders.current = next.occluders;
-    navGridRef.current = next.navGrid;
+  /**
+   * Re-derive the dynamic world after a breakable's alive-state changed. The crowd
+   * walls and sight occluders are cheap to rebuild outright; the nav grids are NOT
+   * (two full grids over the whole zone — a visible hitch on a large map), so when a
+   * single box is `removed` we reopen just its footprint in place. `removed` omitted
+   * ⇒ full nav rebuild (the safe fallback).
+   */
+  const rebuildWorld = (removed?: Aabb) => {
+    const dyn = computeDynamicGeometry(breakables);
+    worldWalls.current = dyn.walls;
+    flyingWalls.current = dyn.flyingWalls;
+    worldOccluders.current = dyn.occluders;
+    if (removed) {
+      releaseNavBlocker(navGridRef.current, removed, ENEMY_RADIUS, dyn.walls);
+      releaseNavBlocker(flyingNavGridRef.current, removed, ENEMY_RADIUS, dyn.flyingWalls);
+    } else {
+      navGridRef.current = buildNavGrid(ARENA_WIDTH, NAV_CELL, dyn.walls, ENEMY_RADIUS, ARENA_HEIGHT);
+      flyingNavGridRef.current = buildNavGrid(ARENA_WIDTH, NAV_CELL, dyn.flyingWalls, ENEMY_RADIUS, ARENA_HEIGHT);
+    }
   };
 
   // Spatial grid for enemy separation: every enemy is bucketed into it each step,
@@ -499,6 +606,40 @@ export const GameScreen = () => {
     const weapon = WEAPONS.find((w) => w.id === weaponId) as WeaponDef;
     zoomTarget.current = zoomFor(weapon);
   }, [weaponId, width]);
+
+  // Music: one AudioDirector for the session. It loops the zone's idle bed and
+  // (once a combat bed exists) crossfades when enemies close in — the idle/combat
+  // decision is fed from the sim each step, its state held in `musicState`.
+  // Created once; disposed on unmount. AppState drives suspend/resume so the
+  // soundtrack stops cleanly when the app backgrounds and the OS session frees.
+  const audioRef = useRef<AudioDirector | null>(null);
+  const musicState = useRef(initMusicState());
+  /** Web blocks audio until the first user gesture; the first thumbstick touch unlocks it. */
+  const audioUnlocked = useRef(false);
+  useEffect(() => {
+    const director = createAudioDirector(AUDIO_MANIFEST);
+    audioRef.current = director;
+    director.setZone(ZONE.audio);
+    director.resume(); // native autoplays; web waits for the first touch (see handleStick)
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") director.resume();
+      else director.suspend();
+    });
+    return () => {
+      sub.remove();
+      director.dispose();
+      audioRef.current = null;
+    };
+  }, []);
+
+  /** Thumbstick sink: store the sample and unlock web audio on the first touch. */
+  const handleStick = (sample: StickSample) => {
+    stickRef.current = sample;
+    if (!audioUnlocked.current) {
+      audioUnlocked.current = true;
+      audioRef.current?.resume();
+    }
+  };
 
   useGameLoop({
     onStep: (dt) => {
@@ -583,7 +724,35 @@ export const GameScreen = () => {
       // by OFFSCREEN_SIM_MARGIN. Compared squared, so no per-enemy sqrt.
       const zoom = zoomCurrent.current || 1;
       const viewRadius = (0.5 / zoom) * Math.hypot(width, playHeight);
-      const simRadiusSq = (viewRadius * OFFSCREEN_SIM_MARGIN) ** 2;
+      const simRadius = viewRadius * OFFSCREEN_SIM_MARGIN;
+      const simRadiusSq = simRadius * simRadius;
+
+      // Occluders near the player, culled ONCE per step for every player-centric sight
+      // query below (enemy LOS, auto-target, ranged-fire gating, spawner reveal). Each
+      // of those segments has the player as an endpoint and is at most `simRadius` long
+      // (LOS is only tested inside that radius; targeting/fire/reveal are gated by
+      // engagement ≤ reach + margin), so any wall that could block one lies within an
+      // `occCullR` box of the player — the rest can't matter. This turns each query
+      // from O(all walls) into O(walls-near-you), so a wall-dense zone plus a big horde
+      // stays cheap (segmentClear is O(segments), called per enemy/candidate). Note:
+      // projectile-vs-wall is NOT player-centric, so it keeps the full set; and a wall
+      // broken mid-step leaves this set one frame stale — harmless, it only over-blocks
+      // for a frame (breaks only remove occluders), then the next step rebuilds it.
+      const occCullR = simRadius + ENGAGEMENT_MARGIN;
+      const occBoxMinX = player.position.x - occCullR;
+      const occBoxMaxX = player.position.x + occCullR;
+      const occBoxMinY = player.position.y - occCullR;
+      const occBoxMaxY = player.position.y + occCullR;
+      const nearOccluders: VisionSegment[] = [];
+      for (const s of worldOccluders.current) {
+        const sMinX = s.ax < s.bx ? s.ax : s.bx;
+        const sMaxX = s.ax > s.bx ? s.ax : s.bx;
+        const sMinY = s.ay < s.by ? s.ay : s.by;
+        const sMaxY = s.ay > s.by ? s.ay : s.by;
+        if (sMaxX >= occBoxMinX && sMinX <= occBoxMaxX && sMaxY >= occBoxMinY && sMinY <= occBoxMaxY) {
+          nearOccluders.push(s);
+        }
+      }
       for (let i = 0; i < living.length; i++) {
         const e = living[i]!;
         selfIndex = i;
@@ -601,7 +770,7 @@ export const GameScreen = () => {
         const near = dxp * dxp + dyp * dyp <= simRadiusSq;
         if (near) {
           if (e.losTimer <= 0) {
-            e.los = segmentClear(e.mover.pos, player.position, worldOccluders.current);
+            e.los = segmentClear(e.mover.pos, player.position, nearOccluders);
             e.losTimer = LOS_RECHECK_STEPS;
           } else {
             e.losTimer -= 1;
@@ -617,7 +786,7 @@ export const GameScreen = () => {
             playerFacing: s.facing,
             neighbors,
             hasLineOfSight: near ? e.los : true,
-            navGrid: near ? navGridRef.current : null,
+            navGrid: near ? (e.flying ? flyingNavGridRef.current : navGridRef.current) : null,
             repathBudget,
           },
           dt,
@@ -640,18 +809,24 @@ export const GameScreen = () => {
       // is O(n²) for a pile — see docs/design/enemy-physics-and-crowds.md). Apply
       // velocities, push the crowd apart via the grid, resolve against the pillars
       // and the just-moved player, then clamp to the arena. This is the Phase 2 win.
-      stepCrowd(
-        enemies.map((e) => e.mover),
-        dt,
-        {
-          grid: enemyGrid,
-          walls: worldWalls.current,
-          player: { pos: playerPos, radius: PLAYER_RADIUS },
-          worldSize: ARENA_WIDTH,
-          worldHeight: ARENA_HEIGHT,
-          pushStrength: CROWD_PUSH,
-        },
-      );
+      //
+      // Two passes, one per movement domain: ground enemies collide against the full
+      // SOLIDS (walls + voids), flyers against walls only — so a flyer crosses a chasm
+      // a grounder can't. The layers are separate, so they crowd-separate only within
+      // their own group (flyers are "above"); both still resolve against the player and
+      // the arena bounds. The grid is rebuilt per call, so reusing it is fine.
+      const groundMovers: Mover[] = [];
+      const flyingMovers: Mover[] = [];
+      for (const e of enemies) (e.flying ? flyingMovers : groundMovers).push(e.mover);
+      const crowdBase = {
+        grid: enemyGrid,
+        player: { pos: playerPos, radius: PLAYER_RADIUS },
+        worldSize: ARENA_WIDTH,
+        worldHeight: ARENA_HEIGHT,
+        pushStrength: CROWD_PUSH,
+      };
+      if (groundMovers.length > 0) stepCrowd(groundMovers, dt, { ...crowdBase, walls: worldWalls.current });
+      if (flyingMovers.length > 0) stepCrowd(flyingMovers, dt, { ...crowdBase, walls: flyingWalls.current });
 
       for (const e of enemies) {
         e.currX = e.mover.pos.x;
@@ -666,8 +841,9 @@ export const GameScreen = () => {
       s.camCurrX += (s.currX - s.camCurrX) * catchUp;
       s.camCurrY += (s.currY - s.camCurrY) * catchUp;
 
-      // --- Enemy upkeep: just flash decay now (no respawn — the test HUD owns
-      // population; the dead are removed outright). Breakables decay their flash too.
+      // --- Enemy upkeep: just flash decay now (no respawn — the dead are removed
+      // outright; population comes from authored creatures + spawners). Breakables
+      // decay their flash too.
       for (const d of enemies) d.flash = Math.max(0, d.flash - dt);
       for (const b of breakables) if (b.flash > 0) b.flash = Math.max(0, b.flash - dt);
 
@@ -761,7 +937,7 @@ export const GameScreen = () => {
           removeBody(physics, body);
           breakableBodies.delete(b.id);
         }
-        rebuildWorld();
+        rebuildWorld(b.box);
         for (const eff of b.onBreak) {
           if (eff.type === "explode") explode(b.box.x, b.box.y, eff.radius, eff.damage);
           // "drop" (loot) waits on an item system — see the design doc.
@@ -843,12 +1019,12 @@ export const GameScreen = () => {
       // damage — it's a reposition, not an attack). See skills/dash.ts.
       applyDashShove(dash, playerPos, enemies);
 
-      // --- Targeting: nearest target with hysteresis, inside the engagement
-      // radius (a margin beyond attack range) and in line of sight — the player
-      // never locks onto, faces, or auto-fires at something behind a wall, and a
-      // target that ducks behind cover is dropped. Enemies are the priority;
-      // breakables are considered ONLY when no enemy is in play, so the player
-      // auto-clears scenery in a lull but never wastes a swing on a crate mid-fight.
+      // --- Targeting: nearest target with hysteresis, inside the engagement radius
+      // (a margin beyond attack range) and in line of sight — the player never locks
+      // onto, faces, or auto-fires at something behind a wall, and a target that ducks
+      // behind cover is dropped. Enemies and breakables/spawners are EQUAL priority —
+      // you target whatever's nearest, so you can chip a spawner or pop a barrel even
+      // with enemies around (fighting around objects no longer makes them dead weight).
       const cfg = c.weapon.config;
       const engagement = cfg.reach + ENGAGEMENT_MARGIN;
 
@@ -871,39 +1047,28 @@ export const GameScreen = () => {
           ? distance(playerPos, t.pos) - ENEMY_RADIUS
           : distanceToAabb(playerPos, t.breakable.box);
 
-      // Distance-gate (cheap) *before* the line-of-sight ray, so we don't ray every
-      // candidate in the zone every step just to discard the far ones.
-      const enemyCandidates: { id: number; pos: Vec2 }[] = [];
+      // One candidate list — enemies and breakables/spawners together, ranked purely
+      // by nearness. Distance-gated (cheap) *before* the line-of-sight ray, so we don't
+      // ray every candidate in the zone every step just to discard the far ones.
+      const candidates: { id: number; pos: Vec2 }[] = [];
       for (const d of enemies) {
         if (distance(playerPos, d.mover.pos) > engagement) continue;
-        if (!segmentClear(playerPos, d.mover.pos, worldOccluders.current)) continue;
-        enemyCandidates.push({ id: d.id, pos: d.mover.pos });
+        if (!segmentClear(playerPos, d.mover.pos, nearOccluders)) continue;
+        candidates.push({ id: d.id, pos: d.mover.pos });
       }
-      let candidates = enemyCandidates;
-      if (enemyCandidates.length === 0) {
-        // No enemies → fall back to breakables. An explosive one is only a target
-        // when the player is beyond its blast: melee range is always inside the
-        // blast, so melee never auto-pops a barrel in your face — only ranged, from
-        // a safe distance, locks one. Non-explosive walls/crates are always eligible.
-        const breakableCandidates: { id: number; pos: Vec2 }[] = [];
-        for (let i = 0; i < breakables.length; i++) {
-          const b = breakables[i]!;
-          if (!b.alive || b.fuse !== null) continue; // primed → already going off
-          const centre = { x: b.box.x, y: b.box.y };
-          if (distanceToAabb(playerPos, b.box) > engagement) continue;
-          // Sight to the box's NEAREST point, not its centre: a ray to the centre
-          // would cross the box's own occluder edges, so an occluding wall would
-          // block sight to itself and never be targetable. The near-face touch is
-          // an endpoint, which segmentClear doesn't count — yet another wall in the
-          // way still blocks correctly.
-          if (!segmentClear(playerPos, closestPointOnAabb(playerPos, b.box), worldOccluders.current)) {
-            continue;
-          }
-          const blast = blastRadius(b);
-          if (blast > 0 && distance(playerPos, centre) - PLAYER_RADIUS <= blast) continue;
-          breakableCandidates.push({ id: -(i + 1), pos: centre });
+      for (let i = 0; i < breakables.length; i++) {
+        const b = breakables[i]!;
+        if (!b.alive || b.fuse !== null) continue; // primed → already going off
+        if (distanceToAabb(playerPos, b.box) > engagement) continue;
+        // Sight to the box's NEAREST point, not its centre: a ray to the centre would
+        // cross the box's own occluder edges, so an occluding wall would block sight to
+        // itself; the near-face touch is an endpoint segmentClear ignores (another wall
+        // in the way still blocks). Explosive barrels are eligible at any range now —
+        // meleeing one in your face pops it, by design (risk/reward).
+        if (!segmentClear(playerPos, closestPointOnAabb(playerPos, b.box), nearOccluders)) {
+          continue;
         }
-        candidates = breakableCandidates;
+        candidates.push({ id: -(i + 1), pos: { x: b.box.x, y: b.box.y } });
       }
       c.targetId = selectTarget(candidates, playerPos, engagement, c.targetId);
       const target = resolveTarget(c.targetId);
@@ -1016,7 +1181,7 @@ export const GameScreen = () => {
         if (!def.attack || !e.cycle || !e.attackCombatant) continue;
         const acfg = def.attack.config;
         const inRange = distance(playerPos, e.mover.pos) - PLAYER_RADIUS <= acfg.reach;
-        const engaged = inRange && segmentClear(e.mover.pos, playerPos, worldOccluders.current);
+        const engaged = inRange && segmentClear(e.mover.pos, playerPos, nearOccluders);
         const eStep = stepAttackCycle(e.cycle, acfg, dt, {
           targetInRange: engaged,
           lockValid: engaged,
@@ -1034,7 +1199,7 @@ export const GameScreen = () => {
           })) {
             c.enemyProjectiles.push({
               ...p,
-              color: def.attack.projectileColor,
+              color: CREATURE_VISUALS[e.type].projectileColor ?? CREATURE_VISUALS[e.type].color,
               knockback: acfg.knockback ?? 0,
               attacker: e.attackCombatant,
             });
@@ -1094,6 +1259,55 @@ export const GameScreen = () => {
         }
       }
 
+      // --- Spawners: each NEST runs the pure dormant→active→destroyed FSM. While
+      // the player is within its activation radius it pumps out its creature on a
+      // cadence, capped at maxAlive of its own brood; the player destroys it by
+      // attacking the structure (it takes hits as a breakable), which stops it for
+      // the run. What it spawns is data (config.creature). See spawners.md.
+      for (const sp of spawners) {
+        // Forget spawned creatures that have died, freeing cap slots.
+        if (sp.liveIds.length > 0) {
+          sp.liveIds = sp.liveIds.filter((id) => enemies.some((e) => e.id === id));
+        }
+        const nest = sp.nest;
+        const nestCentre = { x: nest.box.x, y: nest.box.y };
+        const playerDist = distance(playerPos, nestCentre);
+        // Reveal: latch `everSeen` the first time the nest is within discovery range
+        // AND in clear line of sight (so a nest behind a wall — including a breakable
+        // wood-wall — stays hidden until you break through). Once seen, skip the ray.
+        if (!sp.everSeen) {
+          sp.everSeen =
+            playerDist <= VISION.discoverRadius &&
+            segmentClear(playerPos, nestCentre, nearOccluders);
+        }
+        const stepR = stepSpawner(sp.state, sp.config, {
+          dt,
+          playerDist,
+          seen: sp.everSeen,
+          aliveCount: sp.liveIds.length,
+          destroyed: !nest.alive,
+        });
+        sp.state = stepR.state;
+        if (stepR.spawn > 0 && nest.alive) {
+          const margin = ENEMY_RADIUS + 8;
+          const clampX = (v: number) => Math.max(margin, Math.min(ARENA_WIDTH - margin, v));
+          const clampY = (v: number) => Math.max(margin, Math.min(ARENA_HEIGHT - margin, v));
+          for (let k = 0; k < stepR.spawn; k++) {
+            // Spawn hugging the nest: from just outside its footprint to ~one tile
+            // beyond, so creatures pour out of it rather than popping in around it.
+            const ang = rng.next() * Math.PI * 2;
+            const r = nest.box.w / 2 + ENEMY_RADIUS + rng.next() * ZONE.tileSize;
+            const minion = makeEnemy(
+              sp.config.creature,
+              clampX(nest.box.x + Math.cos(ang) * r),
+              clampY(nest.box.y + Math.sin(ang) * r),
+            );
+            enemies.push(minion);
+            sp.liveIds.push(minion.id);
+          }
+        }
+      }
+
       // --- Facing: locked during windup; re-tracks the target otherwise;
       // falls back to movement direction when nothing is engaged.
       const faceTarget = enemies.find((d) => d.id === c.targetId);
@@ -1143,6 +1357,20 @@ export const GameScreen = () => {
         const hz = LOW_HP_PULSE_MIN_HZ + (LOW_HP_PULSE_MAX_HZ - LOW_HP_PULSE_MIN_HZ) * severity;
         s.lowHpPhaseCurr += dt * hz;
       }
+
+      // --- Music: combat when any living enemy is within COMBAT_MUSIC_RADIUS,
+      // idle otherwise (with a hangover so it doesn't snap back the instant a
+      // fight ends). The director crossfades to the matching bed; a situation
+      // the zone has no bed for just holds the current one. `tick(dt)` advances
+      // the crossfade in real time.
+      const director = audioRef.current;
+      if (director) {
+        const inCombat = enemies.some(
+          (e) => distance(playerPos, e.mover.pos) <= COMBAT_MUSIC_RADIUS,
+        );
+        director.setSituation(stepMusicState(musicState.current, inCombat, dt));
+        director.tick(dt);
+      }
     },
     onRender: (alpha) => {
       const s = sim.current;
@@ -1181,6 +1409,46 @@ export const GameScreen = () => {
           }
         }
       }
+      // Viewport in world space (matches renderCombat's cull bounds), so scene data is
+      // built only for what's on screen.
+      const halfVW = anchorX / zoomCurrent.current;
+      const halfVH = anchorY / zoomCurrent.current;
+      const vMinX = camX - halfVW;
+      const vMaxX = camX + halfVW;
+      const vMinY = camY - halfVH;
+      const vMaxY = camY + halfVH;
+
+      // Breakables in a SINGLE pass: alive + on-screen only, no intermediate arrays — a
+      // zone may hold hundreds, but the per-frame scene cost must stay bounded by the
+      // view, not the map. The negative id (-(i+1)) still encodes the original index so
+      // targeting (c.targetId) keeps resolving against the full breakables array.
+      const sceneBreakables: CombatScene["breakables"] = [];
+      for (let i = 0; i < breakables.length; i++) {
+        const b = breakables[i]!;
+        if (!b.alive) continue;
+        if (
+          b.box.x - b.box.w / 2 > vMaxX ||
+          b.box.x + b.box.w / 2 < vMinX ||
+          b.box.y - b.box.h / 2 > vMaxY ||
+          b.box.y + b.box.h / 2 < vMinY
+        )
+          continue;
+        sceneBreakables.push({
+          x: b.box.x,
+          y: b.box.y,
+          w: b.box.w,
+          h: b.box.h,
+          hpFrac: b.hp / b.maxHp,
+          flash: b.flash / HIT_FLASH_DURATION,
+          kind: b.kind,
+          // Occluding breakables (secret/destructible walls) get the "soft wall" look.
+          occludes: b.occludes,
+          // Fuse progress 0 → 1 (0 when not primed): drives the hot pre-blast glow.
+          prime: b.fuse === null ? 0 : 1 - b.fuse / EXPLOSION_FUSE_DELAY,
+          targeted: -(i + 1) === c.targetId,
+        });
+      }
+
       combatPicture.value = recordCombatScene({
         camera: { x: camX, y: camY, zoom: zoomCurrent.current },
         anchor: { x: anchorX, y: anchorY },
@@ -1214,29 +1482,12 @@ export const GameScreen = () => {
           y: enemyY(d),
           hpFrac: d.combatant.hp / d.combatant.stats.maxHp,
           flash: d.flash / HIT_FLASH_DURATION,
-          color: CREATURES[d.type].color,
+          color: CREATURE_VISUALS[d.type].color,
+          flying: d.flying,
         })),
-        // Breakables are static (no interpolation): pass the alive ones with their
-        // box, hp fraction (for a damage bar), kind (→ colour), hit-flash, and
-        // whether they're the current auto-attack target (index → negative id).
-        breakables: breakables
-          .map((b, i) => ({ b, id: -(i + 1) }))
-          .filter(({ b }) => b.alive)
-          .map(({ b, id }) => ({
-            x: b.box.x,
-            y: b.box.y,
-            w: b.box.w,
-            h: b.box.h,
-            hpFrac: b.hp / b.maxHp,
-            flash: b.flash / HIT_FLASH_DURATION,
-            kind: b.kind,
-            // Occluding breakables (secret/destructible walls) get the "soft wall"
-            // look so they read as breakable rather than as permanent geometry.
-            occludes: b.occludes,
-            // Fuse progress 0 → 1 (0 when not primed): drives the hot pre-blast glow.
-            prime: b.fuse === null ? 0 : 1 - b.fuse / EXPLOSION_FUSE_DELAY,
-            targeted: id === c.targetId,
-          })),
+        // Breakables: alive + on-screen only, built in the single pass above (a zone
+        // may hold hundreds; off-screen ones are culled before any per-item work).
+        breakables: sceneBreakables,
         enemyCasts: enemies.flatMap((d) => {
           const def = CREATURES[d.type];
           const ex = enemyX(d);
@@ -1250,7 +1501,7 @@ export const GameScreen = () => {
                 targetX: px,
                 targetY: py,
                 progress: 1 - d.cycle.remaining / def.attack.config.windup,
-                color: def.attack.projectileColor,
+                color: CREATURE_VISUALS[d.type].projectileColor ?? CREATURE_VISUALS[d.type].color,
               },
             ];
           }
@@ -1279,7 +1530,7 @@ export const GameScreen = () => {
               x: enemyX(d),
               y: enemyY(d),
               progress: 1 - d.summonCycle.remaining / summon.windup,
-              color: summon.telegraphColor,
+              color: CREATURE_VISUALS[d.type].telegraphColor ?? CREATURE_VISUALS[d.type].color,
             },
           ];
         }),
@@ -1345,11 +1596,10 @@ export const GameScreen = () => {
           <Fill color={COLORS.void} />
           <Picture picture={combatPicture} />
         </Canvas>
-        <SpawnPicker onSpawn={spawnEnemy} onClear={clearEnemies} topInset={insets.top} />
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
-        <Thumbstick size={stickSize} onChange={(sample) => (stickRef.current = sample)} />
+        <Thumbstick size={stickSize} onChange={handleStick} />
         <View style={styles.actions}>
           <WeaponButton selected={weaponId} onCycle={cycleWeapon} />
           <DashButton overlay={dashOverlay} onPress={requestDash} />

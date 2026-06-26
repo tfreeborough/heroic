@@ -36,8 +36,9 @@ A zone is a **tilemap** — the level expressed as 2D arrays of small cells. It 
 - **Collision** (authored shapes, *invisible*) — what the player and enemies physically collide with.
   Authored separately from visuals (see below); not necessarily 1:1 with any wall tile.
 - **Objects** (entities, not tiles) — placed points/regions with typed properties: spawners
-  ([spawners](./spawners.md)), settlements & waystones ([realms-and-overworld](./realms-and-overworld.md)),
-  the player spawn, zone exits/transitions, points of interest.
+  and individual placed creatures ([spawners](./spawners.md)), settlements & waystones
+  ([realms-and-overworld](./realms-and-overworld.md)), the player spawn, zone
+  exits/transitions, points of interest.
 
 Separating **what you see** (floor/decor) from **what blocks you** (collision) from **what lives there**
 (objects) is the core simplification. Each is edited, stored, and consumed on its own terms.
@@ -120,6 +121,62 @@ one rect). So everything downstream receives the format it already eats today, w
 - **Navigation** — `buildNavGrid` rasterises the rects (`inInflatedRect`).
 - **Line-of-sight** — `rectEdges` → `VisionSegment[]`, fed to `computeVisibility` / `segmentClear`.
 
+### Collision materials — wall vs void
+
+A solid's *geometry* is an `Aabb`; its **material** decides how it behaves. Two today, open to more (e.g.
+`water`):
+
+- **`wall`** — solid floor-to-ceiling. Blocks movement, **and** occludes (sight, projectiles, targeting).
+  Drawn as a pillar. The default — a free rect with no `material`, or a `1` in the painted-cell grid.
+- **`void`** — a chasm. Blocks **movement only**: sight, projectiles, and ranged targeting pass straight
+  across, so you can shoot to the far side of a bridge. Drawn as a dark, drifting-mist **pit** (the same fog
+  swirl, dimmer and always visible — `renderCombat`), *not* a wall. A `2` in the painted-cell grid, or a free
+  rect tagged `material: "void"`. (Realmsmith can't run the shader, so it paints a static foggy stand-in.)
+
+The split is purely *which downstream sets a solid joins*. `loadZone` meshes each material separately and the
+runtime `Zone` exposes both — `walls` (drawn + occluders) and `voids` (movement only) — plus their union
+`collision`:
+
+- **Movement** (Matter blockers, `stepCrowd`, `buildNavGrid`) consumes `collision` — it doesn't care what a
+  solid is *made of*, only that it stops a body. Unchanged from before.
+- **Occluders** (line-of-sight / projectiles / targeting) are built from `walls` **alone**. Void is absent,
+  so it's see- and shoot-through.
+
+The collision layer is thus *typed*, exactly as a designer expects ("this area is a chasm, not a wall"), and
+adding `water` later is: mesh it, then choose its membership in movement / occluders / (new) a slow-field set.
+
+### Depth — 2.5D edge extrusion (camera-relative)
+
+Top-down has no vertical axis, so a flat slab is ambiguous (raised? sunken? a decal?). We fake height with an
+**extruded side face**: a vertical surface drawn attached to the flat top, whose *length* reads as height
+(walls) or depth (voids).
+
+The extrusion is **camera-relative** — that's what makes it read. With a real over-the-shoulder top-down
+camera, the side you see of a vertical surface depends on where it sits on screen: a pillar dead-centre is
+viewed straight down (no visible side), one near the edge leans away and shows a tall side. We pivot every
+element around the **camera focus `C`** (the world point under the screen centre):
+
+Each surface's depth is two parts: a **fixed south tilt** (the camera is angled, not straight down, so
+*every* collision shows a consistent bit of south face — nothing reads as painted flat on the floor) plus a
+small **parallax lean** relative to `C` on top.
+
+- **Walls** show a constant south face (`wallBase`, the tilt) plus a gentle lean toward `C` that grows with
+  distance (`wallLean`) — so an off-axis wall shows both a south face and a side face, and the tilt keeps
+  even a centred wall grounded. Kept small so faces don't visibly swim over the floor.
+- **Voids** are drawn as the edge of a raised platform: every pit edge gets a **lit ground lip** (outlining
+  the hole), then a **wall surface descending into the fog**. Its strength = a tilt baseline on the
+  south-facing inner walls (`voidTilt` — the near wall you'd see standing just north of a pit, camera-angle
+  alone) plus a parallax term for the far wall you look across at (`voidLean`, which shifts as you move).
+
+Both shift smoothly as the camera moves — the parallax that sells depth. A fixed-direction face (everything
+drops "south") was tried first and read as flat, because it ignored the camera.
+
+The shared geometry lives in `@heroic/core` (`zone/depth`: `extrudeRect`, `wallLeanVector`, `voidRimBands` +
+tunables; unit-tested) and colours in `ZONE_PALETTE`; each renderer just feeds in `C` from its camera and
+fills the shapes. So the game's Skia renderer and Realmsmith's Canvas2D viewport draw identical depth by
+construction. Void rim bands are skipped on edges that border another meshed void rect (a seam, not a real
+pit edge). Applied to walls + voids today; breakables are the obvious next candidate (same `extrudeRect`).
+
 ### On angled / curved collision (deferred)
 
 Realmsmith could let you draw rotated rects or polygons, but we deliberately **do not** use angled collision in v1:
@@ -144,25 +201,34 @@ a blobby floor with void (treeline / cliff / water) all around it.
 **Floor presence defines the shape.** Floor tile id `0` means empty, so you paint floor only where the zone
 exists — paint an L-shaped floor and you've authored an L-shaped zone. No floor there = not part of the zone.
 
-**The loader fences the void automatically.** `loadZone` treats every floorless cell as solid: it
-greedy-meshes the void region into `Aabb`s and adds them to collision (`fenceVoid`, default on). So the
+**The loader fences the void automatically.** `loadZone` treats every floorless cell as **void** collision:
+it greedy-meshes the void region into `Aabb`s and adds them to `voids` (`fenceVoid`, default on). So the
 player and enemies are fenced into the exact painted shape with **zero manual boundary walls** — an L's notch
 becomes ~one merged rect, an organic coastline a handful. It's just the rectangular-perimeter idea
-generalised from the *bounds* to the *shape*, and it feeds Matter / crowd / nav / line-of-sight like any
-other collision.
+generalised from the *bounds* to the *shape*. Because it's void (not wall), it blocks Matter / crowd / nav
+but **not** line-of-sight — so a bridge with floorless cliffs on both sides lets you see and shoot across the
+drop, which is exactly what you want.
 
 Two distinct cases, both already expressible:
 
-- **Outside the zone** (the notch, beyond the field) → *no floor* → auto-fenced void. Nothing to author
-  beyond painting the floor.
-- **Inside the zone but impassable** (a wall, or water you can see across but not cross) → *floor (or water)
-  tile + collision*. The normal collision layer — set `fenceVoid: false` only for the rare
-  floorless-but-walkable case.
+- **Outside the zone** (the notch, beyond the field, the chasm beside a bridge) → *no floor* → auto-fenced
+  **void**: impassable, invisible, see/shoot-across. Nothing to author beyond painting the floor.
+- **Inside the zone but impassable** (a wall) → a `wall` collision cell/rect — drawn as a pillar, blocks
+  movement *and* occludes. (`fenceVoid: false` is the escape hatch for the rare floorless-but-walkable zone.)
+
+**Authoring invariant — a cell is floor _or_ solid, never both.** Realmsmith keeps the floor and collision
+layers mutually exclusive per cell: painting any collision (wall *or* void) clears the floor beneath it, and
+painting floor clears any collision there. This kills the "hidden floor under a pit" trap — a translucent
+void drawn over leftover floor that read as walkable ground (and let creatures stand/spawn on it). A
+consequence of the *symmetric* rule (decided 2026-06-25): a wall cell is floorless too, so `fenceVoid` also
+marks it void — harmless (both block movement; the wall still occludes and draws as a pillar over the pit) —
+and deleting a wall leaves a floorless gap, not floor (repaint floor to reopen a path). The *format* still
+tolerates floor-under-collision for a hand-written/legacy file; it's the editor that normalises it.
 
 Caveats: the shape only *looks* right after **Phase 2 tile rendering** (today the renderer fills the whole
-bounding box, so an L still *draws* as a rectangle — the fence is real, the look isn't yet). And whether the
-zone *edge* blocks sight (a treeline does, an open-vista cliff doesn't) is a later per-edge flag; void edges
-occlude by default, like walls.
+bounding box, so an L still *draws* as a rectangle — the fence is real, the look isn't yet). And whether a
+solid *edge* blocks sight is now its **material's** job (a `wall` occludes, a `void` doesn't); a future
+`treeline`/`cliff` distinction would be one more material, not a per-edge flag.
 
 ## Authoring pipeline: Realmsmith
 
@@ -251,14 +317,14 @@ interface ZoneFile {
   chunkTiles: number;                      // tiles per chunk side (loader slices to this)
   tileset: string;                         // atlas path; tile ids index its source rects
   layers: { floor: number[][]; decor?: number[][] };   // [row][col] tile ids; 0 = empty/void
-  collision: {                             // AS DRAWN; greedy-meshed at load
-    rects: Aabb[];                         // free rectangles (centre + size, world px)
-    cells?: number[][];                    // painted solid cells, 0/1
+  collision: {                             // AS DRAWN; greedy-meshed per material at load
+    rects: (Aabb & { material?: "wall" | "void" })[];  // free rects; absent material = wall
+    cells?: number[][];                    // painted cells: 0 none, 1 wall, 2 void
     cellSize?: number;                     // px per collision cell (independent of tileSize)
   };
   breakables: BreakableDef[];
   objects: ZoneObject[];                   // spawner / waystone / settlement / playerSpawn / exit / poi
-  fenceVoid?: boolean;                     // default true: floorless cells become solid (the zone's shape)
+  fenceVoid?: boolean;                     // default true: floorless cells become void (the zone's shape)
 }
 
 interface BreakableDef {
@@ -281,8 +347,10 @@ interface ZoneObject {
 }
 
 // ── Runtime form: loadZone(file) derives this; the game holds it in memory. ──
-// Collision greedy-meshed to Aabb[]; layers sliced into chunks (each baked to an
-// SkPicture app-side at load); breakables carry mutable hp/alive state.
+// Collision greedy-meshed per material to Aabb[]: `walls` (drawn + occlude),
+// `voids` (movement only), and `collision` = their union (movement set). Layers
+// sliced into chunks (each baked to an SkPicture app-side at load); breakables
+// carry mutable hp/alive state.
 ```
 
 (`Aabb` is the core `{ x, y, w, h }` centre+size already used by `stepCrowd` / `buildNavGrid` /

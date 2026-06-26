@@ -1,4 +1,5 @@
 import { add, length, type Vec2 } from "../math/vec2";
+import { pathClear } from "../pathfinding/navgrid";
 import { clampSpeed, separation } from "./steering";
 import { initPathState, pursue, type PathState } from "./pursue";
 import type { CommonConfig, EnemyPerception } from "./perception";
@@ -104,19 +105,22 @@ export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number)
   // chaser ramps it up the longer it hunts); the gate and clamp below track that.
   const normalSpeed = brain.archetype.normalSpeed?.(brain.state, brain.config) ?? brain.config.speed;
 
-  // Route around walls: when the archetype wants to engage (normal-speed intent)
-  // but a wall blocks line of sight, replace its straight-line intent with an A*
-  // path to the player. Skipped for idle intent (≈0, e.g. a dormant ambusher —
-  // it stays hidden) and for committed bursts (intent above normal speed, e.g. a
-  // charger's dash — it stays a dodgeable straight line). When it can see the
-  // player, the archetype's own steering (orbit/kite/seek) runs untouched.
+  // Route around obstacles: when the archetype wants to engage (normal-speed
+  // intent) but a *movement* obstacle blocks the straight path, replace its
+  // straight-line intent with an A* route to the player. The block test is the
+  // nav grid (`pathClear`), NOT sight — so a mover routes around a barrel, crate,
+  // spawner nest or pit it can see the player straight through, instead of
+  // grinding against it. Skipped for idle intent (≈0, e.g. a dormant ambusher —
+  // it stays hidden) and committed bursts (intent above normal speed, e.g. a
+  // charger's dash — it stays a dodgeable straight line). With a clear path the
+  // archetype's own steering (orbit/kite/seek) runs untouched.
   let move = intent;
   const speed = length(intent);
   if (
-    perception.hasLineOfSight === false &&
     perception.navGrid &&
     speed > 1 &&
-    speed <= normalSpeed + 1e-6
+    speed <= normalSpeed + 1e-6 &&
+    !pathClear(perception.navGrid, perception.selfPos, perception.playerPos)
   ) {
     move = pursue(
       perception.selfPos,
