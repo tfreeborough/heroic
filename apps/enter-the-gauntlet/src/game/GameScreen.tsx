@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AppState, StyleSheet, useWindowDimensions, View } from "react-native";
-import { Canvas, Fill, Picture, type SkPicture } from "@shopify/react-native-skia";
+import { AppState, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Canvas, Fill, Picture, useFont, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { PressStart2P_400Regular } from "@expo-google-fonts/press-start-2p";
+import { useSettings } from "../settings/SettingsContext";
+import type { RootStackParamList } from "../navigation/types";
+import { UI } from "../ui/theme";
 import {
   addBody,
   addVelocityPerSecond,
@@ -49,6 +55,13 @@ import {
   parseSpawnerConfig,
   parseCreatureId,
   initSpawnerState,
+  addKey,
+  spendKey,
+  hasKey,
+  emptyInventory,
+  isKeyColor,
+  playerAtDoor,
+  playerAtKey,
   SPAWNER_NEST_TILES,
   STICK_ZERO,
   sub,
@@ -63,6 +76,8 @@ import {
   type CombatStats,
   type HurtCircle,
   type HurtTarget,
+  type KeyColor,
+  type KeyInventory,
   type Mover,
   type NavGrid,
   type ProjectileState,
@@ -125,6 +140,8 @@ import { WEAPONS, type WeaponDef, type WeaponId } from "./weapons";
 import { AUDIO_MANIFEST } from "./audio/manifest";
 import { playStrikeHaptic } from "./haptics";
 import { Thumbstick } from "./Thumbstick";
+import { KeyHud } from "./KeyHud";
+import { DoorNotice } from "./DoorNotice";
 import { WeaponButton } from "./WeaponButton";
 import { DashButton, DASH_READY_PICTURE, recordDashButton } from "./DashButton";
 import {
@@ -224,6 +241,19 @@ interface LiveBreakable extends Breakable {
 }
 
 /**
+ * A key pickup resolved for this session: its color, world position, and whether
+ * it's been collected. A collected key vanishes from the world and is skipped by
+ * the pickup pass — there's no respawn within a run.
+ */
+interface LiveKey {
+  id: string;
+  color: KeyColor;
+  x: number;
+  y: number;
+  taken: boolean;
+}
+
+/**
  * A spawner nest (docs/design/spawners.md). The destructible *structure* is a
  * `LiveBreakable` (`kind: "spawner"`) held in the breakables list, so it reuses
  * the whole hit / auto-target / world-geometry / render path — to the combat
@@ -314,6 +344,25 @@ export const GameScreen = () => {
   // bottom navigation bar would otherwise overlap the control deck. We reserve
   // the bottom inset out of the play space (below) and pad the deck past it.
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // Player settings (volume, control layout). Read live: the audio effect below
+  // pushes volume changes into the director, and the control deck flips sides.
+  const { settings } = useSettings();
+
+  // Pause the sim whenever the Game screen isn't the focused route — i.e. while
+  // the Pause overlay or Settings sit on top of it. The screen stays mounted, so
+  // the run resumes exactly where it left off; we just stop stepping. Mirrored to
+  // a ref so onStep can read it without the loop restarting on focus changes.
+  const isFocused = useIsFocused();
+  const pausedRef = useRef(false);
+  pausedRef.current = !isFocused;
+
+  // Pixel HUD font for the floating damage numbers, at the two sizes the scene
+  // draws (crit is larger). Each is null until loaded; renderCombat falls back to
+  // the system font meanwhile, so numbers are never missing.
+  const damageFont = useFont(PressStart2P_400Regular, 10);
+  const critFont = useFont(PressStart2P_400Regular, 13);
+
   // Vertical layout: the play space targets 3:4 (w:h); the control deck takes
   // the remaining height but never less than CONTROLS_MIN_HEIGHT *above the nav
   // bar* — on short screens the play space shrinks instead. Taller screens just
@@ -340,7 +389,8 @@ export const GameScreen = () => {
   // step. A ref (not state) so input never causes a React render.
   const stickRef = useRef<StickSample>(STICK_ZERO);
 
-  const { physics, player, weaponCombatants, rng, breakables, breakableBodies, spawners } = useMemo(() => {
+  const { physics, player, weaponCombatants, rng, breakables, breakableBodies, spawners, keys } =
+    useMemo(() => {
     const physics = createPhysicsWorld();
     const player = createMoverBody(SPAWN.x, SPAWN.y, PLAYER_RADIUS);
     addBody(physics, player);
@@ -390,6 +440,16 @@ export const GameScreen = () => {
       spawners.push({ id: o.id, config, state: initSpawnerState(), nest, liveIds: [], everSeen: false });
     }
 
+    // Keys (docs/design/doors-and-keys.md): each placed `key` object becomes a
+    // floor pickup. `props.color` names a KeyColor; an unknown color is dropped
+    // (like a stale creature id) so a bad authored value can't crash the run.
+    const keys: LiveKey[] = [];
+    for (const o of ZONE.objects) {
+      if (o.kind !== "key") continue;
+      if (!isKeyColor(o.props.color)) continue;
+      keys.push({ id: o.id, color: o.props.color, x: o.x, y: o.y, taken: false });
+    }
+
     const breakableBodies = new Map<string, ReturnType<typeof createBlockerBody>>();
     for (const b of breakables) {
       const body = createBlockerBody(b.box.x, b.box.y, b.box.w, b.box.h);
@@ -411,6 +471,7 @@ export const GameScreen = () => {
       breakables,
       breakableBodies,
       spawners,
+      keys,
     };
   }, []);
 
@@ -487,6 +548,8 @@ export const GameScreen = () => {
     playerCombatant: makeCombatant(PLAYER_STATS),
     /** Post-hit invulnerability time left; any hit is ignored while > 0. */
     iFrames: 0,
+    /** Color keys held this run (count per color); spent to open matching doors. */
+    keys: emptyInventory() as KeyInventory,
   });
 
   // Dash skill runtime: the generic ability lifecycle plus the dash's own effect
@@ -495,6 +558,16 @@ export const GameScreen = () => {
   const dashRuntime = useRef(createDashRuntime());
 
   const [weaponId, setWeaponId] = useState<WeaponId>(combat.current.weapon.id);
+  // HUD mirror of the run's key inventory. The sim owns the authoritative copy
+  // (combat.current.keys, read each step); we snapshot it into React state only
+  // when it changes, so the on-screen key strip re-renders on pickup/spend rather
+  // than every frame.
+  const [keyHud, setKeyHud] = useState<KeyInventory>(emptyInventory());
+  // Locked-door hint: the color of a door the player is bumping but can't open,
+  // surfaced (ghosted) on the HUD so they learn what to hunt for. A ref shadows
+  // the state so the sim only re-renders on the rare enter/leave transition.
+  const [lockedNeed, setLockedNeed] = useState<KeyColor | null>(null);
+  const lockedNeedRef = useRef<KeyColor | null>(null);
   const selectWeapon = (id: WeaponId) => {
     setWeaponId(id);
     const c = combat.current;
@@ -632,6 +705,19 @@ export const GameScreen = () => {
     };
   }, []);
 
+  // Push the player's volume/mute settings into the director — on mount (the
+  // director-creation effect above runs first, so it exists) and whenever the
+  // settings change. The director multiplies music/SFX under master and silences
+  // all when muted, so we just mirror the four values across.
+  useEffect(() => {
+    const director = audioRef.current;
+    if (!director) return;
+    director.setMasterVolume(settings.masterVolume);
+    director.setMusicVolume(settings.musicVolume);
+    director.setSfxVolume(settings.sfxVolume);
+    director.setMuted(settings.muted);
+  }, [settings.masterVolume, settings.musicVolume, settings.sfxVolume, settings.muted]);
+
   /** Thumbstick sink: store the sample and unlock web audio on the first touch. */
   const handleStick = (sample: StickSample) => {
     stickRef.current = sample;
@@ -643,6 +729,10 @@ export const GameScreen = () => {
 
   useGameLoop({
     onStep: (dt) => {
+      // Paused (Pause overlay / Settings on top): freeze the sim. onRender keeps
+      // running so the frozen frame still draws behind the dimmed overlay; the
+      // raf keeps `last` current, so there's no time jump on resume.
+      if (pausedRef.current) return;
       const s = sim.current;
       const c = combat.current;
       const stick = stickRef.current;
@@ -947,6 +1037,7 @@ export const GameScreen = () => {
       /** Apply a hit to a breakable; at 0 hp it primes a fuse (explosive) or breaks now. */
       const damageBreakable = (b: LiveBreakable, attacker: Combatant): boolean => {
         if (!b.alive || b.fuse !== null) return false; // already primed → ignore
+        if (b.lock) return false; // a locked door shrugs off weapons — only its key opens it
         // Wrap its hp in a throwaway Combatant so it takes damage through the
         // exact resolveAttack path enemies do (variance, crits, defense=0).
         const defender: Combatant = { hp: b.hp, stats: BREAKABLE_STATS };
@@ -1004,6 +1095,40 @@ export const GameScreen = () => {
         }
       };
 
+      // --- Keys & locked doors (docs/design/doors-and-keys.md). Both trigger on
+      // contact: walk over a key to pocket it; walk into a matching-color door to
+      // spend that key and open it. Opening reuses breakOne — a door is just a
+      // breakable that a key (not a weapon) destroys — so collision, the nav grid,
+      // and occluders all reopen through the one existing destruction path.
+      for (const k of keys) {
+        if (k.taken) continue;
+        if (!playerAtKey({ x: k.x, y: k.y }, playerPos, PLAYER_RADIUS)) continue;
+        k.taken = true;
+        c.keys = addKey(c.keys, k.color);
+        setKeyHud(c.keys);
+        // TODO(audio): key-pickup chime once a sound-event layer exists.
+      }
+      let blockedColor: KeyColor | null = null;
+      for (const b of breakables) {
+        if (!b.alive || !b.lock) continue;
+        if (!playerAtDoor(b.box, playerPos, PLAYER_RADIUS)) continue;
+        if (hasKey(c.keys, b.lock.color)) {
+          c.keys = spendKey(c.keys, b.lock.color);
+          setKeyHud(c.keys);
+          breakOne(b); // open it (a door authors no onBreak effects, so it just vanishes)
+          // TODO(audio): unlock "clunk" once a sound-event layer exists.
+        } else if (blockedColor === null) {
+          // Pressed against a door we can't open → remember its color for the HUD hint.
+          // TODO(audio): locked "rattle" once a sound-event layer exists.
+          blockedColor = b.lock.color;
+        }
+      }
+      // Push the hint only on a change (enter/leave a door we can't open), not per frame.
+      if (blockedColor !== lockedNeedRef.current) {
+        lockedNeedRef.current = blockedColor;
+        setLockedNeed(blockedColor);
+      }
+
       c.iFrames = Math.max(0, c.iFrames - dt);
 
       // --- Contact damage: a touching enemy bites (self-gated by i-frames, and
@@ -1059,6 +1184,7 @@ export const GameScreen = () => {
       for (let i = 0; i < breakables.length; i++) {
         const b = breakables[i]!;
         if (!b.alive || b.fuse !== null) continue; // primed → already going off
+        if (b.lock) continue; // a locked door isn't an attack target — you open it by walking in
         if (distanceToAabb(playerPos, b.box) > engagement) continue;
         // Sight to the box's NEAREST point, not its centre: a ray to the centre would
         // cross the box's own occluder edges, so an occluding wall would block sight to
@@ -1446,12 +1572,24 @@ export const GameScreen = () => {
           // Fuse progress 0 → 1 (0 when not primed): drives the hot pre-blast glow.
           prime: b.fuse === null ? 0 : 1 - b.fuse / EXPLOSION_FUSE_DELAY,
           targeted: -(i + 1) === c.targetId,
+          // A locked door carries its key colour so the renderer tints it; null = plain breakable.
+          lock: b.lock ? b.lock.color : null,
         });
+      }
+
+      // Uncollected keys, on-screen only (same viewport cull as breakables).
+      const sceneKeys: CombatScene["keys"] = [];
+      for (const k of keys) {
+        if (k.taken) continue;
+        if (k.x > vMaxX + 32 || k.x < vMinX - 32 || k.y > vMaxY + 32 || k.y < vMinY - 32) continue;
+        sceneKeys.push({ x: k.x, y: k.y, color: k.color });
       }
 
       combatPicture.value = recordCombatScene({
         camera: { x: camX, y: camY, zoom: zoomCurrent.current },
         anchor: { x: anchorX, y: anchorY },
+        // Pixel HUD font (null until loaded → renderCombat uses its system-font fallback).
+        fonts: { damage: damageFont, crit: critFont },
         floor: {
           chunks: floorChunks,
           chunkCols: ZONE.chunkCols,
@@ -1488,6 +1626,7 @@ export const GameScreen = () => {
         // Breakables: alive + on-screen only, built in the single pass above (a zone
         // may hold hundreds; off-screen ones are culled before any per-item work).
         breakables: sceneBreakables,
+        keys: sceneKeys,
         enemyCasts: enemies.flatMap((d) => {
           const def = CREATURES[d.type];
           const ex = enemyX(d);
@@ -1587,6 +1726,18 @@ export const GameScreen = () => {
     },
   });
 
+  // The control deck pieces: the movement stick and the action cluster. The
+  // default is right-handed — stick on the right, actions on the left; the
+  // left-handed setting swaps them. The cluster aligns to whichever screen edge
+  // it ends up against (left edge by default, right edge when left-handed).
+  const stick = <Thumbstick size={stickSize} onChange={handleStick} />;
+  const actionCluster = (
+    <View style={[styles.actions, !settings.leftHanded && styles.actionsFlipped]}>
+      <WeaponButton selected={weaponId} onCycle={cycleWeapon} />
+      <DashButton overlay={dashOverlay} onPress={requestDash} />
+    </View>
+  );
+
   // The whole world is drawn into `combatPicture` each frame (camera baked in),
   // so the Canvas just blits the void backdrop and that one picture.
   return (
@@ -1596,14 +1747,33 @@ export const GameScreen = () => {
           <Fill color={COLORS.void} />
           <Picture picture={combatPicture} />
         </Canvas>
+        {/* Open the pause menu (a transparent overlay). The run stays mounted and
+            frozen behind it, so Resume drops straight back in. */}
+        <Pressable
+          style={[styles.menuButton, { top: insets.top + 12 }]}
+          onPress={() => navigation.navigate("Pause")}
+          hitSlop={10}
+        >
+          <Text style={styles.menuButtonLabel}>MENU</Text>
+        </Pressable>
+        {/* Key inventory strip — top-right, clear of the menu button (top-left). */}
+        <KeyHud inventory={keyHud} need={lockedNeed} style={{ top: insets.top + 12, right: 12 }} />
+        {/* Locked-door callout — names the missing key's color, low-centre. */}
+        <DoorNotice need={lockedNeed} style={{ bottom: 24 }} />
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
-        <Thumbstick size={stickSize} onChange={handleStick} />
-        <View style={styles.actions}>
-          <WeaponButton selected={weaponId} onCycle={cycleWeapon} />
-          <DashButton overlay={dashOverlay} onPress={requestDash} />
-        </View>
+        {settings.leftHanded ? (
+          <>
+            {stick}
+            {actionCluster}
+          </>
+        ) : (
+          <>
+            {actionCluster}
+            {stick}
+          </>
+        )}
       </View>
     </View>
   );
@@ -1620,6 +1790,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.08)",
   },
+  // Return-to-menu affordance, top-left of the play area (clear of the action
+  // cluster's bottom-right home in either layout).
+  menuButton: {
+    position: "absolute",
+    left: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(14, 17, 22, 0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.14)",
+  },
+  menuButtonLabel: {
+    fontFamily: UI.font,
+    color: "rgba(255, 255, 255, 0.85)",
+    fontSize: 11,
+  },
   controls: {
     flex: 1,
     flexDirection: "row",
@@ -1635,5 +1822,10 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "flex-end",
     gap: 12,
+  },
+  // Left-handed layout: the cluster now sits on the left, so align its chips to
+  // that edge instead of the right.
+  actionsFlipped: {
+    alignItems: "flex-start",
   },
 });

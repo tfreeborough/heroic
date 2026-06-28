@@ -68,6 +68,8 @@ const toBreakable = (def: BreakableDef): Breakable => ({
   maxHp: def.maxHp,
   occludes: def.occludes ?? false,
   onBreak: def.onBreak ?? [],
+  // A locked door carries its lock into the runtime; plain breakables stay unlocked.
+  ...(def.lock ? { lock: def.lock } : {}),
   alive: true,
 });
 

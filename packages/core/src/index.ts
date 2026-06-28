@@ -16,6 +16,7 @@ export * from "./ai/runtime";
 export * from "./ai/archetypes";
 export * from "./creature/roster";
 export * from "./spawner/spawner";
+export * from "./keys/keys";
 export * from "./spatial/grid";
 export * from "./physics/crowd";
 export * from "./vision/visibility";

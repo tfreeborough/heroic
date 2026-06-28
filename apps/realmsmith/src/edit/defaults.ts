@@ -1,6 +1,12 @@
-import { CREATURE_IDS, SPAWNER_DEFAULTS, type BreakableDef, type ZoneObjectKind } from "@heroic/core";
+import {
+  CREATURE_IDS,
+  KEY_COLOR_IDS,
+  SPAWNER_DEFAULTS,
+  type BreakableDef,
+  type ZoneObjectKind,
+} from "@heroic/core";
 
-export const BREAKABLE_KINDS = ["barrel", "crate", "wood-wall"] as const;
+export const BREAKABLE_KINDS = ["barrel", "crate", "wood-wall", "door"] as const;
 export type BreakableKind = (typeof BREAKABLE_KINDS)[number];
 
 /**
@@ -33,6 +39,19 @@ export const breakableDefaults = (
         maxHp: 45,
         occludes: true,
       };
+    case "door":
+      return {
+        id: "",
+        kind,
+        // One tile, filling a doorway. Blocks movement but does NOT occlude sight —
+        // the player's lit radius passes through it (like a void/gate), so you can
+        // see the room beyond. Opened only by a matching-color key; invulnerable to
+        // weapons, so maxHp is nominal.
+        box: { x: cx, y: cy, w: tile, h: tile },
+        maxHp: 1,
+        occludes: false,
+        lock: { color: KEY_COLOR_IDS[0]! },
+      };
     case "crate":
     default:
       return { id: "", kind: "crate", box: { x: cx, y: cy, w: tile, h: tile }, maxHp: 15, occludes: false };
@@ -40,7 +59,14 @@ export const breakableDefaults = (
 };
 
 /** Object kinds the editor can place (the format also allows waystone/settlement). */
-export const OBJECT_KINDS: ZoneObjectKind[] = ["playerSpawn", "exit", "spawner", "creature", "poi"];
+export const OBJECT_KINDS: ZoneObjectKind[] = [
+  "playerSpawn",
+  "exit",
+  "spawner",
+  "creature",
+  "key",
+  "poi",
+];
 
 /**
  * Starting `props` for a freshly placed object. Spawners carry the full
@@ -52,4 +78,10 @@ export const OBJECT_KINDS: ZoneObjectKind[] = ["playerSpawn", "exit", "spawner",
 export const defaultObjectProps = (
   kind: ZoneObjectKind,
 ): Record<string, string | number | boolean> =>
-  kind === "spawner" ? { ...SPAWNER_DEFAULTS } : kind === "creature" ? { creature: CREATURE_IDS[0]! } : {};
+  kind === "spawner"
+    ? { ...SPAWNER_DEFAULTS }
+    : kind === "creature"
+      ? { creature: CREATURE_IDS[0]! }
+      : kind === "key"
+        ? { color: KEY_COLOR_IDS[0]! }
+        : {};

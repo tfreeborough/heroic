@@ -20427,16 +20427,34 @@
   },
   "breakables": [
     {
-      "id": "wood-wall-3",
-      "kind": "wood-wall",
+      "id": "door-1",
+      "kind": "door",
       "box": {
-        "x": 1880,
+        "x": 1744,
         "y": 352,
-        "w": 16,
+        "w": 32,
         "h": 192
       },
-      "maxHp": 45,
-      "occludes": true
+      "maxHp": 1,
+      "occludes": true,
+      "lock": {
+        "color": "red"
+      }
+    },
+    {
+      "id": "door-2",
+      "kind": "door",
+      "box": {
+        "x": 3744,
+        "y": 928,
+        "w": 32,
+        "h": 192
+      },
+      "maxHp": 1,
+      "occludes": true,
+      "lock": {
+        "color": "gold"
+      }
     }
   ],
   "objects": [
@@ -20540,6 +20558,24 @@
       "y": 928,
       "props": {
         "creature": "wizard"
+      }
+    },
+    {
+      "id": "key-1",
+      "kind": "key",
+      "x": 32,
+      "y": 32,
+      "props": {
+        "color": "red"
+      }
+    },
+    {
+      "id": "key-2",
+      "kind": "key",
+      "x": 2976,
+      "y": 2112,
+      "props": {
+        "color": "gold"
       }
     }
   ]

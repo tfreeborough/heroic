@@ -2,8 +2,10 @@ import { useRef } from "react";
 import {
   CREATURE_IDS,
   creatureLabel,
+  KEY_COLORS,
   parseSpawnerConfig,
   type BreakEffect,
+  type KeyColor,
   type ZoneFile,
   type ZoneObjectKind,
 } from "@heroic/core";
@@ -74,7 +76,26 @@ export const Inspector = ({
         {header(b.id)}
         <label>
           Kind
-          <select value={b.kind} onFocus={arm} onChange={(e) => edit(() => (b.kind = e.target.value))}>
+          <select
+            value={b.kind}
+            onFocus={arm}
+            onChange={(e) =>
+              edit(() => {
+                const k = e.target.value;
+                b.kind = k;
+                // "door" is defined by carrying a lock (the game keys off `lock`, not
+                // the kind string): pick one up when becoming a door, drop it otherwise.
+                // A door blocks movement but not sight, so default it to non-occluding
+                // (see-through, like a gate); the Occludes box can still override.
+                if (k === "door") {
+                  if (!b.lock) b.lock = { color: KEY_COLORS[0]!.id };
+                  b.occludes = false;
+                } else {
+                  delete b.lock;
+                }
+              })
+            }
+          >
             {BREAKABLE_KINDS.map((k) => (
               <option key={k} value={k}>
                 {k}
@@ -82,6 +103,22 @@ export const Inspector = ({
             ))}
           </select>
         </label>
+        {b.kind === "door" && (
+          <label>
+            Lock color
+            <select
+              value={b.lock?.color ?? KEY_COLORS[0]!.id}
+              onFocus={arm}
+              onChange={(e) => edit(() => (b.lock = { color: e.target.value as KeyColor }))}
+            >
+              {KEY_COLORS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Max HP
           <input
@@ -237,6 +274,22 @@ export const Inspector = ({
             {CREATURE_IDS.map((id) => (
               <option key={id} value={id}>
                 {creatureLabel(id)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {o.kind === "key" && (
+        <label>
+          Color
+          <select
+            value={String(o.props.color ?? KEY_COLORS[0]!.id)}
+            onFocus={arm}
+            onChange={(e) => setProp("color", e.target.value)}
+          >
+            {KEY_COLORS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
               </option>
             ))}
           </select>

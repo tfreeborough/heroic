@@ -136,6 +136,7 @@ export const VISION = {
   discoverRadius: 340,
 } as const;
 
+
 /**
  * Fog-of-war memory grid resolution, world px per cell. The visibility polygon
  * is rasterised into this grid to remember where you've been. The grid is never

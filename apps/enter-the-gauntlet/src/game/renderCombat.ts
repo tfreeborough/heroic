@@ -11,17 +11,21 @@ import {
   Skia,
   StrokeCap,
   TileMode,
+  type SkCanvas,
+  type SkFont,
   type SkPicture,
 } from "@shopify/react-native-skia";
 import {
   chunksInView,
   computeVisibility,
   extrudeRect,
+  keyColorDef,
   markVisible,
   voidRimBands,
   wallLeanVector,
   ZONE_DEPTH,
   type FogGrid,
+  type KeyColor,
   type VisionSegment,
 } from "@heroic/engine";
 import {
@@ -51,6 +55,12 @@ export interface CombatScene {
   /** World→screen: scale by `zoom` around `anchor`, centred on the camera. */
   camera: { x: number; y: number; zoom: number };
   anchor: { x: number; y: number };
+  /**
+   * Pixel HUD fonts for the floating damage numbers, at the scene's two sizes.
+   * Either may be null while the font is still loading — the drawer falls back to
+   * the built-in system font, so numbers always render.
+   */
+  fonts?: { damage: SkFont | null; crit: SkFont | null };
   /** Baked per-chunk floor pictures + grid geometry; only the in-view chunks are replayed. */
   floor: {
     chunks: SkPicture[];
@@ -70,7 +80,9 @@ export interface CombatScene {
    * isn't in the list). Centre + size, hp fraction (for a damage bar), `kind`
    * (→ colour) and `flash` (1 → 0 hit pulse).
    */
-  breakables: { x: number; y: number; w: number; h: number; hpFrac: number; flash: number; kind: string; occludes: boolean; prime: number; targeted: boolean }[];
+  breakables: { x: number; y: number; w: number; h: number; hpFrac: number; flash: number; kind: string; occludes: boolean; prime: number; targeted: boolean; lock: KeyColor | null }[];
+  /** Uncollected key pickups, drawn with the remembered static world; `color` → its hue. */
+  keys: { x: number; y: number; color: KeyColor }[];
   /** Ranged enemies mid-windup (and chargers): the telegraph line + charge. */
   enemyCasts: { x: number; y: number; targetX: number; targetY: number; progress: number; color: string }[];
   /** Summoners mid-cast: an expanding ring at the summoner. */
@@ -95,9 +107,11 @@ export interface CombatScene {
   lowHealthPhase: number;
 }
 
+// System-font fallbacks for the damage numbers, used until the pixel HUD font
+// (scene.fonts, loaded async in GameScreen) is ready.
 const fontFamily = Platform.select({ ios: "Helvetica", default: "sans-serif" });
-const damageFont = matchFont({ fontFamily, fontSize: 15, fontWeight: "bold" });
-const critFont = matchFont({ fontFamily, fontSize: 19, fontWeight: "bold" });
+const fallbackDamageFont = matchFont({ fontFamily, fontSize: 15, fontWeight: "bold" });
+const fallbackCritFont = matchFont({ fontFamily, fontSize: 19, fontWeight: "bold" });
 
 // Paints are reused across recordings; each draw sets color/alpha before use.
 const fill = Skia.Paint();
@@ -172,6 +186,85 @@ const breakableColor = (kind: string): string => {
     default:
       return COLORS.breakableCrate;
   }
+};
+
+const KEY_ICON_LEN = 22; // key sprite length (world px)
+const KEY_ICON_BOW_R = 6; // radius of the key's bow (the ring you hold)
+
+/**
+ * A locked door (docs/design/doors-and-keys.md): a wall-sized box in its key's
+ * colour with a dark keyhole — the colour says *which* key opens it, the keyhole
+ * says *locked*. No cracks or HP bar: a door yields to a key, never to damage.
+ */
+const drawLockedDoor = (
+  canvas: SkCanvas,
+  hex: string,
+  bx: number,
+  by: number,
+  w: number,
+  h: number,
+) => {
+  fill.setColor(color(hex));
+  fill.setAlphaf(0.92);
+  canvas.drawRect(Skia.XYWHRect(bx, by, w, h), fill);
+  // Inset frame: reads as a built door panel rather than a painted-on tile.
+  stroke.setColor(color("#0c0e12"));
+  stroke.setAlphaf(0.5);
+  stroke.setStrokeWidth(2);
+  const inset = Math.min(w, h) * 0.14;
+  canvas.drawRect(Skia.XYWHRect(bx + inset, by + inset, w - 2 * inset, h - 2 * inset), stroke);
+  // Keyhole: a circle over a tapered slot, centred.
+  const cx = bx + w / 2;
+  const cy = by + h / 2;
+  const r = Math.min(w, h) * 0.13;
+  fill.setColor(color("#0c0e12"));
+  fill.setAlphaf(0.72);
+  canvas.drawCircle(cx, cy - r * 0.25, r, fill);
+  const slot = Skia.Path.Make();
+  slot.moveTo(cx - r * 0.5, cy);
+  slot.lineTo(cx + r * 0.5, cy);
+  slot.lineTo(cx + r * 0.95, cy + r * 1.5);
+  slot.lineTo(cx - r * 0.95, cy + r * 1.5);
+  slot.close();
+  canvas.drawPath(slot, fill);
+};
+
+/**
+ * A key pickup: a small key glyph in its colour, drawn twice — a fat dark
+ * silhouette then the colour on top, so it reads on any floor — under a soft
+ * pulsing halo to catch the eye. `t` is the scene clock (seconds).
+ */
+const drawKeyPickup = (canvas: SkCanvas, hex: string, x: number, y: number, t: number) => {
+  const pulse = 0.5 + 0.5 * Math.sin(t * 4);
+  fill.setColor(color(hex));
+  fill.setAlphaf(0.1 + 0.12 * pulse);
+  canvas.drawCircle(x, y, KEY_ICON_LEN * 0.6, fill);
+
+  const bowX = x - KEY_ICON_LEN * 0.32;
+  const tipX = x + KEY_ICON_LEN * 0.46;
+  const spine = Skia.Path.Make();
+  spine.moveTo(bowX, y);
+  spine.lineTo(tipX, y);
+  const teeth = Skia.Path.Make();
+  teeth.moveTo(tipX - 5, y);
+  teeth.lineTo(tipX - 5, y + 5);
+  teeth.moveTo(tipX, y);
+  teeth.lineTo(tipX, y + 7);
+
+  stroke.setStrokeCap(StrokeCap.Round);
+  for (const pass of [
+    { c: "#13151a", a: 0.9, ring: 5.5, line: 6 },
+    { c: hex, a: 1, ring: 3, line: 3 },
+  ]) {
+    stroke.setColor(color(pass.c));
+    stroke.setAlphaf(pass.a);
+    stroke.setStrokeWidth(pass.line);
+    canvas.drawPath(spine, stroke);
+    canvas.drawPath(teeth, stroke);
+    stroke.setStrokeWidth(pass.ring);
+    canvas.drawCircle(bowX, y, KEY_ICON_BOW_R, stroke);
+  }
+  stroke.setStrokeCap(StrokeCap.Butt);
 };
 
 // Two blurs (respectCTM=true → world units, so they scale with camera zoom): a
@@ -462,29 +555,35 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
         continue;
       const bx = b.x - b.w / 2;
       const by = b.y - b.h / 2;
-      // A destructible *wall* (occludes) renders translucent + cracked so it reads
-      // as breakable, not as permanent bedrock; barrels/crates stay solid.
-      fill.setColor(color(breakableColor(b.kind)));
-      fill.setAlphaf(b.occludes ? BREAKABLE_WALL_ALPHA : 1);
-      canvas.drawRect(Skia.XYWHRect(bx, by, b.w, b.h), fill);
-      if (b.occludes) {
-        // Fracture lines: a zig-zag down the box plus two short branches, sized in
-        // fractions of the box so it works for a tall thin wall or a square block.
-        // Drawn in the bright accent (not dark-on-dark) so they actually read.
-        const cracks = Skia.Path.Make();
-        cracks.moveTo(bx + 0.5 * b.w, by);
-        cracks.lineTo(bx + 0.35 * b.w, by + 0.28 * b.h);
-        cracks.lineTo(bx + 0.6 * b.w, by + 0.52 * b.h);
-        cracks.lineTo(bx + 0.42 * b.w, by + 0.76 * b.h);
-        cracks.lineTo(bx + 0.55 * b.w, by + b.h);
-        cracks.moveTo(bx + 0.35 * b.w, by + 0.28 * b.h);
-        cracks.lineTo(bx + 0.12 * b.w, by + 0.36 * b.h);
-        cracks.moveTo(bx + 0.6 * b.w, by + 0.52 * b.h);
-        cracks.lineTo(bx + 0.86 * b.w, by + 0.6 * b.h);
-        stroke.setColor(color(COLORS.breakableEdge));
-        stroke.setAlphaf(0.85);
-        stroke.setStrokeWidth(2);
-        canvas.drawPath(cracks, stroke);
+      if (b.lock) {
+        // A locked door: its key's colour + a keyhole (see drawLockedDoor). No
+        // crack/translucent treatment — a door isn't broken, it's unlocked.
+        drawLockedDoor(canvas, keyColorDef(b.lock).hex, bx, by, b.w, b.h);
+      } else {
+        // A destructible *wall* (occludes) renders translucent + cracked so it reads
+        // as breakable, not as permanent bedrock; barrels/crates stay solid.
+        fill.setColor(color(breakableColor(b.kind)));
+        fill.setAlphaf(b.occludes ? BREAKABLE_WALL_ALPHA : 1);
+        canvas.drawRect(Skia.XYWHRect(bx, by, b.w, b.h), fill);
+        if (b.occludes) {
+          // Fracture lines: a zig-zag down the box plus two short branches, sized in
+          // fractions of the box so it works for a tall thin wall or a square block.
+          // Drawn in the bright accent (not dark-on-dark) so they actually read.
+          const cracks = Skia.Path.Make();
+          cracks.moveTo(bx + 0.5 * b.w, by);
+          cracks.lineTo(bx + 0.35 * b.w, by + 0.28 * b.h);
+          cracks.lineTo(bx + 0.6 * b.w, by + 0.52 * b.h);
+          cracks.lineTo(bx + 0.42 * b.w, by + 0.76 * b.h);
+          cracks.lineTo(bx + 0.55 * b.w, by + b.h);
+          cracks.moveTo(bx + 0.35 * b.w, by + 0.28 * b.h);
+          cracks.lineTo(bx + 0.12 * b.w, by + 0.36 * b.h);
+          cracks.moveTo(bx + 0.6 * b.w, by + 0.52 * b.h);
+          cracks.lineTo(bx + 0.86 * b.w, by + 0.6 * b.h);
+          stroke.setColor(color(COLORS.breakableEdge));
+          stroke.setAlphaf(0.85);
+          stroke.setStrokeWidth(2);
+          canvas.drawPath(cracks, stroke);
+        }
       }
       if (b.flash > 0) {
         fill.setColor(color("#ffffff"));
@@ -518,6 +617,14 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
         stroke.setStrokeWidth(2);
         canvas.drawRect(Skia.XYWHRect(bx - 3, by - 3, b.w + 6, b.h + 6), stroke);
       }
+    }
+
+    // Key pickups — drawn with the static world (unclipped), so a key you've seen
+    // stays remembered in the fog like a wall rather than vanishing the instant you
+    // look away. The fog overlay still hides any key in unexplored territory.
+    for (const k of scene.keys) {
+      if (k.x > vMaxX + 32 || k.x < vMinX - 32 || k.y > vMaxY + 32 || k.y < vMinY - 32) continue;
+      drawKeyPickup(canvas, keyColorDef(k.color).hex, k.x, k.y, scene.time);
     }
 
     // An enemy is hittable when its *edge* is within reach, i.e. its centre is
@@ -688,7 +795,9 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
 
     // Floating damage numbers; crits are bigger and gold, damage taken is red.
     for (const n of scene.numbers) {
-      const font = n.crit ? critFont : damageFont;
+      const font = n.crit
+        ? (scene.fonts?.crit ?? fallbackCritFont)
+        : (scene.fonts?.damage ?? fallbackDamageFont);
       const width = font.measureText(n.text).width;
       fill.setColor(color(n.crit ? COLORS.critText : n.hostile ? COLORS.hurtText : COLORS.damageText));
       fill.setAlphaf(Math.max(0, n.fade));
@@ -771,6 +880,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       const fog = scene.fog;
       const cs = fog.cellSize;
       markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius);
+
       const cMin = Math.max(0, Math.floor(vl / cs));
       const cMax = Math.min(fog.cols - 1, Math.floor((vl + vw) / cs));
       const rMin = Math.max(0, Math.floor(vt / cs));

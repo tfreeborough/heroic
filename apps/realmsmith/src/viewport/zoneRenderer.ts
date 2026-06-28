@@ -4,6 +4,8 @@ import {
   creatureLabel,
   extrudeRect,
   isCheckerDark,
+  isKeyColor,
+  keyColorDef,
   parseSpawnerConfig,
   SPAWNER_NEST_TILES,
   voidRimBands,
@@ -225,6 +227,32 @@ export const drawZone = (
     const by = b.box.y - b.box.h / 2;
     const w = b.box.w;
     const h = b.box.h;
+    if (b.lock) {
+      // A locked door: its key's colour + a keyhole, mirroring the game's look.
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = isKeyColor(b.lock.color) ? keyColorDef(b.lock.color).hex : "#888888";
+      ctx.fillRect(bx, by, w, h);
+      ctx.globalAlpha = 1;
+      const inset = Math.min(w, h) * 0.14;
+      ctx.strokeStyle = "rgba(12,14,18,0.5)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx + inset, by + inset, w - 2 * inset, h - 2 * inset);
+      const kx = bx + w / 2;
+      const ky = by + h / 2;
+      const r = Math.min(w, h) * 0.13;
+      ctx.fillStyle = "rgba(12,14,18,0.72)";
+      ctx.beginPath();
+      ctx.arc(kx, ky - r * 0.25, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(kx - r * 0.5, ky);
+      ctx.lineTo(kx + r * 0.5, ky);
+      ctx.lineTo(kx + r * 0.95, ky + r * 1.5);
+      ctx.lineTo(kx - r * 0.95, ky + r * 1.5);
+      ctx.closePath();
+      ctx.fill();
+      continue;
+    }
     ctx.globalAlpha = b.occludes ? BREAKABLE_WALL_ALPHA : 1;
     ctx.fillStyle = breakableFill(b.kind);
     ctx.fillRect(bx, by, w, h);
@@ -315,6 +343,37 @@ export const drawZone = (
       ctx.fillText(label, o.x, ly);
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
+      continue;
+    }
+    if (o.kind === "key") {
+      // A key pickup in its colour: bow ring + shaft + teeth, drawn dark-then-colour
+      // for a crisp outline on any floor (mirrors the game's floor glyph).
+      const col = isKeyColor(o.props.color) ? keyColorDef(o.props.color).hex : "#888888";
+      const len = 22;
+      const bowR = 6;
+      const bowX = o.x - len * 0.32;
+      const tipX = o.x + len * 0.46;
+      ctx.lineCap = "round";
+      for (const pass of [
+        { c: "#13151a", line: 6, ring: 5.5 },
+        { c: col, line: 3, ring: 3 },
+      ]) {
+        ctx.strokeStyle = pass.c;
+        ctx.lineWidth = pass.line;
+        ctx.beginPath();
+        ctx.moveTo(bowX, o.y);
+        ctx.lineTo(tipX, o.y);
+        ctx.moveTo(tipX - 5, o.y);
+        ctx.lineTo(tipX - 5, o.y + 5);
+        ctx.moveTo(tipX, o.y);
+        ctx.lineTo(tipX, o.y + 7);
+        ctx.stroke();
+        ctx.lineWidth = pass.ring;
+        ctx.beginPath();
+        ctx.arc(bowX, o.y, bowR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
       continue;
     }
     ctx.fillStyle = o.kind === "playerSpawn" ? "#5fd0ff" : "#f2c14e";

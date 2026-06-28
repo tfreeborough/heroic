@@ -17,6 +17,7 @@
  */
 import type { Aabb } from "../physics/crowd";
 import type { Vec2 } from "../math/vec2";
+import type { DoorLock } from "../keys/keys";
 
 /** Bump when the authored shape changes incompatibly; `loadZone` rejects mismatches. */
 export const ZONE_FORMAT_VERSION = 1;
@@ -137,6 +138,14 @@ export interface BreakableDef {
   occludes?: boolean;
   /** Effects on top of vanishing. Empty/absent → it just opens the path. */
   onBreak?: BreakEffect[];
+  /**
+   * Makes this breakable a **locked door**: it ignores weapon damage and opens
+   * only when the player touches it while holding a matching-color key (which is
+   * consumed). Opening reuses the normal break path — collision drops and the
+   * navgrid rebuilds. Pair with `occludes: true` for a sight-blocking door.
+   * See docs/design/doors-and-keys.md.
+   */
+  lock?: DoorLock;
 }
 
 export type ZoneObjectKind =
@@ -145,6 +154,10 @@ export type ZoneObjectKind =
    *  `props.creature` names the roster `CreatureId`. The spawner's static sibling —
    *  no nest, no cadence, it just stands where you put it. */
   | "creature"
+  /** A collectible color key. `props.color` names a `KeyColor`; picked up on
+   *  contact and consumed to open the matching locked door (a breakable with a
+   *  `lock`). See docs/design/doors-and-keys.md. */
+  | "key"
   | "waystone"
   | "settlement"
   | "playerSpawn"
@@ -228,6 +241,8 @@ export interface Breakable {
   maxHp: number;
   occludes: boolean;
   onBreak: BreakEffect[];
+  /** Set on a locked door (mirrors `BreakableDef.lock`); absent on a plain breakable. */
+  lock?: DoorLock;
   /** Cleared on destruction; the world drops its collision/occluder when this flips. */
   alive: boolean;
 }
