@@ -1,7 +1,7 @@
 # Locked Doors & Keys
 
 Status: **built (v1) — shipped in enter-the-gauntlet; SFX deferred** · Applies to: **both games**
-(shared world mechanic; built for enter-the-gauntlet first) · Last decided: 2026-06-28
+(shared world mechanic; built for enter-the-gauntlet first) · Last decided: 2026-06-29
 
 Borrowed from Gauntlet (1985), the game's namesake: **locked doors opened by matching keys**. A
 light puzzle layer that turns a dungeon from a corridor you run down into a space you *read* —
@@ -23,14 +23,14 @@ Three things make it more than a fetch-quest:
 1. **Choice under scarcity.** Keys are **consumed** on use. Find one red key but see two red
    doors, and you have to *pick* — which is the choice we want. Keys are a small economy, not a
    permanent unlock.
-2. **The tease.** A locked door is **see-through** — it blocks movement but not sight (see
-   ["Doors don't occlude"](#doors-dont-occlude-see-through) below), so your lit radius passes
-   through it. You can *see* the room — and the threats — waiting behind it, which is exactly the
-   "I want in" pull.
-3. **Free enemy-gating.** A locked door is a wall to *movement* — enemies can't path through it —
-   so the room behind it is unreachable until you open it. Because it's see-through, you can scout
-   what's coming; opening the door is what lets the dungeon spill out. No extra system; it falls
-   out of modelling the door as a (see-through) blocker.
+2. **The tease.** A locked door is **see-through for you** — it blocks movement (and *enemy* sight)
+   but not *your* sight (see ["Doors are a one-way window"](#doors-are-a-one-way-window) below), so
+   your lit radius passes through it. You *see* the room — and the threats — waiting behind it,
+   which is exactly the "I want in" pull.
+3. **Free enemy-gating.** A locked door is a wall to *movement* — enemies can't path through it,
+   and can't even *detect* you through it — so the room behind it is unreachable *and* dormant
+   until you open it. You, meanwhile, see straight in and can scout it safely; opening the door is
+   what lets the dungeon spill out. It falls out of modelling the door as a one-way window.
 
 ## The four decisions (locked)
 
@@ -68,10 +68,11 @@ What's new versus a normal breakable:
   keys would be pointless; you'd just shoot the door). No HP bar shown.
 - The open trigger is **contact + matching key**, not HP-to-zero. Because the door has collision
   the player can't literally overlap it, so "contact" = within a small unlock margin of its `box`.
-- **Default `occludes: false` — a door blocks movement but not sight.** The player's lit radius
-  passes straight through it (like a `void`/gate in
-  [world-representation](./world-representation.md)), so you see the room — and the threats —
-  beyond. (The Occludes box can still override for an opaque door.)
+- **A one-way window — blocks movement and *enemy* sight, but not *your* sight.** A door is
+  *defined* by its `lock`, so the game keeps it in the enemy/projectile occluder set but drops it
+  from the player's vision set (regardless of the authored `occludes` flag) — your lit radius passes
+  straight through it while enemies stay blind to you. See
+  ["Doors are a one-way window"](#doors-are-a-one-way-window).
 
 Everything else — removal and the navgrid rebuild — is the **existing breakable destroy path**,
 unchanged.
@@ -112,23 +113,37 @@ next visit (Journey) it's locked again. Keys held reset the same way. This match
   beds today — there's no sound-event layer yet — so v1 ships **silent** with hook points left in;
   see [audio](./audio.md).)*
 
-## Doors don't occlude (see-through)
+## Doors are a one-way window
 
-A locked door blocks **movement** but not **sight**: it's authored `occludes: false`, so it never
-joins the occluder set the player's vision (and projectiles, and enemy line-of-sight) is solved
-against. Mechanically it's the existing `void` material — impassable, but see/shoot-across —
-wearing a door's color and keyhole.
+A locked door is **see-through for the player only**. It blocks *everything* a wall does —
+movement, **enemy line-of-sight, projectiles, targeting** — **except** the player's own fog of war.
+So your lit radius spills through the door into the room beyond, but the enemies in there **can't
+detect or shoot you back through it**, and you can't shoot them either: it's a window, not an
+arrow-slit.
 
-The payoff is anticipation. Your lit radius spills through the door into the room beyond, so a
-locked door isn't a blank wall — it's a window onto what you'll face once you find the key. You see
-the layout and the waiting horde; they can see you too (and, if ranged, shoot through), but they
-**can't reach you** until the door opens — then they pour out. That tension ("I can see them, they
-can't get me… yet") is the whole appeal, and it falls out of one flag.
+This needs **two occluder sets** (in the game's `computeDynamicGeometry`), differing only by doors:
 
-This is **doors only**. A breakable **wall** (`wood-wall`) still occludes — opaque until you break
-through — which is what keeps "break through to reveal the nest" a surprise
-([spawners](./spawners.md)). Permanent walls are opaque as ever. Three coherent behaviors:
-permanent wall = opaque; breakable wall = opaque until broken; locked door = see-through gate.
+| set | doors? | feeds |
+| --- | --- | --- |
+| `occluders` | **in** | enemy LOS, auto-target, projectiles, spawner reveal |
+| `visionOccluders` | **out** | the player's fog-of-war polygon only |
+
+A door is a door by virtue of its `lock`, so it's filtered into/out of each set regardless of its
+authored `occludes` flag — existing authored doors need no re-saving. Movement is unaffected: a door
+is always in the movement-blocker list.
+
+The payoff is **safe anticipation**. The door is a window onto what you'll face once you find the
+key — you see the layout and the waiting horde, size up the room, plan — and none of it can touch
+you (or even know you're there) until you open the door, at which point it all spills out. That
+asymmetry ("I can watch them; they're blind to me… until I choose otherwise") is the whole appeal.
+
+This is **doors only**. A breakable **wall** (`wood-wall`) still occludes both ways — opaque until
+you break through — which keeps "break through to reveal the nest" a surprise
+([spawners](./spawners.md)). Permanent walls are opaque as ever. Behaviors:
+
+- **permanent wall** — opaque, both ways.
+- **breakable wall** — opaque both ways, until you break it.
+- **locked door** — see-through for the player, opaque to enemies/projectiles, until you open it.
 
 *(An earlier build tried a "peek-behind" sliver that leaked a band of sight past breakable
 occluders. It was the wrong tool — see-through doors are simpler and what we actually wanted, and a
@@ -148,8 +163,9 @@ entry. Extend by adding one entry.
 - **`@heroic/core` (pure, deterministic, testable):** the `lock` field on `BreakableDef` /
   `Breakable`; the `KeyColor` palette; the inventory type + consume/pickup rules; the unlock rule
   (contact + matching key → open + decrement, else locked). Opening a door reuses the existing
-  breakable-removal + navgrid-rebuild — no new pathing code; a door's see-through-ness is just
-  `occludes: false`, which the existing occluder build already honors.
+  breakable-removal + navgrid-rebuild — no new pathing code. A door's one-way-window-ness is two
+  occluder sets in the geometry build: doors stay in the enemy/projectile set, drop from the
+  player-vision set.
 - **`@heroic/engine` / app:** key rendering; door visuals (colored frame + lock glyph,
   invulnerable so no HP bar); the React HUD strip; door body removal on open (existing breakable
   path). Unlock / locked / pickup **SFX are deferred** — the audio system only plays music beds
@@ -170,9 +186,11 @@ than doors on the path") would catch mistakes automatically. Tracked as a tunabl
 
 ## Open tunables (your calls)
 
-- **Do doors occlude sight?** — *resolved 2026-06-28:* **no.** A door blocks movement but not sight
-  (`occludes: false`), so the lit radius passes through and you see the room beyond. Breakable
-  walls still occlude. (An earlier peek-behind experiment was removed — see "Doors don't occlude".)
+- **Do doors occlude sight?** — *resolved 2026-06-29:* a **one-way window**. A door blocks enemy
+  line-of-sight, projectiles, and targeting (enemies can't detect or shoot you through it) but
+  **not** the player's fog of war (you see the room beyond). Two occluder sets, split by `lock`,
+  ignoring the authored `occludes` flag. Breakable walls still occlude both ways. (An earlier
+  peek-behind experiment was removed — see "Doors are a one-way window".)
 - **Door unlock reach** — how far past touching a door opens (`DOOR_UNLOCK_MARGIN` in core). Set to
   40px so you open a door by walking *up to* it, not pressing into it. Tunable.
 - **Palette size** — *resolved:* six (red/gold/green/cyan/blue/purple); see Colors above.
@@ -201,11 +219,12 @@ than doors on the path") would catch mistakes automatically. Tracked as a tunabl
   color; **consumed** when it opens a door.
 - **Key inventory** — per-run count of held keys per color; shown on the HUD strip; resets each
   run.
-- **See-through door** — a locked door is authored `occludes: false`: it blocks movement but not
-  sight, so the player's lit radius passes through it (like a `void`). Breakable *walls* still
-  occlude.
-- **Occluder** — anything that blocks line of sight (permanent walls, and breakables with
-  `occludes: true`). Distinct from a movement blocker (a `void`, or a locked door, blocks movement
-  but not sight).
+- **See-through door (one-way window)** — a locked door blocks movement, enemy line-of-sight, and
+  projectiles, but **not** the player's fog of war: the game keeps doors in the enemy/projectile
+  occluder set and out of the player-vision set (by virtue of the `lock`, ignoring the authored
+  `occludes` flag). You see in; enemies can't see out. Breakable *walls* still occlude both ways.
+- **Occluder** — anything that blocks line of sight. Two sets now: the enemy/projectile set
+  (permanent walls, occluding breakables, **and locked doors**) and the player-vision set (the same,
+  **minus locked doors**). A `void` blocks movement but neither sight set.
 - **Solvability** — the property that the keys reachable before a door are enough to open every
   door on the critical path; consumed keys make this a counting constraint.

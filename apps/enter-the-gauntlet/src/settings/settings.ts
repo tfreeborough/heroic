@@ -21,6 +21,12 @@ export interface GameSettings {
    * direction; only which side of the deck each cluster sits on changes.
    */
   leftHanded: boolean;
+  /**
+   * Show the on-screen performance overlay — JS-thread sim/record timing + frame
+   * rate. A debug aid, off by default; exposed in Settings (not just `__DEV__`-gated)
+   * so it can be flipped on in a release build to profile real device performance.
+   */
+  showPerfOverlay: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -29,6 +35,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   sfxVolume: 0.9,
   muted: false,
   leftHanded: false,
+  showPerfOverlay: false,
 };
 
 /** Versioned so a future settings-shape change can migrate rather than corrupt. */

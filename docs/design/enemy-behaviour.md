@@ -286,11 +286,16 @@ concerns, and they live in different places because of `@heroic/core`'s purity r
 - **Player front-arc** — is this enemy inside the cone the player is facing? (drives the
   circler; reads the player `facing` state from the movement doc).
 - **Line of sight (LOS)** — clear straight line of *sight* to the player, or an occluding wall
-  between? Gates ranged fire, the kiter's hold-vs-close, the ambusher's spring, and the future
-  patroller. (It does **not** decide steer-vs-pathfind — that's the *movement* nav grid, since a
-  barrel/pit blocks movement without blocking sight; see Pathing below.) *Built:*
-  `EnemyPerception.hasLineOfSight`, computed by the app with `segmentClear` against the arena's
-  occluders; see [line-of-sight](./line-of-sight.md).
+  between? Gates ranged fire, the kiter's hold-vs-close, the ambusher's spring, the future
+  patroller, **and the first notice of aggro** (`updateAggro` only *engages* when the player is in
+  notice range AND in sight — so an enemy never detects you through a wall or a locked door; once
+  engaged, the leash is distance-only, so it keeps hounding you after sight breaks). (LOS does
+  **not** decide steer-vs-pathfind — that's the *movement* nav grid, since a barrel/pit blocks
+  movement without blocking sight; see Pathing below.) *Built:* `EnemyPerception.hasLineOfSight`,
+  computed by the app with `segmentClear` against the arena's occluders; see
+  [line-of-sight](./line-of-sight.md). Note locked doors are in the **enemy** occluder set (they
+  block detection) but not the **player-vision** set (you see through them) — see
+  [doors-and-keys](./doors-and-keys.md).
 - **Nearby allies** — for separation now; for pack/coordination behaviour later.
 
 ## Pathing (combining steering with A*) — *implemented*

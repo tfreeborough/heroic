@@ -5,7 +5,7 @@ import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { PressStart2P_400Regular } from "@expo-google-fonts/press-start-2p";
+import { GrenzeGotisch_700Bold } from "@expo-google-fonts/grenze-gotisch";
 import { useSettings } from "../settings/SettingsContext";
 import type { RootStackParamList } from "../navigation/types";
 import { UI } from "../ui/theme";
@@ -18,6 +18,7 @@ import {
   brainTelegraph,
   buildNavGrid,
   closestPointOnAabb,
+  computeVisibility,
   createAudioDirector,
   createBlockerBody,
   createFogGrid,
@@ -35,6 +36,7 @@ import {
   initMusicState,
   makeCombatant,
   makeCreatureBrain,
+  markVisible,
   normalize,
   rebuildGrid,
   releaseNavBlocker,
@@ -155,7 +157,7 @@ import {
   isDashing,
   tickDashInvuln,
 } from "./skills/dash";
-import { EMPTY_COMBAT_PICTURE, recordCombatScene, type CombatScene } from "./renderCombat";
+import { EMPTY_COMBAT_PICTURE, recordCombatScene, RENDER_PHASES, setRenderProfiling, type CombatScene } from "./renderCombat";
 import { bakeFloorChunks } from "./zoneRender";
 
 /** A hostile with a brain: chases/circles/kites per its type, soaks hits. */
@@ -290,16 +292,34 @@ interface SpawnerRuntime {
  */
 const computeDynamicGeometry = (
   breakables: readonly LiveBreakable[],
-): { walls: Aabb[]; flyingWalls: Aabb[]; occluders: VisionSegment[] } => {
+): {
+  walls: Aabb[];
+  flyingWalls: Aabb[];
+  occluders: VisionSegment[];
+  visionOccluders: VisionSegment[];
+} => {
   const liveBoxes = breakables.filter((b) => b.alive).map((b) => b.box);
   const walls = liveBoxes.length > 0 ? [...SOLIDS, ...liveBoxes] : SOLIDS;
   const flyingWalls = liveBoxes.length > 0 ? [...PILLARS, ...liveBoxes] : PILLARS;
+  // A locked door is a one-way window, so it needs TWO occluder sets:
+  //   - `occluders` (enemy line-of-sight, auto-target, projectiles): a door DOES
+  //     block these, so enemies can't detect or shoot the player through it (nor
+  //     the player through it). Any occluding wall, OR any door (its `lock`),
+  //     whatever the door's own `occludes` flag says.
+  //   - `visionOccluders` (the PLAYER's fog of war only): a door does NOT block
+  //     this, so the player's lit radius spills through into the room beyond.
+  //     Occluding walls only — doors excluded.
+  // Both still block *movement* (they're in liveBoxes above). See docs/design/doors-and-keys.md.
+  const edges = (b: LiveBreakable) => rectEdges(b.box.x, b.box.y, b.box.w, b.box.h);
   const occludingEdges = breakables
-    .filter((b) => b.alive && b.occludes)
-    .flatMap((b) => rectEdges(b.box.x, b.box.y, b.box.w, b.box.h));
-  const occluders =
-    occludingEdges.length > 0 ? [...OCCLUDERS, ...occludingEdges] : OCCLUDERS;
-  return { walls, flyingWalls, occluders };
+    .filter((b) => b.alive && (b.occludes || b.lock != null))
+    .flatMap(edges);
+  const visionEdges = breakables
+    .filter((b) => b.alive && b.occludes && b.lock == null)
+    .flatMap(edges);
+  const occluders = occludingEdges.length > 0 ? [...OCCLUDERS, ...occludingEdges] : OCCLUDERS;
+  const visionOccluders = visionEdges.length > 0 ? [...OCCLUDERS, ...visionEdges] : OCCLUDERS;
+  return { walls, flyingWalls, occluders, visionOccluders };
 };
 
 const computeWorld = (
@@ -308,6 +328,7 @@ const computeWorld = (
   walls: Aabb[];
   flyingWalls: Aabb[];
   occluders: VisionSegment[];
+  visionOccluders: VisionSegment[];
   navGrid: NavGrid;
   flyingNavGrid: NavGrid;
 } => {
@@ -357,11 +378,11 @@ export const GameScreen = () => {
   const pausedRef = useRef(false);
   pausedRef.current = !isFocused;
 
-  // Pixel HUD font for the floating damage numbers, at the two sizes the scene
+  // Fantasy HUD font for the floating damage numbers, at the two sizes the scene
   // draws (crit is larger). Each is null until loaded; renderCombat falls back to
   // the system font meanwhile, so numbers are never missing.
-  const damageFont = useFont(PressStart2P_400Regular, 10);
-  const critFont = useFont(PressStart2P_400Regular, 13);
+  const damageFont = useFont(GrenzeGotisch_700Bold, 16);
+  const critFont = useFont(GrenzeGotisch_700Bold, 21);
 
   // Vertical layout: the play space targets 3:4 (w:h); the control deck takes
   // the remaining height but never less than CONTROLS_MIN_HEIGHT *above the nav
@@ -500,9 +521,13 @@ export const GameScreen = () => {
       mover,
       combatant: makeCombatant(def.stats),
       brain: makeCreatureBrain(def, id),
-      // Assume visible until the first recheck; stagger timers by id so the
-      // population's LOS checks spread evenly across steps rather than bunching.
-      los: true,
+      // Start blind — assume NO sight until the first real LOS check confirms it.
+      // Now that aggro's first notice is gated on sight (updateAggro), assuming
+      // visible would let a creature spawned next to the player (but behind a door)
+      // engage in the few frames before its first recheck, then leash forever. So a
+      // fresh creature waits for a genuine sighting (≤ LOS_RECHECK_STEPS = ~0.1s).
+      // Timers still stagger by id so the population's checks spread across steps.
+      los: false,
       losTimer: id % LOS_RECHECK_STEPS,
       flash: 0,
       cycle: def.attack ? { ...ATTACK_CYCLE_READY } : null,
@@ -616,6 +641,19 @@ export const GameScreen = () => {
   // replayed (culled to the view) each frame — the big static-render lever.
   const floorChunks = useMemo(() => bakeFloorChunks(ZONE), []);
 
+  // Reused per-frame scene buffers. The scene used to rebuild enemy render data in
+  // THREE passes (one .map + two .flatMap, each walking the whole horde and
+  // allocating a fresh array), plus a [...a, ...b] projectile spread — all garbage
+  // every rendered frame. These persistent arrays are refilled in a single pass in
+  // onRender; the picture is recorded synchronously from them in the same tick, so
+  // nothing retains them across frames and reuse is safe.
+  const renderScratch = useRef({
+    enemies: [] as CombatScene["enemies"],
+    casts: [] as CombatScene["enemyCasts"],
+    summons: [] as CombatScene["summonTelegraphs"],
+    projectiles: [] as CombatScene["projectiles"],
+  });
+
   // Dynamic world geometry — the crowd walls, the sight/projectile occluders, and
   // the enemy nav grid — each = the static zone (PILLARS / OCCLUDERS) plus every
   // alive breakable. Held in refs so a break rebuilds them in place (no React
@@ -626,8 +664,50 @@ export const GameScreen = () => {
   const worldWalls = useRef<Aabb[]>(initialWorld.walls);
   const flyingWalls = useRef<Aabb[]>(initialWorld.flyingWalls);
   const worldOccluders = useRef<VisionSegment[]>(initialWorld.occluders);
+  // Player-vision occluders: same as `worldOccluders` but with locked doors removed,
+  // so the player's fog of war sees through doors while enemies/projectiles don't.
+  const worldVisionOccluders = useRef<VisionSegment[]>(initialWorld.visionOccluders);
   const navGridRef = useRef<NavGrid>(initialWorld.navGrid);
   const flyingNavGridRef = useRef<NavGrid>(initialWorld.flyingNavGrid);
+
+  // Line of sight, solved ONCE per sim step and cached for the renderer. The solve
+  // (computeVisibility) is O(walls²) over the near set; doing it every *rendered*
+  // frame — up to 3× the sim rate under interpolation — was wasted work. The cull
+  // mirrors renderCombat's old inline one: only walls within a sight-sized box can
+  // shape what you see. Built from the PLAYER-vision occluders (locked doors
+  // excluded) so light spills through doors, matching the fog draw.
+  const computeLitPoly = (cx: number, cy: number): Vec2[] => {
+    const visR = VISION.discoverRadius + 240;
+    const minX = cx - visR;
+    const maxX = cx + visR;
+    const minY = cy - visR;
+    const maxY = cy + visR;
+    const near: VisionSegment[] = [
+      { ax: minX, ay: minY, bx: maxX, by: minY },
+      { ax: maxX, ay: minY, bx: maxX, by: maxY },
+      { ax: maxX, ay: maxY, bx: minX, by: maxY },
+      { ax: minX, ay: maxY, bx: minX, by: minY },
+    ];
+    const occ = worldVisionOccluders.current;
+    for (let i = 0; i < occ.length; i++) {
+      const sg = occ[i]!;
+      const sMinX = sg.ax < sg.bx ? sg.ax : sg.bx;
+      const sMaxX = sg.ax > sg.bx ? sg.ax : sg.bx;
+      const sMinY = sg.ay < sg.by ? sg.ay : sg.by;
+      const sMaxY = sg.ay > sg.by ? sg.ay : sg.by;
+      if (sMaxX >= minX && sMinX <= maxX && sMaxY >= minY && sMinY <= maxY) near.push(sg);
+    }
+    return computeVisibility({ x: cx, y: cy }, near);
+  };
+  // The cached LOS polygon (+ whether it's a real shape), refreshed each sim step
+  // and reused by every interpolated render frame in between. Seeded at the spawn
+  // so the very first rendered frame already has sightlines (no startup flash).
+  const visionCache = useRef<{ poly: Vec2[]; hasSight: boolean }>(
+    useMemo(() => {
+      const poly = computeLitPoly(SPAWN.x, SPAWN.y);
+      return { poly, hasSight: poly.length > 2 };
+    }, []),
+  );
 
   /**
    * Re-derive the dynamic world after a breakable's alive-state changed. The crowd
@@ -641,6 +721,7 @@ export const GameScreen = () => {
     worldWalls.current = dyn.walls;
     flyingWalls.current = dyn.flyingWalls;
     worldOccluders.current = dyn.occluders;
+    worldVisionOccluders.current = dyn.visionOccluders;
     if (removed) {
       releaseNavBlocker(navGridRef.current, removed, ENEMY_RADIUS, dyn.walls);
       releaseNavBlocker(flyingNavGridRef.current, removed, ENEMY_RADIUS, dyn.flyingWalls);
@@ -670,6 +751,60 @@ export const GameScreen = () => {
   };
   const dashOverlay = useSharedValue<SkPicture>(DASH_READY_PICTURE);
   const dashCooling = useRef(false);
+
+  // --- Frame profiler (dev only). Accumulate the JS-thread time spent each frame
+  // in the sim step(s) and in the scene-record/picture-recording, then sample it
+  // into state ~2×/sec for a tiny on-screen readout. Refs (not state) for the
+  // per-frame writes so they never trigger a React render; the interval is the
+  // only thing that does, twice a second. This measures the JS thread only — for
+  // the UI/render thread, enable React Native's Perf Monitor (it shows UI vs JS
+  // fps separately), which is the other half of the picture.
+  const perf = useRef({ stepMs: 0, steps: 0, simVisMs: 0, renderMs: 0, frames: 0 });
+  const [perfText, setPerfText] = useState("");
+  // Driven by the Settings "Performance overlay" toggle, so it works in release
+  // builds (not just __DEV__). When off, every timing branch below is skipped, so
+  // the profiler costs nothing when you're not using it.
+  const perfOn = settings.showPerfOverlay;
+  // Mirror the gate into the renderer (its phase timers are off until this flips on).
+  useEffect(() => {
+    setRenderProfiling(perfOn);
+  }, [perfOn]);
+  useEffect(() => {
+    if (!perfOn) {
+      setPerfText("");
+      return;
+    }
+    // Zero the accumulators so the first sample after enabling isn't stale (they may
+    // have drifted while the overlay was off, or just been left from a prior run).
+    const p = perf.current;
+    p.stepMs = p.steps = p.simVisMs = p.renderMs = p.frames = 0;
+    RENDER_PHASES.world = RENDER_PHASES.live = RENDER_PHASES.fog = RENDER_PHASES.ui = 0;
+    let last = performance.now();
+    const id = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - last) / 1000;
+      last = now;
+      const f = Math.max(1, p.frames);
+      const fps = elapsed > 0 ? p.frames / elapsed : 0;
+      const rp = RENDER_PHASES;
+      // Per-frame averages. `sim …×` is steps/frame (the fixed-step catch-up
+      // multiplier). `rec` is split into world/live/fog/ui sub-phases.
+      setPerfText(
+        `JS ${fps.toFixed(0)}fps  sim ${(p.stepMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}× vis ${(p.simVisMs / f).toFixed(1)})  rec ${(p.renderMs / f).toFixed(1)}ms\n` +
+          `rec: world ${(rp.world / f).toFixed(1)}  live ${(rp.live / f).toFixed(1)}  fog ${(rp.fog / f).toFixed(1)}  ui ${(rp.ui / f).toFixed(1)}`,
+      );
+      p.stepMs = 0;
+      p.steps = 0;
+      p.simVisMs = 0;
+      p.renderMs = 0;
+      p.frames = 0;
+      rp.world = 0;
+      rp.live = 0;
+      rp.fog = 0;
+      rp.ui = 0;
+    }, 500);
+    return () => clearInterval(id);
+  }, [perfOn]);
 
   // Zoom is a plain number eased in JS (the picture recorder needs it per
   // frame); a swap sets the target and onRender glides toward it.
@@ -733,6 +868,7 @@ export const GameScreen = () => {
       // running so the frozen frame still draws behind the dimmed overlay; the
       // raf keeps `last` current, so there's no time jump on resume.
       if (pausedRef.current) return;
+      const _t0 = perfOn ? performance.now() : 0;
       const s = sim.current;
       const c = combat.current;
       const stick = stickRef.current;
@@ -1268,11 +1404,18 @@ export const GameScreen = () => {
       }
 
       // --- Projectiles: move, resolve hits, expire on range/pierce/walls.
+      // Snapshot the hurt-target list ONCE for the whole volley — it was being
+      // rebuilt per projectile (O(projectiles × (enemies + breakables)) fresh
+      // allocations every step, a real GC sink with a multishot in a horde). The
+      // snapshot can't go stale within the step: an enemy killed mid-loop just
+      // won't resolve via enemies.find, and a broken/primed breakable is re-guarded
+      // inside damageBreakable — so reusing it is correct as well as cheaper.
       let projectileCrit = false;
+      const projectileTargets = hurtTargets();
       for (let i = c.projectiles.length - 1; i >= 0; i--) {
         const p = c.projectiles[i]!;
         const from = { x: p.pos.x, y: p.pos.y };
-        const result = stepProjectile(p, dt, hurtTargets());
+        const result = stepProjectile(p, dt, projectileTargets);
         // A shot dies on *static* wall/pillar it crossed this step — so a hit it
         // might have landed on the far side doesn't count. Breakables are NOT in
         // this test (only the static OCCLUDERS): a shot that reaches a breakable
@@ -1336,10 +1479,11 @@ export const GameScreen = () => {
       // --- Enemy projectiles: move, resolve against the player, expire on
       // range/walls. The player is the lone hurt circle here.
       const playerCircle: HurtCircle = { id: 0, pos: playerPos, radius: PLAYER_RADIUS };
+      const playerTargets = [playerCircle]; // one reused array, not a literal per shot
       for (let i = c.enemyProjectiles.length - 1; i >= 0; i--) {
         const p = c.enemyProjectiles[i]!;
         const from = { x: p.pos.x, y: p.pos.y };
-        const result = stepProjectile(p, dt, [playerCircle]);
+        const result = stepProjectile(p, dt, playerTargets);
         const hitWall =
           !segmentClear(from, p.pos, worldOccluders.current) ||
           p.pos.x < 0 || p.pos.x > ARENA_WIDTH || p.pos.y < 0 || p.pos.y > ARENA_HEIGHT;
@@ -1484,6 +1628,18 @@ export const GameScreen = () => {
         s.lowHpPhaseCurr += dt * hz;
       }
 
+      // --- Line of sight + fog discovery: solved ONCE here per sim step at the sim
+      // player position, then cached for the renderer to reuse across the (faster)
+      // interpolated render frames. computeVisibility is O(walls²) and markVisible
+      // rasterises the fog grid, so this was the priciest thing the renderer redid
+      // every frame. Occluders are final for the step (all breaks resolved above),
+      // so a wall opened this step lights the room it revealed on the same step.
+      const _tv = perfOn ? performance.now() : 0;
+      const litPoly = computeLitPoly(s.currX, s.currY);
+      markVisible(fog, litPoly, { x: s.currX, y: s.currY }, VISION.discoverRadius);
+      visionCache.current = { poly: litPoly, hasSight: litPoly.length > 2 };
+      if (perfOn) perf.current.simVisMs += performance.now() - _tv;
+
       // --- Music: combat when any living enemy is within COMBAT_MUSIC_RADIUS,
       // idle otherwise (with a hangover so it doesn't snap back the instant a
       // fight ends). The director crossfades to the matching bed; a situation
@@ -1497,8 +1653,14 @@ export const GameScreen = () => {
         director.setSituation(stepMusicState(musicState.current, inCombat, dt));
         director.tick(dt);
       }
+
+      if (perfOn) {
+        perf.current.stepMs += performance.now() - _t0;
+        perf.current.steps += 1;
+      }
     },
     onRender: (alpha) => {
+      const _t0 = perfOn ? performance.now() : 0;
       const s = sim.current;
       const c = combat.current;
       const enemies = enemiesRef.current;
@@ -1585,6 +1747,68 @@ export const GameScreen = () => {
         sceneKeys.push({ x: k.x, y: k.y, color: k.color });
       }
 
+      // All enemy-derived render data — bodies, ranged/charge telegraphs, summon
+      // rings — in ONE pass over the horde into reused buffers (was three full
+      // passes that each allocated). Logic is unchanged: a ranged windup draws an
+      // aim line to the player, else a committed charge draws its telegraph; the
+      // summon ring is independent of either.
+      const rs = renderScratch.current;
+      rs.enemies.length = 0;
+      rs.casts.length = 0;
+      rs.summons.length = 0;
+      for (const d of enemies) {
+        const def = CREATURES[d.type];
+        const ex = enemyX(d);
+        const ey = enemyY(d);
+        rs.enemies.push({
+          id: d.id,
+          x: ex,
+          y: ey,
+          hpFrac: d.combatant.hp / d.combatant.stats.maxHp,
+          flash: d.flash / HIT_FLASH_DURATION,
+          color: CREATURE_VISUALS[d.type].color,
+          flying: d.flying,
+        });
+        if (def.attack && d.cycle && d.cycle.phase === "windup") {
+          rs.casts.push({
+            x: ex,
+            y: ey,
+            targetX: px,
+            targetY: py,
+            progress: 1 - d.cycle.remaining / def.attack.config.windup,
+            color: CREATURE_VISUALS[d.type].projectileColor ?? CREATURE_VISUALS[d.type].color,
+          });
+        } else {
+          const tele = brainTelegraph(d.brain);
+          if (tele && tele.kind === "charge" && tele.dir !== undefined) {
+            const len = tele.length ?? 360;
+            rs.casts.push({
+              x: ex,
+              y: ey,
+              targetX: ex + Math.cos(tele.dir) * len,
+              targetY: ey + Math.sin(tele.dir) * len,
+              progress: tele.progress,
+              color: COLORS.chargeTell,
+            });
+          }
+        }
+        const summon = def.summon;
+        if (summon && d.summonCycle && d.summonCycle.phase === "windup") {
+          rs.summons.push({
+            x: ex,
+            y: ey,
+            progress: 1 - d.summonCycle.remaining / summon.windup,
+            color: CREATURE_VISUALS[d.type].telegraphColor ?? CREATURE_VISUALS[d.type].color,
+          });
+        }
+      }
+      // Player + enemy projectiles into one reused array (no [...a, ...b] spread).
+      rs.projectiles.length = 0;
+      for (const p of c.projectiles)
+        rs.projectiles.push({ x: p.pos.x, y: p.pos.y, dirX: p.dir.x, dirY: p.dir.y, radius: p.radius, color: p.color });
+      for (const p of c.enemyProjectiles)
+        rs.projectiles.push({ x: p.pos.x, y: p.pos.y, dirX: p.dir.x, dirY: p.dir.y, radius: p.radius, color: p.color });
+
       combatPicture.value = recordCombatScene({
         camera: { x: camX, y: camY, zoom: zoomCurrent.current },
         anchor: { x: anchorX, y: anchorY },
@@ -1614,73 +1838,14 @@ export const GameScreen = () => {
               }
             : null,
         targetId: c.targetId,
-        enemies: enemies.map((d) => ({
-          id: d.id,
-          x: enemyX(d),
-          y: enemyY(d),
-          hpFrac: d.combatant.hp / d.combatant.stats.maxHp,
-          flash: d.flash / HIT_FLASH_DURATION,
-          color: CREATURE_VISUALS[d.type].color,
-          flying: d.flying,
-        })),
+        enemies: rs.enemies,
         // Breakables: alive + on-screen only, built in the single pass above (a zone
         // may hold hundreds; off-screen ones are culled before any per-item work).
         breakables: sceneBreakables,
         keys: sceneKeys,
-        enemyCasts: enemies.flatMap((d) => {
-          const def = CREATURES[d.type];
-          const ex = enemyX(d);
-          const ey = enemyY(d);
-          // Ranged wind-up: a line to the player.
-          if (def.attack && d.cycle && d.cycle.phase === "windup") {
-            return [
-              {
-                x: ex,
-                y: ey,
-                targetX: px,
-                targetY: py,
-                progress: 1 - d.cycle.remaining / def.attack.config.windup,
-                color: CREATURE_VISUALS[d.type].projectileColor ?? CREATURE_VISUALS[d.type].color,
-              },
-            ];
-          }
-          // Charge wind-up: the committed dash line (from the brain's telegraph).
-          const tele = brainTelegraph(d.brain);
-          if (tele && tele.kind === "charge" && tele.dir !== undefined) {
-            const len = tele.length ?? 360;
-            return [
-              {
-                x: ex,
-                y: ey,
-                targetX: ex + Math.cos(tele.dir) * len,
-                targetY: ey + Math.sin(tele.dir) * len,
-                progress: tele.progress,
-                color: COLORS.chargeTell,
-              },
-            ];
-          }
-          return [];
-        }),
-        summonTelegraphs: enemies.flatMap((d) => {
-          const summon = CREATURES[d.type].summon;
-          if (!summon || !d.summonCycle || d.summonCycle.phase !== "windup") return [];
-          return [
-            {
-              x: enemyX(d),
-              y: enemyY(d),
-              progress: 1 - d.summonCycle.remaining / summon.windup,
-              color: CREATURE_VISUALS[d.type].telegraphColor ?? CREATURE_VISUALS[d.type].color,
-            },
-          ];
-        }),
-        projectiles: [...c.projectiles, ...c.enemyProjectiles].map((p) => ({
-          x: p.pos.x,
-          y: p.pos.y,
-          dirX: p.dir.x,
-          dirY: p.dir.y,
-          radius: p.radius,
-          color: p.color,
-        })),
+        enemyCasts: rs.casts,
+        summonTelegraphs: rs.summons,
+        projectiles: rs.projectiles,
         numbers: c.numbers.map((n) => ({
           x: n.x,
           y: n.y,
@@ -1703,10 +1868,11 @@ export const GameScreen = () => {
           seed: e.seed,
         })),
         fog,
-        // The live occluder set (static geometry + alive occluding breakables) so
-        // a standing wood wall casts a shadow / blocks sight, and a downed one
-        // reopens it — the renderer's visibility polygon matches the sim's LOS.
-        occluders: worldOccluders.current,
+        // Line-of-sight polygon, solved once per sim step in onStep (against the
+        // player-vision occluders — locked doors excluded, so light spills through
+        // them) and reused here. The renderer builds its clip path from this rather
+        // than re-solving visibility each frame.
+        litPoly: visionCache.current.poly,
         time: s.time,
         lowHealthPhase: s.lowHpPhasePrev + (s.lowHpPhaseCurr - s.lowHpPhasePrev) * alpha,
       });
@@ -1722,6 +1888,11 @@ export const GameScreen = () => {
       } else if (dashCooling.current) {
         dashOverlay.value = DASH_READY_PICTURE;
         dashCooling.current = false;
+      }
+
+      if (perfOn) {
+        perf.current.renderMs += performance.now() - _t0;
+        perf.current.frames += 1;
       }
     },
   });
@@ -1754,12 +1925,17 @@ export const GameScreen = () => {
           onPress={() => navigation.navigate("Pause")}
           hitSlop={10}
         >
-          <Text style={styles.menuButtonLabel}>MENU</Text>
+          <Text style={styles.menuButtonLabel}>Menu</Text>
         </Pressable>
         {/* Key inventory strip — top-right, clear of the menu button (top-left). */}
         <KeyHud inventory={keyHud} need={lockedNeed} style={{ top: insets.top + 12, right: 12 }} />
         {/* Locked-door callout — names the missing key's color, low-centre. */}
         <DoorNotice need={lockedNeed} style={{ bottom: 24 }} />
+        {/* Frame profiler readout (JS-thread sim/record cost + raf fps), toggled by
+            the Settings "Performance overlay" switch so it works in release too. */}
+        {perfOn && perfText ? (
+          <Text style={[styles.perfReadout, { top: insets.top + 44 }]}>{perfText}</Text>
+        ) : null}
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
@@ -1805,7 +1981,15 @@ const styles = StyleSheet.create({
   menuButtonLabel: {
     fontFamily: UI.font,
     color: "rgba(255, 255, 255, 0.85)",
+    fontSize: 15,
+  },
+  // Dev frame profiler: small mono readout pinned top-left under the Menu button.
+  perfReadout: {
+    position: "absolute",
+    left: 12,
+    color: "rgba(120, 255, 170, 0.9)",
     fontSize: 11,
+    fontVariant: ["tabular-nums"],
   },
   controls: {
     flex: 1,

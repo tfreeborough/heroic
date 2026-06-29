@@ -78,15 +78,23 @@ export const LEASH_MULT = 30;
 
 /**
  * Sticky aggro with hysteresis. Engages when the player first comes within
- * `aggroRadius`, then *stays* engaged — pursuing far past where it first noticed
- * — until the player passes `leashRadius` (default `aggroRadius × LEASH_MULT`),
- * at which point it releases. The gap between the two thresholds is the point: a
- * tight notice range can coexist with a huge give-up range, and a creature
- * loitering at the boundary can't flip-flop between chase and idle every step.
+ * `aggroRadius` **and is actually in sight**, then *stays* engaged — pursuing far
+ * past where it first noticed — until the player passes `leashRadius` (default
+ * `aggroRadius × LEASH_MULT`), at which point it releases. The gap between the two
+ * thresholds is the point: a tight notice range can coexist with a huge give-up
+ * range, and a creature loitering at the boundary can't flip-flop between chase
+ * and idle every step.
+ *
+ * The **line-of-sight gate applies only to the first notice**, not the leash: a
+ * creature won't detect you through a wall or a (see-through-to-you, opaque-to-
+ * them) locked door, but once it *has* seen you it hounds you even after you break
+ * sight — so "endless chasing" survives, it just has to start with a real sighting.
+ * Sight is optional (`hasLineOfSight` omitted ⇒ treated as visible), so archetypes
+ * and tests that don't model it keep their distance-only behavior.
  *
  * Mutates and reads `state.engaged` (carry it on the archetype's per-instance
  * state), and returns the new engaged value — the caller acts when true, idles
- * when false. Stays deterministic: pure function of position + prior flag.
+ * when false. Stays deterministic: pure function of position + sight + prior flag.
  */
 export const updateAggro = (
   p: EnemyPerception,
@@ -95,7 +103,9 @@ export const updateAggro = (
   leashRadius: number = aggroRadius * LEASH_MULT,
 ): boolean => {
   const d = distance(p.selfPos, p.playerPos);
-  state.engaged = state.engaged ? d <= leashRadius : d <= aggroRadius;
+  state.engaged = state.engaged
+    ? d <= leashRadius
+    : d <= aggroRadius && p.hasLineOfSight !== false;
   return state.engaged;
 };
 

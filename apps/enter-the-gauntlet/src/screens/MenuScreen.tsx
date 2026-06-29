@@ -25,10 +25,10 @@ export const MenuScreen = ({ navigation, route }: Props) => {
     >
       <View style={styles.titleBlock}>
         {paused ? (
-          <Text style={styles.paused}>PAUSED</Text>
+          <Text style={styles.paused}>Paused</Text>
         ) : (
           <>
-            <Text style={styles.kicker}>HEROIC</Text>
+            <Text style={styles.kicker}>Heroic</Text>
             <Text style={styles.title}>Enter the{"\n"}Gauntlet</Text>
           </>
         )}
@@ -90,22 +90,21 @@ const styles = StyleSheet.create({
   kicker: {
     fontFamily: UI.font,
     color: UI.accent,
-    fontSize: 12,
-    letterSpacing: 6,
-    marginBottom: 16,
+    fontSize: 18,
+    letterSpacing: 2,
+    marginBottom: 12,
   },
   title: {
     fontFamily: UI.font,
     color: UI.text,
-    fontSize: 26,
+    fontSize: 44,
     textAlign: "center",
-    lineHeight: 40,
+    lineHeight: 52,
   },
   paused: {
     fontFamily: UI.font,
     color: UI.text,
-    fontSize: 22,
-    letterSpacing: 4,
+    fontSize: 34,
   },
   buttons: {
     width: "100%",

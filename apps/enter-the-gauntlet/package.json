@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
-    "@expo-google-fonts/press-start-2p": "^0.4.1",
+    "@expo-google-fonts/grenze-gotisch": "^0.4.2",
     "@heroic/core": "workspace:*",
     "@heroic/engine": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",

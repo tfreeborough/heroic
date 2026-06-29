@@ -12,7 +12,7 @@
       "name": "enter-the-gauntlet",
       "version": "1.0.0",
       "dependencies": {
-        "@expo-google-fonts/press-start-2p": "^0.4.1",
+        "@expo-google-fonts/grenze-gotisch": "^0.4.2",
         "@heroic/core": "workspace:*",
         "@heroic/engine": "workspace:*",
         "@react-native-async-storage/async-storage": "2.2.0",
@@ -296,7 +296,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.25.12", "", { "os": "win32", "cpu": "x64" }, "sha512-alJC0uCZpTFrSL0CCDjcgleBXPnCrEAhTBILpeAp7M/OFgoqtAetfBzX0xM00MUsVVPpVjlPuMbREqnZCXaTnA=="],
 
-    "@expo-google-fonts/press-start-2p": ["@expo-google-fonts/press-start-2p@0.4.1", "", {}, "sha512-L6SjPh8qwQ9i34VRNa8XPHH0gYACE1AGcq2MDLGfmBpxDnJnbECuChv6pWO81F2XqPx+V7gUlvSL0rbgh/F6/w=="],
+    "@expo-google-fonts/grenze-gotisch": ["@expo-google-fonts/grenze-gotisch@0.4.2", "", {}, "sha512-X9XzVqJWhvsazok9Lo5h1O8szq43P+G1xqCpu9+3VFVox0JXTPI9BDhREXg/MH/de5pFqSI6MSiblgIRWZQ5BA=="],
 
     "@expo/cli": ["@expo/cli@56.1.14", "", { "dependencies": { "@expo/code-signing-certificates": "^0.0.6", "@expo/config": "~56.0.9", "@expo/config-plugins": "~56.0.8", "@expo/devcert": "^1.2.1", "@expo/env": "~2.3.0", "@expo/image-utils": "^0.10.1", "@expo/inline-modules": "^0.0.11", "@expo/json-file": "^10.2.0", "@expo/log-box": "^56.0.12", "@expo/metro": "~56.0.0", "@expo/metro-config": "~56.0.13", "@expo/metro-file-map": "^56.0.3", "@expo/osascript": "^2.6.0", "@expo/package-manager": "^1.12.1", "@expo/plist": "^0.7.0", "@expo/prebuild-config": "^56.0.15", "@expo/require-utils": "^56.1.3", "@expo/router-server": "^56.0.13", "@expo/schema-utils": "^56.0.0", "@expo/spawn-async": "^1.8.0", "@expo/ws-tunnel": "^1.0.1", "@expo/xcpretty": "^4.4.4", "@react-native/dev-middleware": "0.85.3", "accepts": "^1.3.8", "arg": "^5.0.2", "bplist-creator": "0.1.0", "bplist-parser": "^0.3.1", "chalk": "^4.0.0", "ci-info": "^3.3.0", "compression": "^1.7.4", "connect": "^3.7.0", "debug": "^4.3.4", "dnssd-advertise": "^1.1.4", "expo-server": "^56.0.5", "fetch-nodeshim": "^0.4.10", "getenv": "^2.0.0", "glob": "^13.0.0", "lan-network": "^0.2.1", "multitars": "^1.0.0", "node-forge": "^1.3.3", "npm-package-arg": "^11.0.0", "ora": "^3.4.0", "picomatch": "^4.0.4", "pretty-format": "^29.7.0", "progress": "^2.0.3", "prompts": "^2.3.2", "resolve-from": "^5.0.0", "semver": "^7.6.0", "send": "^0.19.0", "slugify": "^1.3.4", "stacktrace-parser": "^0.1.10", "structured-headers": "^0.4.1", "terminal-link": "^2.1.1", "toqr": "^0.1.1", "wrap-ansi": "^7.0.0", "ws": "^8.12.1", "zod": "^3.25.76" }, "peerDependencies": { "expo": "*", "expo-router": "*", "react-native": "*" }, "optionalPeers": ["expo-router", "react-native"], "bin": { "expo-internal": "main.js" } }, "sha512-rSH3ygjEPipEYG6dgiJ116J8KqCQ/BYKcwQDipStSh4IFWJ10RZaYP4u5B74jxfeIWjWrOeqvwB6NZfQBjaQ4Q=="],
 

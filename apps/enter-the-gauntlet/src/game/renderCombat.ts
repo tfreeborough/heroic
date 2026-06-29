@@ -17,16 +17,13 @@ import {
 } from "@shopify/react-native-skia";
 import {
   chunksInView,
-  computeVisibility,
   extrudeRect,
   keyColorDef,
-  markVisible,
   voidRimBands,
   wallLeanVector,
   ZONE_DEPTH,
   type FogGrid,
   type KeyColor,
-  type VisionSegment,
 } from "@heroic/engine";
 import {
   COLORS,
@@ -93,10 +90,16 @@ export interface CombatScene {
   arcFlashes: { x: number; y: number; facing: number; fade: number }[];
   /** Active explosion VFX. `progress` runs 0 → 1 over the blast's life; `radius` is the AoE. */
   explosions: { x: number; y: number; radius: number; progress: number; seed: number }[];
-  /** Persistent fog-of-war memory, swept by the sight polygon and mutated here. */
+  /** Persistent fog-of-war memory, swept by the sight polygon (the sweep — markVisible
+   *  — now happens in the sim step; the renderer only reads `seen` to draw the fog). */
   fog: FogGrid;
-  /** Live sight/projectile occluders: static geometry + alive occluding breakables. */
-  occluders: VisionSegment[];
+  /**
+   * The line-of-sight polygon from the player, solved once per sim step by the
+   * caller (computeVisibility is O(walls²), so it's no longer redone per frame).
+   * The renderer builds the sight clip path from it and punches the fog holes;
+   * fewer than 3 vertices means "no sightline" (draw fully fogged).
+   */
+  litPoly: { x: number; y: number }[];
   /** Seconds elapsed, fed to the drifting-mist shader as its animation clock. */
   time: number;
   /**
@@ -402,24 +405,52 @@ const wedgePath = (cx: number, cy: number, radius: number, facing: number, arcWi
 
 export const EMPTY_COMBAT_PICTURE: SkPicture = createPicture(() => {});
 
-export const recordCombatScene = (scene: CombatScene): SkPicture =>
-  createPicture((canvas) => {
-    const { camera, anchor, player, weapon } = scene;
-    const cfg = weapon.config;
+/**
+ * Dev phase profiler: recordCombatScene adds the ms it spends in each major
+ * section here, and GameScreen reads + resets these once per sampling interval to
+ * show a per-frame breakdown. `world` = floor/voids/walls/breakables/keys; `live`
+ * = the sight-clipped enemies/telegraphs/projectiles/numbers; `fog` = the
+ * fog-of-war layers; `ui` = player + explosions + vignette. performance.now() is
+ * cheap, so it's always written; the readout is dev-gated in GameScreen.
+ */
+export const RENDER_PHASES = { world: 0, live: 0, fog: 0, ui: 0 };
 
-    // Bake the camera into the picture: translate(anchor) ∘ scale(zoom) ∘
-    // translate(-camera). Everything below is in world space.
+// Profiling gate. The phase timers below only fire when this is on — driven from the
+// Settings "Performance overlay" toggle via setRenderProfiling. Off (the default),
+// they cost nothing, which matters now the overlay can be enabled in release builds.
+let PROFILING = false;
+export const setRenderProfiling = (on: boolean): void => {
+  PROFILING = on;
+};
+
+/**
+ * The static world geometry — floor chunks, void pits (+ drifting mist), boundary
+ * walls, and interior pillars with their camera-relative depth — recorded as a
+ * screen-space picture (the camera transform is baked in). This is by far the most
+ * draw-call-heavy part of the frame: a linear gradient per void rim band, dozens of
+ * rects. Yet it depends ONLY on the camera (x/y/zoom), not on time or any live
+ * entity — at a fixed camera it's byte-identical frame to frame. So `getWorldPicture`
+ * caches it and re-records only when the camera moves; standing still costs a single
+ * `drawPicture` instead of hundreds of draws (the dominant idle cost we measured).
+ *
+ * Tradeoff: the void-pit mist is baked at record time, so it only drifts while the
+ * camera moves and freezes when the camera is perfectly idle. The fog-of-war mist
+ * (drawn live in recordCombatScene) is unaffected and keeps drifting.
+ */
+const recordWorldPicture = (scene: CombatScene): SkPicture =>
+  createPicture((canvas) => {
+    const { camera, anchor } = scene;
+    const mistShader = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+
     canvas.save();
     canvas.translate(anchor.x, anchor.y);
     canvas.scale(camera.zoom, camera.zoom);
     canvas.translate(-camera.x, -camera.y);
 
     // --- Arena floor: replay the baked per-chunk pictures overlapping the view
-    // (culling), then void pits (the swirling chasm), then boundary + interior walls
-    // (PILLARS). Floorless cells were never baked, so the void pit / backdrop shows
-    // through and an irregular zone — or a bridge over a chasm — reads as its shape.
-    // Static geometry is drawn UNCLIPPED — in explored-but-fogged areas the fog dims
-    // it but you still read the layout you remember.
+    // (culling), then void pits, then boundary + interior walls. Floorless cells were
+    // never baked, so the void / backdrop shows through. Drawn UNCLIPPED — in fogged
+    // areas the fog dims it but you still read the layout you remember.
     {
       const f = scene.floor;
       const halfVW = anchor.x / camera.zoom;
@@ -434,17 +465,9 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       for (let k = 0; k < visible.length; k++) canvas.drawPicture(f.chunks[visible[k]!]!);
     }
 
-    // Void pits: a dark, drifting-mist chasm. Cover each void rect with the deep
-    // void colour (hiding any floor under it), then lay the SAME fog mist over it at
-    // reduced alpha — so a void reads as a foggy pit you can see and shoot across,
-    // dimmer than the fog-of-war's unexplored churn. Anchored in world space like the
-    // fog, so it doesn't swim when the camera pans; the fog layers below still dim or
-    // hide it by discovery state, so an undiscovered pit stays unseen.
-    // View-cull: only voids overlapping the viewport are touched. Each void runs an
-    // O(voids) rim/abutment scan and allocates a gradient per cliff band, so sweeping
-    // the whole map-wide void set every frame (not just the few on screen) was the
-    // framerate sink. The abutment test inside voidRimBands still gets the FULL set,
-    // so a partial shared edge with an off-screen rect still suppresses correctly.
+    // Void pits: deep void fill (hiding the floor), the drifting mist over it, then
+    // the camera-relative cliff depth. View-culled to the viewport; the abutment test
+    // inside voidRimBands still gets the FULL VOIDS set.
     const vMinX = camera.x - anchor.x / camera.zoom;
     const vMaxX = camera.x + anchor.x / camera.zoom;
     const vMinY = camera.y - anchor.y / camera.zoom;
@@ -461,20 +484,16 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       fill.setColor(color(COLORS.void));
       fill.setAlphaf(1);
       for (const v of visibleVoids) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
-      const pit = fogEffect ? fogEffect.makeShader([scene.time]) : null;
-      if (pit) {
-        fill.setShader(pit);
+      if (mistShader) {
+        fill.setShader(mistShader);
         fill.setAlphaf(VOID_MIST_ALPHA);
         for (const v of visibleVoids) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
         fill.setShader(null);
         fill.setAlphaf(1);
       }
-      // Pit depth: draw each rim as a piece of cliff — a lit ground lip, then a wall
-      // surface descending from it and dissolving into the fog. The wall is fullest on
-      // the edges facing AWAY from the camera (the far cliff you look across at) and
-      // fades to just-the-lip on the near edges; which edge is "away" tracks the camera
-      // focus, so the lit wall glides round as you move. Clipped to the void so the
-      // cliffs never spill onto the floor.
+      // Pit depth: each rim as a piece of cliff — a lit ground lip, then a wall
+      // surface descending from it and dissolving into the fog. Fullest on the edges
+      // facing AWAY from the camera focus; clipped to the void so cliffs never spill.
       canvas.save();
       const voidClip = Skia.Path.Make();
       for (const v of visibleVoids) voidClip.addRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h));
@@ -508,12 +527,9 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     fill.setAlphaf(1);
     for (const w of WALLS) canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h), fill);
 
-    // Interior walls as raised blocks: each wall drops a darker side face TOWARD the
-    // camera focus — the near face you see — lengthening with distance from centre, so
-    // walls at the screen edge lean and read tall while one under you stays flat (the
-    // parallax). Skirts first as one path, then the lit caps over them.
-    // View-cull interior walls (+ their skirts) to the viewport; the skirt leans a
-    // few px past the wall toward the camera focus, so pad the test by CULL_MARGIN.
+    // Interior walls as raised blocks: each drops a darker side face toward the camera
+    // focus, lengthening with distance from centre (the parallax). Skirts first as one
+    // path, then the lit caps over them. View-culled (+ CULL_MARGIN for the lean).
     const visiblePillars = PILLARS.filter(
       (p) =>
         p.x - p.w / 2 < vMaxX + CULL_MARGIN &&
@@ -538,6 +554,58 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     }
     fill.setColor(color(COLORS.pillar));
     for (const p of visiblePillars) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
+
+    canvas.restore();
+  });
+
+// Camera-keyed cache for the world picture. Reused while the camera (x/y/zoom) is
+// byte-identical — i.e. while you're standing still and the chase camera has fully
+// settled — and re-recorded the instant it moves. Exact equality (no quantisation)
+// means the cached picture's baked camera always matches the live one, so the world
+// can never drift a sub-pixel against the interpolated entities drawn over it.
+let worldCache: { x: number; y: number; zoom: number; pic: SkPicture } | null = null;
+const getWorldPicture = (scene: CombatScene): SkPicture => {
+  const { x, y, zoom } = scene.camera;
+  if (!worldCache || worldCache.x !== x || worldCache.y !== y || worldCache.zoom !== zoom) {
+    worldCache = { x, y, zoom, pic: recordWorldPicture(scene) };
+  }
+  return worldCache.pic;
+};
+
+export const recordCombatScene = (scene: CombatScene): SkPicture => {
+  // World geometry: refresh the cached, camera-keyed sub-picture OUTSIDE the main
+  // recorder (so there's no nested PictureRecorder). Re-records only when the camera
+  // moved; otherwise this is a cache hit and the cost is ~0. Timed into the `world`
+  // phase so the profiler shows it collapse to nothing while standing still.
+  const _tw = PROFILING ? performance.now() : 0;
+  const worldPic = getWorldPicture(scene);
+  if (PROFILING) RENDER_PHASES.world += performance.now() - _tw;
+
+  return createPicture((canvas) => {
+    let _t = PROFILING ? performance.now() : 0;
+    const { camera, anchor, player, weapon } = scene;
+    const cfg = weapon.config;
+
+    // The drifting-mist shader for the FOG layers (the void mist lives in the cached
+    // world picture). makeShader is a JSI allocation, so build it once per frame.
+    const mistShader = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+
+    // The cached world is screen-space (camera baked in), so it's drawn flat here,
+    // before the camera transform the dynamic content below uses.
+    canvas.drawPicture(worldPic);
+
+    // Camera transform for the dynamic, per-frame content (breakables, the sight-
+    // clipped live world, player UI). Identical bake to the world picture, so they
+    // line up exactly. translate(anchor) ∘ scale(zoom) ∘ translate(-camera).
+    canvas.save();
+    canvas.translate(anchor.x, anchor.y);
+    canvas.scale(camera.zoom, camera.zoom);
+    canvas.translate(-camera.x, -camera.y);
+
+    const vMinX = camera.x - anchor.x / camera.zoom;
+    const vMaxX = camera.x + anchor.x / camera.zoom;
+    const vMinY = camera.y - anchor.y / camera.zoom;
+    const vMaxY = camera.y + anchor.y / camera.zoom;
 
     // Breakables: dynamic destructible blockers, drawn with the static geometry
     // (unclipped — a wall you remember still reads in the fog) but from live
@@ -631,41 +699,16 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     // within reach + ENEMY_RADIUS — draw rings/wedges at that radius so the
     // visuals match the actual gate.
     const hitRadius = cfg.reach + ENEMY_RADIUS;
+    if (PROFILING) { const n = performance.now(); RENDER_PHASES.world += n - _t; _t = n; }
 
-    // The visibility polygon from the (interpolated) player: the area in direct
-    // line of sight. Built into a path used both to clip the live world and to
-    // cut the lit hole out of the fog.
-    //
-    // Cull occluders to a box around the player BEFORE the solve: computeVisibility
-    // is O(segments²) (a ray per corner × every segment), so on a wall-dense zone it
-    // explodes if fed every wall edge in the map. Only walls within sight/discover
-    // range can shape what you see, so we keep just the segments whose AABB overlaps
-    // a player box, plus the box's own 4 edges (they terminate rays in open
-    // directions). The half-side is ≥ discoverRadius, so discovery within that radius
-    // is identical to using the full set — far walls only ever mattered in already-
-    // fogged area. All occluders here are axis-aligned, so the AABB test is exact.
-    const visR = VISION.discoverRadius + 240;
-    const vbxMin = player.x - visR;
-    const vbxMax = player.x + visR;
-    const vbyMin = player.y - visR;
-    const vbyMax = player.y + visR;
-    const nearOccluders: VisionSegment[] = [
-      { ax: vbxMin, ay: vbyMin, bx: vbxMax, by: vbyMin },
-      { ax: vbxMax, ay: vbyMin, bx: vbxMax, by: vbyMax },
-      { ax: vbxMax, ay: vbyMax, bx: vbxMin, by: vbyMax },
-      { ax: vbxMin, ay: vbyMax, bx: vbxMin, by: vbyMin },
-    ];
-    for (let i = 0; i < scene.occluders.length; i++) {
-      const s = scene.occluders[i]!;
-      const sMinX = s.ax < s.bx ? s.ax : s.bx;
-      const sMaxX = s.ax > s.bx ? s.ax : s.bx;
-      const sMinY = s.ay < s.by ? s.ay : s.by;
-      const sMaxY = s.ay > s.by ? s.ay : s.by;
-      if (sMaxX >= vbxMin && sMinX <= vbxMax && sMaxY >= vbyMin && sMinY <= vbyMax) {
-        nearOccluders.push(s);
-      }
-    }
-    const litPoly = computeVisibility({ x: player.x, y: player.y }, nearOccluders);
+    // The visibility polygon from the player: the area in direct line of sight,
+    // solved once per sim step by the caller (see GameScreen — computeVisibility is
+    // O(walls²), so it's cached, not redone per rendered frame). Here we just rebuild
+    // the cheap clip path from it — used both to clip the live world and to cut the
+    // lit hole out of the fog. (The solve uses the sim player position; the rest of
+    // the scene interpolates, so under load the lit edge can trail the body by up to
+    // one sim step — imperceptible on the large, soft sight bubble.)
+    const litPoly = scene.litPoly;
     const hasSight = litPoly.length > 2;
     const litPath = Skia.Path.Make();
     if (hasSight) {
@@ -805,6 +848,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
     }
 
     canvas.restore(); // end the current-sight clip
+    if (PROFILING) { const n = performance.now(); RENDER_PHASES.live += n - _t; _t = n; }
 
     // --- Fog of war: dark layers over everything outside current sight. The
     // memory grid is rendered with a heavy blur (VISION.fogSoftness) so its
@@ -820,11 +864,10 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       const vw = (halfW + over) * 2;
       const vh = (halfH + over) * 2;
 
-      // Drifting mist drives the fog colour; the shader is shared by the dim and
-      // dark layers (same noise + clock), so unexplored just reads as a denser
-      // version of the same churn. Null if the effect failed to compile (the flat
-      // shadowColor then stands in).
-      const mistShader = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+      // Drifting mist drives the fog colour (the shared `mistShader` built once at
+      // the top of the frame); the dim and dark layers reuse the same noise + clock,
+      // so unexplored just reads as a denser version of the same churn. Null if the
+      // effect failed to compile (the flat shadowColor then stands in).
       fill.setColor(color(VISION.shadowColor));
 
       // (1) Dim memory layer: line-of-sight-blocked area (behind pillars/walls),
@@ -865,10 +908,11 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
         canvas.restore();
       }
 
-      // Discover what's newly in sight (updates the fog grid's `seen`), then (3) lay
-      // the extra-dark mist over every never-discovered cell in view. Explored cells
-      // are punched out as holes (they keep just the dim memory level); current sight
-      // is a subset of explored, so it stays clear without an extra clip.
+      // Discovery (markVisible — updating the fog grid's `seen`) now happens in the
+      // sim step, so the grid is already current here. (3) Lay the extra-dark mist
+      // over every never-discovered cell in view. Explored cells are punched out as
+      // holes (they keep just the dim memory level); current sight is a subset of
+      // explored, so it stays clear without an extra clip.
       //
       // The mask is rebuilt **every frame but only over the viewport** — an
       // overscanned cell window — so its cost is bounded by screen size, NOT by how
@@ -879,7 +923,6 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       // region costs a few addRects per row, not one per cell.
       const fog = scene.fog;
       const cs = fog.cellSize;
-      markVisible(scene.fog, litPoly, { x: player.x, y: player.y }, VISION.discoverRadius);
 
       const cMin = Math.max(0, Math.floor(vl / cs));
       const cMax = Math.min(fog.cols - 1, Math.floor((vl + vw) / cs));
@@ -914,6 +957,7 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       fill.setMaskFilter(null); // shared paint — clear before player UI draws
       fill.setShader(null);
     }
+    if (PROFILING) { const n = performance.now(); RENDER_PHASES.fog += n - _t; _t = n; }
 
     // --- Player and player-only UI, always drawn on top of the fog: the player,
     // their attack-range ring, HP, and action telegraphs are never obscured.
@@ -1084,4 +1128,6 @@ export const recordCombatScene = (scene: CombatScene): SkPicture =>
       canvas.drawRect(Skia.XYWHRect(0, 0, w, h), fill);
       fill.setShader(null);
     }
+    if (PROFILING) RENDER_PHASES.ui += performance.now() - _t;
   });
+};

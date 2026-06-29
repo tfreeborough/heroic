@@ -36,11 +36,13 @@ describe("kiter archetype", () => {
     expect(v).toEqual(vec2(0, 0));
   });
 
-  test("closes in to find a clear line when sight is blocked, even in-band", () => {
-    // At its preferred range it would normally hold, but with no line of sight
-    // it must reposition (the runtime then routes this around the obstacle).
+  test("once engaged, closes in to find a clear line when sight is blocked, even in-band", () => {
+    // A kiter that has ALREADY noticed the player (engaged) but then loses sight
+    // closes in to re-acquire rather than holding a useless standoff; the runtime
+    // routes this around the obstacle. (It won't engage through a wall in the first
+    // place — that's the aggro line-of-sight gate, covered in perception.test.ts.)
     const v = kiter.tick(
-      kiter.initState(CFG, 0),
+      { engaged: true },
       CFG,
       { ...perceive(vec2(250, 0)), hasLineOfSight: false },
       DT,

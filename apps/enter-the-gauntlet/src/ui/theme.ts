@@ -4,12 +4,12 @@
 
 export const UI = {
   /**
-   * Pixel display font (Press Start 2P), loaded in App via expo-font. Used for
-   * headings, buttons, and HUD chrome — anything short. Long descriptive copy
-   * stays in the system font (pixel fonts are hard to read at body sizes). Only
-   * ASCII glyphs render in this font, so labels using it avoid fancy punctuation.
+   * Fantasy display font (Grenze Gotisch — a legible gothic/blackletter), loaded
+   * in App via expo-font. Used for headings, buttons, and HUD chrome. Long
+   * descriptive copy stays in the system font for readability. Blackletter reads
+   * badly in ALL CAPS, so labels using this font are title/sentence case.
    */
-  font: "PressStart2P_400Regular",
+  font: "GrenzeGotisch_700Bold",
   bg: "#0e1116",
   panel: "rgba(255, 255, 255, 0.05)",
   panelBorder: "rgba(255, 255, 255, 0.12)",

@@ -6,7 +6,7 @@ import * as Brightness from "expo-brightness";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
-import { useFonts, PressStart2P_400Regular } from "@expo-google-fonts/press-start-2p";
+import { useFonts, GrenzeGotisch_700Bold } from "@expo-google-fonts/grenze-gotisch";
 import { SettingsProvider } from "./src/settings/SettingsContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
@@ -22,10 +22,10 @@ import { RootNavigator } from "./src/navigation/RootNavigator";
  * game flow. The game itself (canvas, loop, controls) lives in src/game.
  */
 export default function App() {
-  // The pixel display font (Press Start 2P) used across the UI chrome and HUD.
+  // The fantasy display font (Grenze Gotisch) used across the UI chrome and HUD.
   // Bundled with the app, so this resolves near-instantly; we gate the navigator
-  // on it to avoid a system-font → pixel-font flash on the title screen.
-  const [fontsLoaded] = useFonts({ PressStart2P_400Regular });
+  // on it to avoid a system-font → display-font flash on the title screen.
+  const [fontsLoaded] = useFonts({ GrenzeGotisch_700Bold });
 
   // Hold the screen on for as long as the app is mounted — a game shouldn't
   // dim or sleep mid-session.

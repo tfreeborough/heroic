@@ -53,4 +53,24 @@ describe("updateAggro (leash hysteresis)", () => {
     expect(updateAggro(perceive(vec2(AGGRO * LEASH_MULT - 1, 0)), s, AGGRO)).toBe(true);
     expect(updateAggro(perceive(vec2(AGGRO * LEASH_MULT + 1, 0)), s, AGGRO)).toBe(false);
   });
+
+  const sighted = (selfPos: Vec2, hasLineOfSight: boolean) => ({
+    ...perceive(selfPos),
+    hasLineOfSight,
+  });
+
+  test("won't notice the player through a blocked sightline (wall or locked door)", () => {
+    const s = { engaged: false };
+    // Inside the notice radius, but sight is blocked → stays unaware.
+    expect(updateAggro(sighted(vec2(AGGRO - 1, 0), false), s, AGGRO, LEASH)).toBe(false);
+    // Same spot, sight now clear → engages.
+    expect(updateAggro(sighted(vec2(AGGRO - 1, 0), true), s, AGGRO, LEASH)).toBe(true);
+  });
+
+  test("the LOS gate is first-notice only — it keeps chasing after sight breaks", () => {
+    const s = { engaged: false };
+    updateAggro(sighted(vec2(AGGRO - 1, 0), true), s, AGGRO, LEASH); // first sighting → engaged
+    // Lose sight while still within the leash: it holds on (endless chasing survives).
+    expect(updateAggro(sighted(vec2(AGGRO * 5, 0), false), s, AGGRO, LEASH)).toBe(true);
+  });
 });

@@ -151,15 +151,19 @@ export const Inspector = ({
             />
           </label>
         </div>
-        <label className="row">
-          <input
-            type="checkbox"
-            checked={!!b.occludes}
-            onFocus={arm}
-            onChange={(e) => edit(() => (b.occludes = e.target.checked))}
-          />
-          Occludes (blocks sight)
-        </label>
+        {/* Doors are see-through by design (the game ignores `occludes` for a
+            locked door), so the toggle would be a no-op — hide it for doors. */}
+        {b.kind !== "door" && (
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={!!b.occludes}
+              onFocus={arm}
+              onChange={(e) => edit(() => (b.occludes = e.target.checked))}
+            />
+            Occludes (blocks sight)
+          </label>
+        )}
         <label className="row">
           <input
             type="checkbox"

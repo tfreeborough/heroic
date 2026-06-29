@@ -49,8 +49,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: UI.font,
-    fontSize: 13,
-    letterSpacing: 0.5,
+    fontSize: 20,
   },
   primaryLabel: {
     color: UI.accentText,
