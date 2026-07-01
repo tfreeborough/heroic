@@ -104,8 +104,8 @@ for the same damage dealt.
   creatures and the nest; the wither visual as budget drains.
 - **Content/data:** per-realm spawner placement, creature type, budget size, cadence, cap,
   activation radius — authored alongside realm layout.
-- **Persistence:** "destroyed this visit" is run-scoped state (resets each run), so nothing new
-  for the save system.
+- **Persistence:** "destroyed this visit" is transient world state (resets on death — the world
+  repopulates between deaths), so nothing new for the save system.
 
 ## Open tunables (numbers to find in playtest)
 

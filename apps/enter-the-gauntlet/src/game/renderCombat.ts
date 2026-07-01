@@ -16,7 +16,6 @@ import {
   type SkPicture,
 } from "@shopify/react-native-skia";
 import {
-  chunksInView,
   extrudeRect,
   keyColorDef,
   voidRimBands,
@@ -90,16 +89,10 @@ export interface CombatScene {
   arcFlashes: { x: number; y: number; facing: number; fade: number }[];
   /** Active explosion VFX. `progress` runs 0 → 1 over the blast's life; `radius` is the AoE. */
   explosions: { x: number; y: number; radius: number; progress: number; seed: number }[];
-  /** Persistent fog-of-war memory, swept by the sight polygon (the sweep — markVisible
-   *  — now happens in the sim step; the renderer only reads `seen` to draw the fog). */
+  /** Persistent fog-of-war memory (the explored/unexplored grid). Discovery is a
+   *  proximity reveal done by the caller (markVisibleCircle); the renderer only reads
+   *  `seen` to draw the unexplored fog. */
   fog: FogGrid;
-  /**
-   * The line-of-sight polygon from the player, solved once per sim step by the
-   * caller (computeVisibility is O(walls²), so it's no longer redone per frame).
-   * The renderer builds the sight clip path from it and punches the fog holes;
-   * fewer than 3 vertices means "no sightline" (draw fully fogged).
-   */
-  litPoly: { x: number; y: number }[];
   /** Seconds elapsed, fed to the drifting-mist shader as its animation clock. */
   time: number;
   /**
@@ -169,13 +162,6 @@ const FLYER_SHADOW_ALPHA = 0.55;
  * foggy chasm rather than the bright unexplored churn. Up → mistier, down → flatter.
  */
 const VOID_MIST_ALPHA = 0.35;
-
-/**
- * Padding (world px) on the viewport-cull tests for static geometry, so a wall whose
- * camera-leaned skirt pokes a few px past its rect into view isn't wrongly culled at
- * the screen edge. Comfortably exceeds the max skirt lean.
- */
-const CULL_MARGIN = 64;
 
 /** Breakable fill colour by kind (placeholder art); unknown kinds read as a crate. */
 const breakableColor = (kind: string): string => {
@@ -270,11 +256,8 @@ const drawKeyPickup = (canvas: SkCanvas, hex: string, x: number, y: number, t: n
   stroke.setStrokeCap(StrokeCap.Butt);
 };
 
-// Two blurs (respectCTM=true → world units, so they scale with camera zoom): a
-// tight one for the current-sight edge, and a heavy one for the explored↔unseen
-// frontier that melts the memory grid into mist.
-const sightBlur =
-  VISION.edgeFeather > 0 ? Skia.MaskFilter.MakeBlur(BlurStyle.Normal, VISION.edgeFeather, true) : null;
+// Heavy blur (respectCTM=true → world units, so it scales with camera zoom) for the
+// explored↔unseen frontier — melts the memory grid into soft mist rather than blocks.
 const fogBlur =
   VISION.fogSoftness > 0 ? Skia.MaskFilter.MakeBlur(BlurStyle.Normal, VISION.fogSoftness, true) : null;
 
@@ -423,83 +406,67 @@ export const setRenderProfiling = (on: boolean): void => {
   PROFILING = on;
 };
 
+// Render debug switches (driven from Settings → Diagnostics). These let you bisect
+// the *GPU/raster* cost — which the JS profiler can't see — by turning off the most
+// expensive layers and watching the frame rate: `disableFog` skips the fog-of-war
+// blur/mist/overdraw layers, `disableMist` drops the per-pixel drifting-mist shader
+// (flat fog + flat void instead). Both ship off; they're diagnostic, not gameplay.
+const DEBUG = { disableFog: false, disableMist: false };
+// The baked world picture (below). Module-level so setRenderDebug can invalidate it
+// when `disableMist` flips (the mist is baked into it).
+let worldPic: SkPicture | null = null;
+export const setRenderDebug = (d: { disableFog: boolean; disableMist: boolean }): void => {
+  DEBUG.disableFog = d.disableFog;
+  if (DEBUG.disableMist !== d.disableMist) worldPic = null; // baked in → re-bake on change
+  DEBUG.disableMist = d.disableMist;
+};
+
 /**
- * The static world geometry — floor chunks, void pits (+ drifting mist), boundary
- * walls, and interior pillars with their camera-relative depth — recorded as a
- * screen-space picture (the camera transform is baked in). This is by far the most
- * draw-call-heavy part of the frame: a linear gradient per void rim band, dozens of
- * rects. Yet it depends ONLY on the camera (x/y/zoom), not on time or any live
- * entity — at a fixed camera it's byte-identical frame to frame. So `getWorldPicture`
- * caches it and re-records only when the camera moves; standing still costs a single
- * `drawPicture` instead of hundreds of draws (the dominant idle cost we measured).
+ * The static world geometry — floor chunks, void pits (+ static mist), boundary walls,
+ * and interior pillars — recorded ONCE into a WORLD-SPACE picture (no camera transform)
+ * and then replayed under the camera transform every frame by recordCombatScene.
  *
- * Tradeoff: the void-pit mist is baked at record time, so it only drifts while the
- * camera moves and freezes when the camera is perfectly idle. The fog-of-war mist
- * (drawn live in recordCombatScene) is unaffected and keeps drifting.
+ * The depth is **fixed** (`leanScale: 0` → no camera parallax), which is the whole
+ * point: with no camera dependence the picture is identical forever, so it's baked a
+ * single time instead of re-recorded every frame. That collapses the per-frame `world`
+ * cost from "hundreds of draws + a linear gradient per void rim band" (the dominant
+ * combat cost we measured, ~16-20ms) down to one `drawPicture`.
+ *
+ * The whole map is baked (no per-frame view cull); Skia quick-rejects the off-screen
+ * geometry at replay time, so replaying a map-sized picture stays cheap. The void mist
+ * is baked in, so it's a static texture rather than drifting — the fog-of-war mist
+ * (drawn live in recordCombatScene) still drifts.
  */
 const recordWorldPicture = (scene: CombatScene): SkPicture =>
   createPicture((canvas) => {
-    const { camera, anchor } = scene;
-    const mistShader = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+    const mistShader = !DEBUG.disableMist && fogEffect ? fogEffect.makeShader([scene.time]) : null;
 
-    canvas.save();
-    canvas.translate(anchor.x, anchor.y);
-    canvas.scale(camera.zoom, camera.zoom);
-    canvas.translate(-camera.x, -camera.y);
+    // Arena floor: every baked chunk (Skia quick-rejects the off-screen ones on replay).
+    for (let k = 0; k < scene.floor.chunks.length; k++) canvas.drawPicture(scene.floor.chunks[k]!);
 
-    // --- Arena floor: replay the baked per-chunk pictures overlapping the view
-    // (culling), then void pits, then boundary + interior walls. Floorless cells were
-    // never baked, so the void / backdrop shows through. Drawn UNCLIPPED — in fogged
-    // areas the fog dims it but you still read the layout you remember.
-    {
-      const f = scene.floor;
-      const halfVW = anchor.x / camera.zoom;
-      const halfVH = anchor.y / camera.zoom;
-      const visible = chunksInView(
-        f,
-        camera.x - halfVW,
-        camera.y - halfVH,
-        camera.x + halfVW,
-        camera.y + halfVH,
-      );
-      for (let k = 0; k < visible.length; k++) canvas.drawPicture(f.chunks[visible[k]!]!);
-    }
-
-    // Void pits: deep void fill (hiding the floor), the drifting mist over it, then
-    // the camera-relative cliff depth. View-culled to the viewport; the abutment test
-    // inside voidRimBands still gets the FULL VOIDS set.
-    const vMinX = camera.x - anchor.x / camera.zoom;
-    const vMaxX = camera.x + anchor.x / camera.zoom;
-    const vMinY = camera.y - anchor.y / camera.zoom;
-    const vMaxY = camera.y + anchor.y / camera.zoom;
-    const visibleVoids = VOIDS.filter(
-      (v) =>
-        v.x - v.w / 2 < vMaxX &&
-        v.x + v.w / 2 > vMinX &&
-        v.y - v.h / 2 < vMaxY &&
-        v.y + v.h / 2 > vMinY,
-    );
-    if (visibleVoids.length > 0) {
+    // Void pits: deep fill (hiding the floor), static mist, then the FIXED-depth cliff
+    // (leanScale 0 → camera-independent). The full set; voidRimBands still gets it all
+    // for the abutment test.
+    if (VOIDS.length > 0) {
       fill.setShader(null);
       fill.setColor(color(COLORS.void));
       fill.setAlphaf(1);
-      for (const v of visibleVoids) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
+      for (const v of VOIDS) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
       if (mistShader) {
         fill.setShader(mistShader);
         fill.setAlphaf(VOID_MIST_ALPHA);
-        for (const v of visibleVoids) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
+        for (const v of VOIDS) canvas.drawRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h), fill);
         fill.setShader(null);
         fill.setAlphaf(1);
       }
-      // Pit depth: each rim as a piece of cliff — a lit ground lip, then a wall
-      // surface descending from it and dissolving into the fog. Fullest on the edges
-      // facing AWAY from the camera focus; clipped to the void so cliffs never spill.
+      // Pit depth: a lit ground lip + a wall descending into the fog, clipped to the
+      // void so cliffs never spill. Fixed tilt only (no camera-relative parallax).
       canvas.save();
       const voidClip = Skia.Path.Make();
-      for (const v of visibleVoids) voidClip.addRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h));
+      for (const v of VOIDS) voidClip.addRect(Skia.XYWHRect(v.x - v.w / 2, v.y - v.h / 2, v.w, v.h));
       canvas.clipPath(voidClip, ClipOp.Intersect, true);
-      for (const v of visibleVoids) {
-        for (const b of voidRimBands(v, VOIDS, camera.x, camera.y)) {
+      for (const v of VOIDS) {
+        for (const b of voidRimBands(v, VOIDS, 0, 0, 0)) {
           if (b.intensity > 0.01) {
             fill.setShader(
               Skia.Shader.MakeLinearGradient(
@@ -523,24 +490,14 @@ const recordWorldPicture = (scene: CombatScene): SkPicture =>
       canvas.restore();
     }
 
+    // Boundary walls, then interior pillars with a FIXED south skirt (leanScale 0).
     fill.setColor(color(COLORS.wall));
     fill.setAlphaf(1);
     for (const w of WALLS) canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h), fill);
-
-    // Interior walls as raised blocks: each drops a darker side face toward the camera
-    // focus, lengthening with distance from centre (the parallax). Skirts first as one
-    // path, then the lit caps over them. View-culled (+ CULL_MARGIN for the lean).
-    const visiblePillars = PILLARS.filter(
-      (p) =>
-        p.x - p.w / 2 < vMaxX + CULL_MARGIN &&
-        p.x + p.w / 2 > vMinX - CULL_MARGIN &&
-        p.y - p.h / 2 < vMaxY + CULL_MARGIN &&
-        p.y + p.h / 2 > vMinY - CULL_MARGIN,
-    );
-    if (visiblePillars.length > 0) {
+    if (PILLARS.length > 0) {
       const skirt = Skia.Path.Make();
-      for (const p of visiblePillars) {
-        const lean = wallLeanVector(p, camera.x, camera.y);
+      for (const p of PILLARS) {
+        const lean = wallLeanVector(p, 0, 0, 0);
         for (const q of extrudeRect(p, lean.x, lean.y)) {
           skirt.moveTo(q[0]!, q[1]!);
           skirt.lineTo(q[2]!, q[3]!);
@@ -553,30 +510,21 @@ const recordWorldPicture = (scene: CombatScene): SkPicture =>
       canvas.drawPath(skirt, fill);
     }
     fill.setColor(color(COLORS.pillar));
-    for (const p of visiblePillars) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
-
-    canvas.restore();
+    for (const p of PILLARS) canvas.drawRect(Skia.XYWHRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h), fill);
   });
 
-// Camera-keyed cache for the world picture. Reused while the camera (x/y/zoom) is
-// byte-identical — i.e. while you're standing still and the chase camera has fully
-// settled — and re-recorded the instant it moves. Exact equality (no quantisation)
-// means the cached picture's baked camera always matches the live one, so the world
-// can never drift a sub-pixel against the interpolated entities drawn over it.
-let worldCache: { x: number; y: number; zoom: number; pic: SkPicture } | null = null;
+// Fixed depth makes the world picture camera-independent, so it's baked exactly ONCE
+// (lazily, on first use — it needs the loaded floor chunks from `scene`) and reused
+// forever. `worldPic` is reset by setRenderDebug when the mist toggle flips.
 const getWorldPicture = (scene: CombatScene): SkPicture => {
-  const { x, y, zoom } = scene.camera;
-  if (!worldCache || worldCache.x !== x || worldCache.y !== y || worldCache.zoom !== zoom) {
-    worldCache = { x, y, zoom, pic: recordWorldPicture(scene) };
-  }
-  return worldCache.pic;
+  if (!worldPic) worldPic = recordWorldPicture(scene);
+  return worldPic;
 };
 
 export const recordCombatScene = (scene: CombatScene): SkPicture => {
   // World geometry: refresh the cached, camera-keyed sub-picture OUTSIDE the main
-  // recorder (so there's no nested PictureRecorder). Re-records only when the camera
-  // moved; otherwise this is a cache hit and the cost is ~0. Timed into the `world`
-  // phase so the profiler shows it collapse to nothing while standing still.
+  // recorder (so there's no nested PictureRecorder). Baked ONCE now (fixed depth →
+  // camera-independent), so after the first frame this is a free cache hit.
   const _tw = PROFILING ? performance.now() : 0;
   const worldPic = getWorldPicture(scene);
   if (PROFILING) RENDER_PHASES.world += performance.now() - _tw;
@@ -586,21 +534,21 @@ export const recordCombatScene = (scene: CombatScene): SkPicture => {
     const { camera, anchor, player, weapon } = scene;
     const cfg = weapon.config;
 
-    // The drifting-mist shader for the FOG layers (the void mist lives in the cached
+    // The drifting-mist shader for the FOG layers (the void mist lives in the baked
     // world picture). makeShader is a JSI allocation, so build it once per frame.
-    const mistShader = fogEffect ? fogEffect.makeShader([scene.time]) : null;
+    const mistShader = !DEBUG.disableMist && fogEffect ? fogEffect.makeShader([scene.time]) : null;
 
-    // The cached world is screen-space (camera baked in), so it's drawn flat here,
-    // before the camera transform the dynamic content below uses.
-    canvas.drawPicture(worldPic);
-
-    // Camera transform for the dynamic, per-frame content (breakables, the sight-
-    // clipped live world, player UI). Identical bake to the world picture, so they
-    // line up exactly. translate(anchor) ∘ scale(zoom) ∘ translate(-camera).
+    // Camera transform: translate(anchor) ∘ scale(zoom) ∘ translate(-camera). The
+    // world picture is in WORLD space now, so it's drawn UNDER this transform along
+    // with the dynamic content (breakables, the sight-clipped live world, player UI) —
+    // one transform, everything lines up.
     canvas.save();
     canvas.translate(anchor.x, anchor.y);
     canvas.scale(camera.zoom, camera.zoom);
     canvas.translate(-camera.x, -camera.y);
+
+    // Static world (floor / pits / cliffs / walls / pillars), baked once, replayed here.
+    canvas.drawPicture(worldPic);
 
     const vMinX = camera.x - anchor.x / camera.zoom;
     const vMaxX = camera.x + anchor.x / camera.zoom;
@@ -701,28 +649,12 @@ export const recordCombatScene = (scene: CombatScene): SkPicture => {
     const hitRadius = cfg.reach + ENEMY_RADIUS;
     if (PROFILING) { const n = performance.now(); RENDER_PHASES.world += n - _t; _t = n; }
 
-    // The visibility polygon from the player: the area in direct line of sight,
-    // solved once per sim step by the caller (see GameScreen — computeVisibility is
-    // O(walls²), so it's cached, not redone per rendered frame). Here we just rebuild
-    // the cheap clip path from it — used both to clip the live world and to cut the
-    // lit hole out of the fog. (The solve uses the sim player position; the rest of
-    // the scene interpolates, so under load the lit edge can trail the body by up to
-    // one sim step — imperceptible on the large, soft sight bubble.)
-    const litPoly = scene.litPoly;
-    const hasSight = litPoly.length > 2;
-    const litPath = Skia.Path.Make();
-    if (hasSight) {
-      litPath.moveTo(litPoly[0]!.x, litPoly[0]!.y);
-      for (let i = 1; i < litPoly.length; i++) litPath.lineTo(litPoly[i]!.x, litPoly[i]!.y);
-      litPath.close();
-    }
-
-    // --- Live world, clipped to current sight. Enemies, their telegraphs,
-    // projectiles and damage numbers render only where the player can see RIGHT
-    // NOW, so they never linger in remembered (fogged) areas — memory shows you
-    // the room, not who's currently in it.
+    // --- Live world: enemies, their telegraphs, projectiles and damage numbers.
+    // Drawn UNCLIPPED now (the player line-of-sight polygon is gone) — the fog overlay
+    // below dims distant entities toward the lit-radius edge and the unexplored mask
+    // hides anything in undiscovered territory, so "you see what's near you" falls out
+    // of the fog rather than an expensive per-frame sight solve.
     canvas.save();
-    if (hasSight) canvas.clipPath(litPath, ClipOp.Intersect, true);
 
     // Drop shadows for flying enemies, beneath everything else: a flattened dark
     // ellipse on the ground south of the body, so a flyer reads as above the floor
@@ -850,69 +782,45 @@ export const recordCombatScene = (scene: CombatScene): SkPicture => {
     canvas.restore(); // end the current-sight clip
     if (PROFILING) { const n = performance.now(); RENDER_PHASES.live += n - _t; _t = n; }
 
-    // --- Fog of war: dark layers over everything outside current sight. The
-    // memory grid is rendered with a heavy blur (VISION.fogSoftness) so its
-    // square cells melt into soft mist rather than reading as blocks.
-    {
+    // --- Fog of war (simplified — no player line-of-sight). Two layers: a soft lit
+    // radius around the player (clear near you, fading to remembered-dim with
+    // distance), then the unexplored mask over cells you've never reached. No
+    // shadow-casting, no sight polygon. `disableFog` skips it (diagnostic).
+    if (!DEBUG.disableFog) {
       const halfW = anchor.x / camera.zoom;
       const halfH = anchor.y / camera.zoom;
-      // Overscan past the blur radius so the layers' own outer edges — which the
-      // blur softens — stay safely off-screen instead of darkening the margins.
+      // Overscan past the blur radius so the mask's own outer edge — which the blur
+      // softens — stays off-screen instead of darkening the margins.
       const over = Math.ceil(VISION.fogSoftness) + 8;
       const vl = camera.x - halfW - over;
       const vt = camera.y - halfH - over;
       const vw = (halfW + over) * 2;
       const vh = (halfH + over) * 2;
 
-      // Drifting mist drives the fog colour (the shared `mistShader` built once at
-      // the top of the frame); the dim and dark layers reuse the same noise + clock,
-      // so unexplored just reads as a denser version of the same churn. Null if the
-      // effect failed to compile (the flat shadowColor then stands in).
+      // (1) Lit radius + base dim: a single radial gradient around the player — clear
+      // out to `sightFalloff`, fading to the explored-dim level (`exploredAlpha`) by
+      // `sightRadius` and held there (Clamp). Drawn UNCLIPPED over the whole view, so
+      // everything beyond the bubble reads as remembered/dim and nearby entities stay
+      // clear — that's how "you see what's near you" works now without a sight solve.
       fill.setColor(color(VISION.shadowColor));
-
-      // (1) Dim memory layer: line-of-sight-blocked area (behind pillars/walls),
-      // dim regardless of distance. Drawn FLAT (no mist) — once you've discovered
-      // somewhere it reads as a calm remembered dim; only the unknown drifts.
-      // Even-odd punches the sight polygon out of the view rect; a tight blur
-      // softens the shadow edge.
+      fill.setShader(
+        Skia.Shader.MakeRadialGradient(
+          { x: player.x, y: player.y },
+          VISION.sightRadius,
+          [FOG_CLEAR, FOG_OPAQUE],
+          [VISION.sightFalloff, 1],
+          TileMode.Clamp,
+        ),
+      );
+      fill.setAlphaf(VISION.exploredAlpha);
+      fill.setMaskFilter(null);
+      canvas.drawRect(Skia.XYWHRect(vl, vt, vw, vh), fill);
       fill.setShader(null);
-      if (hasSight) {
-        const dim = Skia.Path.Make();
-        dim.setFillType(FillType.EvenOdd);
-        dim.addRect(Skia.XYWHRect(vl, vt, vw, vh));
-        dim.addPath(litPath);
-        fill.setAlphaf(VISION.exploredAlpha);
-        fill.setMaskFilter(sightBlur);
-        canvas.drawPath(dim, fill);
-      }
 
-      // (2) Sight-range falloff: WITHIN the sightline, fade clear → dim with
-      // distance so vision closes in at sightRadius even down an open corridor. A
-      // radial gradient (clipped to the sightline) does it smoothly and meets the
-      // dim layer at exploredAlpha, so the two are seamless.
-      if (hasSight) {
-        fill.setShader(
-          Skia.Shader.MakeRadialGradient(
-            { x: player.x, y: player.y },
-            VISION.sightRadius,
-            [FOG_CLEAR, FOG_OPAQUE],
-            [VISION.sightFalloff, 1],
-            TileMode.Clamp,
-          ),
-        );
-        fill.setAlphaf(VISION.exploredAlpha);
-        fill.setMaskFilter(null);
-        canvas.save();
-        canvas.clipPath(litPath, ClipOp.Intersect, true);
-        canvas.drawRect(Skia.XYWHRect(vl, vt, vw, vh), fill);
-        canvas.restore();
-      }
-
-      // Discovery (markVisible — updating the fog grid's `seen`) now happens in the
-      // sim step, so the grid is already current here. (3) Lay the extra-dark mist
-      // over every never-discovered cell in view. Explored cells are punched out as
-      // holes (they keep just the dim memory level); current sight is a subset of
-      // explored, so it stays clear without an extra clip.
+      // (2) Unexplored mask: the extra-dark drifting layer over every never-discovered
+      // cell in view (explored cells — those within the proximity reveal — are punched
+      // out as holes). The base dim is already laid by the radial above, so this only
+      // composites the unexplored extra (UNEXPLORED_EXTRA_ALPHA) on top.
       //
       // The mask is rebuilt **every frame but only over the viewport** — an
       // overscanned cell window — so its cost is bounded by screen size, NOT by how

@@ -173,8 +173,8 @@ entry. Extend by adding one entry.
 - **Content / data (Realmsmith):** add `door` to the breakable kinds (with a `lock.color`
   picker) and `key` to the object kinds (with a `color` prop). Author doors + at least enough
   reachable matching keys for the **critical path** (see solvability below).
-- **Persistence:** keys-held and doors-opened are **run-scoped** — resets each run, like
-  spawners. Nothing new for the save system.
+- **Persistence:** keys-held and doors-opened are **transient world state** — reset on death
+  (the world repopulates between deaths), like spawners. Nothing new for the save system.
 
 ## Solvability (a consequence of consumed keys)
 

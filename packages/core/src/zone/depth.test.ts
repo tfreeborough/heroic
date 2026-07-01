@@ -35,6 +35,15 @@ describe("wallLeanVector — south tilt + parallax", () => {
     const far = wallLeanVector(box, 600, 0).x;
     expect(Math.abs(far)).toBeGreaterThan(Math.abs(near));
   });
+
+  test("leanScale 0 drops the parallax — a fixed south tilt, camera-independent", () => {
+    // Used for the baked, fixed-depth world (no per-frame camera tracking).
+    for (const [cx, cy] of [[-100, 0], [600, 400]] as const) {
+      const v = wallLeanVector(box, cx, cy, 0);
+      expect(v.x).toBeCloseTo(0, 6); // no parallax lean, whatever the focus
+      expect(v.y).toBeCloseTo(ZONE_DEPTH.wallBase, 6); // just the fixed south tilt
+    }
+  });
 });
 
 describe("voidRimBands — south-tilt wall + parallax", () => {
@@ -62,6 +71,11 @@ describe("voidRimBands — south-tilt wall + parallax", () => {
     // North edge holds its tilt baseline from both sides.
     expect(northEdge(voidRimBands(rect, [rect], 0, -200)).intensity).toBeGreaterThan(0.5);
     expect(northEdge(voidRimBands(rect, [rect], 0, 200)).intensity).toBeGreaterThan(0.5);
+  });
+
+  test("leanScale 0 makes the cliff camera-independent (fixed depth for the baked world)", () => {
+    const south = (cy: number) => voidRimBands(rect, [rect], 0, cy, 0).find((b) => b.y0 === 10)!.intensity;
+    expect(south(-200)).toBeCloseTo(south(200), 6); // no parallax shift with the camera
   });
 
   test("skips an edge that borders another void rect (a meshed seam, not a real rim)", () => {

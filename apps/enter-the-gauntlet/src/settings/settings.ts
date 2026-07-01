@@ -1,5 +1,5 @@
 // Player-tunable settings, persisted to device storage. This is the first slice
-// of a save layer: meta-progression (Glory, lives, respawn point — see
+// of a save layer: the character roster (level, Talents, gear, lives — see
 // docs/design/progression.md) will reuse the same AsyncStorage-backed pattern,
 // so the load/save helpers are kept generic and versioned by key.
 
@@ -27,6 +27,24 @@ export interface GameSettings {
    * so it can be flipped on in a release build to profile real device performance.
    */
   showPerfOverlay: boolean;
+  /**
+   * Diagnostic: skip drawing the fog-of-war layers (the two heavy blur passes + mist).
+   * The JS profiler can't see GPU/raster cost, so toggling this and watching the frame
+   * rate tells you how much the fog actually costs to draw. Off by default.
+   */
+  disableFog: boolean;
+  /**
+   * Diagnostic: drop the per-pixel drifting-mist shader (flat fog + flat void pits
+   * instead). Isolates the procedural-shader raster cost from the blur cost. Off by default.
+   */
+  disableMist: boolean;
+  /**
+   * Diagnostic: push an EMPTY picture each frame instead of drawing the scene. The
+   * sim still runs; only the scene draw is skipped. If the frame rate stays pinned
+   * with this on, the cost is the present/compositing pipeline (not our drawing); if
+   * it jumps, the scene's GPU raster is the wall. Off by default.
+   */
+  disableSceneRender: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -36,6 +54,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   muted: false,
   leftHanded: false,
   showPerfOverlay: false,
+  disableFog: false,
+  disableMist: false,
+  disableSceneRender: false,
 };
 
 /** Versioned so a future settings-shape change can migrate rather than corrupt. */

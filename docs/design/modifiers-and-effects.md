@@ -4,7 +4,7 @@ Status: **agreed (v1, numbers placeholder)** · Applies to: both games · Last d
 
 The shared substrate under almost everything dynamic. One system so these are all *content*, not
 new code: gear stat bonuses, the pooled **minor effects** and **Relic signature effects**
-([equipment](./equipment.md)), **Perks** and **Masteries** ([progression](./progression.md)),
+([equipment](./equipment.md)), **Talents** ([progression](./progression.md)),
 **consumables**, and **status effects** (buffs/debuffs like burn/slow). Even the level-gap modifiers
 can ride it.
 
@@ -24,7 +24,7 @@ what they do.
 
 Conflating these is what makes modifier systems rot. They're independent:
 
-- **Lifecycle** — how long it lives: permanent (Mastery) / run (Perk) / while-equipped (gear) / timed
+- **Lifecycle** — how long it lives: permanent (Talent) / while-equipped (gear) / timed
   (consumable, status). This is *persistence* only (the progression "layers").
 - **Stacking** — how modifiers combine into a number (below).
 - **Trigger** — always-on, or fires on a hook.
@@ -79,7 +79,7 @@ around this one curve.
 - **Percent is applied *after* the curve** — so it **doesn't get eaten by diminishing returns.** This
   gives flat and percent distinct roles: **flat = front-loaded power that fades; percent = scales
   forever** (the late-game lever once flat has flattened).
-- **`more` multipliers** are a **rare, reserved** category for *signature* Relic/Mastery effects — each
+- **`more` multipliers** are a **rare, reserved** category for *signature* Relic/Talent effects — each
   multiplies separately, so "doubles your crit damage" feels build-defining instead of being one more
   additive number. Most percent bonuses are additive with each other.
 
@@ -88,7 +88,7 @@ around this one curve.
 An effect subscribes to a **hook** and runs when the game emits it with context (attacker, target,
 damage, …). Starting hook catalogue (extend as needed):
 
-`onRunStart` · `onAttack` · `onHitDealt` · `onCrit` · `onKill` · `onHitTaken` · `onDodge` · `onParry` ·
+`onRespawn` · `onAttack` · `onHitDealt` · `onCrit` · `onKill` · `onHitTaken` · `onDodge` · `onParry` ·
 `onBlock` · `onTick` · `onLevelUp` · `onEnterRealm` · `onDeath`
 
 **Authoring = data + coded handlers.** An effect is data referencing a named, coded handler:
@@ -127,13 +127,12 @@ Examples: **burn** = `{ onTick: 3 dmg, duration: 4s, policy: stack }`; **slow** 
 
 | Source | Lifecycle | Typically provides |
 | --- | --- | --- |
-| Masteries (Glory) | permanent | flat/percent stat modifiers |
-| Perks (level-up) | run | stat modifiers + some effects |
+| Talents (level-up) | permanent | flat/percent stat modifiers + some effects |
 | Equipment | while equipped | flat/percent stats; minor effects; Relic signature effects |
 | Consumables | timed | status effects (temporary buffs) |
 | Status effects | timed | applied by procs, enemies, consumables |
 
-Stats **recompute on change** (when a modifier set changes — equip/unequip, Perk picked, buff expires),
+Stats **recompute on change** (when a modifier set changes — equip/unequip, Talent picked, buff expires),
 not every frame.
 
 ## Where this lives (for implementation later)

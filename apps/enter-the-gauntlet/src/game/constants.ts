@@ -122,12 +122,12 @@ export const VISION = {
   /** Current clear-vision range, world px. Beyond this — even down an open
    *  sightline — the view fades into fog, so vision closes in around you. Pulled
    *  in from 360 to tighten the lit bubble for a more claustrophobic feel. */
-  sightRadius: 320,
+  sightRadius: 460,
   /** Where the clear→fog fade begins, as a fraction of sightRadius (0..1).
    *  Inside this you see fully; from here to sightRadius it ramps to the dim.
    *  Dropped from 0.55 so the dimming starts much closer to the player — distant
    *  geometry reads markedly darker, the view crowding in around you. */
-  sightFalloff: 0.38,
+  sightFalloff: 0.50,
   /** Exploration range, world px. Cells within this AND in line of sight become
    *  "explored" (dim memory). Kept a hair above sightRadius so a thin ring just
    *  past clear vision still gets discovered as you move. Tightened from 500 so
@@ -186,6 +186,32 @@ export const LOS_RECHECK_STEPS = 6;
  * or two later, which is invisible. Spreads the spikes that made moving laggy.
  */
 export const MAX_REPATHS_PER_STEP = 6;
+
+/**
+ * Flow-field pathfinding (docs/design/flow-field-pathfinding.md). One flood from the
+ * player gives the whole crowd its "route toward the player around walls" in O(1),
+ * replacing per-enemy A* while it covers the mover.
+ *
+ * `FLOW_RADIUS` — world px the flood reaches from the player. Must comfortably cover
+ * the region where enemies actually path (roughly the on-screen sim radius): an
+ * enemy inside it reads the field, one outside falls back to A* (and off-screen ones
+ * don't path at all). Bigger = more of the fight covered, but a larger flood.
+ */
+export const FLOW_RADIUS = 2400;
+/**
+ * Sim steps between flow-field re-floods. The field goes stale as the player moves,
+ * but slowly, and the routing tolerates it (same trade as the A* re-path throttle).
+ * Higher = cheaper, staler.
+ */
+export const FLOW_RESWEEP_STEPS = 6;
+/**
+ * Enemy count at/above which the flow field is used; below it, enemies fall back to
+ * per-enemy A*. The flood is a FIXED cost (independent of enemy count), so it only
+ * pays off once enough enemies would otherwise be running their own searches — below
+ * the threshold a handful of A* paths is cheaper than flooding the map. This keeps the
+ * flow field a pure win: it kicks in exactly when the crowd is big enough to need it.
+ */
+export const FLOW_MIN_ENEMIES = 12;
 
 /**
  * Distance-of-detail cutoff for the *uncapped* per-enemy AI cost — the line-of-

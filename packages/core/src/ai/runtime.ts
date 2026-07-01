@@ -1,5 +1,6 @@
 import { add, length, type Vec2 } from "../math/vec2";
 import { pathClear } from "../pathfinding/navgrid";
+import { flowAt, flowCovers } from "../pathfinding/flowField";
 import { clampSpeed, separation } from "./steering";
 import { initPathState, pursue, type PathState } from "./pursue";
 import type { CommonConfig, EnemyPerception } from "./perception";
@@ -122,15 +123,28 @@ export const tickBrain = (brain: Brain, perception: EnemyPerception, dt: number)
     speed <= normalSpeed + 1e-6 &&
     !pathClear(perception.navGrid, perception.selfPos, perception.playerPos)
   ) {
-    move = pursue(
-      perception.selfPos,
-      perception.playerPos,
-      speed,
-      perception.navGrid,
-      brain.nav,
-      dt,
-      perception.repathBudget,
-    );
+    // Prefer the shared flow field — one flood from the player, read in O(1) — when it
+    // covers this mover; both it and `pursue` answer "route toward the player around
+    // walls", but the field doesn't scale with crowd size. Fall back to the per-enemy
+    // A* when there's no field, the mover is beyond the flooded radius, or it sits in
+    // the player's own cell (no direction). See docs/design/flow-field-pathfinding.md.
+    const flow =
+      perception.flowField && flowCovers(perception.flowField, perception.selfPos)
+        ? flowAt(perception.flowField, perception.selfPos)
+        : null;
+    if (flow && (flow.x !== 0 || flow.y !== 0)) {
+      move = { x: flow.x * speed, y: flow.y * speed };
+    } else {
+      move = pursue(
+        perception.selfPos,
+        perception.playerPos,
+        speed,
+        perception.navGrid,
+        brain.nav,
+        dt,
+        perception.repathBudget,
+      );
+    }
   }
 
   // Separation is scaled to the *base* config speed (not a chaser's ramped speed

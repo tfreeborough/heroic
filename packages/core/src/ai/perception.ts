@@ -1,5 +1,6 @@
 import { angleDiff, angleTo, distance, type Vec2 } from "../math/vec2";
 import type { NavGrid } from "../pathfinding/navgrid";
+import type { FlowField } from "../pathfinding/flowField";
 import type { RepathBudget } from "./pursue";
 
 /**
@@ -31,6 +32,14 @@ export interface EnemyPerception {
    * path is blocked. Omitted/null ⇒ no pathfinding (the off-screen LOD just steers).
    */
   navGrid?: NavGrid | null;
+  /**
+   * Optional shared flow field: the whole crowd's "which way to the player, around
+   * walls" answer, flooded once from the player and read in O(1) (see
+   * docs/design/flow-field-pathfinding.md). When present AND it covers the mover, the
+   * runtime routes via a field lookup instead of a per-enemy A*. Omitted/uncovered ⇒
+   * fall back to `pursue` (A*). Must match `navGrid`'s domain (ground vs flying).
+   */
+  flowField?: FlowField | null;
   /**
    * Optional shared per-step A* allowance. Passed to `pursue` so the whole crowd
    * re-paths at most N times per step (the rest defer to a later step), bounding

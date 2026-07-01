@@ -9,6 +9,7 @@ export * from "./movement/locomotion";
 export * from "./pathfinding/grid";
 export * from "./pathfinding/astar";
 export * from "./pathfinding/navgrid";
+export * from "./pathfinding/flowField";
 export * from "./ai/steering";
 export * from "./ai/pursue";
 export * from "./ai/perception";

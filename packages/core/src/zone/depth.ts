@@ -82,11 +82,11 @@ export const extrudeRect = (box: Aabb, dx: number, dy: number): number[][] => {
  * The two sum, so an off-axis wall shows both its south face and a side face (a fuller
  * 3D read), while the south tilt keeps every wall grounded.
  */
-export const wallLeanVector = (box: Aabb, cx: number, cy: number): Vec2 => {
+export const wallLeanVector = (box: Aabb, cx: number, cy: number, leanScale = 1): Vec2 => {
   const tx = cx - box.x;
   const ty = cy - box.y;
   const dist = Math.hypot(tx, ty);
-  const lean = dist * ZONE_DEPTH.wallLean;
+  const lean = dist * ZONE_DEPTH.wallLean * leanScale;
   const lx = dist < 1e-3 ? 0 : (tx / dist) * lean;
   const ly = dist < 1e-3 ? 0 : (ty / dist) * lean;
   return { x: lx, y: ly + ZONE_DEPTH.wallBase };
@@ -155,7 +155,13 @@ const subtractSpans = (lo: number, hi: number, blockers: readonly Span[]): Span[
  *     far wall you look across at), which shifts smoothly as you move.
  * `voids` is the full meshed set, for the abutment test.
  */
-export const voidRimBands = (rect: Aabb, voids: readonly Aabb[], cx: number, cy: number): RimBand[] => {
+export const voidRimBands = (
+  rect: Aabb,
+  voids: readonly Aabb[],
+  cx: number,
+  cy: number,
+  leanScale = 1,
+): RimBand[] => {
   const d = ZONE_DEPTH.voidDepth;
   const lip = ZONE_DEPTH.lip;
   const left = rect.x - rect.w / 2;
@@ -170,7 +176,7 @@ export const voidRimBands = (rect: Aabb, voids: readonly Aabb[], cx: number, cy:
     const len = Math.hypot(dx, dy) || 1;
     const tilt = Math.max(0, -ny);
     const parallax = Math.max(0, (nx * dx + ny * dy) / len);
-    const intensity = Math.min(1, ZONE_DEPTH.voidTilt * tilt + ZONE_DEPTH.voidLean * parallax);
+    const intensity = Math.min(1, ZONE_DEPTH.voidTilt * tilt + ZONE_DEPTH.voidLean * parallax * leanScale);
     bands.push({ ...band, intensity });
   };
 

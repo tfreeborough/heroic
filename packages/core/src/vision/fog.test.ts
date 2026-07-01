@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Vec2 } from "../math/vec2";
-import { createFogGrid, markVisible, resetFog } from "./fog";
+import { createFogGrid, markVisible, markVisibleCircle, resetFog } from "./fog";
 
 /** Centre of cell (col, row) in world space, for asserting on `seen`. */
 const cellSeen = (fog: ReturnType<typeof createFogGrid>, col: number, row: number): boolean =>
@@ -95,6 +95,31 @@ describe("markVisible", () => {
     // Re-marking the same area sees nothing new → the buffer is cleared, not appended.
     markVisible(fog, square, { x: 50, y: 50 }, wide, newly);
     expect(newly).toHaveLength(0);
+  });
+});
+
+describe("markVisibleCircle", () => {
+  test("reveals cells within the radius and leaves the rest unseen", () => {
+    const fog = createFogGrid(100, 10); // 10×10 grid of 10px cells
+    const changed = markVisibleCircle(fog, { x: 50, y: 50 }, 15);
+    expect(changed).toBe(true);
+    expect(cellSeen(fog, 5, 5)).toBe(true); // cell centre (55,55) is ~7px from origin
+    expect(cellSeen(fog, 0, 0)).toBe(false); // far corner stays unexplored
+  });
+
+  test("fills a disc — every cell whose centre is within the radius", () => {
+    // No occluders in the API at all; it's pure proximity (the point of the change).
+    const fog = createFogGrid(100, 10);
+    markVisibleCircle(fog, { x: 50, y: 50 }, 40);
+    expect(cellSeen(fog, 8, 5)).toBe(true); // (85,55) ≈ 35.4px away, inside 40
+    expect(cellSeen(fog, 5, 1)).toBe(true); // (55,15) ≈ 35.4px away, inside 40
+    expect(cellSeen(fog, 9, 9)).toBe(false); // (95,95) far corner, outside
+  });
+
+  test("returns false when nothing new is revealed", () => {
+    const fog = createFogGrid(100, 10);
+    expect(markVisibleCircle(fog, { x: 50, y: 50 }, 15)).toBe(true);
+    expect(markVisibleCircle(fog, { x: 50, y: 50 }, 15)).toBe(false); // already seen
   });
 });
 

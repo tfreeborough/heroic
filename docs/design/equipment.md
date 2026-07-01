@@ -80,7 +80,7 @@ Example: *Worn Iron Sword → Fine → Superior → Masterwork Iron Sword*; a Re
 > Full design lives in [modifiers-and-effects](./modifiers-and-effects.md); this is the summary.
 
 Special accessories (a ring that **+i-frame duration**, or **+speed burst on kill**) can't be plain
-stats — they need logic. And the *same* system powers Perks, Masteries, consumables, and (later) set
+stats — they need logic. And the *same* system powers Talents, consumables, and (later) set
 bonuses, so it's a shared substrate, not a one-off. Two kinds of modification:
 
 - **Stat & rule modifiers (pure data)** — "+10 Strength" (stat), or "+0.3s i-frames" / "+10° arc"
@@ -116,24 +116,22 @@ Three containers, deliberately bounded so the armory never bloats:
 
 | Container | Persists? | Holds |
 | --- | --- | --- |
-| **Equipped** | survives death | what's on your body. On **respawn**, pieces you still meet the level for stay equipped; the rest drop to the **Bag** |
-| **Bag** | run-scoped | fresh loot + consumables + un-equippable gear. **Deleted on death.** |
-| **Bank** (Banker) | across runs | **4 slots**, pay a **fee**, **universal across all settlements** |
+| **Equipped** | survives death | what's on your body — it respawns with you (the character never de-levels, so nothing un-equips) |
+| **Bag** | **wiped on death** | fresh loot + consumables + un-equippable gear — the at-risk container |
+| **Bank** (Banker) | survives death | **4 slots**, pay a **fee**, **universal across all settlements** |
 
-- **Items have an equip-level requirement.** Since runs restart at level 1 (or `starting_level`),
-  your high-level gear is unusable until you re-level into it — each run is a genuine re-climb.
-- **Equipping is how you keep a find** — an upgrade above your level sits in the at-risk Bag until you
-  survive long enough to equip it. (Drops are level-matched to the realm, so most finds are securable
-  soon; the occasional over-level find is the fragile, exciting case.)
-- **The Banker** softens the loss: bank up to 4 pieces you can't use yet and reclaim them in any future
-  run. The cap forces a choice — you can't protect everything. Interlocks with `starting_level`: more
-  Glory in starting level → more gear stays *equipped* on respawn → less to bank. And early levels get
-  trivial as you power up, shrinking the loss window.
+- **Items have an equip-level requirement.** With a persistent level this only bites on
+  **over-level finds** — a drop above your level can't be worn yet.
+- **Equipping is how you keep a find** — an upgrade above your level sits in the at-risk Bag until
+  you level into it. (Drops are level-matched to the realm, so most finds are securable soon; the
+  occasional over-level find is the fragile, exciting case.)
+- **The Banker** softens the loss: bank up to 4 pieces you can't use yet and reclaim them at any
+  settlement later. The cap forces a choice — you can't protect everything.
 
 ## Acquisition
 
 - **Drops** (primary) — level/realm-scaled; **`luck` boosts rarity odds**.
-- **Vendors** in settlements — guaranteed but plainer gear, bought with (run-scoped) gold.
+- **Vendors** in settlements — guaranteed but plainer gear, bought with gold.
 - **Quest rewards** — fixed special pieces; a natural home for some Relics.
 
 ## Durability (from progression)
@@ -163,6 +161,6 @@ Repair cost scales with item level/rarity (a gold sink). Loop: find better + kee
 - **Level band `[X,Y]`** — the level range a base item exists in; it ages out rather than scaling up.
 - **Rarity** — quality tier (White→Gold); sets the stat roll min/max. **Relic** — top tier, unique effect.
 - **`Armor` stat** — always-on damage reduction (diminishing, level-relative), vs the dodge/parry/block trio.
-- **Modifier** — a stat/rule change from an item/Perk/etc. **Effect / hook** — logic that runs on a named
+- **Modifier** — a stat/rule change from an item/Talent/etc. **Effect / hook** — logic that runs on a named
   game event (`onKill`, …). **Encumbrance** — the speed penalty for carrying over your Strength capacity.
-- **Equipped / Bag / Bank** — survives-death / run-scoped-and-wiped / 4-slot-cross-run-stash.
+- **Equipped / Bag / Bank** — survives-death / wiped-on-death / 4-slot-protected-stash.

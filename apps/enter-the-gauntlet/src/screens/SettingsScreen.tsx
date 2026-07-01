@@ -72,6 +72,24 @@ export const SettingsScreen = ({ navigation }: Props) => {
             value={settings.showPerfOverlay}
             onChange={(v) => update({ showPerfOverlay: v })}
           />
+          <ToggleRow
+            label="Disable fog of war"
+            description="Skip the fog blur + mist layers (test their GPU cost)"
+            value={settings.disableFog}
+            onChange={(v) => update({ disableFog: v })}
+          />
+          <ToggleRow
+            label="Disable drifting mist"
+            description="Flat fog and void pits, no per-pixel mist shader"
+            value={settings.disableMist}
+            onChange={(v) => update({ disableMist: v })}
+          />
+          <ToggleRow
+            label="Skip scene render"
+            description="Draw nothing — isolates the present/UI cost from scene drawing"
+            value={settings.disableSceneRender}
+            onChange={(v) => update({ disableSceneRender: v })}
+          />
         </View>
       </ScrollView>
     </View>

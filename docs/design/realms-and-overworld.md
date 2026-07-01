@@ -49,25 +49,22 @@ Two distinct things sharing the root word:
   — the "get home / escape" button, *separate* from the between-nodes fast-travel. (This is the function
   the earlier docs called the "Waystone item.")
 
-## The respawn ↔ restart-at-level-1 reconciliation
+## Respawn binding (simplified by the progression v2 pivot)
 
-The tension: respawns advance *forward*, but runs restart at **level 1 / `starting_level`** — so a hearth
-bound in a level-20 realm would drop you into instant death. The resolution ties several systems together:
+Your character keeps their level through death ([progression](./progression.md) v2), so a bind at
+the frontier is never a death trap — respawning drops you back at your own level:
 
-- Your hearth is a **rebindable choice** among settlements you've reached — "permanent" means the
-  settlement stays unlocked, not that you're forced to the frontier.
-- **You advance your bind forward only as fast as `starting_level` (Glory) lets you survive restarting
-  there.** *How aggressively to push your respawn forward* becomes a real, self-gated player decision — no
-  system enforcement needed.
-- The **fast-travel network** removes backtrack tedium: hop to an appropriate-level settlement, re-level,
-  push your frontier.
-- So each run = re-level from the start, climb back via the network, push further.
+- Your hearth is a **rebindable choice** among settlements you've reached — bind at the frontier
+  to keep pushing, or somewhere safer to farm gear/gold below your band.
+- The **fast-travel network** removes backtrack tedium: hop between attuned Waystones freely.
+- The level-gap, not a `starting_level` stat, is what gates how far forward you can usefully bind.
 
-Interlock: **realms ↔ settlements ↔ respawn ↔ `starting_level` ↔ fast-travel ↔ level-gap** all lock together.
+Interlock: **realms ↔ settlements ↔ respawn ↔ fast-travel ↔ level-gap** still lock together —
+minus v1's re-level-from-scratch climb.
 
 ## World-state persistence
 
-Permanent per character (the save system stores it, alongside Glory/stats/gear/Bank/lives):
+Permanent per character (the save system stores it, alongside level/stats/Talents/gear/Bank/lives):
 **attuned Waystones / unlocked settlements**, the **discovered map**, and **quest state**. Geography is
 static; enemy population is dynamic.
 

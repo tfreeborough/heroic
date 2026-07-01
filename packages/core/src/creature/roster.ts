@@ -125,7 +125,7 @@ const creature = <K extends ArchetypeId>(
 const ZOMBIE_BRAIN: ChaserConfig = {
   speed: 110,
   separationRadius: 56,
-  aggroRadius: 480,
+  aggroRadius: 580,
 };
 
 /**
@@ -136,7 +136,7 @@ const ZOMBIE_BRAIN: ChaserConfig = {
 const WOLF_BRAIN: CirclerConfig = {
   speed: 240,
   separationRadius: 56,
-  aggroRadius: 640,
+  aggroRadius: 760,
   orbitDistance: 170,
   /**
    * Prowl: circling runs at this fraction of full speed. Full-speed strafing
@@ -159,8 +159,8 @@ const WOLF_BRAIN: CirclerConfig = {
 const AMBUSHER_BRAIN: AmbusherConfig = {
   speed: 320,
   separationRadius: 56,
-  triggerRadius: 300,
-  releaseRadius: 500,
+  triggerRadius: 340,
+  releaseRadius: 560,
 };
 
 /**
@@ -186,7 +186,7 @@ const CASTER_REACH = 240;
 const ARCHER_BRAIN: KiterConfig = {
   speed: 205,
   separationRadius: 56,
-  aggroRadius: 620,
+  aggroRadius: 740,
   preferredRange: standoff(ARCHER_REACH, 50),
   rangeBand: 50,
 };
@@ -194,7 +194,7 @@ const ARCHER_BRAIN: KiterConfig = {
 const CASTER_BRAIN: KiterConfig = {
   speed: 200,
   separationRadius: 56,
-  aggroRadius: 640,
+  aggroRadius: 760,
   preferredRange: standoff(CASTER_REACH, 50),
   rangeBand: 50,
 };
@@ -210,7 +210,7 @@ const CHARGER_BRAIN: ChargerConfig = {
   speed: 130,
   maxSpeed: 640,
   separationRadius: 56,
-  aggroRadius: 560,
+  aggroRadius: 680,
   chargeRange: 300,
   windupTime: 0.55,
   dashDuration: 0.9,
@@ -225,14 +225,14 @@ const CHARGER_BRAIN: ChargerConfig = {
 const BAT_BRAIN: ChaserConfig = {
   speed: 205,
   separationRadius: 40,
-  aggroRadius: 600,
+  aggroRadius: 720,
 };
 
 /** Wizard: a kiter that hangs well back (big preferredRange) and summons. */
 const WIZARD_BRAIN: KiterConfig = {
   speed: 175,
   separationRadius: 56,
-  aggroRadius: 760,
+  aggroRadius: 900,
   preferredRange: 360,
   rangeBand: 60,
 };

@@ -108,3 +108,34 @@ export const markVisible = (
   }
   return changed;
 };
+
+/**
+ * Mark every cell within `radius` of `origin` as seen — a plain proximity reveal that
+ * ignores walls. This is the cheap exploration-fog discovery for games without a
+ * line-of-sight polygon: O(cells in the radius box), no visibility solve. Returns true
+ * if any previously-unseen cell became seen (so callers can skip cached-render rebuilds
+ * on frames that didn't grow the explored area).
+ */
+export const markVisibleCircle = (fog: FogGrid, origin: Vec2, radius: number): boolean => {
+  const { cols, rows, cellSize, seen } = fog;
+  const r2 = radius * radius;
+  const r0 = Math.max(0, Math.floor((origin.y - radius) / cellSize));
+  const r1 = Math.min(rows - 1, Math.floor((origin.y + radius) / cellSize));
+  const c0 = Math.max(0, Math.floor((origin.x - radius) / cellSize));
+  const c1 = Math.min(cols - 1, Math.floor((origin.x + radius) / cellSize));
+  let changed = false;
+  for (let r = r0; r <= r1; r++) {
+    const dy = (r + 0.5) * cellSize - origin.y;
+    const base = r * cols;
+    for (let c = c0; c <= c1; c++) {
+      const dx = (c + 0.5) * cellSize - origin.x;
+      if (dx * dx + dy * dy > r2) continue;
+      const idx = base + c;
+      if (seen[idx] === 0) {
+        seen[idx] = 1;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+};

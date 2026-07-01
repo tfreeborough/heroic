@@ -1,47 +1,113 @@
-# Progression & the Death Loop
+# Progression, Characters & Lives
 
-Status: **agreed (v1, numbers placeholder)** · Applies to: both games · Last decided: 2026-06-09
+Status: **agreed (v2, numbers placeholder)** · Applies to: both games · Last decided: 2026-07-01
 
-The meta-game that ties everything together: a **roguelite** (permanent progression that
-accumulates across deaths) wearing **WoW's** world and RPG clothing. Pulls in the stats that
-[combat](./combat.md) and [player-movement-and-targeting](./player-movement-and-targeting.md)
-consume, and is the home for the canonical stat list.
+The meta-game that ties everything together: **one persistent character on a single progression
+track, with purchasable lives as the stakes** — WoW's world and RPG clothing, without a roguelite
+reset. Pulls in the stats that [combat](./combat.md) and
+[player-movement-and-targeting](./player-movement-and-targeting.md) consume, and is the home for
+the canonical stat list.
 
-> **Roguelite / meta-progression** = upgrades that *persist across runs and deaths*, so you get
-> permanently stronger over many attempts (vs. a roguelike where death resets everything).
+## The v1 → v2 pivot (2026-07-01)
 
-## The spine: three timescales, hinged on death
+v1 was a roguelite death loop: die → this run's levels convert to **Glory** → buy permanent
+**Masteries** → restart at level 1, with timed life-refills gating runs per day. v2 removes the
+run/meta split entirely. Why:
 
-| Timescale | Resets? | Contains |
+- **The purchase moment is stronger.** Players pay far more to *keep* something they've built
+  than to buy extra play time (loss aversion). "Your level-20 character has fallen — revive, or
+  start again?" is the classic point-of-loss converter; v1's refills only sold sessions.
+- **One track is simpler and more tactile.** No in-game/out-of-game leveling split, no conversion
+  currency, no post-death shopping screen — every upgrade decision happens live, in the world.
+
+Trade-offs accepted (recorded so future-us remembers this was deliberate):
+
+- **Content consumption** — a persistent character climbs authored content *once*. Replay must
+  come from new characters with different builds; endless/prestige content moves up the
+  priority list.
+- **Run variety is gone** — v1's per-run Perk re-picks were the variety engine; variety now
+  lives across characters (and a possible respec sink later).
+- **Difficulty must respect loss aversion** — death now has real stakes, so level-gap tuning and
+  life-grant placement must avoid pinning a player between "risk permadeath" and "farm nothing"
+  (see Lives).
+
+Gone from v1: Glory, Masteries, per-run levels, `starting_level`, the post-death upgrade screen,
+run-scoped gold, the timed lives refill.
+
+## Characters & the roster
+
+You create **characters**; the character-select screen is a **roster** of them, living and
+fallen. A character owns *everything*: level & XP, stat growth, **Talents**, equipment, gold,
+**lives**, checkpoints/Waystones, discovered map & quest state. Nothing is account-level except
+the roster itself (whether *purchased* lives are account-wide or per-character is open, below).
+Build variety = rolling a new character down a different Talent path.
+
+## The spine: one timescale (plus buffs)
+
+| Layer | Ends when | Contains |
 | --- | --- | --- |
-| **Per-run** | resets on death | your level (starts at 1 or your bought `starting_level`); Perks picked this run; consumables; **gold (starts at 0)**; current HP/mana |
-| **Permanent** | survives death | **Glory** + the stat upgrades it buys; **equipment** (kept, with durability); mounts/companions; saved **respawn point**; attuned **Waystones**; raised **lives cap**; unlocked Masteries |
-| **Daily-gated** | refills over real time | **lives** (default max 3, +1 / 6h — placeholder) |
+| **Character** | permadeath (fallen — revivable) | level/XP · stat growth · Talents · equipment · gold · lives · checkpoints/Waystones · map & quest state |
+| **Temporary** | timer / expiry | consumables & status effects (timed buffs/debuffs) |
+| **At-risk** | wiped on death | the **Bag** (unequipped, unbanked loot — see [equipment](./equipment.md)) |
 
-**Death is the hinge.** On death: convert this run's levels → **Glory**, end the run, **spend a
-life**, then a **post-death screen** — for **character upgrades only**: spend Glory (Masteries) and
-choose where to respawn / which character. Then respawn (if a life is available; else wait). Glory
-is **never** spent in the world — always this screen. **Gear and the Bank are *not* here:** gear
-goes to your **inventory**, and the **Bank** is accessed in-world at **settlements/camps** (below).
+## Death & lives (the loop)
 
-## Two currencies, two jobs
+**Death with a life available:** spend **1 life** → respawn at your checkpoint with level,
+Talents, gear, and gold intact. Death still costs: the life, your **Bag** (unsecured loot), and
+a **durability hit** to equipped gear (placeholder — a gold sink and a sting, not a reset).
 
-- **Glory** — permanent power. Granted on *every* death (deeper run = more Glory → faster
-  permanent growth: the push-further incentive). Spent on permanent upgrades (base stats,
-  `starting_level`, speed, reach, attack_speed, dodge, parry, block, luck, lives cap…).
-- **Gold** — the run-scoped economy. **You start every run at 0**; a Mastery can grant
-  starting gold ("begin each run with +X gold"). Buys consumables, gear, mounts, companions.
+**Death with no lives → Fallen.** The character becomes **fallen**: unplayable, parked on the
+roster, never auto-deleted. From the roster you choose:
+
+- **Revive** — buy lives and continue at your level with everything intact. No time limit — a
+  fallen level-20 sitting on the roster *is* the standing offer.
+- **Start again** — create a new character at level 1 (and try a different build).
+
+**Where lives come from** (all numbers placeholder):
+
+- **New-character stock** — start with **3**.
+- **Milestone grants** — first-time achievements: clearing a zone, downing a boss, level
+  milestones. Earned and finite per character — the free player's supply. *Placement is the
+  tuning knife-edge:* grants must land often enough that a walled free player isn't pinned
+  between "risk permadeath" and "farm trivial XP."
+- **Purchase** — the monetization surface (below).
+- **No timed refill** — v1's +1/6h energy gate is cut. Scarcity is what makes a life worth
+  paying for; a timer would quietly revive every fallen character for free.
+
+## Leveling & Talents (all in-world, all live)
+
+Kill creatures → XP → levels (under-level kills give trivial XP — the level-gap applied to XP).
+**There is no level cap** — XP-to-next escalates forever, and the trivial-XP rule means the
+frontier zone is the real ceiling (the content caps you, not a number).
+
+1. **Every level → pick a minor Talent** (1 of a few offered) from **tiered chains** with
+   fixed, authored values (*Mighty I → II → …*) — stat growth itself rides the Talent system,
+   and depth-vs-breadth across chains is the player's optimization game.
+2. **Milestone levels → pick a major Talent** (1 of N, authored) — the build-defining choices.
+
+Talents replace *both* v1 systems (run-scoped Perks and Glory-bought Masteries) with one:
+permanent picks made live at level-up. Pick-1-of-N keeps choices interesting; permanence makes
+them weighty — Talents *are* character identity now. (**Respec** — paying to re-pick — is open:
+gold sink, paid, or absent.) Classes, the milestone schedule, and the Talent catalogue live in
+[characters-and-talents](./characters-and-talents.md).
+
+## One currency: gold
+
+**Gold is persistent on the character** (no more start-at-0 runs). Earned from kills, loot, and
+quests; spent on **repair**, **consumables**, and **gear** — gold does **not** buy character
+growth (decided 2026-07-01: levels/Talents/abilities are purely XP-driven; camp ability-trainers
+were considered and cut). Persistence brings **inflation risk** — sinks (repair costs,
+consumable prices) must scale with earnings, a real tuning surface v1's spend-before-you-die
+economy didn't have.
 
 ## The layered stat model (bridge to combat)
 
-Your effective stats at any moment are the sum of four layers — this is what combat reads, and
-the real job of "stats" as a system:
+Your effective stats at any moment are the sum of three layers — this is what combat reads:
 
 ```
-effective stat = permanent (Glory upgrades)
-               + per-run    (levels gained this run + Perks)
+effective stat = character  (base + per-level growth + Talents)
                + equipment  (gear bonuses, durability-gated)
-               + consumables(active temporary buffs)
+               + temporary  (consumables / status effects)
 ```
 
 ### Canonical character stats
@@ -59,61 +125,34 @@ effective stat = permanent (Glory upgrades)
 | **attack_speed** | attack-cycle cadence |
 | **dodge / parry / block** | the damage-intake pipeline (block needs a shield) |
 | **luck** | small nudge to crit *and* to dodge/parry/block |
-| **starting_level** | (Glory) the level a run begins at |
 
 *(`strength`'s fatigue + carry-capacity roles imply an encumbrance/exertion system — its own
-future doc. Combat only uses the physical-power part.)*
-
-## In-run leveling = the variety engine
-
-Within a run you level by killing creatures. Leveling does two things:
-
-1. **Every level → a stat boost** (run-scoped; gone on death).
-2. **Milestone levels → pick a Perk** (1 of N) — a temporary, this-run-only modifier.
-
-The Perk picks are what make each run feel different and let players **try different
-strategies** run to run (the roguelite "boon pick" pattern — Hades/Vampire-Survivors-style).
-Three customization layers, cleanly separated:
-
-- **Glory** → permanent, slow forever-growth.
-- **Perks** → per-run build variety (from leveling).
-- **Gold** → gear / consumables / mounts / companions.
+future doc. Combat only uses the physical-power part. v1's `starting_level` stat is gone — there
+are no resets to start from.)*
 
 ## Equipment & durability
 
-Equipment **persists through death** (you keep what you've equipped — losing hard-won gear each
-death would feel awful). To keep *discovery* meaningful without making gear run-scoped:
+Equipment persists trivially now (the character never resets), so the tension moves entirely to
+**loot risk** and **upkeep**:
 
-- **Durability is use-based** — gear wears as you fight.
-- A worn-out item is **disabled until repaired** (not destroyed) — repair costs *this run's* gold
-  at a settlement. Destroying finds felt too punishing.
-- The loop: **find better gear** + **keep what you have working** (repair) + a steady **gold sink**.
+- The **Bag** (fresh, unequipped loot) is **wiped on death** — equip it or bank it to keep it.
+- **Durability is use-based** — gear wears as you fight (plus the on-death hit above); a
+  worn-out item is **disabled until repaired** (never destroyed) — repair costs gold at a
+  settlement.
+- The loop: **find better gear** + **keep what you have working** + a steady **gold sink**.
 
-The full gear system (slots, item levels, rarity — "like WoW") is **its own doc later**; here we
-only fix how it sits in the death loop and that it feeds the stat layers.
+Full system (slots, item levels, rarity) in [equipment](./equipment.md).
 
 ## Settlements / hubs
 
-Each realm has 1-2 settlements. Run-scoped gold + durability make settlements the **in-run hub**
-where you turn *this run's* gold into staying power **before you lose it**:
+Each realm has 1-2 settlements — the in-world hub:
 
 - **repair** gear · **buy** consumables / gear / mounts / companions · **heal & rest** safely ·
-  **quest** givers · the **Bank** (4-slot, cross-run) · **save respawn point** (a *permanent* checkpoint
-  advance) · **Waystone** (attune + bind respawn).
+  **quest** givers · the **Bank** (4-slot stash, pay a fee — protects loot from the Bag wipe) ·
+  **save checkpoint** · **Waystone** (attune + bind respawn).
 
-(Glory-spending is **not** here — that's the post-death screen above. The **Bank** and gear *are*
-in-world: Bank at settlements/camps, gear via your inventory.)
-
-No cross-run hoarding (no gold/gear squirreling) — settlements earn their place through the
-spend-it-before-you-die economy, not storage.
-
-## Lives (the gate)
-
-- Default **max 3**, **+1 every ~6h** (placeholder numbers).
-- A **life is spent on death**; respawning requires an available life; out of lives → wait.
-- **Permanently raisable cap** (to 4, 5…) as an unlock — *the limit exists primarily as the
-  monetization surface* (life-cap and/or refills are the paid levers). Design the cap as an
-  upgradeable number from day one.
+There is no out-of-world spending anymore — the only screens outside the world are the
+**roster** (create/select character) and the **fallen screen** (revive or start again).
 
 ## Level-gap difficulty (the world's risk dial)
 
@@ -128,9 +167,18 @@ power raises your ceiling but never erases the gap (you can't brute-force a prob
 - **Enemy crits you more + your dodge/parry/block work less** — the *incoming* danger is what
   says "you shouldn't be here."
 
-Net curve (matches the brief): **3-4 above = harder, 5-9 = much harder, 10+ = basically
-impossible** — emergent from the modifiers, softened by Glory/gear but never nullified. All
-numbers are placeholders to tune.
+Net curve: **3-4 above = harder, 5-9 = much harder, 10+ = basically impossible** — emergent from
+the modifiers, softened by gear/Talents but never nullified. The gap now **prices your lives**:
+deeper is where meaningful XP and loot live, and where lives get spent — tuning must remember
+that death costs real scarcity, not a cash-out.
+
+## Monetization surface
+
+**Lives are the single paid lever.** The flagship moment is the **fallen revive** — "continue
+your level-20 character, or start again." Deeper characters make stronger offers, which aligns
+the business with the player's own investment. Pack sizes, pricing, and store integration are
+open. Perception risk (recorded): a paywall at the point of loss converts *and* irritates — the
+free player's milestone-life supply is what keeps it feeling fair; tune it generously first.
 
 ## Quests
 
@@ -139,30 +187,37 @@ reason to push into higher-level realms. Its own system/doc later.
 
 ## Where this lives (for implementation later)
 
-- **`@heroic/core` (pure, deterministic, testable):** the stat-layering computation; Glory
-  conversion; level-gap modifier math; Perk application; durability bookkeeping; lives
-  accounting.
-- **App / persistence layer (new — not in core/engine yet):** saving *permanent* state (Glory,
-  gear, spawn point, lives, unlocked Masteries) to device storage; the **real-time lives timer**.
-  Flag: we don't have a save/persistence system yet — it's a new piece this introduces.
+- **`@heroic/core` (pure, deterministic, testable):** XP curve + level-up math; Talent
+  application (rides the [modifier system](./modifiers-and-effects.md)); lives accounting + the
+  alive/fallen state machine; level-gap modifier math; durability bookkeeping.
+- **App / persistence layer (new — not in core/engine yet):** the **character roster is the save
+  unit** — level, stats, Talents, gear, gold, lives, checkpoints, map/quests per character.
+  Simpler than v1 (no real-time refill timer). **New flag: IAP/store integration** for life
+  purchases — its own piece of work.
 
 ## Open / deferred (own docs or tuning)
 
-- Equipment system (slots/item-level/rarity); full gold economy; quests; mounts/companions;
-  `strength`'s fatigue & carry/encumbrance system.
-- Monetization specifics beyond "lives are the surface."
-- **Numbers to tune:** Glory conversion rate (linear vs escalating with run depth); Perk
-  milestone levels & the Perk pool; level-gap damage/miss/crit curves; durability wear &
-  repair costs; lives cap/refill cadence; starting-gold Mastery values.
+- Respec (gold sink / paid / absent); purchased lives account-wide vs per-character;
+  **endless/prestige content** for characters that finish the authored climb (raised priority
+  by the pivot); gold-inflation sinks; size of the on-death durability hit.
+- Equipment system details; full gold economy; quests; mounts/companions; `strength`'s fatigue
+  & carry/encumbrance system.
+- **Numbers to tune:** starting lives; milestone-grant placement & counts; XP curve; Talent
+  milestone levels & the Talent pool; life pack pricing; level-gap damage/miss/crit curves;
+  durability wear & repair costs.
 
 ## Glossary
 
-- **Glory** — permanent-upgrade currency; your levels convert to it when you die.
-- **Perk** — a temporary, this-run-only modifier picked at certain levels.
-- **Mastery** — a permanent character upgrade bought with Glory.
-- **Meta-progression** — permanent growth that persists across deaths/runs.
+- **Character** — the persistent unit of progression; owns level, Talents, gear, gold, lives.
+- **Roster** — the character-select screen: all your characters, living and fallen.
+- **Talent** — a permanent modifier/ability gained on level-up: **minor** chain-tier picks every
+  level, authored **major** picks at milestones (replaces v1's Perks and Masteries).
+- **Lives** — the respawn resource: spent on death, earned at milestones, purchasable. No timed
+  refill.
+- **Fallen** — dead with no lives: unplayable but never deleted; revive by buying lives, or
+  start a new character.
 - **Durability** — how much wear gear can take before it's disabled until repaired.
-- **Lives / energy gate** — the daily-refilling cap on how many times you can die & return.
 - **Level-gap** — the difficulty swing from fighting things above/below your level.
 - **Waystone** — a travel monument at a settlement (attune to unlock fast-travel + bind respawn).
-  **Recall** — returns you to your bound Waystone on a cooldown. (See [realms-and-overworld](./realms-and-overworld.md).)
+  **Recall** — returns you to your bound Waystone on a cooldown. (See
+  [realms-and-overworld](./realms-and-overworld.md).)

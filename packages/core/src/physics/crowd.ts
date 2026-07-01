@@ -204,6 +204,10 @@ export interface CrowdParams {
  * Velocities are set by the caller's AI/locomotion before this; positions are
  * read by the caller afterwards.
  */
+// Reused across stepCrowd calls (ground then flying, sequentially) to hold the walls
+// near the crowd — so the broad-phase below allocates nothing per step.
+const wallScratch: Aabb[] = [];
+
 export const stepCrowd = (movers: readonly Mover[], dt: number, p: CrowdParams): void => {
   const n = movers.length;
 
@@ -216,9 +220,48 @@ export const stepCrowd = (movers: readonly Mover[], dt: number, p: CrowdParams):
   rebuildGrid(p.grid, n, (i) => movers[i]!.pos);
   pushApartCrowd(movers, p.grid, p.pushStrength);
 
-  for (let i = 0; i < n; i++) {
-    const m = movers[i]!;
-    for (let w = 0; w < p.walls.length; w++) resolveCircleAabb(m.pos, m.radius, p.walls[w]!);
+  // Wall collision, broad-phased. Testing every mover against every level wall is
+  // O(movers × walls) — fine for a few walls, but a zone can carry ~100 collision
+  // boxes (interior walls + the void border) and that dominated the crowd step. So
+  // first cull the walls to the crowd's bounding box (expanded by the largest mover
+  // radius); a wall outside it can't touch any mover. When the crowd is clustered —
+  // chasing the player, the common case — the kept set is tiny. Skipping a far wall is
+  // exact, not approximate, so behaviour is unchanged.
+  if (n > 0 && p.walls.length > 0) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxR = 0;
+    for (let i = 0; i < n; i++) {
+      const m = movers[i]!;
+      if (m.pos.x < minX) minX = m.pos.x;
+      if (m.pos.x > maxX) maxX = m.pos.x;
+      if (m.pos.y < minY) minY = m.pos.y;
+      if (m.pos.y > maxY) maxY = m.pos.y;
+      if (m.radius > maxR) maxR = m.radius;
+    }
+    minX -= maxR;
+    minY -= maxR;
+    maxX += maxR;
+    maxY += maxR;
+    const near = wallScratch;
+    near.length = 0;
+    for (let w = 0; w < p.walls.length; w++) {
+      const box = p.walls[w]!;
+      if (
+        box.x - box.w / 2 <= maxX &&
+        box.x + box.w / 2 >= minX &&
+        box.y - box.h / 2 <= maxY &&
+        box.y + box.h / 2 >= minY
+      ) {
+        near.push(box);
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const m = movers[i]!;
+      for (let w = 0; w < near.length; w++) resolveCircleAabb(m.pos, m.radius, near[w]!);
+    }
   }
 
   if (p.player) {

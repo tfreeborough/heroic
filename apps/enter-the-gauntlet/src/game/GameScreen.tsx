@@ -18,9 +18,10 @@ import {
   brainTelegraph,
   buildNavGrid,
   closestPointOnAabb,
-  computeVisibility,
+  computeFlowField,
   createAudioDirector,
   createBlockerBody,
+  createFlowField,
   createFogGrid,
   createMoverBody,
   createPhysicsWorld,
@@ -36,7 +37,7 @@ import {
   initMusicState,
   makeCombatant,
   makeCreatureBrain,
-  markVisible,
+  markVisibleCircle,
   normalize,
   rebuildGrid,
   releaseNavBlocker,
@@ -75,6 +76,7 @@ import {
   type Brain,
   type Breakable,
   type Combatant,
+  type FlowField,
   type CombatStats,
   type HurtCircle,
   type HurtTarget,
@@ -113,6 +115,9 @@ import {
   EXPLOSION_FUSE_DELAY,
   EXPLOSION_FX_DURATION,
   EXPLOSION_KNOCKBACK,
+  FLOW_MIN_ENEMIES,
+  FLOW_RADIUS,
+  FLOW_RESWEEP_STEPS,
   FOG_CELL,
   HIT_FLASH_DURATION,
   LOS_RECHECK_STEPS,
@@ -157,7 +162,7 @@ import {
   isDashing,
   tickDashInvuln,
 } from "./skills/dash";
-import { EMPTY_COMBAT_PICTURE, recordCombatScene, RENDER_PHASES, setRenderProfiling, type CombatScene } from "./renderCombat";
+import { EMPTY_COMBAT_PICTURE, recordCombatScene, RENDER_PHASES, setRenderDebug, setRenderProfiling, type CombatScene } from "./renderCombat";
 import { bakeFloorChunks } from "./zoneRender";
 
 /** A hostile with a brain: chases/circles/kites per its type, soaks hits. */
@@ -670,44 +675,19 @@ export const GameScreen = () => {
   const navGridRef = useRef<NavGrid>(initialWorld.navGrid);
   const flyingNavGridRef = useRef<NavGrid>(initialWorld.flyingNavGrid);
 
-  // Line of sight, solved ONCE per sim step and cached for the renderer. The solve
-  // (computeVisibility) is O(walls²) over the near set; doing it every *rendered*
-  // frame — up to 3× the sim rate under interpolation — was wasted work. The cull
-  // mirrors renderCombat's old inline one: only walls within a sight-sized box can
-  // shape what you see. Built from the PLAYER-vision occluders (locked doors
-  // excluded) so light spills through doors, matching the fog draw.
-  const computeLitPoly = (cx: number, cy: number): Vec2[] => {
-    const visR = VISION.discoverRadius + 240;
-    const minX = cx - visR;
-    const maxX = cx + visR;
-    const minY = cy - visR;
-    const maxY = cy + visR;
-    const near: VisionSegment[] = [
-      { ax: minX, ay: minY, bx: maxX, by: minY },
-      { ax: maxX, ay: minY, bx: maxX, by: maxY },
-      { ax: maxX, ay: maxY, bx: minX, by: maxY },
-      { ax: minX, ay: maxY, bx: minX, by: minY },
-    ];
-    const occ = worldVisionOccluders.current;
-    for (let i = 0; i < occ.length; i++) {
-      const sg = occ[i]!;
-      const sMinX = sg.ax < sg.bx ? sg.ax : sg.bx;
-      const sMaxX = sg.ax > sg.bx ? sg.ax : sg.bx;
-      const sMinY = sg.ay < sg.by ? sg.ay : sg.by;
-      const sMaxY = sg.ay > sg.by ? sg.ay : sg.by;
-      if (sMaxX >= minX && sMinX <= maxX && sMaxY >= minY && sMinY <= maxY) near.push(sg);
-    }
-    return computeVisibility({ x: cx, y: cy }, near);
-  };
-  // The cached LOS polygon (+ whether it's a real shape), refreshed each sim step
-  // and reused by every interpolated render frame in between. Seeded at the spawn
-  // so the very first rendered frame already has sightlines (no startup flash).
-  const visionCache = useRef<{ poly: Vec2[]; hasSight: boolean }>(
-    useMemo(() => {
-      const poly = computeLitPoly(SPAWN.x, SPAWN.y);
-      return { poly, hasSight: poly.length > 2 };
-    }, []),
-  );
+  // Flow fields (docs/design/flow-field-pathfinding.md): the crowd's shared "route
+  // toward the player around walls", one per movement domain. Sized once to the nav
+  // grid (dimensions are fixed); re-flooded from the player on a throttle in onStep,
+  // reading each nav grid's live walkability so a broken wall opens the route too.
+  const groundFlow = useMemo<FlowField>(() => createFlowField(navGridRef.current), []);
+  const flyingFlow = useMemo<FlowField>(() => createFlowField(flyingNavGridRef.current), []);
+  const flowTimer = useRef(0); // steps until the next re-flood (0 = flood this step)
+
+  // Player vision is a simple lit radius now (no line-of-sight polygon): the
+  // renderer draws a soft radial bubble around the player and the exploration fog,
+  // and discovery is a plain proximity reveal (markVisibleCircle in onRender). Enemy
+  // LOS + pathfinding still use the occluders in onStep — only the player's expensive
+  // shadow-casting was removed. See docs (fog-of-war simplification).
 
   /**
    * Re-derive the dynamic world after a breakable's alive-state changed. The crowd
@@ -759,16 +739,23 @@ export const GameScreen = () => {
   // only thing that does, twice a second. This measures the JS thread only — for
   // the UI/render thread, enable React Native's Perf Monitor (it shows UI vs JS
   // fps separately), which is the other half of the picture.
-  const perf = useRef({ stepMs: 0, steps: 0, simVisMs: 0, renderMs: 0, frames: 0 });
+  const perf = useRef({ stepMs: 0, steps: 0, simVisMs: 0, simAiMs: 0, simPhysMs: 0, simCrowdMs: 0, renderMs: 0, frames: 0 });
   const [perfText, setPerfText] = useState("");
   // Driven by the Settings "Performance overlay" toggle, so it works in release
   // builds (not just __DEV__). When off, every timing branch below is skipped, so
   // the profiler costs nothing when you're not using it.
   const perfOn = settings.showPerfOverlay;
+  // Diagnostic: when on, onRender pushes an empty picture (draws nothing) so we can
+  // tell whether the frame-rate wall is our scene's raster or the present pipeline.
+  const blankRender = settings.disableSceneRender;
   // Mirror the gate into the renderer (its phase timers are off until this flips on).
   useEffect(() => {
     setRenderProfiling(perfOn);
   }, [perfOn]);
+  // Mirror the GPU diagnostic switches (fog / mist) into the renderer.
+  useEffect(() => {
+    setRenderDebug({ disableFog: settings.disableFog, disableMist: settings.disableMist });
+  }, [settings.disableFog, settings.disableMist]);
   useEffect(() => {
     if (!perfOn) {
       setPerfText("");
@@ -777,7 +764,7 @@ export const GameScreen = () => {
     // Zero the accumulators so the first sample after enabling isn't stale (they may
     // have drifted while the overlay was off, or just been left from a prior run).
     const p = perf.current;
-    p.stepMs = p.steps = p.simVisMs = p.renderMs = p.frames = 0;
+    p.stepMs = p.steps = p.simVisMs = p.simAiMs = p.simPhysMs = p.simCrowdMs = p.renderMs = p.frames = 0;
     RENDER_PHASES.world = RENDER_PHASES.live = RENDER_PHASES.fog = RENDER_PHASES.ui = 0;
     let last = performance.now();
     const id = setInterval(() => {
@@ -788,14 +775,19 @@ export const GameScreen = () => {
       const fps = elapsed > 0 ? p.frames / elapsed : 0;
       const rp = RENDER_PHASES;
       // Per-frame averages. `sim …×` is steps/frame (the fixed-step catch-up
-      // multiplier). `rec` is split into world/live/fog/ui sub-phases.
+      // multiplier); `rec` is split into world/live/fog/ui (world is baked once now,
+      // so it should sit near 0).
       setPerfText(
-        `JS ${fps.toFixed(0)}fps  sim ${(p.stepMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}× vis ${(p.simVisMs / f).toFixed(1)})  rec ${(p.renderMs / f).toFixed(1)}ms\n` +
+        `JS ${fps.toFixed(0)}fps  sim ${(p.stepMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.renderMs / f).toFixed(1)}ms (vis ${(p.simVisMs / f).toFixed(1)})\n` +
+          `sim: ai ${(p.simAiMs / f).toFixed(1)}  phys ${(p.simPhysMs / f).toFixed(1)}  crowd ${(p.simCrowdMs / f).toFixed(1)}  rest ${((p.stepMs - p.simAiMs - p.simPhysMs - p.simCrowdMs) / f).toFixed(1)}\n` +
           `rec: world ${(rp.world / f).toFixed(1)}  live ${(rp.live / f).toFixed(1)}  fog ${(rp.fog / f).toFixed(1)}  ui ${(rp.ui / f).toFixed(1)}`,
       );
       p.stepMs = 0;
       p.steps = 0;
       p.simVisMs = 0;
+      p.simAiMs = 0;
+      p.simPhysMs = 0;
+      p.simCrowdMs = 0;
       p.renderMs = 0;
       p.frames = 0;
       rp.world = 0;
@@ -921,6 +913,31 @@ export const GameScreen = () => {
         setVelocityPerSecond(player, vel.x, vel.y);
       }
 
+      // --- Flow fields: re-flood the crowd's shared "route toward the player around
+      // walls" on a throttle, from last step's player position (one step stale — fine
+      // at this cadence). Reads each nav grid's live walkability, so a wall broken this
+      // run reopens the route. Enemies then read it in O(1) below, falling back to A*
+      // only when uncovered. Counted into the `ai` timer since it's AI-loop work.
+      //
+      // Gated on enemy count: the flood is a FIXED cost, so below FLOW_MIN_ENEMIES a
+      // few A* searches are cheaper — skip the flood entirely and let enemies path with
+      // A* (flowField passed as null below). It only kicks in when the crowd is big
+      // enough to amortise it, so it never regresses a light fight.
+      const useFlow = enemies.length >= FLOW_MIN_ENEMIES;
+      const _tf = perfOn ? performance.now() : 0;
+      if (useFlow) {
+        if (flowTimer.current <= 0) {
+          flowTimer.current = FLOW_RESWEEP_STEPS;
+          computeFlowField(groundFlow, navGridRef.current, player.position, FLOW_RADIUS);
+          computeFlowField(flyingFlow, flyingNavGridRef.current, player.position, FLOW_RADIUS);
+        } else {
+          flowTimer.current -= 1;
+        }
+      } else {
+        flowTimer.current = 0; // re-flood immediately when the crowd next grows past the gate
+      }
+      if (perfOn) perf.current.simAiMs += performance.now() - _tf;
+
       // --- Enemy AI: each brain reads perception and yields a desired
       // velocity, shaped through the same acceleration-limited locomotion as
       // the player — so enemies inherit the weight/skid feel, and knockback
@@ -928,6 +945,7 @@ export const GameScreen = () => {
       // and facing are last step's resolved values; one step of lag is
       // imperceptible and keeps the order simple.
       const living = enemies;
+      const _ta = perfOn ? performance.now() : 0;
       // Bucket every enemy into the spatial grid once per step (O(n)), so each
       // enemy's separation below scans only its 3×3 cell neighbourhood rather than
       // the whole swarm — the old per-enemy neighbour list was O(n²) and the main
@@ -1013,6 +1031,7 @@ export const GameScreen = () => {
             neighbors,
             hasLineOfSight: near ? e.los : true,
             navGrid: near ? (e.flying ? flyingNavGridRef.current : navGridRef.current) : null,
+            flowField: near && useFlow ? (e.flying ? flyingFlow : groundFlow) : null,
             repathBudget,
           },
           dt,
@@ -1023,9 +1042,12 @@ export const GameScreen = () => {
         e.mover.vel.x = eVel.x;
         e.mover.vel.y = eVel.y;
       }
+      if (perfOn) perf.current.simAiMs += performance.now() - _ta;
 
       // Matter now steps only the player (+ static walls) — ~10 bodies, trivial.
+      const _tp = perfOn ? performance.now() : 0;
       stepPhysics(physics, dt);
+      if (perfOn) perf.current.simPhysMs += performance.now() - _tp;
 
       s.currX = player.position.x;
       s.currY = player.position.y;
@@ -1041,6 +1063,7 @@ export const GameScreen = () => {
       // a grounder can't. The layers are separate, so they crowd-separate only within
       // their own group (flyers are "above"); both still resolve against the player and
       // the arena bounds. The grid is rebuilt per call, so reusing it is fine.
+      const _tc = perfOn ? performance.now() : 0;
       const groundMovers: Mover[] = [];
       const flyingMovers: Mover[] = [];
       for (const e of enemies) (e.flying ? flyingMovers : groundMovers).push(e.mover);
@@ -1053,6 +1076,7 @@ export const GameScreen = () => {
       };
       if (groundMovers.length > 0) stepCrowd(groundMovers, dt, { ...crowdBase, walls: worldWalls.current });
       if (flyingMovers.length > 0) stepCrowd(flyingMovers, dt, { ...crowdBase, walls: flyingWalls.current });
+      if (perfOn) perf.current.simCrowdMs += performance.now() - _tc;
 
       for (const e of enemies) {
         e.currX = e.mover.pos.x;
@@ -1628,17 +1652,9 @@ export const GameScreen = () => {
         s.lowHpPhaseCurr += dt * hz;
       }
 
-      // --- Line of sight + fog discovery: solved ONCE here per sim step at the sim
-      // player position, then cached for the renderer to reuse across the (faster)
-      // interpolated render frames. computeVisibility is O(walls²) and markVisible
-      // rasterises the fog grid, so this was the priciest thing the renderer redid
-      // every frame. Occluders are final for the step (all breaks resolved above),
-      // so a wall opened this step lights the room it revealed on the same step.
-      const _tv = perfOn ? performance.now() : 0;
-      const litPoly = computeLitPoly(s.currX, s.currY);
-      markVisible(fog, litPoly, { x: s.currX, y: s.currY }, VISION.discoverRadius);
-      visionCache.current = { poly: litPoly, hasSight: litPoly.length > 2 };
-      if (perfOn) perf.current.simVisMs += performance.now() - _tv;
+      // (Exploration-fog discovery is a cheap proximity reveal done in onRender now;
+      // the player line-of-sight solve was removed. Enemy LOS still runs in the AI
+      // loop above.)
 
       // --- Music: combat when any living enemy is within COMBAT_MUSIC_RADIUS,
       // idle otherwise (with a hangover so it doesn't snap back the instant a
@@ -1661,6 +1677,16 @@ export const GameScreen = () => {
     },
     onRender: (alpha) => {
       const _t0 = perfOn ? performance.now() : 0;
+      // Diagnostic: skip all scene drawing, just present an empty picture. The sim
+      // above still ran; this isolates the present/compositing cost from raster.
+      if (blankRender) {
+        combatPicture.value = EMPTY_COMBAT_PICTURE;
+        if (perfOn) {
+          perf.current.renderMs += performance.now() - _t0;
+          perf.current.frames += 1;
+        }
+        return;
+      }
       const s = sim.current;
       const c = combat.current;
       const enemies = enemiesRef.current;
@@ -1677,6 +1703,12 @@ export const GameScreen = () => {
       const enemyY = (d: Enemy) => d.prevY + (d.currY - d.prevY) * alpha;
       // Ease the zoom toward its target in JS (cosmetic, on weapon swap).
       zoomCurrent.current += (zoomTarget.current - zoomCurrent.current) * 0.2;
+
+      // Exploration-fog discovery: a plain proximity reveal around the player (no
+      // line-of-sight polygon — that whole O(walls²) solve is gone). Cheap.
+      const _tv = perfOn ? performance.now() : 0;
+      markVisibleCircle(fog, { x: px, y: py }, VISION.discoverRadius);
+      if (perfOn) perf.current.simVisMs += performance.now() - _tv;
 
       // Where the windup telegraph points: the locked enemy (interpolated) or, for
       // a breakable lock (negative id), its static box centre — else the player.
@@ -1868,11 +1900,6 @@ export const GameScreen = () => {
           seed: e.seed,
         })),
         fog,
-        // Line-of-sight polygon, solved once per sim step in onStep (against the
-        // player-vision occluders — locked doors excluded, so light spills through
-        // them) and reused here. The renderer builds its clip path from this rather
-        // than re-solving visibility each frame.
-        litPoly: visionCache.current.poly,
         time: s.time,
         lowHealthPhase: s.lowHpPhasePrev + (s.lowHpPhaseCurr - s.lowHpPhasePrev) * alpha,
       });

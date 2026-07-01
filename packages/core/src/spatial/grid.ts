@@ -30,6 +30,14 @@ export interface SpatialGrid {
    * cell. The arrays are reused across rebuilds (cleared, not reallocated).
    */
   readonly cells: number[][];
+  /**
+   * Indices (into `cells`) of the cells that currently hold items. A rebuild clears
+   * only these, NOT all cols×rows — on a big arena the grid can be tens of thousands
+   * of cells, almost all empty, and clearing every one each step was a fixed cost
+   * independent of item count (it dominated the crowd step). Maintained by
+   * insertItem/clearGrid; never read by queries.
+   */
+  readonly occupied: number[];
 }
 
 /**
@@ -42,7 +50,7 @@ export const createSpatialGrid = (width: number, cellSize: number, height = widt
   const rows = Math.max(1, Math.ceil(height / cellSize));
   const cells: number[][] = new Array(cols * rows);
   for (let i = 0; i < cells.length; i++) cells[i] = [];
-  return { cellSize, cols, rows, cells };
+  return { cellSize, cols, rows, cells, occupied: [] };
 };
 
 /** Column index for a world x, clamped to the grid (out-of-bounds → edge cell). */
@@ -57,15 +65,23 @@ const rowOf = (grid: SpatialGrid, y: number): number => {
   return r < 0 ? 0 : r >= grid.rows ? grid.rows - 1 : r;
 };
 
-/** Empty every cell (keeps the arrays for reuse — no reallocation). */
+/**
+ * Empty every non-empty cell (keeps the arrays for reuse — no reallocation). Only
+ * the cells tracked in `occupied` are touched, so this is O(occupied), not O(all
+ * cells) — the whole point of the `occupied` list.
+ */
 export const clearGrid = (grid: SpatialGrid): void => {
-  const { cells } = grid;
-  for (let i = 0; i < cells.length; i++) cells[i]!.length = 0;
+  const { cells, occupied } = grid;
+  for (let i = 0; i < occupied.length; i++) cells[occupied[i]!]!.length = 0;
+  occupied.length = 0;
 };
 
 /** Bucket item `index` (located at world `x, y`) into its cell. */
 export const insertItem = (grid: SpatialGrid, index: number, x: number, y: number): void => {
-  grid.cells[rowOf(grid, y) * grid.cols + colOf(grid, x)]!.push(index);
+  const idx = rowOf(grid, y) * grid.cols + colOf(grid, x);
+  const cell = grid.cells[idx]!;
+  if (cell.length === 0) grid.occupied.push(idx); // first item here → track for clearing
+  cell.push(index);
 };
 
 /**
