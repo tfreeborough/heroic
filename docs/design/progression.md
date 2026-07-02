@@ -115,8 +115,8 @@ effective stat = character  (base + per-level growth + Talents)
 | Stat | Role |
 | --- | --- |
 | **Vitality** | max HP |
-| **strength** | physical base power (melee/bow) · fatigue · carry capacity |
-| **agility** | physical crit chance (melee/bow) |
+| **strength** | melee base power · fatigue · carry capacity |
+| **agility** | ranged physical base power · physical crit chance |
 | **intellect** | magic base power + magic crit chance |
 | **wisdom** | mana regen |
 | **Renewal** | HP regen |

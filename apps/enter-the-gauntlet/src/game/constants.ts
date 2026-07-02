@@ -385,14 +385,8 @@ export const CREATURE_VISUALS: Record<
 };
 
 // --- Player health -------------------------------------------------------------
-
-export const PLAYER_STATS = {
-  maxHp: 100,
-  attack: 0,
-  defense: 0,
-  critChance: 0,
-  critMultiplier: 1,
-};
+// (Player stats now come from the chosen class through @heroic/core's modifier
+// pipeline — see stats/classes.ts and derivePlayerCombatStats.)
 
 /**
  * Invulnerability window after taking a contact hit, seconds. Without it a

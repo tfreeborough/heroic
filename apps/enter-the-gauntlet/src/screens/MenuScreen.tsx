@@ -53,9 +53,9 @@ export const MenuScreen = ({ navigation, route }: Props) => {
           </>
         ) : (
           <>
-            {/* New Game currently always loads realm-00 (the only zone); this is
-                the seam where run-initialization will later hook in. */}
-            <MenuButton label="New Game" onPress={() => navigation.navigate("Game")} />
+            {/* New Game → pick a class → into realm-00 (the only zone). ClassSelect
+                is the seed of the full character-creation flow. */}
+            <MenuButton label="New Game" onPress={() => navigation.navigate("ClassSelect")} />
             <MenuButton
               label="Settings"
               variant="secondary"

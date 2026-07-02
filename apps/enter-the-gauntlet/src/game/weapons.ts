@@ -1,4 +1,4 @@
-import type { AttackConfig, CombatStats } from "@heroic/core";
+import type { AttackConfig, CombatStats, EffectiveStats } from "@heroic/core";
 import type { HapticWeight } from "./haptics";
 
 /**
@@ -116,3 +116,21 @@ export const WEAPONS: readonly WeaponDef[] = [
 ];
 
 export type WeaponId = WeaponDef["id"];
+
+/**
+ * A weapon as one particular character swings it: reach scaled by the reach
+ * multiplier, cycle timing divided by attack speed (higher = faster cadence).
+ * Derived once at equip time so every downstream reader of the equipped
+ * config — targeting, camera framing, the HUD windup ring — sees the same
+ * numbers and can't disagree. Damage/crit scaling is separate (the school
+ * channels via deriveAttackerStats); this handles the config side.
+ */
+export const scaleWeaponForStats = (def: WeaponDef, eff: EffectiveStats): WeaponDef => ({
+  ...def,
+  config: {
+    ...def.config,
+    reach: def.config.reach * eff.reach,
+    windup: def.config.windup / eff.attackSpeed,
+    recovery: def.config.recovery / eff.attackSpeed,
+  },
+});

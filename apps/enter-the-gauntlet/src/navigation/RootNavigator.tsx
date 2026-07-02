@@ -1,9 +1,10 @@
-// The root screen stack: Menu → Settings and Menu → Game. Headers are hidden
-// (every screen draws its own chrome edge-to-edge); a fade keeps transitions
-// unobtrusive in front of the full-screen game canvas.
+// The root screen stack: Menu → Settings and Menu → ClassSelect → Game. Headers
+// are hidden (every screen draws its own chrome edge-to-edge); a fade keeps
+// transitions unobtrusive in front of the full-screen game canvas.
 
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { GameScreen } from "../game/GameScreen";
+import { ClassSelectScreen } from "../screens/ClassSelectScreen";
 import { MenuScreen } from "../screens/MenuScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
 import { UI } from "../ui/theme";
@@ -22,6 +23,7 @@ export const RootNavigator = () => (
   >
     <Stack.Screen name="Menu" component={MenuScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
+    <Stack.Screen name="ClassSelect" component={ClassSelectScreen} />
     {/* Gameplay binds its own gestures; disable the swipe-back so a thumbstick
         drag from the edge can't pop the screen mid-fight. */}
     <Stack.Screen name="Game" component={GameScreen} options={{ gestureEnabled: false }} />

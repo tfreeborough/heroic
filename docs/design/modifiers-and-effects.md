@@ -147,6 +147,10 @@ not every frame.
 
 - The **`unique`** stacking policy; buff **stack limits** / UI; whether the **level-gap** modifiers route
   through this system (likely yes).
+- **Attack-scoped modifiers** — modifiers conditional on an attack's shape/school tags — and
+  **stat-linked modifiers** — a modifier whose value derives from another stat ("50% of strength
+  added to intellect"), which needs ordered evaluation (source stat first, no cycles). Both for
+  the class specialisations ([characters-and-talents](./characters-and-talents.md)).
 - Finalising the **hook catalogue** as combat/loop solidify.
 - **Numbers to tune:** per-stat `MaxBonus` and `K(level)` curves; rating-stat caps; which effects exist
   in the **minor-effect pool**; `more`-multiplier sources.

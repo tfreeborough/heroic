@@ -29,12 +29,16 @@ An attack is defined by two orthogonal tags, plus timing/range:
   fire-time), travels, damages the first hostile it overlaps (optionally `pierce`s more).
   Stopped by walls.
 
-**School** — physical or magic. The school decides where the numbers come from:
+**School** — physical or magic. School *and shape* together decide where the numbers come from
+— the three combat styles each scale from their own stat *(revised 2026-07-02 for the class
+specialisations in [characters-and-talents](./characters-and-talents.md); specs exist to bend
+exactly this table)*:
 
-| | Base power from | Crit chance from | Mana cost |
+| Style | Base power from | Crit chance from | Mana cost |
 | --- | --- | --- | --- |
-| **physical** (swords, bows) | `strength` + weapon | `agility` (+ `luck`) | none |
-| **magic** (spells) | `intellect` (+ spell) | `intellect` (+ `luck`) | yes (regened by `wisdom`) |
+| **melee** (`arc·physical` — swords) | `strength` + weapon | `agility` (+ `luck`) | none |
+| **ranged physical** (`projectile·physical` — bows) | `agility` + weapon | `agility` (+ `luck`) | none |
+| **magic** (any shape — spells) | `intellect` (+ spell) | `intellect` (+ `luck`) | yes (regened by `wisdom`) |
 
 The axes are independent, so any combination works: sword cleave = `{arc, physical}`,
 firebolt = `{projectile, magic}`, arrow = `{projectile, physical}`. The attack config carries
@@ -135,8 +139,9 @@ Stays the swappable "how much" layer. Notes:
 
 ## Stats combat consumes (full system is its own doc)
 
-`reach` (range), `attack_speed` (cycle), `speed` (movement), `agility` (physical crit),
-`intellect` (magic power + crit), `strength` (physical power), `luck` (crit + defence nudge),
+`reach` (range), `attack_speed` (cycle), `speed` (movement), `agility` (ranged physical power +
+physical crit), `intellect` (magic power + crit), `strength` (melee power), `luck` (crit +
+defence nudge),
 `Vitality` (max HP), `Armor` (damage reduction), `dodge`/`parry`/`block` (intake pipeline). Combat
 reads the *final numbers*;
 deriving them from base attributes, leveling, mana/health regen (`wisdom`/`Renewal`), and

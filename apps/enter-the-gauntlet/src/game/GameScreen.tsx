@@ -3,7 +3,7 @@ import { AppState, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import { Canvas, Fill, Picture, useFont, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useIsFocused } from "@react-navigation/native";
+import { useNavigation, useIsFocused, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { GrenzeGotisch_700Bold } from "@expo-google-fonts/grenze-gotisch";
 import { useSettings } from "../settings/SettingsContext";
@@ -17,7 +17,9 @@ import {
   ATTACK_CYCLE_READY,
   brainTelegraph,
   buildNavGrid,
+  CLASSES,
   closestPointOnAabb,
+  computeEffectiveStats,
   computeFlowField,
   createAudioDirector,
   createBlockerBody,
@@ -28,6 +30,8 @@ import {
   createMover,
   createRng,
   createSpatialGrid,
+  deriveAttackerStats,
+  derivePlayerCombatStats,
   distance,
   distanceToAabb,
   faceMovement,
@@ -134,7 +138,6 @@ import {
   PLAYER_IFRAMES,
   PLAYER_MAX_SPEED,
   PLAYER_RADIUS,
-  PLAYER_STATS,
   PILLARS,
   SOLIDS,
   SPAWN,
@@ -143,7 +146,7 @@ import {
   ZONE,
   type EnemyTypeId,
 } from "./constants";
-import { WEAPONS, type WeaponDef, type WeaponId } from "./weapons";
+import { WEAPONS, scaleWeaponForStats, type WeaponDef, type WeaponId } from "./weapons";
 import { AUDIO_MANIFEST } from "./audio/manifest";
 import { playStrikeHaptic } from "./haptics";
 import { Thumbstick } from "./Thumbstick";
@@ -375,6 +378,14 @@ export const GameScreen = () => {
   // pushes volume changes into the director, and the control deck flips sides.
   const { settings } = useSettings();
 
+  // The class picked on the way in (ClassSelect route) and its effective stats
+  // through the modifier pipeline. Level is pinned to 1 and the source list is
+  // empty until XP/Talents land (build order step 3) — when they do, they add
+  // modifier sources here and recompute. Stable for the life of the run.
+  const route = useRoute<RouteProp<RootStackParamList, "Game">>();
+  const classDef = CLASSES[route.params?.classId ?? "warrior"];
+  const playerEff = useMemo(() => computeEffectiveStats(classDef.base, 1), [classDef]);
+
   // Pause the sim whenever the Game screen isn't the focused route — i.e. while
   // the Pause overlay or Settings sit on top of it. The screen stays mounted, so
   // the run resumes exactly where it left off; we just stop stepping. Mirrored to
@@ -484,9 +495,15 @@ export const GameScreen = () => {
     }
 
     // One attacker stat block per weapon, reused across strikes (resolveAttack
-    // only reads the attacker's stats — hp is irrelevant on this side).
+    // only reads the attacker's stats — hp is irrelevant on this side). The
+    // weapon's base numbers are scaled through the class's effective stats:
+    // the attack's style — shape × school — picks which channel powers it
+    // (melee ← strength, ranged ← agility, magic ← intellect; combat.md).
     const weaponCombatants = new Map<WeaponId, Combatant>(
-      WEAPONS.map((w) => [w.id, makeCombatant(w.stats)]),
+      WEAPONS.map((w) => [
+        w.id,
+        makeCombatant(deriveAttackerStats(playerEff, w.stats, w.config)),
+      ]),
     );
 
     return {
@@ -564,7 +581,10 @@ export const GameScreen = () => {
   // Combat state lives in a ref: it's stepped by the game loop, never rendered
   // through React. The weapon picker is the only React-state piece.
   const combat = useRef({
-    weapon: WEAPONS[0]!,
+    weapon: scaleWeaponForStats(
+      WEAPONS.find((w) => w.id === classDef.startingWeapon) ?? WEAPONS[0]!,
+      playerEff,
+    ),
     cycle: ATTACK_CYCLE_READY as AttackCycleState,
     targetId: null as number | null,
     lockedId: null as number | null,
@@ -575,7 +595,7 @@ export const GameScreen = () => {
     numbers: [] as FlyingNumber[],
     arcFlashes: [] as ArcFlash[],
     explosions: [] as Explosion[],
-    playerCombatant: makeCombatant(PLAYER_STATS),
+    playerCombatant: makeCombatant(derivePlayerCombatStats(playerEff)),
     /** Post-hit invulnerability time left; any hit is ignored while > 0. */
     iFrames: 0,
     /** Color keys held this run (count per color); spent to open matching doors. */
@@ -601,7 +621,7 @@ export const GameScreen = () => {
   const selectWeapon = (id: WeaponId) => {
     setWeaponId(id);
     const c = combat.current;
-    c.weapon = WEAPONS.find((w) => w.id === id) as WeaponDef;
+    c.weapon = scaleWeaponForStats(WEAPONS.find((w) => w.id === id) as WeaponDef, playerEff);
     // Swapping resets the cycle — no carrying a greatsword windup into a bow.
     c.cycle = ATTACK_CYCLE_READY;
     c.lockedId = null;
@@ -804,8 +824,8 @@ export const GameScreen = () => {
   const zoomCurrent = useRef(zoomTarget.current);
   useEffect(() => {
     const weapon = WEAPONS.find((w) => w.id === weaponId) as WeaponDef;
-    zoomTarget.current = zoomFor(weapon);
-  }, [weaponId, width]);
+    zoomTarget.current = zoomFor(scaleWeaponForStats(weapon, playerEff));
+  }, [weaponId, width, playerEff]);
 
   // Music: one AudioDirector for the session. It loops the zone's idle bed and
   // (once a combat bed exists) crossfades when enemies close in — the idle/combat
@@ -901,7 +921,7 @@ export const GameScreen = () => {
         const v = dashVelocity(dash);
         setVelocityPerSecond(player, v.x, v.y);
       } else {
-        const speed = PLAYER_MAX_SPEED * stick.magnitude;
+        const speed = PLAYER_MAX_SPEED * playerEff.speed * stick.magnitude;
         const desired = { x: stick.dir.x * speed, y: stick.dir.y * speed };
         const vel = approachVelocity(
           getVelocityPerSecond(player),
