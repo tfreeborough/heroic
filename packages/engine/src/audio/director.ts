@@ -14,9 +14,12 @@
  * `expo-audio` has no built-in fade, so we ramp `player.volume` ourselves every
  * `tick(dt)` — call it once per frame (or step) with elapsed seconds.
  *
- * SFX (`playSfx`) is the designed-but-unused seam from the audio doc: one-shots
- * fire-and-forget on a fresh player that self-releases when it finishes. The
- * music half is what ships now; the SFX clips get wired in a later pass.
+ * SFX (`playSfx`) plays one-shots through a fixed **voice pool**: a small set of
+ * reusable players, growing lazily to a hard cap, stealing the oldest voice when
+ * all are busy (classic game-audio voice stealing). A player per play sounds
+ * simpler but exhausts Android's native audio sessions at gameplay rates
+ * (footsteps every ~300ms + strikes + hurts) — "Null pointer error creating
+ * session" — and leaks any player whose finish-callback never fires.
  */
 import {
   createAudioPlayer,
@@ -33,6 +36,22 @@ export type AudioManifest = Record<string, AudioSource>;
 const DEFAULT_CROSSFADE = 2;
 /** Below this gain a faded-out deck is paused so it stops decoding silence. */
 const SILENT_EPSILON = 0.001;
+/** Hard cap on simultaneous native SFX players (plus the two music decks). */
+const SFX_VOICES = 8;
+/**
+ * A voice counts as busy this soon after firing even if `playing` hasn't
+ * flipped yet — `play()` reports asynchronously, so two same-frame one-shots
+ * would otherwise both grab the same voice.
+ */
+const VOICE_HOLD_MS = 250;
+
+/** One reusable SFX player. `clip` is what's loaded, so same-clip replays skip the reload. */
+interface Voice {
+  player: AudioPlayer;
+  clip: string;
+  /** Wall-clock ms of the last fire — the steal heuristic takes the stalest. */
+  firedAt: number;
+}
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -84,6 +103,8 @@ export const createAudioDirector = (manifest: AudioManifest): AudioDirector => {
   const decks: [Deck, Deck] = [makeDeck(), makeDeck()];
   /** Index of the deck holding the bed that should be at full volume. */
   let activeIdx: 0 | 1 = 0;
+  /** The SFX voice pool — grows lazily to SFX_VOICES, then steals. */
+  const voices: Voice[] = [];
 
   let beds: Partial<Record<MusicSituation, string>> = {};
   let crossfade = DEFAULT_CROSSFADE;
@@ -180,19 +201,38 @@ export const createAudioDirector = (manifest: AudioManifest): AudioDirector => {
         console.warn(`[audio] no manifest entry for sfx "${name}"`);
         return;
       }
-      const player = createAudioPlayer(source);
-      player.volume = clamp01((muted ? 0 : master * sfx) * (opts?.volume ?? 1));
-      if (opts?.pitchVariance) {
-        // ±variance so repeated hits don't sound machine-stamped.
-        player.setPlaybackRate(1 + (Math.random() * 2 - 1) * opts.pitchVariance);
-      }
-      player.play();
-      const sub = player.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) {
-          sub.remove();
-          player.remove();
+      const now = Date.now();
+      const free = (v: Voice): boolean => now - v.firedAt > VOICE_HOLD_MS && !v.player.playing;
+      // Best → worst: a free voice already holding this clip (rewind, no reload);
+      // any free voice (load the clip onto it); grow the pool while under the cap
+      // (lazily, so a menu screen isn't holding eight native sessions); steal the
+      // stalest voice, cutting the oldest still-ringing one-shot.
+      let voice = voices.find((v) => v.clip === name && free(v));
+      if (voice) {
+        void voice.player.seekTo(0);
+      } else if ((voice = voices.find(free))) {
+        voice.player.replace(source);
+        voice.clip = name;
+      } else if (voices.length < SFX_VOICES) {
+        voice = { player: createAudioPlayer(source), clip: name, firedAt: 0 };
+        voices.push(voice);
+      } else {
+        voice = voices.reduce((a, b) => (a.firedAt <= b.firedAt ? a : b));
+        if (voice.clip === name) {
+          void voice.player.seekTo(0);
+        } else {
+          voice.player.replace(source);
+          voice.clip = name;
         }
-      });
+      }
+      voice.firedAt = now;
+      voice.player.volume = clamp01((muted ? 0 : master * sfx) * (opts?.volume ?? 1));
+      // Always set the rate — voices are reused, so a previous play's variance
+      // would otherwise stick to the next sound.
+      voice.player.setPlaybackRate(
+        opts?.pitchVariance ? 1 + (Math.random() * 2 - 1) * opts.pitchVariance : 1,
+      );
+      voice.player.play();
     },
 
     resume() {
@@ -206,6 +246,8 @@ export const createAudioDirector = (manifest: AudioManifest): AudioDirector => {
 
     dispose() {
       for (const d of decks) d.player.remove();
+      for (const v of voices) v.player.remove();
+      voices.length = 0;
     },
   };
 };

@@ -331,3 +331,166 @@ body {
   color: var(--muted);
   pointer-events: none;
 }
+
+/* Asset Forge panel — floats over the right edge like the issues card, above
+   the inspector (z-index 20 vs 10) since both live on the same side. */
+.forge {
+  position: absolute;
+  top: 46px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
+  width: 380px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.forge-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.forge h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.forge label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.forge textarea,
+.forge input[type="text"],
+.forge input[type="number"],
+.forge select {
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.forge textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.forge button {
+  background: #1d2433;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.forge button:hover:not(:disabled) {
+  border-color: #3a4a64;
+  background: #232c3e;
+}
+
+.forge button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.forge button.primary {
+  background: #2e6cf0;
+  border-color: #2e6cf0;
+  color: #fff;
+}
+
+.forge .takes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge .candidate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.forge .candidate.keep {
+  border-color: #2c6b3f;
+}
+
+.forge .candidate audio {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+}
+
+.forge .muted {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.forge .warnbox,
+.forge .errbox,
+.forge .okbox {
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge .warnbox {
+  background: #3a2d12;
+  border: 1px solid #7a5e2e;
+  color: #f2c14e;
+}
+
+.forge .errbox {
+  background: #3a1d22;
+  border: 1px solid #7a2e38;
+  color: #ffc9cf;
+}
+
+.forge .okbox {
+  background: #15301c;
+  border: 1px solid #2c6b3f;
+  color: #7fe0a0;
+}
+
+.forge .okbox pre {
+  margin: 0;
+  background: #0b0d12;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text);
+  overflow-x: auto;
+  user-select: all;
+}
+
+.forge code {
+  background: #0b0d12;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}

@@ -71,6 +71,12 @@ export interface EffectiveStats {
   parry: number;
   block: number;
   armor: number;
+  /**
+   * The luck channel (0..cap) — already folded into crit/avoidance above;
+   * exposed for the systems that read luck directly (Rare+ talent-offer
+   * nudge, and later loot rarity).
+   */
+  luck: number;
 }
 
 const clampCap = (value: number, cap: number | undefined): number =>
@@ -127,5 +133,6 @@ export const computeEffectiveStats = (
     parry: clampCap(channel("parry") + luck, RATING_CURVES.parry.cap),
     block: clampCap(channel("block") + luck, RATING_CURVES.block.cap),
     armor: clampCap(channel("armor"), RATING_CURVES.armor.cap),
+    luck,
   };
 };

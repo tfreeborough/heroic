@@ -47,7 +47,9 @@ export const validateZone = (file: ZoneFile): Issue[] => {
     const sel: Selection = { type: "object", id: o.id };
     if (o.x < 0 || o.x > W || o.y < 0 || o.y > H) {
       issues.push({ level: "warn", message: `${o.kind} "${o.id}" is out of bounds.`, focus: { x: o.x, y: o.y }, select: sel });
-    } else if (!onFloor(file, o.x, o.y)) {
+    } else if (o.kind !== "trigger" && !onFloor(file, o.x, o.y)) {
+      // A trigger is an abstract region — it may legitimately sit over a wall/void
+      // (it only detects the player entering), so it's exempt from the floor check.
       issues.push({ level: "warn", message: `${o.kind} "${o.id}" is on void (no floor).`, focus: { x: o.x, y: o.y }, select: sel });
     }
   }

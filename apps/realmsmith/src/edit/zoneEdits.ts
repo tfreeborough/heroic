@@ -7,7 +7,12 @@ import {
   type ZoneObject,
   type ZoneObjectKind,
 } from "@heroic/core";
-import { breakableDefaults, defaultObjectProps, type BreakableKind } from "./defaults";
+import {
+  breakableDefaults,
+  defaultObjectProps,
+  TRIGGER_REGION_TILES,
+  type BreakableKind,
+} from "./defaults";
 
 /**
  * In-place editors for the authored ZoneFile. Each mutates the working copy and
@@ -180,11 +185,16 @@ export const duplicateBreakable = (z: ZoneFile, id: string, dx: number, dy: numb
 };
 
 // --- Objects ------------------------------------------------------------------
-/** Topmost object within `radius` of (wx,wy), or null. */
+/** Topmost object at (wx,wy), or null. Point markers hit within `radius`; region
+ *  objects (a trigger, carrying `w`/`h`) hit anywhere inside their rect. */
 export const objectIdAt = (z: ZoneFile, wx: number, wy: number, radius: number): string | null => {
   for (let i = z.objects.length - 1; i >= 0; i--) {
     const o = z.objects[i]!;
-    if (Math.hypot(wx - o.x, wy - o.y) <= radius) return o.id;
+    if (o.w && o.h) {
+      if (Math.abs(wx - o.x) <= o.w / 2 && Math.abs(wy - o.y) <= o.h / 2) return o.id;
+    } else if (Math.hypot(wx - o.x, wy - o.y) <= radius) {
+      return o.id;
+    }
   }
   return null;
 };
@@ -211,7 +221,14 @@ export const placeObject = (
     z.objects.map((o) => o.id),
     kind,
   );
-  z.objects.push({ id, kind, x, y, props: props ?? defaultObjectProps(kind) });
+  const obj: ZoneObject = { id, kind, x, y, props: props ?? defaultObjectProps(kind) };
+  // A trigger is a region: give it a default footprint (resized by its corners).
+  if (kind === "trigger") {
+    const s = TRIGGER_REGION_TILES * z.tileSize;
+    obj.w = s;
+    obj.h = s;
+  }
+  z.objects.push(obj);
   return id;
 };
 

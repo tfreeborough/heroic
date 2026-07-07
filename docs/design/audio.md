@@ -1,11 +1,13 @@
 # Audio: Music & Sound
 
-Status: **music shipped (v1)** · SFX seams designed, not built · Applies to: both games (shared system) ·
-First consumer: Enter the Gauntlet · Last decided: 2026-06-24
+Status: **music shipped (v1)** · SFX scheduler built (core) — app wiring in progress · Applies to: both
+games (shared system) · First consumer: Enter the Gauntlet · Last decided: 2026-07-05
 
-Built: `core` carries `ZoneAudio` + the `musicState` decider; `@heroic/engine` has the crossfading
-`AudioDirector` on `expo-audio`; Enter the Gauntlet plays its idle bed (`assets/audio/music/idle.mp3`),
-crossfading to combat when a combat bed exists. SFX (`playSfx`) is wired in the director but unused.
+Built: `core` carries `ZoneAudio` + the `musicState` decider **and now the pure SFX scheduler**
+(`audio/sound.ts`); `@heroic/engine` has the crossfading `AudioDirector` on `expo-audio` (its `playSfx`
+one-shot is the device sink); Enter the Gauntlet plays its idle bed (`assets/audio/music/idle.mp3`),
+crossfading to combat when a combat bed exists. Remaining: the app catalogue + clip files + the call-site
+wiring that feeds the scheduler's decisions to `playSfx`.
 
 How the game makes sound. Two halves share one system: **music** — zone-attached, looping beds that
 crossfade with the situation (idle ↔ combat) — and **SFX** — short one-shot sounds tied to gameplay
@@ -193,22 +195,70 @@ How it runs:
   focus (pause/duck Spotify) and whether to respect the iOS mute switch are product calls; wire an explicit
   `setAudioModeAsync` when they're decided (good companion to the in-game mute below).
 
-## SFX seams (designed, not built)
+## SFX: the model *(decided 2026-07-05)*
 
-The SFX pass subscribes to the **same event points haptics already fires from** — `haptics.ts` is the map:
-strike, hit-taken, crit (`GameScreen.tsx` ~532/744/947/974/1006), plus breakable-destroyed / explosion
-(`rebuildWorld`, the `BreakEffect` `explode`). Plan:
+Mirrors music exactly — **core decides, engine plays, app supplies content** — so it's testable and the
+other two games inherit the whole thing. The SFX pass subscribes to the **same event points haptics fires
+from** (`haptics.ts` is the map: strike, hit-taken, crit; plus breakable-destroyed / explosion), and adds a
+footfall cadence and the UI moments (level-up, talent pick).
 
-- A typed **sound-event vocabulary** in core (a discriminated union), e.g. `weaponStrike{weapon}`,
-  `hitTaken`, `projectileFire`, `breakableDestroyed{kind}`, `explosion`, `abilityCast{ability}` — so the sim
-  emits intent and the app maps each to a clip via `director.playSfx`.
-- **Throttle** like haptics (a global min-gap) so cleaves/volleys don't machine-gun, plus per-shot
-  **pitch/volume variance** so repeats don't sound identical.
-- **Categories** for the manifest: weapon (melee/ranged), impact/hit, breakable/explosion, ability/spell
-  (dash whoosh — ties to [skills](./equipment.md)/the skills system), creature (spawn/death/idle, later), UI.
+### Events are a *type* + an open *qualifier* (the key move)
 
-Nothing in the music build blocks this; the event points exist and the director's `playSfx` is already in
-the surface above.
+A raw `event → one clip` map doesn't survive contact with a real game: creature deaths sound *entirely*
+different per creature, and footsteps depend on the *surface* under the foot. So an event is a stable
+**type** (the shared vocabulary) **plus an open-string qualifier** (the per-game variable) that selects a
+**variant bank** of clips, with an optional base bank as fallback:
+
+```ts
+// packages/core/src/audio/sound.ts
+type SoundEvent = "weaponStrike" | "projectileFire" | "hitTaken" | "abilityCast" | "footstep"
+                | "creatureDeath" | "breakableDestroyed" | "explosion" | "levelUp" | "talentPick" | "uiSelect";
+
+interface SoundDef {            // one catalogue entry
+  clips?: string[];             // base/fallback variation set (manifest names)
+  variants?: Record<string, SoundBank>; // qualifier value → its own bank
+  volume?; pitchVariance?; throttleMs?;  // config, inherited by variants
+}
+```
+
+The **types** stay a small typed union in core (the contract every game speaks); the **qualifier values**
+(`goblin`, `stone`, `sword`) are open strings the app binds in its catalogue — so a new creature or tileset
+is a catalogue line, never a core change, and games 2 & 3 reuse the scheduler with their own content.
+
+### The scheduler (pure, in core)
+
+`createSoundScheduler({ catalogue, now, rng })` → `play(event, qualifier?, overrides?) → PlaySound | null`.
+It resolves `variants[qualifier] ?? base`, picks a random clip (nudged off an immediate repeat),
+applies a **per-bank throttle** (keyed by the *resolved* bank, so a footstep isn't gated by a sword and a
+cleave hitting 6 targets fires once — better than one global floor), and returns `{clip, volume,
+pitchVariance}` or `null`. Pure and deterministic (injected clock + `Rng`), unit-tested like the perception
+hysteresis. Footsteps have no natural event — `stepFootstepCadence(state, distanceMoved, stride)`
+accumulates travel and fires one footfall per stride; the app samples the tile under the player when it
+fires and plays `footstep` qualified by that surface. A dash covers its distance in one step, so the helper
+swallows an oversized step to one footfall (and the app can simply not tick it while dashing — dash has its
+own whoosh).
+
+### App wiring
+
+- **Catalogue** — `apps/enter-the-gauntlet/src/game/audio/sounds.ts`: a `SoundCatalogue` binding events →
+  clip names + config. Content, like the zone JSON; the designer's authoring surface.
+- **Manifest** — SFX clip names → `require("…/assets/audio/sfx/…")`, alongside the music beds.
+- **Wiring** — build the scheduler in `GameScreen`; at each haptic/`TODO(audio)` seam call
+  `scheduler.play(event, qualifier)` and hand any non-null result to `director.playSfx`. Level-up rides the
+  existing React level-watch effect; talent pick rides `TalentPickScreen`'s `onPress`.
+
+Nothing in the music build blocked this; `playSfx`, the `sfxVolume` bus + its Settings slider all pre-exist.
+
+### One-shots play through a voice pool *(decided 2026-07-06)*
+
+`playSfx` originally created a fresh native player per one-shot, self-released on finish. At real
+gameplay rates (footsteps every ~300ms + strikes + hurts) that exhausts Android's native audio
+sessions — `AudioPlayer.constructor … Null pointer error creating session` — and leaks any player
+whose finish callback never fires. The director now owns a fixed **voice pool** (max 8 SFX players +
+the 2 music decks): voices are created lazily, a free voice already holding the clip just rewinds
+(no reload), and when all voices are busy the **stalest is stolen** — the oldest still-ringing
+one-shot gets cut, the standard game-audio trade. Playback rate is re-set on every fire since voices
+are reused (a previous play's pitch variance would otherwise stick).
 
 ## Volume, mute & settings
 

@@ -153,7 +153,8 @@ export const loadZone = (file: ZoneFile): Zone => {
   return {
     id: file.id,
     name: file.name,
-    band: file.band,
+    // Older files carry only `band` — treat them as a single-level zone there.
+    levels: { min: file.band, max: Math.max(file.band, file.bandMax ?? file.band) },
     size: sizePx,
     tileSize,
     chunkTiles,

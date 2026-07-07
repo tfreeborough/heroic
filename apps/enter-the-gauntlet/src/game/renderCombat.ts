@@ -70,13 +70,25 @@ export interface CombatScene {
   /** Present only while winding up. `progress` runs 0 → 1 toward the strike. */
   windup: { progress: number; facing: number; targetX: number; targetY: number } | null;
   targetId: number | null;
-  enemies: { id: number; x: number; y: number; hpFrac: number; flash: number; color: string; flying: boolean }[];
+  /** `con` is the level-gap ring colour (CON_COLORS via conTier — creature-levels.md). */
+  enemies: { id: number; x: number; y: number; hpFrac: number; flash: number; color: string; con: string; flying: boolean }[];
   /**
    * Destructible blockers in live state (alive ones only — a broken one just
    * isn't in the list). Centre + size, hp fraction (for a damage bar), `kind`
    * (→ colour) and `flash` (1 → 0 hit pulse).
    */
   breakables: { x: number; y: number; w: number; h: number; hpFrac: number; flash: number; kind: string; occludes: boolean; prime: number; targeted: boolean; lock: KeyColor | null }[];
+  /**
+   * Live spawner nests: a spinning spiral is drawn over each (the "it's pumping out
+   * monsters" tell). `size` is the nest's footprint side; the spin/pulse phases are
+   * derived from `time`, so no per-nest animation state is needed.
+   */
+  spawnerFx: { x: number; y: number; size: number }[];
+  /**
+   * One-shot particle poofs when a nest is spent or destroyed (the nest itself is
+   * already gone from `breakables`). `progress` runs 0 → 1 over the poof's life.
+   */
+  spawnerBursts: { x: number; y: number; size: number; progress: number; seed: number }[];
   /** Uncollected key pickups, drawn with the remembered static world; `color` → its hue. */
   keys: { x: number; y: number; color: KeyColor }[];
   /** Ranged enemies mid-windup (and chargers): the telegraph line + charge. */
@@ -254,6 +266,101 @@ const drawKeyPickup = (canvas: SkCanvas, hex: string, x: number, y: number, t: n
     canvas.drawCircle(bowX, y, KEY_ICON_BOW_R, stroke);
   }
   stroke.setStrokeCap(StrokeCap.Butt);
+};
+
+// A spinning spiral of glowing motes over an ACTIVE nest — the "it's pumping out
+// monsters" tell that makes a live nest pop from the static world at a glance so it
+// can be prioritised. Rotation comes from the scene clock (no per-nest state); it's
+// purely cosmetic (additive glow), independent of the budget-driven wither on the
+// nest body itself.
+const SPAWNER_SPIRAL_ARMS = 3;
+const SPAWNER_SPIRAL_TURNS = 1.35; // revolutions each arm sweeps from core to rim
+const SPAWNER_SPIRAL_STEPS = 20;
+const SPAWNER_SPIN_RATE = 1.8; // radians/sec (calm rotation, not a frantic pinwheel)
+const SPAWNER_PULSE_RATE = 3.0; // radians/sec of the brightness breath
+
+const drawSpawnerSpiral = (canvas: SkCanvas, x: number, y: number, radius: number, time: number) => {
+  const hue = color(COLORS.spawnerSpiral);
+  const spin = time * SPAWNER_SPIN_RATE;
+  // A slow brightness breath so the whole glyph feels alive rather than a fixed decal.
+  const pulse = 0.72 + 0.28 * Math.sin(time * SPAWNER_PULSE_RATE); // ~0.44 → 1.0
+  stroke.setStrokeCap(StrokeCap.Round);
+  stroke.setBlendMode(BlendMode.Plus);
+  fill.setBlendMode(BlendMode.Plus);
+  for (let a = 0; a < SPAWNER_SPIRAL_ARMS; a++) {
+    const base = spin + (a / SPAWNER_SPIRAL_ARMS) * Math.PI * 2;
+    const arm = Skia.Path.Make();
+    let tipX = x;
+    let tipY = y;
+    for (let i = 0; i <= SPAWNER_SPIRAL_STEPS; i++) {
+      const t = i / SPAWNER_SPIRAL_STEPS; // 0 (core) → 1 (rim)
+      const ang = base + t * SPAWNER_SPIRAL_TURNS * Math.PI * 2;
+      tipX = x + Math.cos(ang) * t * radius;
+      tipY = y + Math.sin(ang) * t * radius;
+      if (i === 0) arm.moveTo(tipX, tipY);
+      else arm.lineTo(tipX, tipY);
+    }
+    // A faint trail, then a slightly brighter mote riding its leading tip — kept low
+    // so it reads as a soft glow hovering over the nest, not a hard graphic.
+    stroke.setColor(hue);
+    stroke.setAlphaf(0.16 * pulse);
+    stroke.setStrokeWidth(2);
+    canvas.drawPath(arm, stroke);
+    fill.setColor(hue);
+    fill.setAlphaf(0.5 * pulse);
+    canvas.drawCircle(tipX, tipY, 2.5, fill);
+  }
+  // A soft core so the arms read as spilling out of the nest's heart.
+  fill.setColor(hue);
+  fill.setAlphaf(0.28 * pulse);
+  canvas.drawCircle(x, y, radius * 0.16, fill);
+  stroke.setBlendMode(BlendMode.SrcOver);
+  fill.setBlendMode(BlendMode.SrcOver);
+  stroke.setStrokeCap(StrokeCap.Butt);
+};
+
+// The particle poof when a nest is spent or destroyed: a fan of arcane motes flung
+// outward (ease-out, shrinking + fading) under a quick core flash and an expanding
+// ring — the "this nest is finished" beat that replaces leaving an inert husk. Same
+// additive glow as the spiral; a handful of circles, only while the poof is alive.
+const SPAWNER_BURST_MOTES = 16;
+
+const drawSpawnerBurst = (
+  canvas: SkCanvas,
+  x: number,
+  y: number,
+  size: number,
+  progress: number,
+  seed: number,
+) => {
+  const fade = 1 - progress;
+  const eo = 1 - fade * fade; // shoots out fast, then settles
+  const hue = color(COLORS.spawnerSpiral);
+  fill.setBlendMode(BlendMode.Plus);
+  fill.setColor(hue);
+  const spread = size * (0.4 + 1.2 * eo);
+  const moteR = 1.5 + 2.5 * fade;
+  for (let k = 0; k < SPAWNER_BURST_MOTES; k++) {
+    const ang = seed + (k / SPAWNER_BURST_MOTES) * Math.PI * 2;
+    // Deterministic per-mote jitter (no rng) so it isn't a perfect ring.
+    const jitter = 0.7 + 0.3 * Math.sin(seed * 3 + k * 1.7);
+    fill.setAlphaf(0.85 * fade);
+    canvas.drawCircle(x + Math.cos(ang) * spread * jitter, y + Math.sin(ang) * spread * jitter, moteR, fill);
+  }
+  // Core flash — punchy, gone by ~35% of the life — sells the pop.
+  const flash = Math.max(0, 1 - progress / 0.35);
+  if (flash > 0) {
+    fill.setAlphaf(0.6 * flash);
+    canvas.drawCircle(x, y, size * 0.4, fill);
+  }
+  // Expanding ring, thinning + fading.
+  stroke.setColor(hue);
+  stroke.setBlendMode(BlendMode.Plus);
+  stroke.setAlphaf(0.7 * fade);
+  stroke.setStrokeWidth(1 + 2 * fade);
+  canvas.drawCircle(x, y, size * (0.3 + 0.85 * eo), stroke);
+  fill.setBlendMode(BlendMode.SrcOver);
+  stroke.setBlendMode(BlendMode.SrcOver);
 };
 
 // Heavy blur (respectCTM=true → world units, so it scales with camera zoom) for the
@@ -635,6 +742,14 @@ export const recordCombatScene = (scene: CombatScene): SkPicture => {
       }
     }
 
+    // Active nests: a spinning spiral over each, drawn after the nest bodies so it
+    // sits on top. View-culled by footprint like the breakables above.
+    for (const fx of scene.spawnerFx) {
+      if (fx.x - fx.size > vMaxX || fx.x + fx.size < vMinX || fx.y - fx.size > vMaxY || fx.y + fx.size < vMinY)
+        continue;
+      drawSpawnerSpiral(canvas, fx.x, fx.y, fx.size * 0.62, scene.time);
+    }
+
     // Key pickups — drawn with the static world (unclipped), so a key you've seen
     // stays remembered in the fog like a wall rather than vanishing the instant you
     // look away. The fog overlay still hides any key in unexplored territory.
@@ -705,6 +820,27 @@ export const recordCombatScene = (scene: CombatScene): SkPicture => {
     for (const [c, pts] of bodiesByColor) {
       enemyBodyPaint.setColor(color(c));
       canvas.drawPoints(PointMode.Points, pts, enemyBodyPaint);
+    }
+    // Con rings (creature-levels.md): a thin ring just outside the body in the
+    // level-gap colour — the "should I fight this?" read. Batched one path per
+    // tier colour (≤5 draws) to keep the call count flat, like the bars below.
+    {
+      const ringsByCon = new Map<string, ReturnType<typeof Skia.Path.Make>>();
+      for (const d of scene.enemies) {
+        let path = ringsByCon.get(d.con);
+        if (path === undefined) {
+          path = Skia.Path.Make();
+          ringsByCon.set(d.con, path);
+        }
+        path.addCircle(d.x, d.y, ENEMY_RADIUS + 2.5);
+      }
+      stroke.setStrokeWidth(2);
+      stroke.setAlphaf(0.85);
+      for (const [c, path] of ringsByCon) {
+        stroke.setColor(color(c));
+        canvas.drawPath(path, stroke);
+      }
+      stroke.setAlphaf(1);
     }
     if (anyFlash) {
       fill.setColor(color("#ffffff"));
@@ -987,6 +1123,12 @@ export const recordCombatScene = (scene: CombatScene): SkPicture => {
           canvas.drawCircle(ex.x + Math.cos(a) * dist, ex.y + Math.sin(a) * dist, sparkR, fill);
         }
       }
+    }
+
+    // Spawner death poofs (a nest that spent its last unit or was destroyed). The
+    // nest is already out of `breakables`, so this is a free-standing effect.
+    for (const sb of scene.spawnerBursts) {
+      drawSpawnerBurst(canvas, sb.x, sb.y, sb.size, sb.progress, sb.seed);
     }
 
     // Player body + facing notch, drawn last so it sits on top of everything.

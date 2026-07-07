@@ -50,6 +50,13 @@ const CREATURE_MARKER_FILL = "#b388ff";
 const CREATURE_MARKER_EDGE = "rgba(20,12,40,0.85)";
 const CREATURE_LABEL_FILL = "#e9ddff";
 
+// A trigger is an invisible region (hidden in-game): drawn here as a dashed amber
+// rectangle with a faint fill and its text labelled, so it reads as a scripted
+// zone distinct from the crimson spawner / violet creature / gold POI markers.
+const TRIGGER_FILL = "rgba(245,165,36,0.10)";
+const TRIGGER_EDGE = "rgba(245,165,36,0.9)";
+const TRIGGER_LABEL_FILL = "#ffe0a3";
+
 const breakableFill = (kind: string): string => {
   switch (kind) {
     case "wood-wall":
@@ -376,6 +383,38 @@ export const drawZone = (
       ctx.lineCap = "butt";
       continue;
     }
+    if (o.kind === "trigger") {
+      // The region footprint (centre + size): a faint amber fill + dashed border,
+      // in world px so it scales with zoom. Hidden in-game — an editor-only marker.
+      const w = o.w && o.w > 0 ? o.w : 2 * t;
+      const h = o.h && o.h > 0 ? o.h : 2 * t;
+      const rx = o.x - w / 2;
+      const ry = o.y - h / 2;
+      ctx.fillStyle = TRIGGER_FILL;
+      ctx.fillRect(rx, ry, w, h);
+      ctx.lineWidth = 1.5 / view.zoom;
+      ctx.strokeStyle = TRIGGER_EDGE;
+      ctx.setLineDash([8 / view.zoom, 6 / view.zoom]);
+      ctx.strokeRect(rx, ry, w, h);
+      ctx.setLineDash([]);
+      // Its text centred in the region (a placeholder tag when unauthored), so the
+      // designer sees what fires — screen-constant size with a dark halo for legibility.
+      const raw = typeof o.props.text === "string" ? o.props.text.trim() : "";
+      const label = (raw || "⚑ trigger").replace(/\s+/g, " ");
+      const shown = label.length > 24 ? `${label.slice(0, 23)}…` : label;
+      const fontPx = 12 / view.zoom;
+      ctx.font = `${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3 / view.zoom;
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      ctx.strokeText(shown, o.x, o.y);
+      ctx.fillStyle = TRIGGER_LABEL_FILL;
+      ctx.fillText(shown, o.x, o.y);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      continue;
+    }
     ctx.fillStyle = o.kind === "playerSpawn" ? "#5fd0ff" : "#f2c14e";
     ctx.beginPath();
     ctx.arc(o.x, o.y, 8 / view.zoom + 2, 0, Math.PI * 2);
@@ -422,7 +461,13 @@ export const drawZone = (
       }
     } else {
       const o = zone.objects.find((o) => o.id === sel.id);
-      if (o) {
+      if (o && o.kind === "trigger") {
+        // A region object: outline its rect (so it pairs with the resize handles).
+        const w = o.w && o.w > 0 ? o.w : 2 * t;
+        const h = o.h && o.h > 0 ? o.h : 2 * t;
+        const pad = 3 / view.zoom;
+        ctx.strokeRect(o.x - w / 2 - pad, o.y - h / 2 - pad, w + pad * 2, h + pad * 2);
+      } else if (o) {
         ctx.beginPath();
         ctx.arc(o.x, o.y, 12 / view.zoom + 2, 0, Math.PI * 2);
         ctx.stroke();

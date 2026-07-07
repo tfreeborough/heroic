@@ -39,6 +39,11 @@ setup friction for zero gameplay need). If we ever need pixel-identical preview 
 drop CanvasKit — the same Skia WASM the game uses — into the Vite viewport later without restructuring the
 editor. We won't need it for authoring.
 
+**One exception to "no server":** the [Asset Forge](./asset-forge.md) (AI asset generation, built
+2026-07-05) adds a small dev-only Vite plugin (`forge/plugin.ts`) — needed for API keys, image/audio
+post-processing, and writing into the game's assets folder. Zone editing itself stays pure-browser as
+described below.
+
 ## Tilesets — keeping editor and game identical
 
 A tileset is an image atlas; each tile id maps to a source rectangle in it. The game draws tiles with Skia

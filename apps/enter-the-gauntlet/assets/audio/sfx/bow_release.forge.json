@@ -1,0 +1,18 @@
+{
+  "type": "sfx",
+  "subject": "a bow string being released by an archer, bowstring twang and thud",
+  "prompt": "Close-mic'd wooden longbow twang: sharp, tense string snap, hollow resonant wooden belly of bow, quick airborne whoosh of arrow, soft muffled leather nock thud as arrow departs — one clean one-second burst, gritty, natural, physical.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.6,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "bow_release_1.mp3"
+  ],
+  "created": "2026-07-05T23:08:09.107Z",
+  "updated": "2026-07-05T23:08:09.107Z"
+}

@@ -1,7 +1,7 @@
 import { StyleSheet } from "react-native";
 // RNGH's Pressable (not RN's): lives in the gesture-handler touch system so it
 // still fires while the thumbstick's pan gesture owns a touch — the dash is a
-// right-thumb action used *while* the left thumb holds the stick. See WeaponButton.
+// right-thumb action used *while* the left thumb holds the stick.
 import { Pressable } from "react-native-gesture-handler";
 import {
   Canvas,

@@ -1,20 +1,21 @@
 import { useRef } from "react";
 import {
   CREATURE_IDS,
-  creatureLabel,
   KEY_COLORS,
   parseSpawnerConfig,
+  parseTriggerConfig,
   type BreakEffect,
   type KeyColor,
   type ZoneFile,
   type ZoneObjectKind,
 } from "@heroic/core";
 import type { Selection } from "./edit/types";
-import { BREAKABLE_KINDS, OBJECT_KINDS } from "./edit/defaults";
+import { BREAKABLE_KINDS, OBJECT_KINDS, creaturePickerLabel } from "./edit/defaults";
 
 interface Props {
   zoneFile: ZoneFile;
-  selection: Selection;
+  /** null = nothing selected → the inspector shows the zone's own settings. */
+  selection: Selection | null;
   /** Snapshot for undo — called once per field-editing session (arm-on-focus). */
   beginEdit: () => void;
   /** Mark dirty + re-derive after a mutation. */
@@ -67,9 +68,64 @@ export const Inspector = ({
     </div>
   );
 
+  // The zone's own settings — shown when nothing is selected (click empty
+  // space to get here). Name and the level range (band–bandMax: the content
+  // gate every spawn's roll is clamped to — creature-levels.md). Size lives
+  // in the toolbar's resize control; id is the file's identity, read-only.
+  const zonePanel = (
+    <div className="inspector">
+      <div className="inspector-head">
+        <h3>Zone</h3>
+      </div>
+      <label>
+        Name
+        <input
+          value={zoneFile.name}
+          onFocus={arm}
+          onChange={(e) => edit(() => (zoneFile.name = e.target.value))}
+        />
+      </label>
+      <div className="pair">
+        <label>
+          Level min
+          <input
+            type="number"
+            min={1}
+            value={zoneFile.band}
+            onFocus={arm}
+            onChange={(e) => edit(() => (zoneFile.band = Math.max(1, toNum(e.target.value, zoneFile.band))))}
+          />
+        </label>
+        <label>
+          Level max
+          <input
+            type="number"
+            min={1}
+            value={zoneFile.bandMax ?? zoneFile.band}
+            onFocus={arm}
+            onChange={(e) =>
+              edit(
+                () =>
+                  (zoneFile.bandMax = Math.max(
+                    1,
+                    toNum(e.target.value, zoneFile.bandMax ?? zoneFile.band),
+                  )),
+              )
+            }
+          />
+        </label>
+      </div>
+      <div className="muted pos">
+        {zoneFile.id} · {zoneFile.size.cols}×{zoneFile.size.rows} tiles
+      </div>
+    </div>
+  );
+
+  if (!selection) return zonePanel;
+
   if (selection.type === "breakable") {
     const b = zoneFile.breakables.find((x) => x.id === selection.id);
-    if (!b) return <div className="inspector muted">Nothing selected.</div>;
+    if (!b) return zonePanel;
     const explode = b.onBreak?.find((e): e is ExplodeEffect => e.type === "explode");
     return (
       <div className="inspector">
@@ -215,11 +271,14 @@ export const Inspector = ({
   }
 
   const o = zoneFile.objects.find((x) => x.id === selection.id);
-  if (!o) return <div className="inspector muted">Nothing selected.</div>;
+  if (!o) return zonePanel;
   // For a spawner, surface a purpose-built config form (the format also stores it
   // in the generic `props` bag). parseSpawnerConfig fills any unset prop from the
   // defaults, so the inputs always show a concrete value to edit.
   const spawner = o.kind === "spawner" ? parseSpawnerConfig(o.props) : null;
+  // A trigger surfaces its text/duration/repeat + region size (docs/design/triggers.md).
+  // parseTriggerConfig fills any unset prop, so the fields always show a concrete value.
+  const trigger = o.kind === "trigger" ? parseTriggerConfig(o.props) : null;
   const setProp = (key: string, value: string | number) => edit(() => (o.props[key] = value));
   const numProp = (key: string, current: number, min: number) => (
     <input
@@ -228,6 +287,24 @@ export const Inspector = ({
       value={current}
       onFocus={arm}
       onChange={(e) => setProp(key, Math.max(min, toNum(e.target.value, current)))}
+    />
+  );
+  // Optional level-bounds props (docs/design/creature-levels.md): empty = the
+  // zone's range applies; a value replaces it for this placement (the game's
+  // parseLevelRange reads levelMin/levelMax; the creature's own bounds still
+  // clamp the roll, so a wizard never drops below its floor).
+  const levelProp = (key: string) => (
+    <input
+      type="number"
+      min={1}
+      placeholder="zone"
+      value={o.props[key] === undefined ? "" : String(o.props[key])}
+      onFocus={arm}
+      onChange={(e) =>
+        e.target.value === ""
+          ? edit(() => delete o.props[key])
+          : setProp(key, Math.max(1, toNum(e.target.value, 1)))
+      }
     />
   );
   return (
@@ -277,7 +354,7 @@ export const Inspector = ({
           >
             {CREATURE_IDS.map((id) => (
               <option key={id} value={id}>
-                {creatureLabel(id)}
+                {creaturePickerLabel(id)}
               </option>
             ))}
           </select>
@@ -299,6 +376,63 @@ export const Inspector = ({
           </select>
         </label>
       )}
+      {trigger && (
+        <>
+          <label>
+            Text
+            <textarea
+              rows={3}
+              placeholder="Shown on screen when the player enters…"
+              value={String(o.props.text ?? "")}
+              onFocus={arm}
+              onChange={(e) => setProp("text", e.target.value)}
+              style={{ resize: "vertical", fontFamily: "inherit" }}
+            />
+          </label>
+          <div className="pair">
+            <label>
+              Width
+              <input
+                type="number"
+                min={8}
+                value={Math.round(o.w ?? 0)}
+                onFocus={arm}
+                onChange={(e) => edit(() => (o.w = Math.max(8, toNum(e.target.value, o.w ?? 8))))}
+              />
+            </label>
+            <label>
+              Height
+              <input
+                type="number"
+                min={8}
+                value={Math.round(o.h ?? 0)}
+                onFocus={arm}
+                onChange={(e) => edit(() => (o.h = Math.max(8, toNum(e.target.value, o.h ?? 8))))}
+              />
+            </label>
+          </div>
+          <label>
+            Duration (s)
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={trigger.action.durationMs / 1000}
+              onFocus={arm}
+              onChange={(e) => setProp("durationMs", Math.max(0, toNum(e.target.value, 3)) * 1000)}
+            />
+          </label>
+          <label className="row">
+            <input
+              type="checkbox"
+              checked={trigger.repeat}
+              onFocus={arm}
+              onChange={(e) => edit(() => (o.props.repeat = e.target.checked))}
+            />
+            Repeat (re-fire on re-entry)
+          </label>
+        </>
+      )}
       {spawner && (
         <>
           <label>
@@ -310,7 +444,7 @@ export const Inspector = ({
             >
               {CREATURE_IDS.map((id) => (
                 <option key={id} value={id}>
-                  {creatureLabel(id)}
+                  {creaturePickerLabel(id)}
                 </option>
               ))}
             </select>
@@ -333,7 +467,23 @@ export const Inspector = ({
               {numProp("maxAlive", spawner.maxAlive, 1)}
             </label>
           </div>
+          <label>
+            Capacity (total spawns)
+            {numProp("capacity", spawner.capacity, 0)}
+          </label>
         </>
+      )}
+      {(o.kind === "creature" || o.kind === "spawner") && (
+        <div className="pair">
+          <label>
+            Level min
+            {levelProp("levelMin")}
+          </label>
+          <label>
+            Level max
+            {levelProp("levelMax")}
+          </label>
+        </div>
       )}
     </div>
   );

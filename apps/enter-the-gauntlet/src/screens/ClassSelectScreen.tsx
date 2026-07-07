@@ -39,6 +39,7 @@ import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { CLASS_LIST, type ClassDef, type ClassId } from "@heroic/core";
 import type { RootStackParamList } from "../navigation/types";
+import { useCharacter } from "../character/CharacterContext";
 import { MenuButton } from "../ui/MenuButton";
 import { UI } from "../ui/theme";
 
@@ -188,6 +189,7 @@ const ClassPortrait = ({
 export const ClassSelectScreen = ({ navigation }: Props) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const { createCharacter } = useCharacter();
   // The strip: indexSv is the settled class, tx the live drag offset. Both
   // owned by the UI thread; React's `index` mirror (for stats/dots/button)
   // updates only when a transition lands.
@@ -333,7 +335,13 @@ export const ClassSelectScreen = ({ navigation }: Props) => {
         <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
           <MenuButton
             label={`Choose ${def.label}`}
-            onPress={() => navigation.navigate("Game", { classId: def.id })}
+            onPress={() => {
+              // A fresh level-1 record becomes the active character; the Game
+              // reads it from CharacterContext (no route params). Old
+              // characters stay in the roster for the future roster screen.
+              createCharacter(def.id);
+              navigation.navigate("Game");
+            }}
           />
         </View>
 

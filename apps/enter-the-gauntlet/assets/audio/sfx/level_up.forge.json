@@ -1,0 +1,18 @@
+{
+  "type": "sfx",
+  "subject": "a bright triumphant arcane chime swelling upward, no melody",
+  "prompt": "a bright triumphant arcane chime swelling upward, no melody. A single one-shot sound effect for a dark-fantasy dungeon game — gritty and physical, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.4,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "level_up_1.mp3"
+  ],
+  "created": "2026-07-05T23:13:59.346Z",
+  "updated": "2026-07-05T23:13:59.346Z"
+}

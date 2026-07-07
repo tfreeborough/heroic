@@ -7,6 +7,7 @@ import { GameScreen } from "../game/GameScreen";
 import { ClassSelectScreen } from "../screens/ClassSelectScreen";
 import { MenuScreen } from "../screens/MenuScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
+import { TalentPickScreen } from "../screens/TalentPickScreen";
 import { UI } from "../ui/theme";
 import type { RootStackParamList } from "./types";
 
@@ -33,6 +34,14 @@ export const RootNavigator = () => (
       name="Pause"
       component={MenuScreen}
       options={{ presentation: "transparentModal", animation: "fade" }}
+    />
+    {/* Level-up talent pick: same over-the-frozen-game modal as Pause. Swipe-back
+        is disabled — leaving without picking is allowed only via hardware back,
+        and the Game's auto-open effect just re-summons it while picks are owed. */}
+    <Stack.Screen
+      name="TalentPick"
+      component={TalentPickScreen}
+      options={{ presentation: "transparentModal", animation: "fade", gestureEnabled: false }}
     />
   </Stack.Navigator>
 );

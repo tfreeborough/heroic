@@ -8,6 +8,7 @@ import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-c
 import { NavigationContainer } from "@react-navigation/native";
 import { useFonts, GrenzeGotisch_700Bold } from "@expo-google-fonts/grenze-gotisch";
 import { SettingsProvider } from "./src/settings/SettingsContext";
+import { CharacterProvider } from "./src/character/CharacterContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 /**
@@ -54,11 +55,13 @@ export default function App() {
             so the first text it paints is already pixel. The dark root shows
             through until then. */}
         <SettingsProvider>
-          {fontsLoaded ? (
-            <NavigationContainer>
-              <RootNavigator />
-            </NavigationContainer>
-          ) : null}
+          <CharacterProvider>
+            {fontsLoaded ? (
+              <NavigationContainer>
+                <RootNavigator />
+              </NavigationContainer>
+            ) : null}
+          </CharacterProvider>
         </SettingsProvider>
         <StatusBar style="light" hidden />
       </SafeAreaProvider>

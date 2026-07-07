@@ -3,6 +3,7 @@
   "id": "realm-00",
   "name": "Proving Grounds",
   "band": 1,
+  "bandMax": 10,
   "size": {
     "cols": 100,
     "rows": 100
@@ -20461,7 +20462,7 @@
     {
       "id": "spawn",
       "kind": "playerSpawn",
-      "x": 416,
+      "x": 352,
       "y": 352,
       "props": {}
     },
@@ -20476,7 +20477,9 @@
         "activationRadius": 500,
         "cadence": 7,
         "maxAlive": 1,
-        "spawnRadius": 100
+        "spawnRadius": 100,
+        "levelMin": 2,
+        "levelMax": 4
       }
     },
     {
@@ -20490,7 +20493,9 @@
         "activationRadius": 500,
         "cadence": 7,
         "maxAlive": 1,
-        "spawnRadius": 100
+        "spawnRadius": 100,
+        "levelMin": 2,
+        "levelMax": 4
       }
     },
     {
@@ -20499,7 +20504,9 @@
       "x": 1056,
       "y": 224,
       "props": {
-        "creature": "zombie"
+        "creature": "zombie",
+        "levelMin": 1,
+        "levelMax": 2
       }
     },
     {
@@ -20508,7 +20515,9 @@
       "x": 1056,
       "y": 480,
       "props": {
-        "creature": "zombie"
+        "creature": "zombie",
+        "levelMin": 1,
+        "levelMax": 2
       }
     },
     {
@@ -20517,7 +20526,9 @@
       "x": 928,
       "y": 32,
       "props": {
-        "creature": "ambusher"
+        "creature": "ambusher",
+        "levelMin": 2,
+        "levelMax": 2
       }
     },
     {
@@ -20526,7 +20537,9 @@
       "x": 1312,
       "y": 672,
       "props": {
-        "creature": "ambusher"
+        "creature": "ambusher",
+        "levelMin": 2,
+        "levelMax": 2
       }
     },
     {
@@ -20539,7 +20552,9 @@
         "maxHp": 40,
         "activationRadius": 700,
         "cadence": 1,
-        "maxAlive": 5
+        "maxAlive": 5,
+        "levelMin": 3,
+        "levelMax": 4
       }
     },
     {
@@ -20548,7 +20563,9 @@
       "x": 3168,
       "y": 544,
       "props": {
-        "creature": "archer"
+        "creature": "archer",
+        "levelMin": 4,
+        "levelMax": 4
       }
     },
     {
@@ -20557,7 +20574,9 @@
       "x": 4064,
       "y": 928,
       "props": {
-        "creature": "wizard"
+        "creature": "wizard",
+        "levelMin": 5,
+        "levelMax": 6
       }
     },
     {
@@ -20586,9 +20605,11 @@
       "props": {
         "creature": "zombie",
         "maxHp": 120,
-        "activationRadius": 420,
+        "activationRadius": 620,
         "cadence": 3,
-        "maxAlive": 10
+        "maxAlive": 10,
+        "levelMin": 1,
+        "levelMax": 3
       }
     },
     {
@@ -20599,9 +20620,11 @@
       "props": {
         "creature": "zombie",
         "maxHp": 120,
-        "activationRadius": 420,
+        "activationRadius": 620,
         "cadence": 3,
-        "maxAlive": 10
+        "maxAlive": 10,
+        "levelMin": 1,
+        "levelMax": 3
       }
     },
     {
@@ -20612,9 +20635,11 @@
       "props": {
         "creature": "zombie",
         "maxHp": 120,
-        "activationRadius": 420,
+        "activationRadius": 620,
         "cadence": 3,
-        "maxAlive": 10
+        "maxAlive": 10,
+        "levelMin": 1,
+        "levelMax": 3
       }
     },
     {
@@ -20625,10 +20650,26 @@
       "props": {
         "creature": "zombie",
         "maxHp": 120,
-        "activationRadius": 420,
+        "activationRadius": 620,
         "cadence": 3,
-        "maxAlive": 10
+        "maxAlive": 10,
+        "levelMin": 1,
+        "levelMax": 3
       }
+    },
+    {
+      "id": "trigger-1",
+      "kind": "trigger",
+      "x": 32,
+      "y": 32,
+      "props": {
+        "action": "text",
+        "text": "You hear a faint unlocking sound in the distance...",
+        "durationMs": 4000,
+        "repeat": false
+      },
+      "w": 64,
+      "h": 64
     }
   ]
 }

@@ -21,8 +21,10 @@ import {
   type Mover,
   type Vec2,
 } from "@heroic/engine";
+import { talentEffectTotal } from "@heroic/core";
 import {
   DASH_COOLDOWN,
+  DASH_COOLDOWN_MIN,
   DASH_DURATION,
   DASH_IFRAMES,
   DASH_KNOCKBACK,
@@ -31,11 +33,16 @@ import {
   ENEMY_RADIUS,
 } from "../constants";
 
-/** Lifecycle timing → the generic ability machine. */
-export const DASH_CONFIG: AbilityConfig = {
+/**
+ * Lifecycle timing → the generic ability machine, built from the character's
+ * talents: the Swift Roll chain (a non-stat "effect" talent — see
+ * progression/chains.ts) shaves seconds off the cooldown, floored at
+ * DASH_COOLDOWN_MIN. Rebuilt by GameScreen whenever the talent list changes.
+ */
+export const makeDashConfig = (talents: readonly string[]): AbilityConfig => ({
   activeDuration: DASH_DURATION,
-  cooldown: DASH_COOLDOWN,
-};
+  cooldown: Math.max(DASH_COOLDOWN_MIN, DASH_COOLDOWN - talentEffectTotal(talents, "dashCooldown")),
+});
 
 export interface DashRuntime {
   /** Generic lifecycle (ready/active/cooldown), advanced each step by stepAbility. */
@@ -84,8 +91,8 @@ export const isDashing = (rt: DashRuntime): boolean => rt.ability.phase === "act
 export const dashInvulnerable = (rt: DashRuntime): boolean => rt.invulnLeft > 0;
 
 /** Cooldown fraction 1 → 0, for the button's clock overlay. */
-export const dashCooldownFrac = (rt: DashRuntime): number =>
-  rt.ability.cooldownRemaining / DASH_CONFIG.cooldown;
+export const dashCooldownFrac = (rt: DashRuntime, config: AbilityConfig): number =>
+  rt.ability.cooldownRemaining / config.cooldown;
 
 /**
  * Barge effect: while rolling, shove every enemy within the dash's *wide* sweep

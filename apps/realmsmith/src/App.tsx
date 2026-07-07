@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   COLLISION_CELL,
   CREATURE_IDS,
-  creatureLabel,
   loadZone,
   type Aabb,
   type CollisionMaterial,
@@ -13,8 +12,15 @@ import {
 } from "@heroic/core";
 import { Viewport } from "./viewport/Viewport";
 import { Inspector } from "./Inspector";
+import { ForgePanel } from "./forge/ForgePanel";
 import type { EditPointer, Selection, Tool } from "./edit/types";
-import { BREAKABLE_KINDS, OBJECT_KINDS, breakableDefaults, type BreakableKind } from "./edit/defaults";
+import {
+  BREAKABLE_KINDS,
+  OBJECT_KINDS,
+  breakableDefaults,
+  creaturePickerLabel,
+  type BreakableKind,
+} from "./edit/defaults";
 import {
   breakableIdAt,
   deleteBreakable,
@@ -104,6 +110,7 @@ export const App = () => {
   const [showGrid, setShowGrid] = useState(true);
   const [snapMode, setSnapMode] = useState<"half" | "off">("half");
   const [showIssues, setShowIssues] = useState(false);
+  const [showForge, setShowForge] = useState(false);
   const [focus, setFocus] = useState<{ x: number; y: number } | null>(null);
   const [pending, setPending] = useState<{ box: Aabb; valid: boolean } | null>(null);
 
@@ -366,7 +373,32 @@ export const App = () => {
         // A `creature` placement carries the toolbar's chosen creature id; other
         // kinds fall back to their own defaults (defaultObjectProps).
         const objInit = objectKind === "creature" ? { creature: creatureId } : undefined;
-        if (left) {
+        // A trigger is an abstract region — it may sit over walls/voids (it just
+        // detects the player entering), so it bypasses the solid-avoidance gate
+        // that point markers obey.
+        const placeableAt = (kind: ZoneObjectKind, x: number, y: number): boolean =>
+          kind === "trigger" || objectPlaceable(zone, x, y);
+        const selObj =
+          selection?.type === "object" ? z.objects.find((o) => o.id === selection.id) : undefined;
+        if (e.handle && selObj && selObj.kind === "trigger") {
+          // Resize the selected trigger's region: drag a corner; the opposite
+          // corner (captured on down) stays put. Mirrors the breakable resize.
+          if (e.phase === "down") {
+            const w = selObj.w && selObj.w > 0 ? selObj.w : t;
+            const h = selObj.h && selObj.h > 0 ? selObj.h : t;
+            resizeAnchorRef.current = {
+              x: e.handle.includes("e") ? selObj.x - w / 2 : selObj.x + w / 2,
+              y: e.handle.includes("s") ? selObj.y - h / 2 : selObj.y + h / 2,
+            };
+          } else if (e.phase === "drag" && resizeAnchorRef.current) {
+            const a = resizeAnchorRef.current;
+            selObj.x = (a.x + sx) / 2;
+            selObj.y = (a.y + sy) / 2;
+            selObj.w = Math.max(8, Math.abs(sx - a.x));
+            selObj.h = Math.max(8, Math.abs(sy - a.y));
+            changed = true;
+          }
+        } else if (left) {
           if (e.phase === "down") {
             const hit = objectIdAt(z, e.wx, e.wy, radius);
             if (hit) {
@@ -376,19 +408,21 @@ export const App = () => {
             } else {
               strokeKindRef.current = "place";
               lastCellRef.current = { col: e.col, row: e.row };
-              if (objectPlaceable(zone, sx, sy)) {
+              if (placeableAt(objectKind, sx, sy)) {
                 setSelection({ type: "object", id: placeObject(z, objectKind, sx, sy, objInit) });
                 changed = true;
               }
             }
           } else if (e.phase === "drag") {
             if (strokeKindRef.current === "move" && dragRef.current?.type === "object") {
-              if (objectPlaceable(zone, sx, sy)) changed = moveObject(z, dragRef.current.id, sx, sy);
+              const moving = z.objects.find((o) => o.id === dragRef.current!.id);
+              if (moving && placeableAt(moving.kind, sx, sy))
+                changed = moveObject(z, dragRef.current.id, sx, sy);
             } else if (
               strokeKindRef.current === "place" &&
               dragged() &&
               movedCell() &&
-              objectPlaceable(zone, sx, sy)
+              placeableAt(objectKind, sx, sy)
             ) {
               placeObject(z, objectKind, sx, sy, objInit);
               changed = true;
@@ -552,11 +586,25 @@ export const App = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [save, deleteSelection, duplicateSelection, undo, redo]);
 
-  // The selected breakable's box → corner handles in the viewport (breakable tool only).
-  const resizeBox: Aabb | null =
-    tool === "breakable" && selection?.type === "breakable" && zoneRef.current
-      ? (zoneRef.current.breakables.find((b) => b.id === selection.id)?.box ?? null)
-      : null;
+  // Corner handles in the viewport: a selected breakable's box (breakable tool),
+  // or a selected region object's rect (a trigger, object tool). Both drag-resize
+  // through the same handle machinery in onPointer.
+  const resizeBox: Aabb | null = (() => {
+    const z = zoneRef.current;
+    if (!z) return null;
+    if (tool === "breakable" && selection?.type === "breakable") {
+      return z.breakables.find((b) => b.id === selection.id)?.box ?? null;
+    }
+    if (tool === "object" && selection?.type === "object") {
+      const o = z.objects.find((o) => o.id === selection.id);
+      if (o && o.kind === "trigger") {
+        const w = o.w && o.w > 0 ? o.w : z.tileSize;
+        const h = o.h && o.h > 0 ? o.h : z.tileSize;
+        return { x: o.x, y: o.y, w, h };
+      }
+    }
+    return null;
+  })();
 
   return (
     <div className="app">
@@ -618,7 +666,7 @@ export const App = () => {
               >
                 {CREATURE_IDS.map((id) => (
                   <option key={id} value={id}>
-                    {creatureLabel(id)}
+                    {creaturePickerLabel(id)}
                   </option>
                 ))}
               </select>
@@ -684,6 +732,13 @@ export const App = () => {
             <button onClick={save} disabled={!dirty}>
               Save{dirty ? " •" : ""}
             </button>
+            <button
+              className={showForge ? "on" : ""}
+              onClick={() => setShowForge((v) => !v)}
+              title="AI asset generation (docs/design/asset-forge.md)"
+            >
+              Forge
+            </button>
           </>
         ) : (
           <>
@@ -691,6 +746,14 @@ export const App = () => {
             {canReopen && <button onClick={reopen}>Reopen last</button>}
             <button onClick={openZone} disabled={!fsSupported}>
               Open zone…
+            </button>
+            {/* The Forge doesn't need a zone — it's usable straight from the empty state. */}
+            <button
+              className={showForge ? "on" : ""}
+              onClick={() => setShowForge((v) => !v)}
+              title="AI asset generation (docs/design/asset-forge.md)"
+            >
+              Forge
             </button>
           </>
         )}
@@ -727,16 +790,16 @@ export const App = () => {
             onPointer={onPointer}
             validateHover={validateHover}
           />
-          {selection && (
-            <Inspector
-              zoneFile={zoneRef.current}
-              selection={selection}
-              beginEdit={pushUndo}
-              commit={commitEdit}
-              onDuplicate={duplicateSelection}
-              onDelete={deleteSelection}
-            />
-          )}
+          {/* Always mounted: with a selection it inspects that entity; with
+              none it shows the zone's own settings (name, level range). */}
+          <Inspector
+            zoneFile={zoneRef.current}
+            selection={selection}
+            beginEdit={pushUndo}
+            commit={commitEdit}
+            onDuplicate={duplicateSelection}
+            onDelete={deleteSelection}
+          />
         </div>
       ) : (
         <div className="empty">
@@ -752,6 +815,8 @@ export const App = () => {
           )}
         </div>
       )}
+
+      {showForge && <ForgePanel onClose={() => setShowForge(false)} />}
 
       {error && <div className="error">{error}</div>}
     </div>

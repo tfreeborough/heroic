@@ -1,0 +1,18 @@
+{
+  "type": "sfx",
+  "subject": "a blunt weapon striking flesh and leather, meaty thud with a metallic edg",
+  "prompt": "Close, heavy one-two impact: a blunt iron mace hitting leather-clad flesh — wet, meaty thud layered with metallic edge clank; low-frequency chesty boom, brief echo, slight leather rasp. Two-second hit+reverberant decay, gritty, close-mic'd.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.35,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "block_1.mp3"
+  ],
+  "created": "2026-07-05T23:03:17.078Z",
+  "updated": "2026-07-05T23:03:17.078Z"
+}

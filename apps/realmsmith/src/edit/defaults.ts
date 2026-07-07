@@ -1,10 +1,24 @@
 import {
+  CREATURES,
   CREATURE_IDS,
   KEY_COLOR_IDS,
   SPAWNER_DEFAULTS,
+  TRIGGER_DEFAULTS,
+  creatureLabel,
   type BreakableDef,
+  type CreatureId,
   type ZoneObjectKind,
 } from "@heroic/core";
+
+/**
+ * Picker label carrying the species' level bounds (creature-levels.md), so
+ * choosing what a spawner emits — or authoring a levelMin/levelMax window —
+ * shows what levels the species can actually be.
+ */
+export const creaturePickerLabel = (id: CreatureId): string => {
+  const { min, max } = CREATURES[id].levels;
+  return `${creatureLabel(id)} · Lv ${min}–${max}`;
+};
 
 export const BREAKABLE_KINDS = ["barrel", "crate", "wood-wall", "door"] as const;
 export type BreakableKind = (typeof BREAKABLE_KINDS)[number];
@@ -65,8 +79,34 @@ export const OBJECT_KINDS: ZoneObjectKind[] = [
   "spawner",
   "creature",
   "key",
+  "trigger",
   "poi",
 ];
+
+/** A freshly-placed trigger's region size, in tiles per side (resize per-instance). */
+export const TRIGGER_REGION_TILES = 3;
+
+/**
+ * SPAWNER_DEFAULTS minus its structured `levels` range — props are flat
+ * scalars, and level bounds ride as separate `levelMin`/`levelMax` props
+ * (parseLevelRange), authored in the inspector rather than defaulted here.
+ */
+const scalarSpawnerDefaults = (): Record<string, string | number | boolean> => {
+  const { levels: _levels, ...scalars } = SPAWNER_DEFAULTS;
+  return { ...scalars };
+};
+
+/**
+ * TRIGGER_DEFAULTS flattened into a scalar `props` bag — the action's `type`,
+ * its `text`/`durationMs`, and the `repeat` flag (parseTriggerConfig reads them
+ * back). v1 has only the `text` action, so its fields are inlined directly.
+ */
+const scalarTriggerDefaults = (): Record<string, string | number | boolean> => ({
+  action: TRIGGER_DEFAULTS.action.type,
+  text: TRIGGER_DEFAULTS.action.text,
+  durationMs: TRIGGER_DEFAULTS.action.durationMs,
+  repeat: TRIGGER_DEFAULTS.repeat,
+});
 
 /**
  * Starting `props` for a freshly placed object. Spawners carry the full
@@ -79,9 +119,11 @@ export const defaultObjectProps = (
   kind: ZoneObjectKind,
 ): Record<string, string | number | boolean> =>
   kind === "spawner"
-    ? { ...SPAWNER_DEFAULTS }
+    ? scalarSpawnerDefaults()
     : kind === "creature"
       ? { creature: CREATURE_IDS[0]! }
       : kind === "key"
         ? { color: KEY_COLOR_IDS[0]! }
-        : {};
+        : kind === "trigger"
+          ? scalarTriggerDefaults()
+          : {};

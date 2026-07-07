@@ -7,6 +7,7 @@ import {
   loadZone,
   rectEdges,
   ZONE_PALETTE,
+  type ConTier,
   type CreatureId,
   type VisionSegment,
 } from "@heroic/engine";
@@ -249,6 +250,14 @@ export const PLAYER_ACCEL = 3000;
  */
 export const PLAYER_DECEL = 2800;
 
+/**
+ * Footfall cadence: one step sound per this many world-px travelled. At
+ * PLAYER_MAX_SPEED (280 px/s) that's ~2.5 footfalls/sec at a full sprint, fewer
+ * as you slow — distance-based so the rhythm tracks real movement, not the clock.
+ * See audio/sound.ts (`stepFootstepCadence`).
+ */
+export const FOOTSTEP_STRIDE_PX = 110;
+
 // --- Dash / roll -------------------------------------------------------------
 // A committed burst in the stick direction (or facing, if the stick is idle):
 // the player's velocity is pinned to DASH_SPEED for DASH_DURATION, bypassing the
@@ -261,6 +270,8 @@ export const DASH_DURATION = 0.2;
 export const DASH_SPEED = DASH_DISTANCE / DASH_DURATION;
 /** Seconds before the roll can be used again (the cooldown clock fills this). */
 export const DASH_COOLDOWN = 8;
+/** Floor the Swift Roll talent chain can never push the cooldown below. */
+export const DASH_COOLDOWN_MIN = 2;
 /**
  * Invulnerability window, seconds — a touch longer than the roll itself so the
  * dodge stays forgiving at the tail. Tracked separately from the post-hit
@@ -423,6 +434,13 @@ export const EXPLOSION_KNOCKBACK = 520;
 export const EXPLOSION_FX_DURATION = 0.45;
 
 /**
+ * Lifetime of the spawner-death particle poof (motes + ring), seconds. Fired when a
+ * nest is spent OR destroyed, then the nest is removed — so a cleared nest visibly
+ * finishes and leaves no husk. Purely cosmetic. See renderCombat / spawners.md.
+ */
+export const SPAWNER_BURST_DURATION = 0.5;
+
+/**
  * Fuse: the beat between an explosive breakable reaching 0 hp and actually
  * detonating, seconds. Because a blast primes its neighbours' fuses (rather than
  * bursting them instantly), a cluster chain-reacts as a visible cascade — pop,
@@ -464,4 +482,21 @@ export const COLORS = {
   hurtText: "#ff7a6b",
   playerHurt: "#e8503a",
   chargeTell: "#ff8a3a",
+  // Spawner arcane glow: the spinning spiral over a live nest and the particle poof
+  // when it's spent/destroyed (both additive, so they read as energy — spawners.md).
+  spawnerSpiral: "#7bf3d4",
+} as const;
+
+/**
+ * Con-ring palette (docs/design/creature-levels.md): the level-gap read on
+ * every enemy, grey → red. Core decides the tier (conTier — thresholds shared
+ * with the combat/XP gap); this maps it to pixels. Intensity is ordered so the
+ * ramp still reads in greyscale (dim grey → bright red).
+ */
+export const CON_COLORS: Record<ConTier, string> = {
+  grey: "#7c8087",
+  green: "#8fbf6f",
+  gold: "#f2c14e",
+  orange: "#e0893c",
+  red: "#e04a3a",
 } as const;

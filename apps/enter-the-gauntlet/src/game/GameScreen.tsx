@@ -3,10 +3,11 @@ import { AppState, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import { Canvas, Fill, Picture, useFont, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useIsFocused, useRoute, type RouteProp } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { GrenzeGotisch_700Bold } from "@expo-google-fonts/grenze-gotisch";
 import { useSettings } from "../settings/SettingsContext";
+import { useCharacter } from "../character/CharacterContext";
 import type { RootStackParamList } from "../navigation/types";
 import { UI } from "../ui/theme";
 import {
@@ -29,6 +30,7 @@ import {
   createPhysicsWorld,
   createMover,
   createRng,
+  createSoundScheduler,
   createSpatialGrid,
   deriveAttackerStats,
   derivePlayerCombatStats,
@@ -39,6 +41,7 @@ import {
   getVelocityPerSecond,
   hitsInArc,
   initMusicState,
+  initFootstepCadence,
   makeCombatant,
   makeCreatureBrain,
   markVisibleCircle,
@@ -55,12 +58,27 @@ import {
   stepAbility,
   stepAttackCycle,
   stepMusicState,
+  stepFootstepCadence,
   stepCrowd,
   stepPhysics,
   stepProjectile,
   stepSpawner,
   parseSpawnerConfig,
+  rollDefenderWave,
+  stepTrigger,
+  parseTriggerConfig,
+  initTriggerState,
+  regionContains,
   parseCreatureId,
+  pendingPicks,
+  playerAttackGapMods,
+  creatureAttackGapMods,
+  conTier,
+  parseLevelRange,
+  rollCreatureLevel,
+  talentModifierSources,
+  xpForKill,
+  xpToNext,
   initSpawnerState,
   addKey,
   spendKey,
@@ -82,6 +100,8 @@ import {
   type Combatant,
   type FlowField,
   type CombatStats,
+  type GapAttackMods,
+  type LevelRange,
   type HurtCircle,
   type HurtTarget,
   type KeyColor,
@@ -91,6 +111,8 @@ import {
   type ProjectileState,
   type SpawnerConfig,
   type SpawnerState,
+  type TriggerConfig,
+  type TriggerState,
   type StickSample,
   type Vec2,
   type VisionSegment,
@@ -105,6 +127,7 @@ import {
   CAMERA_MIN_RADIUS,
   COLORS,
   COMBAT_MUSIC_RADIUS,
+  CON_COLORS,
   CONTROLS_MIN_HEIGHT,
   CREATURES,
   CREATURE_VISUALS,
@@ -118,6 +141,7 @@ import {
   ENGAGEMENT_MARGIN,
   EXPLOSION_FUSE_DELAY,
   EXPLOSION_FX_DURATION,
+  SPAWNER_BURST_DURATION,
   EXPLOSION_KNOCKBACK,
   FLOW_MIN_ENEMIES,
   FLOW_RADIUS,
@@ -141,6 +165,7 @@ import {
   PILLARS,
   SOLIDS,
   SPAWN,
+  FOOTSTEP_STRIDE_PX,
   VISION,
   WALLS,
   ZONE,
@@ -148,11 +173,21 @@ import {
 } from "./constants";
 import { WEAPONS, scaleWeaponForStats, type WeaponDef, type WeaponId } from "./weapons";
 import { AUDIO_MANIFEST } from "./audio/manifest";
+import { SOUND_CATALOGUE } from "./audio/sounds";
+import type { SoundScheduler, SoundEvent, SoundConfig } from "@heroic/core";
 import { playStrikeHaptic } from "./haptics";
 import { Thumbstick } from "./Thumbstick";
 import { KeyHud } from "./KeyHud";
+import {
+  createHudAnim,
+  EMPTY_HUD_PICTURE,
+  LevelUpBanner,
+  LEVEL_UP_BANNER_MS,
+  PlayerHud,
+  recordPlayerHud,
+} from "./PlayerHud";
 import { DoorNotice } from "./DoorNotice";
-import { WeaponButton } from "./WeaponButton";
+import { TriggerBanner } from "./TriggerBanner";
 import { DashButton, DASH_READY_PICTURE, recordDashButton } from "./DashButton";
 import {
   applyDashShove,
@@ -161,7 +196,7 @@ import {
   dashCooldownFrac,
   dashInvulnerable,
   dashVelocity,
-  DASH_CONFIG,
+  makeDashConfig,
   isDashing,
   tickDashInvuln,
 } from "./skills/dash";
@@ -172,6 +207,12 @@ import { bakeFloorChunks } from "./zoneRender";
 interface Enemy {
   id: number;
   type: EnemyTypeId;
+  /**
+   * Instance level, rolled at spawn from the zone's band (creature-levels.md).
+   * Never scales the authored stats — it feeds the level-gap combat mods, the
+   * XP payout, and the con color, all relative to the player's level.
+   */
+  level: number;
   /** Flies over voids: routes/collides against walls only, ignoring chasms. */
   flying: boolean;
   /** Kinematic mover (position + velocity, px/s): integrated and collided in core. */
@@ -208,6 +249,8 @@ interface FlightProjectile extends ProjectileState {
   knockback: number;
   /** The firing weapon's stat block — kept so a mid-flight weapon swap can't retag the shot. */
   attacker: Combatant;
+  /** Enemy shots only: the shooter's instance level, so the hit prices the level gap. */
+  attackerLevel?: number;
 }
 
 interface FlyingNumber {
@@ -235,6 +278,18 @@ interface Explosion {
   radius: number;
   age: number;
   /** Per-blast angle offset so the debris sparks don't all point the same way. */
+  seed: number;
+}
+
+/** A one-shot particle poof when a nest is spent or destroyed (spawners.md): the
+ *  nest bursts into arcane motes and is removed, so a cleared nest leaves no husk. */
+interface SpawnerBurst {
+  x: number;
+  y: number;
+  /** Nest footprint side, so the motes scatter proportionally to its size. */
+  size: number;
+  age: number;
+  /** Rotates the mote fan per burst so they don't all align. */
   seed: number;
 }
 
@@ -282,6 +337,20 @@ interface SpawnerRuntime {
   /** Latched once the player has had line of sight to the nest — it stays silent
    *  until revealed, so breaking open a wall to expose it is when it springs to life. */
   everSeen: boolean;
+}
+
+/**
+ * A placed trigger (docs/design/triggers.md): an invisible region that fires an
+ * action when the player walks into it. Like a spawner, it pairs a pure FSM
+ * `state` with parsed `config`; `region` is the object's footprint as an `Aabb`,
+ * tested against the player's centre each step. v1's only action shows text.
+ */
+interface TriggerRuntime {
+  id: string;
+  config: TriggerConfig;
+  state: TriggerState;
+  /** The region footprint (centre + size), tested with `regionContains`. */
+  region: Aabb;
 }
 
 /**
@@ -378,13 +447,22 @@ export const GameScreen = () => {
   // pushes volume changes into the director, and the control deck flips sides.
   const { settings } = useSettings();
 
-  // The class picked on the way in (ClassSelect route) and its effective stats
-  // through the modifier pipeline. Level is pinned to 1 and the source list is
-  // empty until XP/Talents land (build order step 3) — when they do, they add
-  // modifier sources here and recompute. Stable for the life of the run.
-  const route = useRoute<RouteProp<RootStackParamList, "Game">>();
-  const classDef = CLASSES[route.params?.classId ?? "warrior"];
-  const playerEff = useMemo(() => computeEffectiveStats(classDef.base, 1), [classDef]);
+  // The active character record (CharacterContext): class, level, XP and
+  // talents all live on the persisted record. Its effective stats run through
+  // the modifier pipeline — owned talents as permanent sources — and recompute
+  // whenever a level-up, talent pick, or load changes the memo deps. The
+  // refresh effect below (after the combat refs) pushes the result into the
+  // mount-time sim caches.
+  const { active, gainXp } = useCharacter();
+  const classDef = CLASSES[active?.classId ?? "warrior"];
+  const talentSources = useMemo(
+    () => talentModifierSources(active?.talents ?? []),
+    [active?.talents],
+  );
+  const playerEff = useMemo(
+    () => computeEffectiveStats(classDef.base, active?.level ?? 1, talentSources),
+    [classDef, active?.level, talentSources],
+  );
 
   // Pause the sim whenever the Game screen isn't the focused route — i.e. while
   // the Pause overlay or Settings sit on top of it. The screen stays mounted, so
@@ -394,11 +472,44 @@ export const GameScreen = () => {
   const pausedRef = useRef(false);
   pausedRef.current = !isFocused;
 
+  // Level mirrored to a ref (the pausedRef pattern) so the kill hook inside
+  // onStep prices the XP gap without waiting on a re-render.
+  const levelRef = useRef(active?.level ?? 1);
+  levelRef.current = active?.level ?? 1;
+
+  // Level-up choreography. Picks owed is DERIVED from the record (level and
+  // talents-taken), never stored — so multi-level kills, backing out of the
+  // pick screen, and app restarts mid-pick all self-heal: while anything is
+  // owed and we're focused, the pick screen gets (re-)summoned. The banner
+  // gets LEVEL_UP_BANNER_MS of glory first; TalentPick is a transparent modal,
+  // so opening it unfocuses us and the Pause mechanism freezes the run.
+  const level = active?.level ?? 1;
+  const owed = active ? pendingPicks(active.level, active.talents.length) : 0;
+  const [bannerLevel, setBannerLevel] = useState<number | null>(null);
+  const prevLevelRef = useRef(level);
+  useEffect(() => {
+    if (level > prevLevelRef.current) {
+      setBannerLevel(level);
+      const t = setTimeout(() => setBannerLevel(null), LEVEL_UP_BANNER_MS + 600);
+      prevLevelRef.current = level;
+      return () => clearTimeout(t);
+    }
+    prevLevelRef.current = level;
+  }, [level]);
+  useEffect(() => {
+    if (owed <= 0 || !isFocused) return;
+    const t = setTimeout(() => navigation.navigate("TalentPick"), LEVEL_UP_BANNER_MS);
+    return () => clearTimeout(t);
+  }, [owed, isFocused, navigation]);
+
   // Fantasy HUD font for the floating damage numbers, at the two sizes the scene
   // draws (crit is larger). Each is null until loaded; renderCombat falls back to
   // the system font meanwhile, so numbers are never missing.
   const damageFont = useFont(GrenzeGotisch_700Bold, 16);
   const critFont = useFont(GrenzeGotisch_700Bold, 21);
+  // Player-plate faces (the level numeral and the hp readout); same fallback rule.
+  const badgeFont = useFont(GrenzeGotisch_700Bold, 20);
+  const hudLabelFont = useFont(GrenzeGotisch_700Bold, 13);
 
   // Vertical layout: the play space targets 3:4 (w:h); the control deck takes
   // the remaining height but never less than CONTROLS_MIN_HEIGHT *above the nav
@@ -426,7 +537,7 @@ export const GameScreen = () => {
   // step. A ref (not state) so input never causes a React render.
   const stickRef = useRef<StickSample>(STICK_ZERO);
 
-  const { physics, player, weaponCombatants, rng, breakables, breakableBodies, spawners, keys } =
+  const { physics, player, weaponCombatants, rng, breakables, breakableBodies, spawners, keys, triggers } =
     useMemo(() => {
     const physics = createPhysicsWorld();
     const player = createMoverBody(SPAWN.x, SPAWN.y, PLAYER_RADIUS);
@@ -474,7 +585,7 @@ export const GameScreen = () => {
         fuse: null,
       };
       breakables.push(nest);
-      spawners.push({ id: o.id, config, state: initSpawnerState(), nest, liveIds: [], everSeen: false });
+      spawners.push({ id: o.id, config, state: initSpawnerState(config), nest, liveIds: [], everSeen: false });
     }
 
     // Keys (docs/design/doors-and-keys.md): each placed `key` object becomes a
@@ -485,6 +596,16 @@ export const GameScreen = () => {
       if (o.kind !== "key") continue;
       if (!isKeyColor(o.props.color)) continue;
       keys.push({ id: o.id, color: o.props.color, x: o.x, y: o.y, taken: false });
+    }
+
+    // Triggers (docs/design/triggers.md): each placed `trigger` object becomes an
+    // invisible region + a pure FSM. Config (text/duration/repeat) rides `props`;
+    // the region is the object's centre + size. Fires on entry each step below.
+    const triggers: TriggerRuntime[] = [];
+    for (const o of ZONE.objects) {
+      if (o.kind !== "trigger") continue;
+      const region: Aabb = { x: o.x, y: o.y, w: o.w ?? ZONE.tileSize, h: o.h ?? ZONE.tileSize };
+      triggers.push({ id: o.id, config: parseTriggerConfig(o.props), state: initTriggerState(), region });
     }
 
     const breakableBodies = new Map<string, ReturnType<typeof createBlockerBody>>();
@@ -515,8 +636,13 @@ export const GameScreen = () => {
       breakableBodies,
       spawners,
       keys,
+      triggers,
     };
   }, []);
+
+  // nest id → its runtime, for O(1) lookups from the kill / nest-damage / render
+  // paths (a kill needs to find the nest that owns the dying creature's budget).
+  const spawnerById = useMemo(() => new Map(spawners.map((sp) => [sp.id, sp])), [spawners]);
 
   // The live enemy list: seeded once from the zone's authored `creature` objects
   // (below), then grown over the visit by spawners and summoners. No respawn — the
@@ -527,7 +653,8 @@ export const GameScreen = () => {
   const nextEnemyId = useRef(1);
 
   /** Build one enemy and add its body to the world (does not enlist it). */
-  const makeEnemy = (type: EnemyTypeId, x: number, y: number): Enemy => {
+  /** `levels` is an authored spawn window (placed object / spawner props) replacing the zone range. */
+  const makeEnemy = (type: EnemyTypeId, x: number, y: number, levels?: LevelRange): Enemy => {
     const def = CREATURES[type];
     // Enemies live outside the matter.js world: their movement, crowd spacing,
     // and collision against pillars + the player are integrated in core each step
@@ -539,6 +666,7 @@ export const GameScreen = () => {
     return {
       id,
       type,
+      level: rollCreatureLevel(ZONE.levels, def.levels, rng, levels),
       flying: def.flying ?? false,
       mover,
       combatant: makeCombatant(def.stats),
@@ -574,12 +702,15 @@ export const GameScreen = () => {
     seeded.current = true;
     for (const o of ZONE.objects) {
       if (o.kind !== "creature") continue;
-      enemiesRef.current.push(makeEnemy(parseCreatureId(o.props.creature), o.x, o.y));
+      enemiesRef.current.push(
+        makeEnemy(parseCreatureId(o.props.creature), o.x, o.y, parseLevelRange(o.props)),
+      );
     }
   }
 
   // Combat state lives in a ref: it's stepped by the game loop, never rendered
-  // through React. The weapon picker is the only React-state piece.
+  // through React. The equipped weapon is the class's starting weapon for the
+  // whole run — in-run swapping is gone; loadouts change through gear later.
   const combat = useRef({
     weapon: scaleWeaponForStats(
       WEAPONS.find((w) => w.id === classDef.startingWeapon) ?? WEAPONS[0]!,
@@ -595,6 +726,7 @@ export const GameScreen = () => {
     numbers: [] as FlyingNumber[],
     arcFlashes: [] as ArcFlash[],
     explosions: [] as Explosion[],
+    spawnerBursts: [] as SpawnerBurst[],
     playerCombatant: makeCombatant(derivePlayerCombatStats(playerEff)),
     /** Post-hit invulnerability time left; any hit is ignored while > 0. */
     iFrames: 0,
@@ -606,8 +738,32 @@ export const GameScreen = () => {
   // state (locked direction, dodge i-frames). A ref — the sim owns it, no render.
   // The first of what will be a skill roster; each new skill gets a runtime here.
   const dashRuntime = useRef(createDashRuntime());
+  // Its lifecycle config, rebuilt from talents (Swift Roll shaves the cooldown).
+  const dashConfigRef = useRef(makeDashConfig(active?.talents ?? []));
 
-  const [weaponId, setWeaponId] = useState<WeaponId>(combat.current.weapon.id);
+  // Push recomputed stats into every mount-time combat cache IN PLACE — the sim
+  // closed over these object identities (the weaponCombatants Map, the player
+  // combatant), so they must be refreshed, never replaced. Runs on level-up,
+  // talent pick, and load; idempotent on mount (delta 0, identical entries).
+  // Skipping any one of these would make talents silently do nothing to it.
+  useEffect(() => {
+    // Attacker stat block per weapon (damage/crit scaling).
+    for (const w of WEAPONS) {
+      weaponCombatants.set(w.id, makeCombatant(deriveAttackerStats(playerEff, w.stats, w.config)));
+    }
+    const c = combat.current;
+    // The equipped weapon's reach/attack-speed scaling.
+    c.weapon = scaleWeaponForStats(WEAPONS.find((w) => w.id === c.weapon.id) as WeaponDef, playerEff);
+    // Defender stats. Max-HP changes preserve damage taken: current hp shifts
+    // by the max-hp delta (a Stalwart pick grows the pool, not a free heal).
+    const next = derivePlayerCombatStats(playerEff);
+    const delta = next.maxHp - c.playerCombatant.stats.maxHp;
+    c.playerCombatant.stats = next;
+    c.playerCombatant.hp = Math.min(next.maxHp, Math.max(1, c.playerCombatant.hp + delta));
+    // Swift Roll: rebuild the dash lifecycle config from the talent list.
+    dashConfigRef.current = makeDashConfig(active?.talents ?? []);
+  }, [playerEff, weaponCombatants, active?.talents]);
+
   // HUD mirror of the run's key inventory. The sim owns the authoritative copy
   // (combat.current.keys, read each step); we snapshot it into React state only
   // when it changes, so the on-screen key strip re-renders on pickup/spend rather
@@ -618,19 +774,21 @@ export const GameScreen = () => {
   // the state so the sim only re-renders on the rare enter/leave transition.
   const [lockedNeed, setLockedNeed] = useState<KeyColor | null>(null);
   const lockedNeedRef = useRef<KeyColor | null>(null);
-  const selectWeapon = (id: WeaponId) => {
-    setWeaponId(id);
-    const c = combat.current;
-    c.weapon = scaleWeaponForStats(WEAPONS.find((w) => w.id === id) as WeaponDef, playerEff);
-    // Swapping resets the cycle — no carrying a greatsword windup into a bow.
-    c.cycle = ATTACK_CYCLE_READY;
-    c.lockedId = null;
-  };
-  /** Equip the next weapon in WEAPONS, wrapping at the end. */
-  const cycleWeapon = () => {
-    const idx = WEAPONS.findIndex((w) => w.id === combat.current.weapon.id);
-    selectWeapon(WEAPONS[(idx + 1) % WEAPONS.length]!.id);
-  };
+  // The active trigger banner (docs/design/triggers.md). Set from the sim only on a
+  // fire edge; `token` (a monotonic counter) forces a fresh banner even when the
+  // same text re-fires, and drives the auto-dismiss timer below.
+  const [triggerText, setTriggerText] = useState<{ text: string; durationMs: number; token: number } | null>(
+    null,
+  );
+  const triggerTokenRef = useRef(0);
+  // Auto-dismiss the trigger banner after its authored duration. A newer trigger
+  // (a fresh token → new object) re-runs this, clearing the old timer, so the
+  // latest message always wins its full hold.
+  useEffect(() => {
+    if (!triggerText) return;
+    const t = setTimeout(() => setTriggerText(null), triggerText.durationMs);
+    return () => clearTimeout(t);
+  }, [triggerText]);
 
   // Previous + current simulated state, so the renderer can interpolate
   // between fixed steps (render fps and sim fps are decoupled).
@@ -752,6 +910,15 @@ export const GameScreen = () => {
   const dashOverlay = useSharedValue<SkPicture>(DASH_READY_PICTURE);
   const dashCooling = useRef(false);
 
+  // Player plate (level badge + health/XP bars): a Skia picture re-recorded
+  // each frame like the dash face — health moves every step now that regen
+  // ticks, so the bar reads straight from the sim instead of via React state.
+  // `hudAnim` holds the glides/choreography; `hudClock` supplies real frame
+  // time so those stay smooth whatever the sim tier.
+  const hudPicture = useSharedValue<SkPicture>(EMPTY_HUD_PICTURE);
+  const hudAnim = useRef(createHudAnim());
+  const hudClock = useRef<number | null>(null);
+
   // --- Frame profiler (dev only). Accumulate the JS-thread time spent each frame
   // in the sim step(s) and in the scene-record/picture-recording, then sample it
   // into state ~2×/sec for a tiny on-screen readout. Refs (not state) for the
@@ -819,13 +986,15 @@ export const GameScreen = () => {
   }, [perfOn]);
 
   // Zoom is a plain number eased in JS (the picture recorder needs it per
-  // frame); a swap sets the target and onRender glides toward it.
+  // frame). The equipped weapon is fixed per class now (no in-run swapping),
+  // so the target only moves when the stats that scale its reach do. Depends
+  // on the stats-refresh effect above having re-scaled c.weapon — it's
+  // declared earlier, so it runs first within the same commit.
   const zoomTarget = useRef(zoomFor(combat.current.weapon));
   const zoomCurrent = useRef(zoomTarget.current);
   useEffect(() => {
-    const weapon = WEAPONS.find((w) => w.id === weaponId) as WeaponDef;
-    zoomTarget.current = zoomFor(scaleWeaponForStats(weapon, playerEff));
-  }, [weaponId, width, playerEff]);
+    zoomTarget.current = zoomFor(combat.current.weapon);
+  }, [width, playerEff]);
 
   // Music: one AudioDirector for the session. It loops the zone's idle bed and
   // (once a combat bed exists) crossfades when enemies close in — the idle/combat
@@ -865,6 +1034,37 @@ export const GameScreen = () => {
     director.setMuted(settings.muted);
   }, [settings.masterVolume, settings.musicVolume, settings.sfxVolume, settings.muted]);
 
+  // --- SFX. The pure scheduler (core) turns a gameplay event into a concrete
+  // clip — variation, per-bank throttle, variant-by-qualifier — and the
+  // director's playSfx makes the noise. A *separate* rng from the sim's keeps
+  // sound choice from perturbing the deterministic combat rolls, and Date.now
+  // drives the throttle (wall-clock, like haptics). Created once, independent of
+  // the director's lifecycle. `playSound` is fire-and-forget: a no-op if the
+  // event is throttled or has no clip yet.
+  const soundRef = useRef<SoundScheduler | null>(null);
+  if (soundRef.current === null) {
+    soundRef.current = createSoundScheduler({
+      catalogue: SOUND_CATALOGUE,
+      now: () => Date.now(),
+      rng: { next: () => Math.random() },
+    });
+  }
+  const footstep = useRef(initFootstepCadence());
+  const playSound = (event: SoundEvent, qualifier?: string, overrides?: SoundConfig): void => {
+    const cmd = soundRef.current?.play(event, qualifier, overrides);
+    if (cmd) {
+      audioRef.current?.playSfx(cmd.clip, { volume: cmd.volume, pitchVariance: cmd.pitchVariance });
+    }
+  };
+
+  // Level-up flourish. Its own rising-edge watcher, kept here with the audio
+  // wiring (the banner has a separate one at the HUD state, up near `bannerLevel`).
+  const prevLevelSfx = useRef(level);
+  useEffect(() => {
+    if (level > prevLevelSfx.current) playSound("levelUp");
+    prevLevelSfx.current = level;
+  }, [level]);
+
   /** Thumbstick sink: store the sample and unlock web audio on the first touch. */
   const handleStick = (sample: StickSample) => {
     stickRef.current = sample;
@@ -902,13 +1102,14 @@ export const GameScreen = () => {
       // cooldown are ignored. On the activation step we lock the roll direction
       // (the stick's, or facing when the stick is idle) and open the dodge
       // i-frames — the skill's on-activate effects (see skills/dash.ts).
-      const dashStep = stepAbility(dash.ability, DASH_CONFIG, dt, dashRequest.current);
+      const dashStep = stepAbility(dash.ability, dashConfigRef.current, dt, dashRequest.current);
       dashRequest.current = false;
       dash.ability = dashStep.state;
       if (dashStep.activated) {
         if (stick.magnitude > 0) beginDash(dash, stick.dir.x, stick.dir.y);
         else beginDash(dash, Math.cos(s.facing), Math.sin(s.facing));
         playStrikeHaptic("light");
+        playSound("abilityCast", "dash");
       }
       tickDashInvuln(dash, dt);
 
@@ -1142,10 +1343,33 @@ export const GameScreen = () => {
         if (c.targetId === d.id) c.targetId = null;
       };
 
-      /** Returns whether the hit crit, so callers can voice it haptically. */
-      const applyHit = (d: Enemy, dir: Vec2, knockback: number, attacker: Combatant): boolean => {
+      /**
+       * Returns whether the hit crit, so callers can voice it haptically.
+       * `mods` is the level-gap bend for the attacker (player swings pass
+       * playerAttackGapMods; environmental damage like blasts passes none).
+       */
+      const applyHit = (
+        d: Enemy,
+        dir: Vec2,
+        knockback: number,
+        attacker: Combatant,
+        mods?: GapAttackMods,
+      ): boolean => {
         if (d.combatant.hp <= 0) return false; // already slain this step
-        const result = resolveAttack(attacker, d.combatant, rng);
+        const result = resolveAttack(attacker, d.combatant, rng, mods);
+        if (result.missed) {
+          // A whiff (fighting above the grace band): no flash, no knockback —
+          // just the readout, so the miss reads as the gap, not a dropped input.
+          c.numbers.push({
+            x: d.mover.pos.x,
+            y: d.mover.pos.y - ENEMY_RADIUS - 16,
+            text: "Miss",
+            crit: false,
+            hostile: false,
+            age: 0,
+          });
+          return false;
+        }
         d.flash = HIT_FLASH_DURATION;
         // Knockback is an impulse straight onto the mover's velocity (px/s); it
         // decays back toward the brain's intent through the locomotion decel.
@@ -1161,7 +1385,20 @@ export const GameScreen = () => {
           hostile: false,
           age: 0,
         });
-        if (result.lethal) removeEnemy(d);
+        if (result.lethal) {
+          removeEnemy(d);
+          // Qualified by the creature kind (the key into CREATURES) — each
+          // creature dies with its own bank, so this is where the roster meets
+          // the catalogue (sounds.ts `creatureDeath.variants`).
+          playSound("creatureDeath", d.type);
+          // Kills are the only XP source (progression.md): the creature's
+          // level-fraction worth through the level-gap multiplier vs its
+          // instance level. gainXp is a functional setState, so a multi-kill
+          // explosion in one step loses nothing. A spawner-born creature is worth
+          // full XP like any other — the nest caps its total output by capacity, not
+          // by devaluing kills (spawners.md).
+          gainXp(xpForKill(CREATURES[d.type].xpFrac, levelRef.current, d.level));
+        }
         return result.crit;
       };
 
@@ -1172,9 +1409,15 @@ export const GameScreen = () => {
        * invulnerability window (a dodge). No death in the tech demo: an emptied
        * bar refills. Returns whether the hit landed.
        */
-      const damagePlayer = (attacker: Combatant, fromX: number, fromY: number, knockback: number): boolean => {
+      const damagePlayer = (
+        attacker: Combatant,
+        fromX: number,
+        fromY: number,
+        knockback: number,
+        mods?: GapAttackMods,
+      ): boolean => {
         if (c.iFrames > 0 || dashInvulnerable(dash)) return false;
-        const result = resolveAttack(attacker, c.playerCombatant, rng);
+        const result = resolveAttack(attacker, c.playerCombatant, rng, mods);
         c.iFrames = PLAYER_IFRAMES;
         const away = normalize(sub(playerPos, { x: fromX, y: fromY }));
         if (knockback > 0) addVelocityPerSecond(player, away.x * knockback, away.y * knockback);
@@ -1182,14 +1425,41 @@ export const GameScreen = () => {
           x: playerPos.x,
           y: playerPos.y - PLAYER_RADIUS - 16,
           text: String(result.damage),
-          crit: false,
+          // Higher-level creatures crit (creature-levels.md) — make it readable.
+          crit: result.crit,
           hostile: true,
           age: 0,
         });
         // The heavy pulse is reserved for exactly this (see haptics.ts).
         playStrikeHaptic("heavy");
+        playSound("hitTaken");
         if (result.lethal) c.playerCombatant.hp = c.playerCombatant.stats.maxHp;
         return true;
+      };
+
+      // Spawn `count` of a nest's creature hugging its footprint (they pour out of
+      // it rather than popping in around it). Shared by the steady cadence (count 1)
+      // and the defender-wave burst (count up to maxAlive, ignoring the alive cap —
+      // a burst, not a new steady state; spawners.md). Capacity accounting lives in
+      // core (stepSpawner / rollDefenderWave already spent it); this just makes the
+      // bodies.
+      const spawnFromNest = (sp: SpawnerRuntime, count: number) => {
+        const nest = sp.nest;
+        const margin = ENEMY_RADIUS + 8;
+        const clampX = (v: number) => Math.max(margin, Math.min(ARENA_WIDTH - margin, v));
+        const clampY = (v: number) => Math.max(margin, Math.min(ARENA_HEIGHT - margin, v));
+        for (let k = 0; k < count; k++) {
+          const ang = rng.next() * Math.PI * 2;
+          const r = nest.box.w / 2 + ENEMY_RADIUS + rng.next() * ZONE.tileSize;
+          const minion = makeEnemy(
+            sp.config.creature,
+            clampX(nest.box.x + Math.cos(ang) * r),
+            clampY(nest.box.y + Math.sin(ang) * r),
+            sp.config.levels,
+          );
+          enemies.push(minion);
+          sp.liveIds.push(minion.id);
+        }
       };
 
       // --- Breakables. The player damages them through the same path as enemies
@@ -1208,6 +1478,35 @@ export const GameScreen = () => {
           breakableBodies.delete(b.id);
         }
         rebuildWorld(b.box);
+        // A nest going away — whether the player destroyed it or it spent its last
+        // unit — bursts into arcane particles and leaves no husk (spawners.md). On a
+        // player-destroy it also pays out the un-spawned remainder at once: the total
+        // XP obtainable is exactly `capacity` however you play — rush the nest for the
+        // remainder now, or farm the trickle for the same total slower. Each un-spawned
+        // unit = one full-value kill of its creature, priced through the level gap so a
+        // low-band nest pays trivially. Already-spawned creatures keep their own XP;
+        // `remaining` counts only what never came out, so there's no double-dip.
+        if (b.kind === "spawner") {
+          c.spawnerBursts.push({
+            x: b.box.x,
+            y: b.box.y,
+            size: b.box.w,
+            age: 0,
+            seed: rng.next() * Math.PI * 2,
+          });
+          playSound("spawnerDestroyed");
+          const sp = spawnerById.get(b.id);
+          if (sp && sp.state.remaining > 0) {
+            const def = CREATURES[sp.config.creature];
+            const band = sp.config.levels ?? ZONE.levels;
+            const repLevel = Math.max(
+              def.levels.min,
+              Math.min(def.levels.max, Math.round((band.min + band.max) / 2)),
+            );
+            gainXp(sp.state.remaining * xpForKill(def.xpFrac, levelRef.current, repLevel));
+            sp.state = { ...sp.state, remaining: 0 };
+          }
+        }
         for (const eff of b.onBreak) {
           if (eff.type === "explode") explode(b.box.x, b.box.y, eff.radius, eff.damage);
           // "drop" (loot) waits on an item system — see the design doc.
@@ -1220,10 +1519,24 @@ export const GameScreen = () => {
         if (b.lock) return false; // a locked door shrugs off weapons — only its key opens it
         // Wrap its hp in a throwaway Combatant so it takes damage through the
         // exact resolveAttack path enemies do (variance, crits, defense=0).
+        const hpBefore = b.hp;
         const defender: Combatant = { hp: b.hp, stats: BREAKABLE_STATS };
         const result = resolveAttack(attacker, defender, rng);
         b.hp = defender.hp;
         b.flash = HIT_FLASH_DURATION;
+        // A damaged nest can erupt a burst of defenders (spawners.md): rolled per
+        // 25% HP band this hit crossed, capped per nest, drawing from the same
+        // budget (the burst creatures are tagged, so their kills spend budget too).
+        // rollDefenderWave declines on the killing blow, so overkill deletes it
+        // before it can react — the payoff for overwhelming force.
+        if (b.kind === "spawner" && b.maxHp > 0) {
+          const sp = spawnerById.get(b.id);
+          if (sp) {
+            const roll = rollDefenderWave(sp.state, sp.config, hpBefore / b.maxHp, b.hp / b.maxHp, rng);
+            sp.state = roll.state;
+            if (roll.waves > 0) spawnFromNest(sp, roll.waves);
+          }
+        }
         c.numbers.push({
           x: b.box.x,
           y: b.box.y - b.box.h / 2 - 8,
@@ -1296,7 +1609,7 @@ export const GameScreen = () => {
           c.keys = spendKey(c.keys, b.lock.color);
           setKeyHud(c.keys);
           breakOne(b); // open it (a door authors no onBreak effects, so it just vanishes)
-          // TODO(audio): unlock "clunk" once a sound-event layer exists.
+          playSound("doorOpen", b.lock.color);
         } else if (blockedColor === null) {
           // Pressed against a door we can't open → remember its color for the HUD hint.
           // TODO(audio): locked "rattle" once a sound-event layer exists.
@@ -1309,13 +1622,40 @@ export const GameScreen = () => {
         setLockedNeed(blockedColor);
       }
 
+      // --- Triggers (docs/design/triggers.md): fire an action when the player's
+      // centre enters an invisible region. The FSM edge-detects entry (once per
+      // visit, or every entry when `repeat`); we only touch React state on a fire,
+      // so there's no per-frame churn. v1's one action shows a banner.
+      for (const tr of triggers) {
+        const stepR = stepTrigger(tr.state, tr.config, {
+          inside: regionContains(tr.region, playerPos),
+        });
+        tr.state = stepR.state;
+        if (stepR.fire && tr.config.action.type === "text" && tr.config.action.text.trim() !== "") {
+          triggerTokenRef.current += 1;
+          setTriggerText({
+            text: tr.config.action.text,
+            durationMs: tr.config.action.durationMs,
+            token: triggerTokenRef.current,
+          });
+        }
+      }
+
       c.iFrames = Math.max(0, c.iFrames - dt);
 
       // --- Contact damage: a touching enemy bites (self-gated by i-frames, and
       // by the roll's invulnerability — you can't be bitten mid-dodge).
       for (const e of enemies) {
         if (distance(playerPos, e.mover.pos) > PLAYER_RADIUS + ENEMY_RADIUS + 1) continue;
-        if (damagePlayer(e.combatant, e.mover.pos.x, e.mover.pos.y, CREATURES[e.type].contactKnockback)) {
+        if (
+          damagePlayer(
+            e.combatant,
+            e.mover.pos.x,
+            e.mover.pos.y,
+            CREATURES[e.type].contactKnockback,
+            creatureAttackGapMods(e.level, levelRef.current),
+          )
+        ) {
           break; // one bite per window; the rest no-op anyway
         }
       }
@@ -1410,12 +1750,19 @@ export const GameScreen = () => {
             const d = enemies.find((dd) => dd.id === id);
             if (!d) continue;
             const dir = normalize(sub(d.mover.pos, playerPos));
-            crit = applyHit(d, dir, cfg.knockback ?? 0, attacker) || crit;
+            crit =
+              applyHit(d, dir, cfg.knockback ?? 0, attacker, playerAttackGapMods(levelRef.current, d.level)) ||
+              crit;
             landed = true;
           }
           // One pulse per swing however many it cleaves — haptics count
           // events, not victims. Whiffs are silent: the haptic *is* contact.
-          if (landed) playStrikeHaptic(c.weapon.haptic, crit);
+          if (landed) {
+            playStrikeHaptic(c.weapon.haptic, crit);
+            // Qualified by weapon id; falls back to the base strike bank until
+            // per-weapon variants are authored (sounds.ts `weaponStrike`).
+            playSound("weaponStrike", c.weapon.id);
+          }
           c.arcFlashes.push({ x: s.currX, y: s.currY, facing: c.lockedFacing, age: 0 });
         } else if (locked) {
           // Ranged auto-aims at the target's position at the moment of Strike.
@@ -1443,6 +1790,7 @@ export const GameScreen = () => {
           // whatever the projectile count. Impacts happen far away and out of
           // hand, so they stay silent (crits excepted, below).
           playStrikeHaptic(c.weapon.haptic);
+          playSound("projectileFire", c.weapon.id);
         }
         c.lockedId = null;
       }
@@ -1474,7 +1822,12 @@ export const GameScreen = () => {
               continue;
             }
             const d = enemies.find((dd) => dd.id === id);
-            if (d && applyHit(d, p.dir, p.knockback, p.attacker)) projectileCrit = true;
+            if (
+              d &&
+              applyHit(d, p.dir, p.knockback, p.attacker, playerAttackGapMods(levelRef.current, d.level))
+            ) {
+              projectileCrit = true;
+            }
           }
         }
         if (result.expired || hitWall) c.projectiles.splice(i, 1);
@@ -1515,6 +1868,7 @@ export const GameScreen = () => {
               color: CREATURE_VISUALS[e.type].projectileColor ?? CREATURE_VISUALS[e.type].color,
               knockback: acfg.knockback ?? 0,
               attacker: e.attackCombatant,
+              attackerLevel: e.level,
             });
           }
         }
@@ -1531,7 +1885,17 @@ export const GameScreen = () => {
         const hitWall =
           !segmentClear(from, p.pos, worldOccluders.current) ||
           p.pos.x < 0 || p.pos.x > ARENA_WIDTH || p.pos.y < 0 || p.pos.y > ARENA_HEIGHT;
-        if (!hitWall && result.hits.length > 0) damagePlayer(p.attacker, p.pos.x, p.pos.y, p.knockback);
+        if (!hitWall && result.hits.length > 0) {
+          damagePlayer(
+            p.attacker,
+            p.pos.x,
+            p.pos.y,
+            p.knockback,
+            p.attackerLevel === undefined
+              ? undefined
+              : creatureAttackGapMods(p.attackerLevel, levelRef.current),
+          );
+        }
         if (result.expired || hitWall) c.enemyProjectiles.splice(i, 1);
       }
 
@@ -1594,32 +1958,29 @@ export const GameScreen = () => {
             playerDist <= VISION.discoverRadius &&
             segmentClear(playerPos, nestCentre, nearOccluders);
         }
-        const stepR = stepSpawner(sp.state, sp.config, {
-          dt,
-          playerDist,
-          seen: sp.everSeen,
-          aliveCount: sp.liveIds.length,
-          destroyed: !nest.alive,
-        });
+        const stepR = stepSpawner(
+          sp.state,
+          sp.config,
+          {
+            dt,
+            playerDist,
+            seen: sp.everSeen,
+            aliveCount: sp.liveIds.length,
+            destroyed: !nest.alive,
+          },
+          rng,
+        );
         sp.state = stepR.state;
-        if (stepR.spawn > 0 && nest.alive) {
-          const margin = ENEMY_RADIUS + 8;
-          const clampX = (v: number) => Math.max(margin, Math.min(ARENA_WIDTH - margin, v));
-          const clampY = (v: number) => Math.max(margin, Math.min(ARENA_HEIGHT - margin, v));
-          for (let k = 0; k < stepR.spawn; k++) {
-            // Spawn hugging the nest: from just outside its footprint to ~one tile
-            // beyond, so creatures pour out of it rather than popping in around it.
-            const ang = rng.next() * Math.PI * 2;
-            const r = nest.box.w / 2 + ENEMY_RADIUS + rng.next() * ZONE.tileSize;
-            const minion = makeEnemy(
-              sp.config.creature,
-              clampX(nest.box.x + Math.cos(ang) * r),
-              clampY(nest.box.y + Math.sin(ang) * r),
-            );
-            enemies.push(minion);
-            sp.liveIds.push(minion.id);
-          }
-        }
+        // Spawn hugging the nest (creatures pour out of it, not popping in around
+        // it); the interval to the next one is jittered inside stepSpawner.
+        if (stepR.spawn > 0 && nest.alive) spawnFromNest(sp, stepR.spawn);
+        // Spent → the nest bursts and is removed (no inert husks). `remaining` hit 0
+        // either via the last cadence spawn just above or a defender burst earlier
+        // this step; breakOne handles the particle poof (and pays out nothing, since
+        // remaining is 0). Its already-spawned brood fights on independently. Gated on
+        // `everSeen` so a degenerate capacity-0 nest can't poof on load before the
+        // player has even revealed it — it stays hidden like any unrevealed nest.
+        if (nest.alive && sp.everSeen && sp.state.remaining <= 0) breakOne(nest);
       }
 
       // --- Facing: locked during windup; re-tracks the target otherwise;
@@ -1650,6 +2011,11 @@ export const GameScreen = () => {
         e.age += dt;
         if (e.age >= EXPLOSION_FX_DURATION) c.explosions.splice(i, 1);
       }
+      for (let i = c.spawnerBursts.length - 1; i >= 0; i--) {
+        const sb = c.spawnerBursts[i]!;
+        sb.age += dt;
+        if (sb.age >= SPAWNER_BURST_DURATION) c.spawnerBursts.splice(i, 1);
+      }
       // Burn down primed fuses; at 0 the barrel finally bursts (which, via its
       // blast, primes any neighbours → the chain cascades a fuse-length apart).
       for (const b of breakables) {
@@ -1661,6 +2027,16 @@ export const GameScreen = () => {
         }
       }
 
+      // --- Health regen (renewal → HP/s, progression.md): a slow trickle back
+      // toward full, always on. Mana has no pool yet (spell costs are authored
+      // but unenforced — see attack.ts), so wisdom's regen has nothing to tick.
+      if (c.playerCombatant.hp < c.playerCombatant.stats.maxHp) {
+        c.playerCombatant.hp = Math.min(
+          c.playerCombatant.stats.maxHp,
+          c.playerCombatant.hp + playerEff.hpRegen * dt,
+        );
+      }
+
       // --- Low-health pulse: while under the threshold, advance the beat at a
       // rate that ramps from MIN_HZ (just under it) to MAX_HZ (near death), so
       // the warning vignette throbs faster the lower you get. Left untouched
@@ -1670,6 +2046,18 @@ export const GameScreen = () => {
         const severity = (LOW_HP_THRESHOLD - hpFrac) / LOW_HP_THRESHOLD; // 0 → 1 toward death
         const hz = LOW_HP_PULSE_MIN_HZ + (LOW_HP_PULSE_MAX_HZ - LOW_HP_PULSE_MIN_HZ) * severity;
         s.lowHpPhaseCurr += dt * hz;
+      }
+
+      // --- Footsteps: movement has no discrete "step" event, so accumulate the
+      // distance travelled this step and sound one footfall per stride. Silent
+      // while rolling (the dash has its own whoosh) and while standing still.
+      // TODO(audio): qualify by the surface under the player — a tile-id → surface
+      // table over ZONE.floor — once per-surface step banks exist (sounds.ts).
+      if (!isDashing(dash)) {
+        const moved = Math.hypot(s.currX - s.prevX, s.currY - s.prevY);
+        if (stepFootstepCadence(footstep.current, moved, FOOTSTEP_STRIDE_PX)) {
+          playSound("footstep");
+        }
       }
 
       // (Exploration-fog discovery is a cheap proximity reveal done in onRender now;
@@ -1763,6 +2151,10 @@ export const GameScreen = () => {
       // view, not the map. The negative id (-(i+1)) still encodes the original index so
       // targeting (c.targetId) keeps resolving against the full breakables array.
       const sceneBreakables: CombatScene["breakables"] = [];
+      // A live nest gets a spinning spiral (the "it's pumping" tell); when it spends
+      // its last unit it bursts into particles and is removed outright — no inert
+      // husk — so a nest is only ever on screen while it's still a threat.
+      const sceneSpawnerFx: CombatScene["spawnerFx"] = [];
       for (let i = 0; i < breakables.length; i++) {
         const b = breakables[i]!;
         if (!b.alive) continue;
@@ -1773,6 +2165,7 @@ export const GameScreen = () => {
           b.box.y + b.box.h / 2 < vMinY
         )
           continue;
+        const sp = b.kind === "spawner" ? spawnerById.get(b.id) : undefined;
         sceneBreakables.push({
           x: b.box.x,
           y: b.box.y,
@@ -1789,6 +2182,12 @@ export const GameScreen = () => {
           // A locked door carries its key colour so the renderer tints it; null = plain breakable.
           lock: b.lock ? b.lock.color : null,
         });
+        // Spiral only while the nest can still spawn (active AND has capacity) — its
+        // presence *is* the "this nest is still live" tell. A spent nest is already
+        // gone (it burst on the step it emptied), so this is just belt-and-braces.
+        if (sp && sp.state.phase === "active" && sp.state.remaining > 0) {
+          sceneSpawnerFx.push({ x: b.box.x, y: b.box.y, size: b.box.w });
+        }
       }
 
       // Uncollected keys, on-screen only (same viewport cull as breakables).
@@ -1819,6 +2218,7 @@ export const GameScreen = () => {
           hpFrac: d.combatant.hp / d.combatant.stats.maxHp,
           flash: d.flash / HIT_FLASH_DURATION,
           color: CREATURE_VISUALS[d.type].color,
+          con: CON_COLORS[conTier(d.level, levelRef.current)],
           flying: d.flying,
         });
         if (def.attack && d.cycle && d.cycle.phase === "windup") {
@@ -1894,6 +2294,7 @@ export const GameScreen = () => {
         // Breakables: alive + on-screen only, built in the single pass above (a zone
         // may hold hundreds; off-screen ones are culled before any per-item work).
         breakables: sceneBreakables,
+        spawnerFx: sceneSpawnerFx,
         keys: sceneKeys,
         enemyCasts: rs.casts,
         summonTelegraphs: rs.summons,
@@ -1919,16 +2320,44 @@ export const GameScreen = () => {
           progress: e.age / EXPLOSION_FX_DURATION,
           seed: e.seed,
         })),
+        spawnerBursts: c.spawnerBursts.map((sb) => ({
+          x: sb.x,
+          y: sb.y,
+          size: sb.size,
+          progress: sb.age / SPAWNER_BURST_DURATION,
+          seed: sb.seed,
+        })),
         fog,
         time: s.time,
         lowHealthPhase: s.lowHpPhasePrev + (s.lowHpPhaseCurr - s.lowHpPhasePrev) * alpha,
       });
 
+      // Player plate: advance its glides by real frame time and re-record. The
+      // hp values come straight off the sim-owned combatant; level/xp read the
+      // character record (fresh each render via the handlers ref).
+      const hudNow = performance.now();
+      const hudDt =
+        hudClock.current === null ? 0 : Math.min(0.1, (hudNow - hudClock.current) / 1000);
+      hudClock.current = hudNow;
+      hudPicture.value = recordPlayerHud(
+        hudAnim.current,
+        {
+          width: width - 16,
+          level,
+          xpFrac: active ? active.xp / xpToNext(active.level) : 0,
+          hp: c.playerCombatant.hp,
+          maxHp: c.playerCombatant.stats.maxHp,
+          hpRegen: playerEff.hpRegen,
+          fonts: { badge: badgeFont, label: hudLabelFont },
+        },
+        hudDt,
+      );
+
       // Drive the dash button's cooldown clock from the skill. While cooling,
       // re-record the wedge each frame for a smooth sweep; the moment it's ready,
       // push the cached ready face once — so an idle button never redraws (same
       // SkPicture ref each frame is a no-op for the <Picture>).
-      const frac = dashCooldownFrac(dash);
+      const frac = dashCooldownFrac(dash, dashConfigRef.current);
       if (frac > 0) {
         dashOverlay.value = recordDashButton(frac);
         dashCooling.current = true;
@@ -1951,7 +2380,6 @@ export const GameScreen = () => {
   const stick = <Thumbstick size={stickSize} onChange={handleStick} />;
   const actionCluster = (
     <View style={[styles.actions, !settings.leftHanded && styles.actionsFlipped]}>
-      <WeaponButton selected={weaponId} onCycle={cycleWeapon} />
       <DashButton overlay={dashOverlay} onPress={requestDash} />
     </View>
   );
@@ -1976,8 +2404,16 @@ export const GameScreen = () => {
         </Pressable>
         {/* Key inventory strip — top-right, clear of the menu button (top-left). */}
         <KeyHud inventory={keyHud} need={lockedNeed} style={{ top: insets.top + 12, right: 12 }} />
-        {/* Locked-door callout — names the missing key's color, low-centre. */}
-        <DoorNotice need={lockedNeed} style={{ bottom: 24 }} />
+        {/* Locked-door callout — names the missing key's color, above the plate. */}
+        <DoorNotice need={lockedNeed} style={{ bottom: 66 }} />
+        {/* Player plate (level badge + health/XP bars) along the play area's
+            bottom edge; the banner is the level-up moment, mounted for its
+            short flash then faded out. */}
+        <PlayerHud picture={hudPicture} style={{ bottom: 8 }} />
+        {bannerLevel !== null && <LevelUpBanner level={bannerLevel} />}
+        {/* Trigger text — a centered banner shown while a walked-into trigger's
+            message is active, auto-dismissed by its duration timer. */}
+        {triggerText && <TriggerBanner key={triggerText.token} text={triggerText.text} />}
         {/* Frame profiler readout (JS-thread sim/record cost + raf fps), toggled by
             the Settings "Performance overlay" switch so it works in release too. */}
         {perfOn && perfText ? (

@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { forgePlugin } from "./forge/plugin";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -10,7 +11,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 // Vite compile it as part of the app, so the editor shares the EXACT same zone
 // logic (loadZone/greedyMesh) + palette as the game — the basis of map accuracy.
 export default defineConfig({
-  plugins: [react()],
+  // forgePlugin: the Asset Forge's dev-only endpoints (docs/design/asset-forge.md).
+  plugins: [react(), forgePlugin()],
   resolve: {
     alias: {
       "@heroic/core": resolve(here, "../../packages/core/src/index.ts"),

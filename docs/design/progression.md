@@ -76,7 +76,9 @@ roster, never auto-deleted. From the roster you choose:
 
 ## Leveling & Talents (all in-world, all live)
 
-Kill creatures → XP → levels (under-level kills give trivial XP — the level-gap applied to XP).
+Kill creatures → XP → levels. Kill XP is a per-creature *fraction of a level* (percent-based,
+decided 2026-07-03 — see [characters-and-talents](./characters-and-talents.md)), bent by the
+level-gap: under-level kills give trivial XP, punching up pays a small capped bonus.
 **There is no level cap** — XP-to-next escalates forever, and the trivial-XP rule means the
 frontier zone is the real ceiling (the content caps you, not a number).
 

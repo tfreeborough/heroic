@@ -12,6 +12,7 @@
  */
 import type { CombatStats } from "../combat/combat";
 import type { AttackConfig } from "../combat/attack";
+import type { LevelRange } from "../progression/levelGap";
 import { makeBrain, type Archetype, type Brain } from "../ai/runtime";
 import type { CommonConfig } from "../ai/perception";
 import { chaser, type ChaserConfig } from "../ai/archetypes/chaser";
@@ -96,6 +97,21 @@ export interface CreatureDef {
   stats: CombatStats;
   /** px/s shove applied to the player on a contact hit. */
   contactKnockback: number;
+  /**
+   * Kill XP as a fraction of a level (0.08 = 8% of the player's current
+   * level requirement — see progression/xp.ts). Percent-based so a roster of
+   * hundreds balances with one relative number per creature; the level-gap
+   * multiplier bends it for over/under-leveled players. Placeholder numbers
+   * proportional to threat until the enemy roster doc lands.
+   */
+  xpFrac: number;
+  /**
+   * The species' own level bounds (creature-levels.md): a spawn rolls inside
+   * the zone range CLAMPED by this — a wizard below its floor isn't a wizard.
+   * Where a species can live is authored here; how hard it hits at a given
+   * gap is the global table's job. Placeholder ladders, threat-proportional.
+   */
+  levels: LevelRange;
   /**
    * Flies over voids: routes and crowd-collides against walls only, ignoring
    * chasms (still stopped by walls/breakables/bounds). A movement domain
@@ -247,6 +263,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: ZOMBIE_BRAIN,
     stats: { maxHp: 40, attack: 6, defense: 2, critChance: 0, critMultiplier: 1 },
     contactKnockback: 220,
+    xpFrac: 0.08,
+    levels: { min: 1, max: 4 },
   }),
   wolf: creature({
     label: "Wolf",
@@ -255,6 +273,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: WOLF_BRAIN,
     stats: { maxHp: 26, attack: 10, defense: 0, critChance: 0, critMultiplier: 1 },
     contactKnockback: 320,
+    xpFrac: 0.09,
+    levels: { min: 2, max: 6 },
   }),
   ambusher: creature({
     label: "Ambusher",
@@ -263,6 +283,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: AMBUSHER_BRAIN,
     stats: { maxHp: 22, attack: 14, defense: 0, critChance: 0, critMultiplier: 1 },
     contactKnockback: 360,
+    xpFrac: 0.09,
+    levels: { min: 3, max: 8 },
   }),
   archer: creature({
     label: "Archer",
@@ -271,6 +293,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: ARCHER_BRAIN,
     stats: { maxHp: 24, attack: 0, defense: 0, critChance: 0, critMultiplier: 1 },
     contactKnockback: 160,
+    xpFrac: 0.1,
+    levels: { min: 2, max: 7 },
     attack: {
       config: {
         shape: "projectile",
@@ -293,6 +317,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: CASTER_BRAIN,
     stats: { maxHp: 20, attack: 0, defense: 0, critChance: 0, critMultiplier: 1 },
     contactKnockback: 160,
+    xpFrac: 0.1,
+    levels: { min: 3, max: 8 },
     attack: {
       config: {
         shape: "projectile",
@@ -315,6 +341,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: CHARGER_BRAIN,
     stats: { maxHp: 34, attack: 12, defense: 1, critChance: 0, critMultiplier: 1 },
     contactKnockback: 440, // the dash hits hard
+    xpFrac: 0.12,
+    levels: { min: 4, max: 10 },
   }),
   bat: creature({
     label: "Bat",
@@ -323,6 +351,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: BAT_BRAIN,
     stats: { maxHp: 12, attack: 5, defense: 0, critChance: 0, critMultiplier: 1 },
     contactKnockback: 120,
+    xpFrac: 0.04,
+    levels: { min: 1, max: 3 },
     flying: true,
   }),
   wizard: creature({
@@ -332,6 +362,8 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     config: WIZARD_BRAIN,
     stats: { maxHp: 28, attack: 0, defense: 0, critChance: 0, critMultiplier: 1 },
     contactKnockback: 160,
+    xpFrac: 0.2,
+    levels: { min: 5, max: 12 },
     summon: {
       minionType: "wolf",
       count: 2,

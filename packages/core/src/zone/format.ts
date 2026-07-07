@@ -18,6 +18,7 @@
 import type { Aabb } from "../physics/crowd";
 import type { Vec2 } from "../math/vec2";
 import type { DoorLock } from "../keys/keys";
+import type { LevelRange } from "../progression/levelGap";
 
 /** Bump when the authored shape changes incompatibly; `loadZone` rejects mismatches. */
 export const ZONE_FORMAT_VERSION = 1;
@@ -32,8 +33,14 @@ export interface ZoneFile {
   id: string;
   /** Human label. */
   name: string;
-  /** Level band — see realms-and-overworld. */
+  /**
+   * Level range floor (creature-levels.md): spawns roll between `band` and
+   * `bandMax`, clamped by each creature's own bounds — the zone is the content
+   * gate, the species is the identity.
+   */
   band: number;
+  /** Level range ceiling; older files omit it (treated as a single-level zone at `band`). */
+  bandMax?: number;
   /** Zone dimensions in *tiles* (world px = cols·tileSize × rows·tileSize). */
   size: { cols: number; rows: number };
   /** Px per floor tile (the visual resolution). */
@@ -158,6 +165,10 @@ export type ZoneObjectKind =
    *  contact and consumed to open the matching locked door (a breakable with a
    *  `lock`). See docs/design/doors-and-keys.md. */
   | "key"
+  /** An invisible region (uses `w`/`h`) that fires an action when the player
+   *  walks into it — v1 shows text. Hidden in-game, drawn in Realmsmith. Config
+   *  rides `props` (`parseTriggerConfig`). See docs/design/triggers.md. */
+  | "trigger"
   | "waystone"
   | "settlement"
   | "playerSpawn"
@@ -182,7 +193,8 @@ export interface ZoneObject {
 export interface Zone {
   id: string;
   name: string;
-  band: number;
+  /** The zone's spawn-level range, normalised from the file's band/bandMax. */
+  levels: LevelRange;
   /** World dimensions in px. */
   size: Vec2;
   tileSize: number;

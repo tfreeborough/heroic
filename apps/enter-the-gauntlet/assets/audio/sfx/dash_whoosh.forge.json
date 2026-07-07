@@ -1,0 +1,18 @@
+{
+  "type": "sfx",
+  "subject": "a fast close whoosh of cloth and air as a body lunges forward",
+  "prompt": "Close, breathy cloth whoosh as a cloaked body lunges: layered rush of heavy linen and leather, tight air displacement, sharp initial whip, brief high-frequency rustle peak, quick damped tail into fabric flutters — short, violent, 0.3–0.6s.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.6,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "dash_whoosh_1.mp3"
+  ],
+  "created": "2026-07-05T23:11:11.807Z",
+  "updated": "2026-07-05T23:11:11.807Z"
+}

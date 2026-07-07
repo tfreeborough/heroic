@@ -1,0 +1,18 @@
+{
+  "type": "sfx",
+  "subject": "a weapon attack hitting an enemy flesh",
+  "prompt": "Close, visceral flesh strike: short, wet impact—blade slicing then blunt thud—layered wet crunch, tearing muscle, bone rattled beneath, spatters and a metallic hiss, peaks immediately on contact, one-second decay into damp, echoing hollow body thump.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.35,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "strike_generic_1.mp3"
+  ],
+  "created": "2026-07-05T23:05:23.783Z",
+  "updated": "2026-07-05T23:05:23.783Z"
+}
