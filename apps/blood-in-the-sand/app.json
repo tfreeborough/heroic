@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Blood in the Sand",
+    "slug": "blood-in-the-sand",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#141210",
+    "ios": {
+      "bundleIdentifier": "com.tfreeb.blood-in-the-sand"
+    },
+    "android": {
+      "package": "com.heroic.blood_in_the_sand",
+      "predictiveBackGestureEnabled": false
+    },
+    "owner": "free-the-borough-games",
+    "extra": {
+      "eas": {
+        "projectId": "4cb5b5aa-5c5d-49ff-ab45-69a775dbeee1"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "blood-in-the-sand-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts",
+    "bot": "bun scripts/bot.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@heroic/blood-in-the-sand-sim": "workspace:*",
+    "@heroic/core": "workspace:*"
+  }
+}

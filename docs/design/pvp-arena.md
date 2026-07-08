@@ -1,12 +1,15 @@
-# PVP Arena — Concept & Network Architecture
+# Blood in the Sand — PVP Arena Concept & Network Architecture
 
-Status: **proposal (v1) — drafted 2026-07-07, awaiting sign-off** ·
-Applies to: **new third title** (shares all combat systems with Gauntlet + Journey) ·
-Last decided: —
+Status: **agreed (v2) — approved + M1 built 2026-07-07/08** ·
+Applies to: **Blood in the Sand** (shares all combat systems with Gauntlet + Journey) ·
+Last decided: 2026-07-08
 
-> Working title: **Heroic: Arena** *(placeholder — amusingly, the name Gauntlet vacated;
-> Tom to decide)*. This doc records the concept and the netcode architecture decision so the
-> prerequisite engineering (which benefits Gauntlet regardless) can start without re-litigating.
+> Title decided by Tom 2026-07-07: **Blood in the Sand** (replaces the "Heroic: Arena"
+> placeholder). Code: `packages/blood-in-the-sand-sim` (pure sim + wire protocol),
+> `apps/blood-in-the-sand-server` (Bun WS server), `apps/blood-in-the-sand` (Expo client,
+> dev builds like the gauntlet).
+> This doc records the concept and the netcode architecture decision so implementation never
+> re-litigates them; **v2 updates it to what M1 actually built.**
 
 ## The pitch
 
@@ -82,17 +85,42 @@ Two classic approaches, recorded so we don't revisit:
    miserable to debug when it drifts. Server-auth never needs it.
 3. Cheating: client-run sims can't be trusted for PVP anyway.
 
-**Shape:** a new `packages/server` — a **Bun** process (built-in WebSocket server, zero new
-deps) that imports `@heroic/core`, loads the arena zone JSON, runs the sim at a **fixed 30Hz
-tick**, and broadcasts snapshots at **15–20Hz**. Clients send `{ stick, dash, skill1..3 }` per
-tick (a few bytes — auto-targeting means no aim vector) and render interpolated snapshots.
-Rooms via a join code; the lobby is just "who's connected + team assignment + loadout picks".
+**Shape (as built, M1):** `packages/blood-in-the-sand-sim` (@heroic/blood-in-the-sand-sim) holds the pure sim — one plain
+JSON-able `ArenaState`, `stepSim(sim, inputs, dt)` composing core primitives (`stepAttackCycle`,
+`stepAbility`, `stepCrowd`, `resolveAttack`, `hitsInArc`, `selectTarget`, `segmentClear`) — plus
+the wire protocol, snapshot projection, and the client's interpolation buffer, all unit-tested
+(determinism asserted: same seed + inputs ⇒ identical states). `apps/blood-in-the-sand-server`
+is a Bun WebSocket process running the sim at a **fixed 30Hz tick** and broadcasting snapshots
+**every tick** (~21KB/s per client — a `SNAPSHOT_DIVISOR` constant drops it to 15Hz if ever
+needed); the round/match machine lives *inside* the sim, so the server is pure transport.
+Clients send `{ seq, stick, dash }` per tick (auto-targeting means no aim vector) and render
+66ms behind the newest snapshot, lerping the bracketing pair. The arena zone JSON lives inside
+`packages/blood-in-the-sand-sim` and is statically imported by BOTH server and client — the map can never
+desync. M1 is one room, first-two-players; join codes come with M2. Headless bot clients
+(`scripts/bot.ts`) let the server play full matches with no phones — that plus the sim tests is
+the regression net.
+
+**Combat rule discovered in bot playtests (2026-07-08):** a windup whose facing locks at start
+whiffs forever against a point-blank strafer (they orbit out of the cone every time — bot-vs-bot
+fights literally never resolved). The arena rule is now **the windup tracks its target until the
+strike**; counterplay is dash i-frames or breaking reach, not sidestepping — matching the
+telegraph-then-dash design intent. PvE keeps its start-locked rule; this is exactly the kind of
+per-game tuning the separate PvP tables exist for.
 
 **LAN-first, deliberately.** On home Wi-Fi latency is 1–5ms, so v1 needs **no client
 prediction, no lag compensation** — the genuinely hard netcode. Naive send-input /
 render-snapshot feels fine on LAN. Internet play (prediction + reconciliation, hosted server,
 matchmaking) is a later phase and a separate decision. *(Trade-off recorded: until then the
 game is same-network only — acceptable for the validation goal.)*
+
+> **Amended 2026-07-08 (Tom):** the server auto-deploys to **Render** (`render.yaml`
+> blueprint, Frankfurt) so the phones use one fixed address with no server-on-the-Mac step —
+> i.e. internet *transport* arrives early, still **without prediction**. UK→Frankfurt adds
+> ~25–40ms on top of the 66ms interpolation delay; judged acceptable for a top-down
+> auto-targeting game, and the LAN path remains as an override in the join screen if it feels
+> floaty. M4 (prediction/reconciliation, matchmaking) stays a separate unscheduled decision.
+> Known accepted holes until M2: one public room on a guessable URL (join codes fix this) and
+> free-tier spin-down (~1 min cold start; `starter` plan if annoying).
 
 ## Prerequisite engineering (benefits Gauntlet regardless)
 
@@ -115,13 +143,13 @@ In dependency order — 1 dominates:
 
 ## Milestones
 
-| # | Milestone | Proves |
-| --- | --- | --- |
-| M0 | Pure `step()` extraction; Gauntlet plays identically | the refactor didn't break the shipping game |
-| M1 | **LAN 1v1** — two phones, Bun server on the Mac, one arena, fixed loadout | the netcode end-to-end (the wife test) |
-| M2 | Rounds + bench/spectate + loadout picker + 2v2 | the actual game loop is fun |
-| M3 | 5v5, skill catalogue to 12, stall rules tuned | the full pitch |
-| M4 | Internet play (prediction, hosted server) | *separate decision — not scheduled* |
+| # | Milestone | Proves | Status |
+| --- | --- | --- | --- |
+| M0 | ~~Pure `step()` extraction from Gauntlet~~ → **superseded**: the arena sim was written fresh in `packages/blood-in-the-sand-sim`, composing core primitives; Gauntlet untouched (Tom's constraint 2026-07-08) | zero regression risk to the shipping game | done |
+| M1 | **LAN 1v1** — two phones, Bun server on the Mac, one arena, fixed loadout (sword + dash) | the netcode end-to-end (the wife test) | **built 2026-07-08** — full bot matches + Expo Go client verified vs live server; two-phone playtest pending |
+| M2 | Rounds + bench/spectate + loadout picker + 2v2 | the actual game loop is fun | — |
+| M3 | 5v5, skill catalogue to 12, stall rules tuned | the full pitch | — |
+| M4 | Internet play (prediction, hosted server) | *separate decision — not scheduled* | — |
 
 **Scope honesty:** M1 is a few weeks of evening work on top of M0. A *shipped* internet 5v5 is
 a different beast (matchmaking, server hosting costs, disconnect handling, PvP balance as a
