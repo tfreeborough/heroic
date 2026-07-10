@@ -20,7 +20,8 @@ android/
 # misc
 .DS_Store
 *.log
-.env*.local
+# env files are never committed — build-time config lives in eas.json / render.yaml-style files
+.env*
 .idea/
 .vscode/
 
