@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ArenaEvent } from "./events";
 import { INTERP_DELAY_TICKS, SnapshotBuffer } from "./interp";
-import type { PlayerSnapshot, SnapshotMsg } from "./protocol";
+import type { PlayerSnapshot, ProjectileSnapshot, SnapshotMsg } from "./protocol";
 
 const TICK_RATE = 30;
 const MS = 1000 / TICK_RATE;
@@ -10,6 +10,7 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   id,
   team: (id + 1) as 1 | 2,
   name: `p${id}`,
+  weapon: "blade",
   x: 0,
   y: 0,
   hp: 100,
@@ -25,11 +26,26 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   ...over,
 });
 
-const snap = (tick: number, players: PlayerSnapshot[], events: ArenaEvent[] = []): SnapshotMsg => ({
+const shot = (id: number, over: Partial<ProjectileSnapshot> = {}): ProjectileSnapshot => ({
+  id,
+  x: 0,
+  y: 0,
+  angle: 0,
+  weapon: "bow",
+  ...over,
+});
+
+const snap = (
+  tick: number,
+  players: PlayerSnapshot[],
+  events: ArenaEvent[] = [],
+  projectiles: ProjectileSnapshot[] = [],
+): SnapshotMsg => ({
   t: "snapshot",
   tick,
   round: { phase: "active", timer: 0, roundNumber: 1, wins: [0, 0], lastWinner: 0 },
   players,
+  projectiles,
   events,
 });
 
@@ -86,6 +102,17 @@ describe("SnapshotBuffer", () => {
     expect(buf.push(snap(1, [player(0)], [hit]), 0)).toEqual([hit]);
     expect(buf.push(snap(1, [player(0)], [hit]), MS)).toEqual([]); // duplicate tick
     expect(buf.push(snap(0, [player(0)], [hit]), 2 * MS)).toEqual([]); // out of order
+  });
+
+  test("projectiles lerp by id; a shot new to the pair renders at its newer position", () => {
+    const buf = new SnapshotBuffer(TICK_RATE);
+    buf.push(snap(0, [player(0)], [], [shot(0, { x: 0 })]), 0);
+    buf.push(snap(1, [player(0)], [], [shot(0, { x: 20 }), shot(1, { x: 100 })]), MS);
+    buf.push(snap(2, [player(0)], [], [shot(0, { x: 40 }), shot(1, { x: 120 })]), 2 * MS);
+    buf.push(snap(3, [player(0)], [], [shot(0, { x: 60 }), shot(1, { x: 140 })]), 3 * MS);
+    const view = buf.sample(2.5 * MS)!; // target 0.5 → bracket (0, 1)
+    expect(view.projectiles.find((p) => p.id === 0)!.x).toBeCloseTo(10); // lerped
+    expect(view.projectiles.find((p) => p.id === 1)!.x).toBe(100); // pop-in at newer
   });
 
   test("discrete fields (hp, alive, phase) come from the newer snapshot", () => {

@@ -9,6 +9,7 @@ import {
   createRng,
   createSpatialGrid,
   loadZone,
+  makeCombatant,
   rectEdges,
   type Aabb,
   type Rng,
@@ -17,6 +18,7 @@ import {
   type VisionSegment,
   type ZoneFile,
 } from "@heroic/core";
+import { PLAYER_STATS, WEAPONS, type WeaponId } from "./config";
 import { createArenaState, createPlayer, type ArenaPlayer, type ArenaState, type Team } from "./state";
 
 const GRID_CELL = 64;
@@ -87,31 +89,55 @@ export const spawnFacing = (sim: ArenaSim, spawn: Vec2): number =>
   angleTo(spawn, { x: sim.zone.size.x / 2, y: sim.zone.size.y / 2 });
 
 /**
- * Claim the next free slot (0 then 1). Returns null when the room is full.
- * Slot = id = team − 1, stable for the whole match.
+ * Seat a new player in the first free seat (lobby only — mid-match the seats
+ * are the match roster). Returns null when no seat is free or a match is on.
+ * Seat index = id = team − 1, stable until the seat is freed.
  */
 export const addPlayer = (sim: ArenaSim, name: string): ArenaPlayer | null => {
-  const id = sim.state.players.length;
-  if (id >= 2) return null;
+  if (sim.state.round.phase !== "lobby") return null;
+  const id = sim.state.players.indexOf(null);
+  if (id === -1) return null;
   const team = (id + 1) as Team;
   const spawn = sim.zone.spawns[id]!;
   const player = createPlayer(id, name, team, spawn, spawnFacing(sim, spawn));
-  sim.state.players.push(player);
+  sim.state.players[id] = player;
   return player;
 };
 
-/** Drop to "waiting" (sim freezes, wins preserved); the slot stays reserved. */
-export const markDisconnected = (sim: ArenaSim, id: number): void => {
-  const player = sim.state.players.find((p) => p.id === id);
-  if (!player) return;
-  player.connected = false;
-  sim.state.round.phase = "waiting";
-  sim.state.round.timer = 0;
+/**
+ * A lobby weapon pick (duplicates allowed — variety by choice, not by rule).
+ * Rebuilds the combatant so the weapon's stat overlay lands; locked mid-match.
+ */
+export const setPlayerWeapon = (sim: ArenaSim, id: number, weapon: WeaponId): boolean => {
+  if (sim.state.round.phase !== "lobby") return false;
+  const player = sim.state.players[id];
+  if (!player) return false;
+  player.weapon = weapon;
+  player.combatant = makeCombatant({ ...PLAYER_STATS, ...WEAPONS[weapon].stats });
+  return true;
 };
 
-/** A reserved slot's owner came back — the round machine resumes from "waiting". */
+/** Free a seat (lobby only — mid-match a leaver becomes a disconnected body). */
+export const removePlayer = (sim: ArenaSim, id: number): boolean => {
+  if (sim.state.round.phase !== "lobby") return false;
+  if (!sim.state.players[id]) return false;
+  sim.state.players[id] = null;
+  return true;
+};
+
+/**
+ * Mid-match disconnect: the match NEVER pauses (decided 2026-07-09). The body
+ * idles in place (missing input = IDLE_INPUT), stays killable, and the seat is
+ * reserved so a rejoin resumes control of the live character.
+ */
+export const markDisconnected = (sim: ArenaSim, id: number): void => {
+  const player = sim.state.players[id];
+  if (player) player.connected = false;
+};
+
+/** Claim a disconnected seat — the rejoiner takes over its live character. */
 export const reconnectPlayer = (sim: ArenaSim, id: number, name: string): void => {
-  const player = sim.state.players.find((p) => p.id === id);
+  const player = sim.state.players[id];
   if (!player) return;
   player.connected = true;
   player.name = name;

@@ -9,7 +9,7 @@
  */
 import { angleDiff } from "@heroic/core";
 import type { ArenaEvent } from "./events";
-import type { PlayerSnapshot, RoundSnapshot, SnapshotMsg } from "./protocol";
+import type { PlayerSnapshot, ProjectileSnapshot, RoundSnapshot, SnapshotMsg } from "./protocol";
 
 export const INTERP_DELAY_TICKS = 2;
 
@@ -21,6 +21,7 @@ export interface InterpolatedView {
   tick: number;
   round: RoundSnapshot;
   players: PlayerSnapshot[];
+  projectiles: ProjectileSnapshot[];
 }
 
 interface Entry {
@@ -42,12 +43,30 @@ const lerpPlayer = (a: PlayerSnapshot, b: PlayerSnapshot, t: number): PlayerSnap
   lockedFacing: lerpAngle(a.lockedFacing, b.lockedFacing, t),
 });
 
+/** Same rule as players: lerp by id; a shot new to the pair pops at its newer
+ * position (≤ one tick of flight — invisible at our speeds). */
+const lerpProjectile = (a: ProjectileSnapshot, b: ProjectileSnapshot, t: number): ProjectileSnapshot => ({
+  ...b,
+  x: lerpNum(a.x, b.x, t),
+  y: lerpNum(a.y, b.y, t),
+  angle: lerpAngle(a.angle, b.angle, t),
+});
+
 export class SnapshotBuffer {
   private entries: Entry[] = [];
   private readonly msPerTick: number;
 
   constructor(tickRate: number) {
     this.msPerTick = 1000 / tickRate;
+  }
+
+  /**
+   * Drop all history. Switching rooms restarts the tick counter — stale
+   * entries would make push() drop every new snapshot as "old". Call on
+   * each welcome.
+   */
+  reset(): void {
+    this.entries.length = 0;
   }
 
   /**
@@ -102,6 +121,11 @@ export class SnapshotBuffer {
       return lerpPlayer(a, b, t);
     });
 
-    return { tick: target, round: newer.round, players };
+    const projectiles = newer.projectiles.map((b) => {
+      const a = older.projectiles.find((p) => p.id === b.id) ?? b;
+      return lerpProjectile(a, b, t);
+    });
+
+    return { tick: target, round: newer.round, players, projectiles };
   }
 }

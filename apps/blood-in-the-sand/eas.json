@@ -8,19 +8,19 @@
       "distribution": "internal",
       "env": {
         "APP_VARIANT": "development",
-        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand.onrender.com"
+        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand.onrender.com"
+        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand.onrender.com"
+        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com"
       }
     }
   },

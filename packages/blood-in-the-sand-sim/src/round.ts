@@ -1,13 +1,17 @@
 /**
  * The round/match machine. It lives INSIDE the sim step (not in the server) so
- * the whole match — countdowns, benches, rematches — is one deterministic,
+ * the whole match — countdowns, benches, lobby returns — is one deterministic,
  * headless-testable simulation; the server stays pure transport.
  *
- *   waiting ──(both connected)──▶ countdown ──▶ active ──(team wiped)──▶ roundEnd
- *      ▲                                                                  │
- *      └── disconnect (any phase)          countdown ◀─(wins < 3)─────────┤
- *                                          matchEnd  ◀─(wins = 3)─────────┘
- *                                              └──(timer)──▶ fresh match → countdown
+ *   lobby ──(host startMatch)──▶ countdown ──▶ active ──(team wiped)──▶ roundEnd
+ *     ▲                                                                   │
+ *     │                                     countdown ◀─(wins < 3)────────┤
+ *     └───────(timer)─── matchEnd ◀───────────────────(wins = 3)──────────┘
+ *
+ * Nothing is automatic in the lobby: matches start ONLY via startMatch (the
+ * host's button), and matchEnd returns everyone to the lobby — no auto-rematch
+ * (decided 2026-07-09). Disconnects never touch the machine; a dropped
+ * player's body idles and stays killable (see sim.markDisconnected).
  */
 import { ATTACK_CYCLE_READY } from "@heroic/core";
 import {
@@ -18,12 +22,14 @@ import {
 } from "./config";
 import type { ArenaEvent } from "./events";
 import { spawnFacing, type ArenaSim } from "./sim";
-import { createDashState, type Team } from "./state";
+import { createDashState, seatedPlayers, type Team } from "./state";
 
 /** Respawn everyone at their team spawn with a clean slate and start the countdown. */
 export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
   const { state, zone } = sim;
-  for (const p of state.players) {
+  // Shots don't cross rounds (ids stay monotonic — the client lerps by id).
+  state.projectiles.length = 0;
+  for (const p of seatedPlayers(state)) {
     const spawn = zone.spawns[p.team - 1]!;
     p.mover.pos.x = spawn.x;
     p.mover.pos.y = spawn.y;
@@ -36,6 +42,7 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.lockedTargetId = null;
     p.lockedFacing = p.facing;
     p.dash = createDashState();
+    p.dots.length = 0;
     p.alive = true;
   }
   state.round.phase = "countdown";
@@ -44,8 +51,23 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
   events.push({ type: "roundStart", roundNumber: state.round.roundNumber });
 };
 
-const everyoneReady = (sim: ArenaSim): boolean =>
-  sim.state.players.length === 2 && sim.state.players.every((p) => p.connected);
+/** Can the host's start button do anything right now? */
+export const canStartMatch = (sim: ArenaSim): boolean =>
+  sim.state.round.phase === "lobby" &&
+  sim.state.players.every((p) => p !== null && p.connected && p.weapon !== null);
+
+/**
+ * The host pressed start: fresh scoreboard, everyone to spawns, countdown.
+ * Returns false (and does nothing) unless the lobby is full and connected.
+ */
+export const startMatch = (sim: ArenaSim, events: ArenaEvent[]): boolean => {
+  if (!canStartMatch(sim)) return false;
+  sim.state.round.wins = [0, 0];
+  sim.state.round.roundNumber = 0;
+  sim.state.round.lastWinner = 0;
+  resetForRound(sim, events);
+  return true;
+};
 
 /**
  * Advance the non-combat side of the machine by one tick. Returns true when
@@ -54,10 +76,8 @@ const everyoneReady = (sim: ArenaSim): boolean =>
 export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]): boolean => {
   const round = sim.state.round;
   switch (round.phase) {
-    case "waiting": {
-      if (everyoneReady(sim)) resetForRound(sim, events);
-      return false;
-    }
+    case "lobby":
+      return false; // host-driven only — nothing ticks here
     case "countdown": {
       round.timer -= dt;
       if (round.timer <= 0) {
@@ -86,11 +106,15 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
     case "matchEnd": {
       round.timer -= dt;
       if (round.timer <= 0) {
-        // Rematch: same players, fresh scoreboard.
-        round.wins = [0, 0];
-        round.roundNumber = 0;
-        round.lastWinner = 0;
-        resetForRound(sim, events);
+        // Back to the lobby. Wins/lastWinner survive for the lobby's "last
+        // match" line (cleared by the next startMatch). Seats whose players
+        // never reconnected are freed — they can rejoin the lobby normally.
+        round.phase = "lobby";
+        round.timer = 0;
+        for (let i = 0; i < sim.state.players.length; i++) {
+          const p = sim.state.players[i];
+          if (p && !p.connected) sim.state.players[i] = null;
+        }
       }
       return false;
     }
@@ -101,8 +125,9 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
 export const checkRoundOver = (sim: ArenaSim, events: ArenaEvent[]): void => {
   const round = sim.state.round;
   if (round.phase !== "active") return;
-  const alive1 = sim.state.players.some((p) => p.team === 1 && p.alive);
-  const alive2 = sim.state.players.some((p) => p.team === 2 && p.alive);
+  const seated = seatedPlayers(sim.state);
+  const alive1 = seated.some((p) => p.team === 1 && p.alive);
+  const alive2 = seated.some((p) => p.team === 2 && p.alive);
   if (alive1 && alive2) return;
 
   // Both wiped on the same tick can't happen 1v1 (a dead player never swings),

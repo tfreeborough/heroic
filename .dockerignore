@@ -1,9 +1,0 @@
-# Keep the server image's build context lean — only the server workspaces matter.
-.git
-node_modules
-**/node_modules
-apps/enter-the-gauntlet
-apps/journey-to-greatness
-apps/realmsmith
-apps/blood-in-the-sand
-docs

@@ -7,6 +7,7 @@ export * from "./events";
 export * from "./dash";
 export * from "./sim";
 export * from "./zone";
+export * from "./rooms";
 export * from "./protocol";
 export * from "./snapshot";
 export * from "./interp";

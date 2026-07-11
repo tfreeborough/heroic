@@ -46,23 +46,90 @@ account-level unlocks are a later monetisation question, not v1.)
   arena boundary that damages anyone outside it *(mechanism open — could also be: most total
   damage dealt wins; decide when it actually stalls in playtests)*.
 
-## Loadout: one weapon, pick 3 skills
+## Loadout: one weapon, pick 3 powers
 
-At round start (or match start — open question) each player picks:
+**Weapons: BUILT 2026-07-10 (protocol v3).** Four weapons, picked per-player in the lobby
+(tap to repick until the host starts; duplicates allowed — variety by choice, not rule;
+decided with Tom 2026-07-10). The match cannot start until every seat has picked
+(`canStartMatch`). Every weapon auto-fires at the auto-target — ranged included — so still
+no aim input on the wire (confirmed 2026-07-10). The table lives in the sim package's
+`config.ts` (`WEAPONS`); the client imports it directly (the ARENA_00 rule), so per-weapon
+telegraphs never desync:
 
-- **1 weapon** from the shared weapon categories ([equipment](./equipment.md) shapes: melee /
-  ranged / magic) — sets your basic-attack pattern and damage school.
-- **3 skills** from a catalogue of **12+** actives. These are the same ability implementations
-  the PvE games use (dash, and the class kits as they're built) — the PVP catalogue is a curated
-  *subset + rebalance pass*, not new systems. PvP numbers live in a separate tuning table from
-  PvE numbers (same skill, different constants) so balancing one never breaks the other.
+| id | shape | feel | signature |
+| --- | --- | --- | --- |
+| blade | 40° arc, reach 90, fastest cycle | commit in close | 35% chance on hit: bleed, 3 × 3 dmg over 3s (fixed damage, no rng draws — core `status.ts` DoT container, the seed of the modifiers-and-effects hook system) |
+| bow | projectile 520 px/s, range 360 | long poke, biggest hit | arrows stop on walls; dash i-frames pass *through* a shot |
+| staff | projectile 300 px/s, range 320, homing 2.2 rad/s | zoning dread | steers toward its fire-time target; barely faster than a sprint — dash/walls beat it, running doesn't |
+| hammer | 90° arc, reach 125 (longest melee), slowest cycle | melee zoning | knockback 1400 (vs blade 100) — launches people out of its own reach |
 
-No classes in v1 — the weapon + 3 skills *is* the build. This keeps the draft legible and dodges
+**Melee range swap 2026-07-10 (Tom):** the hammer now OUT-REACHES the blade (125 vs 90; they
+launched at 70 vs 110). Rationale: the hammer was paying three costs (reach, speed, damage) for
+one benefit whose real value only arrives at 5v5 (knockback → peel/displacement), and its own
+launch kept resetting the approach it had just won — while the blade held the longest reach AND
+the fastest cycle AND bleed. Now: blade = get genuinely close, cycle fast, stack bleeds; hammer
+= a long, slow, readable sweep that wins *space*, not duels (attack nudged 9 → 11 so it isn't a
+pillow). Knockback polarised same day (Tom): blade 400 → 100 (it wants targets to STAY in
+reach for bleed stacking), hammer 1100 → 1400.
+
+Balance numbers are first guesses awaiting on-device tuning; the "read the telegraph, dash the
+strike" windup philosophy carries over (0.25–0.6s windups). Ranged windups draw an aim-line
+telegraph instead of the arc wedge. **Pacing pass 2026-07-10 (Tom, after first play):** attack
+cycles slowed across the board (blade 0.8s, bow/hammer 1.2s, staff 1.5s) — the 0.9s-cycle staff
+was near-unapproachable; ranged must leave gaps a melee player can close through. Added the
+same day: **enemy range rings** — a faint dashed circle at each enemy's strike range, fading in
+as you approach, so engage/disengage decisions read at a glance (client-derived from snapshot
+weapon + positions; nothing networked).
+
+**Powers: designed, not built (sketch 2026-07-10 — iterate with Tom before building).**
+Each player picks **up to 3 powers** in the lobby, same flow as weapons. Dash stops being
+hardwired and becomes the first catalogue entry:
+
+- **Sim shape:** `DashState` generalises to `powers: PowerState[]` (each = core `AbilityState`
+  + per-power runtime fields); `PlayerInput.dash: boolean` becomes three per-slot booleans (or a
+  bitmask); the server's `dashLatch` set becomes per-slot latches. A `POWERS` table in
+  `config.ts` mirrors `WEAPONS`.
+- **Wire:** fold `setWeapon` into `{ t: "setLoadout"; weapon; powers[] }` when powers land (one
+  more protocol bump); `RoomStatePlayer.powers`; per-power cooldowns in `PlayerSnapshot`
+  (generalising `dashCd`).
+- **Client:** the buttons container (built 2026-07-10 as a column opposite the thumbstick)
+  holds up to 3 `PowerButton`s — `DashButton` generalised with per-power icons over the same
+  cooldown-pie overlay.
+- **Starter catalogue (6 for playtests):** dash (as today), blink (teleport, no barge, longer
+  cd), shield (brief damage immunity, rooted), hook (projectile that pulls the victim in —
+  reuses the weapon projectile system), war cry (radial knockback burst), regenerate
+  (channelled heal, broken by damage). Picks should enable counter-play (hook pulls the archer
+  in; shield eats the hammer launch) and, later, team roles.
+
+No classes in v1 — the weapon + 3 powers *is* the build. This keeps the draft legible and dodges
 the class-balance problem while the catalogue is small. *(Revisit if builds converge on one meta
 combo — banning/pick-order or class restrictions are the levers.)*
 
-**Catalogue authoring is the content cost:** 12 skills that are fair vs humans is a real
-balancing job (PvE tolerates wild imbalance; PvP doesn't). v1 playtests can start with ~6.
+**Catalogue authoring is the content cost:** 12 powers that are fair vs humans is a real
+balancing job (PvE tolerates wild imbalance; PvP doesn't). v1 playtests start with ~6.
+
+## Blood on the sand (added 2026-07-10, Tom's design)
+
+The title mechanic: **wounded players bleed onto the arena floor**. Below **50% hp** a player
+drips a blood trail behind them, and the drip rate/size worsens as hp falls — so a fresh, dense
+trail means a badly hurt player went this way, and a busy match paints the sand with where the
+fighting happened. Hits also splash blood at the impact point (scaled by damage), and a kill
+leaves a larger, longer-lived pool. Decals fade out over ~45s (pools ~100s); blood **persists
+across rounds** within a match and clears with the fresh match.
+
+**Architecture decision — blood is client-derived, never networked.** Drips are a pure function
+of snapshot data every client already receives (positions + hp each tick); splashes/pools come
+from the existing `hit` events. Per the events contract, the wire only carries what clients
+can't re-derive — so the sim, protocol, and server are untouched. Per-client random jitter means
+pixel placement differs between phones, but the trails describe identical information. Accepted
+trade-off: a mid-match spectator/rejoiner starts with a clean floor (blood spilt before they
+arrived is gone for them) — fine while blood is informational flavour, revisit if it ever
+becomes a hard gameplay mechanic. Implementation: `BloodField` in
+`apps/blood-in-the-sand/src/game/blood.ts` (capped decal pool, oldest-first eviction), drawn on
+the floor layer with camera culling in `render.ts`.
+
+**Deferred (needs art):** a skeleton decal where each player fell, sinking further into the
+sand as rounds pass — the death pool is its placeholder marker for now.
 
 ## Network architecture (the decision)
 
@@ -100,6 +167,19 @@ desync. M1 is one room, first-two-players; join codes come with M2. Headless bot
 (`scripts/bot.ts`) let the server play full matches with no phones — that plus the sim tests is
 the regression net.
 
+**Rooms + host-driven lobbies (added 2026-07-10, Tom's design).** Players create rooms
+(optional passcode) or browse/join open ones; each room is a lobby showing player names where
+the **host** (creator; crown migrates if they leave) starts the match. After first-to-3
+everyone returns to the lobby — **no auto-rematch**. Room registry is **in-memory only** (a
+room is exactly as ephemeral as the match inside it; a DB would persist pointers to vanished
+matches): `Map<code, Room>`, 4-letter unambiguous codes (doubles as join-by-code), 20-room cap,
+2-minute empty-room GC. **Disconnect rule (Tom):** the match never pauses — a dropped player's
+body idles in place and stays killable; rejoining the room reclaims the seat and its live
+character; seats still empty when the match ends are freed at the lobby. Protocol v2
+(create/join/list/watch/leave/start); `watchRoom` spectates seatlessly (debug tooling now, the
+seed of bench-spectating later). Pure decision logic (codes, join rules, GC policy) lives in
+the sim package under test; the server stays transport.
+
 **Combat rule discovered in bot playtests (2026-07-08):** a windup whose facing locks at start
 whiffs forever against a point-blank strafer (they orbit out of the cone every time — bot-vs-bot
 fights literally never resolved). The arena rule is now **the windup tracks its target until the
@@ -113,8 +193,10 @@ render-snapshot feels fine on LAN. Internet play (prediction + reconciliation, h
 matchmaking) is a later phase and a separate decision. *(Trade-off recorded: until then the
 game is same-network only — acceptable for the validation goal.)*
 
-> **Amended 2026-07-08 (Tom):** the server auto-deploys to **Render** (`render.yaml`
-> blueprint, Frankfurt) so the phones use one fixed address with no server-on-the-Mac step —
+> **Amended 2026-07-08 (Tom):** the server auto-deploys to **Render** (dashboard-configured
+> web service on the native Bun/Node runtime — build `bun install`, start
+> `bun apps/blood-in-the-sand-server/src/main.ts`; settings recorded in the app README) so the
+> phones use one fixed address with no server-on-the-Mac step —
 > i.e. internet *transport* arrives early, still **without prediction**. UK→Frankfurt adds
 > ~25–40ms on top of the 66ms interpolation delay; judged acceptable for a top-down
 > auto-targeting game, and the LAN path remains as an override in the join screen if it feels
@@ -147,7 +229,7 @@ In dependency order — 1 dominates:
 | --- | --- | --- | --- |
 | M0 | ~~Pure `step()` extraction from Gauntlet~~ → **superseded**: the arena sim was written fresh in `packages/blood-in-the-sand-sim`, composing core primitives; Gauntlet untouched (Tom's constraint 2026-07-08) | zero regression risk to the shipping game | done |
 | M1 | **LAN 1v1** — two phones, Bun server on the Mac, one arena, fixed loadout (sword + dash) | the netcode end-to-end (the wife test) | **built 2026-07-08** — full bot matches + Expo Go client verified vs live server; two-phone playtest pending |
-| M2 | Rounds + bench/spectate + loadout picker + 2v2 | the actual game loop is fun | — |
+| M2 | Rounds + bench/spectate + loadout picker + 2v2 | the actual game loop is fun | **partial 2026-07-10**: rooms, passcodes, host-run lobbies, names, watchRoom, weapon picker (4 weapons, protocol v3); remaining: powers picker, 2v2, in-match bench view |
 | M3 | 5v5, skill catalogue to 12, stall rules tuned | the full pitch | — |
 | M4 | Internet play (prediction, hosted server) | *separate decision — not scheduled* | — |
 

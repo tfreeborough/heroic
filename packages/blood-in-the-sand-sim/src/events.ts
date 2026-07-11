@@ -8,7 +8,18 @@
 import type { Team } from "./state";
 
 export type ArenaEvent =
-  | { type: "hit"; attackerId: number; targetId: number; damage: number; crit: boolean; lethal: boolean; x: number; y: number }
+  | {
+      type: "hit";
+      attackerId: number;
+      targetId: number;
+      damage: number;
+      crit: boolean;
+      lethal: boolean;
+      /** Present on bleed ticks — the client tints these red and skips the ring. */
+      bleed?: true;
+      x: number;
+      y: number;
+    }
   | { type: "death"; playerId: number }
   | { type: "dash"; playerId: number }
   | { type: "roundStart"; roundNumber: number }

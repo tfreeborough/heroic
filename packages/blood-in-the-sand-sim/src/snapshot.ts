@@ -2,35 +2,32 @@
  * State → wire. Pure projections from ArenaState to the protocol shapes; the
  * server stringifies the result, the client's SnapshotBuffer consumes it.
  */
-import {
-  COUNTDOWN_SECONDS,
-  DASH,
-  PLAYER_RADIUS,
-  SWORD,
-  SWORD_ARC_WIDTH,
-  TICK_RATE,
-  WINS_TO_TAKE_MATCH,
-} from "./config";
+import { COUNTDOWN_SECONDS, DASH, PLAYER_RADIUS, TICK_RATE, WINS_TO_TAKE_MATCH } from "./config";
 import { isDashing } from "./dash";
 import type { ArenaEvent } from "./events";
-import type { ArenaClientConfig, LobbyPlayer, PlayerSnapshot, RoundSnapshot, SnapshotMsg } from "./protocol";
-import type { ArenaState } from "./state";
+import type {
+  ArenaClientConfig,
+  PlayerSnapshot,
+  ProjectileSnapshot,
+  RoomStatePlayer,
+  RoundSnapshot,
+  SnapshotMsg,
+} from "./protocol";
+import { seatedPlayers, type ArenaPlayer, type ArenaProjectile, type ArenaState } from "./state";
 
 export const makeClientConfig = (): ArenaClientConfig => ({
   tickRate: TICK_RATE,
   playerRadius: PLAYER_RADIUS,
-  reach: SWORD.reach,
-  arcWidth: SWORD_ARC_WIDTH,
-  windup: SWORD.windup,
   dashCooldown: DASH.cooldown,
   winsToTake: WINS_TO_TAKE_MATCH,
   countdownSeconds: COUNTDOWN_SECONDS,
 });
 
-const toPlayerSnapshot = (p: ArenaState["players"][number]): PlayerSnapshot => ({
+const toPlayerSnapshot = (p: ArenaPlayer): PlayerSnapshot => ({
   id: p.id,
   team: p.team,
   name: p.name,
+  weapon: p.weapon,
   x: p.mover.pos.x,
   y: p.mover.pos.y,
   hp: p.combatant.hp,
@@ -53,13 +50,28 @@ const toRoundSnapshot = (state: ArenaState): RoundSnapshot => ({
   lastWinner: state.round.lastWinner,
 });
 
+const toProjectileSnapshot = (p: ArenaProjectile): ProjectileSnapshot => ({
+  id: p.id,
+  x: p.pos.x,
+  y: p.pos.y,
+  angle: Math.atan2(p.dir.y, p.dir.x),
+  weapon: p.weapon,
+});
+
 export const toSnapshot = (state: ArenaState, events: ArenaEvent[]): SnapshotMsg => ({
   t: "snapshot",
   tick: state.tick,
   round: toRoundSnapshot(state),
-  players: state.players.map(toPlayerSnapshot),
+  players: seatedPlayers(state).map(toPlayerSnapshot),
+  projectiles: state.projectiles.map(toProjectileSnapshot),
   events,
 });
 
-export const toLobby = (state: ArenaState): LobbyPlayer[] =>
-  state.players.map((p) => ({ id: p.id, name: p.name, team: p.team, connected: p.connected }));
+export const toRoomStatePlayers = (state: ArenaState): RoomStatePlayer[] =>
+  seatedPlayers(state).map((p) => ({
+    id: p.id,
+    name: p.name,
+    team: p.team,
+    connected: p.connected,
+    weapon: p.weapon,
+  }));

@@ -1,34 +1,34 @@
 /**
- * Blood in the Sand — LAN match server.
+ * Blood in the Sand — match server (rooms + host-driven lobbies).
  *
  *   bun run dev      (auto-restarts on change)
  *   bun run start
  *
- * Prints the LAN addresses to type into the phones. Tip for long sessions:
+ * Prints the LAN addresses for local play. Tip for long sessions on a Mac:
  * `caffeinate -i bun src/main.ts` stops macOS sleeping mid-match.
  */
 import { networkInterfaces } from "node:os";
 import { DEFAULT_PORT } from "@heroic/blood-in-the-sand-sim";
-import { Room, type ClientData } from "./room";
+import { RoomManager } from "./manager";
+import type { ClientData } from "./room";
 
 // PORT is what Render (and most PaaS) inject; ARENA_PORT is the local override.
 const port = Number(process.env.PORT ?? process.env.ARENA_PORT ?? DEFAULT_PORT);
-const room = new Room();
+const manager = new RoomManager();
 
 const server = Bun.serve<ClientData, never>({
   port,
   fetch(req, srv) {
-    if (srv.upgrade(req, { data: { playerId: null } })) return;
-    return new Response("Blood in the Sand server — connect with the app.");
+    if (srv.upgrade(req, { data: { roomCode: null, playerId: null } })) return;
+    return new Response(`Blood in the Sand server — ${manager.roomCount()} room(s) open. Connect with the app.`);
   },
   websocket: {
-    open: (ws) => room.open(ws),
-    message: (ws, raw) => room.message(ws, raw),
-    close: (ws) => room.close(ws),
+    message: (ws, raw) => manager.message(ws, raw),
+    close: (ws) => manager.close(ws),
   },
 });
 
-room.start(server);
+manager.start(server);
 
 console.log("🩸 Blood in the Sand server up. Point the phones at:");
 for (const list of Object.values(networkInterfaces())) {

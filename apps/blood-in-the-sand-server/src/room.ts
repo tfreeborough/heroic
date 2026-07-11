@@ -1,7 +1,9 @@
 /**
- * The single match room: owns the ArenaSim, turns socket traffic into per-tick
- * inputs, and broadcasts snapshots. All game rules live in @heroic/blood-in-the-sand-sim —
- * this file is pure transport (that's what keeps the sim headless-testable).
+ * One room: a lobby-plus-match owned by its host. All game rules live in
+ * @heroic/blood-in-the-sand-sim — this class is transport: it turns socket
+ * traffic into per-tick inputs, broadcasts snapshots on the room's topic, and
+ * keeps the seat/host bookkeeping honest. The RoomManager owns the clock; a
+ * room never sets its own timers.
  *
  * Input model per player:
  * - stick: latest-input-wins (an old stick sample is worthless).
@@ -9,140 +11,184 @@
  *   next simulated step, so a tap is never lost to timing.
  */
 import type { Server, ServerWebSocket } from "bun";
-import { advanceFixed } from "@heroic/core";
 import {
   ARENA_00,
   PROTOCOL_VERSION,
   SNAPSHOT_DIVISOR,
   TICK_DT,
-  TICK_RATE,
   addPlayer,
   createSim,
   makeClientConfig,
   markDisconnected,
   reconnectPlayer,
+  removePlayer,
   sanitizeInput,
+  seatedPlayers,
+  setPlayerWeapon,
+  startMatch,
   stepSim,
-  toLobby,
+  toRoomStatePlayers,
   toSnapshot,
   type ArenaEvent,
   type ArenaSim,
   type ClientMsg,
   type PlayerInput,
+  type RoomListing,
   type ServerMsg,
+  type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 
 export interface ClientData {
+  roomCode: string | null;
   playerId: number | null;
 }
 
-type Socket = ServerWebSocket<ClientData>;
+export type Socket = ServerWebSocket<ClientData>;
 
-const TOPIC = "room";
-const MAX_NAME = 16;
+export interface RoomMeta {
+  code: string;
+  name: string;
+  passcode: string | null;
+  hostId: number;
+}
 
 export class Room {
-  private sim: ArenaSim;
-  private server: Server<ClientData> | null = null;
+  readonly meta: RoomMeta;
+  readonly sim: ArenaSim;
+  /** When the last connected player left, for the GC sweep. Null while occupied. */
+  emptySinceMs: number | null;
+
+  private readonly server: Server<ClientData>;
+  private readonly seats = new Map<number, Socket>();
   private readonly inputs = new Map<number, PlayerInput>();
   private readonly dashLatch = new Set<number>();
   private eventBuffer: ArenaEvent[] = [];
-  private accumulator = 0;
-  private lastMs = 0;
+  private lastRoomStateKey = "";
 
-  constructor(seed: number = Date.now() >>> 0) {
-    this.sim = createSim(ARENA_00, seed);
-  }
-
-  start(server: Server<ClientData>): void {
+  constructor(server: Server<ClientData>, meta: RoomMeta, seed: number, nowMs: number) {
     this.server = server;
-    this.lastMs = performance.now();
-    // ~30 firings/s, but each firing measures REAL elapsed time and runs the
-    // accumulator — interval jitter never drifts the sim clock.
-    setInterval(() => this.tick(), 1000 / TICK_RATE);
+    this.meta = meta;
+    this.sim = createSim(ARENA_00, seed);
+    this.emptySinceMs = nowMs; // occupied the moment the creator is seated
   }
 
-  open(ws: Socket): void {
-    // Subscribe before hello: sockets that never claim a slot still receive
-    // snapshots, which makes any connected client a free spectator/debug view.
-    ws.subscribe(TOPIC);
+  private get topic(): string {
+    return `room:${this.meta.code}`;
   }
 
-  message(ws: Socket, raw: string | Buffer): void {
-    let msg: ClientMsg;
-    try {
-      msg = JSON.parse(String(raw)) as ClientMsg;
-    } catch {
-      return; // not our protocol — drop it
-    }
-    if (msg.t === "hello") this.onHello(ws, msg);
-    else if (msg.t === "input") this.onInput(ws, msg);
+  connectedCount(): number {
+    return seatedPlayers(this.sim.state).filter((p) => p.connected).length;
   }
 
-  close(ws: Socket): void {
-    const id = ws.data.playerId;
-    if (id === null) return;
-    ws.data.playerId = null;
-    this.inputs.delete(id);
-    this.dashLatch.delete(id);
-    markDisconnected(this.sim, id);
-    console.log(`✝ player ${id} disconnected — match paused`);
-    this.broadcast({ t: "lobby", players: toLobby(this.sim.state) });
+  listing(): RoomListing {
+    return {
+      code: this.meta.code,
+      name: this.meta.name,
+      players: this.connectedCount(),
+      capacity: this.sim.state.players.length,
+      locked: this.meta.passcode !== null,
+      phase: this.sim.state.round.phase === "lobby" ? "lobby" : "in-match",
+    };
   }
 
-  private onHello(ws: Socket, msg: Extract<ClientMsg, { t: "hello" }>): void {
-    if (ws.data.playerId !== null) return; // already seated
-    if (msg.v !== PROTOCOL_VERSION) {
-      this.send(ws, { t: "reject", reason: `protocol mismatch (server v${PROTOCOL_VERSION}, you v${msg.v})` });
-      return;
-    }
-    const name = (typeof msg.name === "string" ? msg.name : "").trim().slice(0, MAX_NAME) || "player";
+  hasFreeSeatInLobby(): boolean {
+    return this.sim.state.round.phase === "lobby" && this.sim.state.players.includes(null);
+  }
 
+  hasDisconnectedSeat(): boolean {
+    return seatedPlayers(this.sim.state).some((p) => !p.connected);
+  }
+
+  /**
+   * Seat a validated joiner: a disconnected seat is reclaimed first (mid-match
+   * rejoin takes over the live body), else a free lobby seat. Returns the
+   * player id, or null if the room filled up in the meantime.
+   */
+  seat(ws: Socket, name: string, nowMs: number): number | null {
+    const ghost = seatedPlayers(this.sim.state).find((p) => !p.connected);
     let playerId: number | null = null;
-    const vacant = this.sim.state.players.find((p) => !p.connected);
-    if (this.sim.state.players.length < 2) {
+    if (ghost) {
+      reconnectPlayer(this.sim, ghost.id, name);
+      playerId = ghost.id;
+    } else {
       playerId = addPlayer(this.sim, name)?.id ?? null;
-    } else if (vacant) {
-      reconnectPlayer(this.sim, vacant.id, name);
-      playerId = vacant.id;
     }
-    if (playerId === null) {
-      this.send(ws, { t: "reject", reason: "room full" });
-      return;
-    }
+    if (playerId === null) return null;
 
+    // A stale socket may still hold the seat (rejoin racing the close event).
+    this.seats.get(playerId)?.close();
+    this.seats.set(playerId, ws);
+    ws.data.roomCode = this.meta.code;
     ws.data.playerId = playerId;
+    ws.subscribe(this.topic);
+    this.emptySinceMs = null;
+
     const player = this.sim.state.players[playerId]!;
-    console.log(`⚔ ${name} joined as player ${playerId} (team ${player.team})`);
     this.send(ws, {
       t: "welcome",
       v: PROTOCOL_VERSION,
       playerId,
       team: player.team,
+      roomCode: this.meta.code,
+      roomName: this.meta.name,
+      hostId: this.meta.hostId,
       zoneId: this.sim.zone.id,
       config: makeClientConfig(),
     });
-    this.broadcast({ t: "lobby", players: toLobby(this.sim.state) });
+    this.syncRoomState(nowMs);
+    return playerId;
   }
 
-  private onInput(ws: Socket, msg: Extract<ClientMsg, { t: "input" }>): void {
+  watch(ws: Socket): void {
+    ws.data.roomCode = this.meta.code;
+    ws.data.playerId = null;
+    ws.subscribe(this.topic);
+    this.send(ws, { t: "watching", roomCode: this.meta.code, roomName: this.meta.name });
+  }
+
+  /**
+   * A seated socket left (message or close). Lobby: the seat frees. Mid-match:
+   * the body idles and stays killable — the match NEVER pauses (2026-07-09).
+   */
+  dropSocket(ws: Socket, nowMs: number): void {
     const id = ws.data.playerId;
-    if (id === null) return;
-    const input = sanitizeInput({ seq: msg.seq, sx: msg.sx, sy: msg.sy, dash: msg.dash });
-    this.inputs.set(id, input);
-    if (input.dash) this.dashLatch.add(id);
+    ws.unsubscribe(this.topic);
+    ws.data.roomCode = null;
+    ws.data.playerId = null;
+    if (id === null) return; // watcher
+
+    if (this.seats.get(id) !== ws) return; // superseded by a rejoin
+    this.seats.delete(id);
+    if (this.sim.state.round.phase === "lobby") {
+      removePlayer(this.sim, id);
+    } else {
+      markDisconnected(this.sim, id);
+      console.log(`[${this.meta.code}] player ${id} dropped — body idles on`);
+    }
+    this.syncRoomState(nowMs);
   }
 
-  private tick(): void {
-    const now = performance.now();
-    const elapsed = (now - this.lastMs) / 1000;
-    this.lastMs = now;
+  startByHost(playerId: number): void {
+    if (playerId !== this.meta.hostId) return;
+    if (startMatch(this.sim, this.eventBuffer)) {
+      console.log(`[${this.meta.code}] host started a match`);
+    }
+  }
 
-    const result = advanceFixed(this.accumulator, elapsed, { step: TICK_DT, maxSteps: 4 });
-    this.accumulator = result.accumulator;
-    if (result.steps === 0) return;
+  /** A lobby weapon pick; the roomState diff broadcasts the change. */
+  setWeapon(playerId: number, weapon: WeaponId, nowMs: number): void {
+    if (setPlayerWeapon(this.sim, playerId, weapon)) this.syncRoomState(nowMs);
+  }
 
-    for (let i = 0; i < result.steps; i++) {
+  input(playerId: number, msg: Extract<ClientMsg, { t: "input" }>): void {
+    const input = sanitizeInput({ seq: msg.seq, sx: msg.sx, sy: msg.sy, dash: msg.dash });
+    this.inputs.set(playerId, input);
+    if (input.dash) this.dashLatch.add(playerId);
+  }
+
+  /** Advance `steps` fixed ticks and broadcast. Called by the manager's loop. */
+  step(steps: number, nowMs: number): void {
+    for (let i = 0; i < steps; i++) {
       const stepInputs = new Map<number, PlayerInput>();
       for (const [id, input] of this.inputs) {
         // The latch fires on the first catch-up step only — one press, one dash.
@@ -157,14 +203,38 @@ export class Room {
       this.broadcast(toSnapshot(this.sim.state, this.eventBuffer));
       this.eventBuffer = [];
     }
+
+    // The sim itself can change membership (ghost seats freed at lobby return)
+    // — diffing here catches that without event plumbing.
+    this.syncRoomState(nowMs);
+  }
+
+  /** Host migration + roomState broadcast + empty tracking, on any change. */
+  private syncRoomState(nowMs: number): void {
+    // Host gone entirely (seat freed)? Crown the lowest occupied seat.
+    if (!this.sim.state.players[this.meta.hostId]) {
+      const next = seatedPlayers(this.sim.state)[0];
+      if (next) {
+        this.meta.hostId = next.id;
+        console.log(`[${this.meta.code}] host left — crown passes to ${next.name}`);
+      }
+    }
+    this.emptySinceMs = this.connectedCount() === 0 ? (this.emptySinceMs ?? nowMs) : null;
+
+    const players = toRoomStatePlayers(this.sim.state);
+    const key = JSON.stringify([players, this.meta.hostId]);
+    if (key !== this.lastRoomStateKey) {
+      this.lastRoomStateKey = key;
+      this.broadcast({ t: "roomState", players, hostId: this.meta.hostId });
+    }
   }
 
   private logEvents(): void {
     for (const e of this.eventBuffer) {
-      if (e.type === "roundStart") console.log(`— round ${e.roundNumber} —`);
-      else if (e.type === "roundEnd") console.log(`round to team ${e.winnerTeam} · score ${e.wins[0]}–${e.wins[1]}`);
-      else if (e.type === "matchEnd") console.log(`★ MATCH to team ${e.winnerTeam} ★`);
-      else if (e.type === "death") console.log(`☠ player ${e.playerId} down`);
+      const tag = `[${this.meta.code}]`;
+      if (e.type === "roundStart") console.log(`${tag} — round ${e.roundNumber} —`);
+      else if (e.type === "roundEnd") console.log(`${tag} round to team ${e.winnerTeam} · ${e.wins[0]}–${e.wins[1]}`);
+      else if (e.type === "matchEnd") console.log(`${tag} ★ MATCH to team ${e.winnerTeam} ★`);
     }
   }
 
@@ -173,6 +243,6 @@ export class Room {
   }
 
   private broadcast(msg: ServerMsg): void {
-    this.server?.publish(TOPIC, JSON.stringify(msg));
+    this.server.publish(this.topic, JSON.stringify(msg));
   }
 }

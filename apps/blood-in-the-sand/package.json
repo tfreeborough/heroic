@@ -31,6 +31,8 @@
     "android": "APP_VARIANT=development expo run:android",
     "build:ios:dev": "eas build --platform ios --profile development",
     "build:android:dev": "eas build --platform android --profile development",
+    "build:ios:preview": "eas build --platform ios --profile preview",
+    "build:android:preview": "eas build --platform android --profile preview",
     "typecheck": "tsc --noEmit"
   },
   "private": true

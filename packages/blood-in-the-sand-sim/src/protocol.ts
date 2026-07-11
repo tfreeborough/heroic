@@ -12,27 +12,41 @@
  *   package; `welcome.zoneId` only asserts they agree.
  */
 import type { AttackPhase } from "@heroic/core";
+import type { WeaponId } from "./config";
 import type { ArenaEvent } from "./events";
 import type { RoundPhase, Team } from "./state";
 
-export const PROTOCOL_VERSION = 1;
+/**
+ * v2 (2026-07-09): rooms + host-driven lobbies replaced the single global room.
+ * v3 (2026-07-10): lobby weapon picks (setWeapon), per-player weapon in
+ * snapshots/room state, projectiles in snapshots; per-weapon telegraph config
+ * moved off ArenaClientConfig (the client imports WEAPONS, like ARENA_00).
+ */
+export const PROTOCOL_VERSION = 3;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
 export type ClientMsg =
-  | { t: "hello"; v: number; name: string }
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string }
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string }
+  | { t: "listRooms" }
+  /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
+  | { t: "watchRoom"; code: string }
+  | { t: "leaveRoom" }
+  /** Lobby weapon pick (repick freely until the match starts). */
+  | { t: "setWeapon"; weapon: WeaponId }
+  /** Host only; ignored unless the lobby is full, connected, and all-picked. */
+  | { t: "startMatch" }
   | { t: "input"; seq: number; sx: number; sy: number; dash: boolean };
 
 // ── server → client ────────────────────────────────────────────────────────
 
 /** Everything the renderer needs from the tuning table, sent once at welcome —
- * the client never duplicates sim constants. */
+ * the client never duplicates sim constants. (Per-weapon telegraph numbers are
+ * NOT here: the client imports WEAPONS from this package, the ARENA_00 rule.) */
 export interface ArenaClientConfig {
   tickRate: number;
   playerRadius: number;
-  reach: number;
-  arcWidth: number;
-  windup: number;
   dashCooldown: number;
   winsToTake: number;
   countdownSeconds: number;
@@ -42,6 +56,8 @@ export interface PlayerSnapshot {
   id: number;
   team: Team;
   name: string;
+  /** Drives the per-player telegraph (reach/arc/windup from WEAPONS[weapon]). */
+  weapon: WeaponId | null;
   x: number;
   y: number;
   hp: number;
@@ -68,11 +84,33 @@ export interface RoundSnapshot {
   lastWinner: Team | 0;
 }
 
-export interface LobbyPlayer {
+export interface RoomStatePlayer {
   id: number;
   name: string;
   team: Team;
   connected: boolean;
+  /** null until the player picks — the lobby shows "choosing…". */
+  weapon: WeaponId | null;
+}
+
+/** A live shot, projected for rendering (the client lerps x/y/angle by id). */
+export interface ProjectileSnapshot {
+  id: number;
+  x: number;
+  y: number;
+  /** Travel direction, radians. */
+  angle: number;
+  weapon: WeaponId;
+}
+
+/** Public directory entry — never carries the passcode. */
+export interface RoomListing {
+  code: string;
+  name: string;
+  players: number;
+  capacity: number;
+  locked: boolean;
+  phase: "lobby" | "in-match";
 }
 
 export interface SnapshotMsg {
@@ -80,6 +118,7 @@ export interface SnapshotMsg {
   tick: number;
   round: RoundSnapshot;
   players: PlayerSnapshot[];
+  projectiles: ProjectileSnapshot[];
   events: ArenaEvent[];
 }
 
@@ -89,9 +128,18 @@ export type ServerMsg =
       v: number;
       playerId: number;
       team: Team;
+      roomCode: string;
+      roomName: string;
+      hostId: number;
       zoneId: string;
       config: ArenaClientConfig;
     }
-  | { t: "lobby"; players: LobbyPlayer[] }
+  | { t: "rooms"; rooms: RoomListing[] }
+  /** Membership/host changes — sent to the room on join/leave/migration. */
+  | { t: "roomState"; players: RoomStatePlayer[]; hostId: number }
+  /** Watcher acknowledgment (no seat, snapshots only). */
+  | { t: "watching"; roomCode: string; roomName: string }
+  /** You left (or were never in) a room — back to the room list. */
+  | { t: "left" }
   | SnapshotMsg
   | { t: "reject"; reason: string };

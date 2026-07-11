@@ -4,6 +4,7 @@
  * inter-layer jitter). Flat-shaded M1 art: sand floor, stone walls, team-
  * coloured discs, windup telegraph wedges, hp bars, and event-driven FX.
  */
+import { Platform } from "react-native";
 import {
   createPicture,
   matchFont,
@@ -16,10 +17,13 @@ import {
 import { loadZone } from "@heroic/core";
 import {
   ARENA_00,
+  WEAPONS,
   type ArenaClientConfig,
   type InterpolatedView,
   type PlayerSnapshot,
+  type ProjectileSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
+import { decalAlpha, type BloodDecal } from "./blood";
 
 // Zone geometry is static — derive once at module scope (loadZone is pure).
 const ZONE = loadZone(ARENA_00);
@@ -44,10 +48,26 @@ const C_HP_BACK = Skia.Color("rgba(0, 0, 0, 0.55)");
 const C_HP_FILL = Skia.Color("#5fc75f");
 const C_HP_LOW = Skia.Color("#e0503c");
 const C_DASH_RING = Skia.Color("rgba(255, 255, 255, 0.85)");
+const C_BLOOD = Skia.Color("#6e150e");
+const C_BOLT = Skia.Color("#f0e8d8");
+const C_STAFF_ORB = Skia.Color("#9b6dd9");
+const C_STAFF_RING = Skia.Color("rgba(155, 109, 217, 0.45)");
+const C_FX_BLEED = Skia.Color("#e0503c");
+const C_RANGE_RING = Skia.Color("#ff4a3d");
 
 const fill = Skia.Paint();
 const stroke = Skia.Paint();
 stroke.setStyle(PaintStyle.Stroke);
+
+// Dedicated paint so the dash effect never leaks into the shared stroke.
+const rangeStroke = Skia.Paint();
+rangeStroke.setStyle(PaintStyle.Stroke);
+rangeStroke.setStrokeWidth(1.5);
+rangeStroke.setColor(C_RANGE_RING);
+rangeStroke.setPathEffect(Skia.PathEffect.MakeDash([10, 8], 0));
+
+/** Enemy range rings peak at this alpha — information, not decoration. */
+const RANGE_RING_ALPHA = 0.3;
 
 /** A transient visual: damage numbers and hit rings, aged by the caller. */
 export interface FxItem {
@@ -58,12 +78,18 @@ export interface FxItem {
   life: number;
   text?: string;
   crit?: boolean;
+  /** Bleed-tick numbers render red (and the caller skips the ring). */
+  bleed?: boolean;
 }
 
 const C_FX_NUM = Skia.Color("#ffffff");
 const C_FX_CRIT = Skia.Color("#f2c14e");
-const FX_FONT = matchFont({ fontSize: 26, fontWeight: "bold" });
-const FX_FONT_CRIT = matchFont({ fontSize: 34, fontWeight: "bold" });
+// matchFont NEEDS an explicit family: with none, Android resolves a null
+// typeface and drawText silently draws nothing (iOS falls back to the system
+// font, which is how this hid). Same fix as the gauntlet's renderCombat.
+const FX_FONT_FAMILY = Platform.select({ ios: "Helvetica", default: "sans-serif" });
+const FX_FONT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 26, fontWeight: "bold" });
+const FX_FONT_CRIT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 34, fontWeight: "bold" });
 
 export interface ArenaRenderInput {
   view: InterpolatedView;
@@ -73,30 +99,112 @@ export interface ArenaRenderInput {
   screenW: number;
   screenH: number;
   fx: readonly FxItem[];
+  /** Blood decals (birth-ordered), faded per-frame via decalAlpha. */
+  blood: readonly BloodDecal[];
+  /** The clock the decals were aged against (performance.now). */
+  nowMs: number;
 }
+
+/** Floor blood, culled to the camera rect (translucent overlaps darken into pools).
+ * Round drops are circles; smear decals (dx/dy set) are round-capped streaks. */
+const drawBlood = (
+  canvas: SkCanvas,
+  blood: readonly BloodDecal[],
+  nowMs: number,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+): void => {
+  fill.setColor(C_BLOOD);
+  stroke.setColor(C_BLOOD);
+  stroke.setStrokeCap(StrokeCap.Round);
+  for (const d of blood) {
+    const reach = d.r + Math.max(Math.abs(d.dx ?? 0), Math.abs(d.dy ?? 0));
+    if (d.x + reach < left || d.x - reach > right || d.y + reach < top || d.y - reach > bottom) continue;
+    const a = decalAlpha(d, nowMs);
+    if (a <= 0) continue;
+    if (d.dx !== undefined && d.dy !== undefined) {
+      stroke.setAlphaf(a);
+      stroke.setStrokeWidth(d.r * 2);
+      canvas.drawLine(d.x, d.y, d.x + d.dx, d.y + d.dy, stroke);
+    } else {
+      fill.setAlphaf(a);
+      canvas.drawCircle(d.x, d.y, d.r, fill);
+    }
+  }
+  fill.setAlphaf(1);
+  stroke.setAlphaf(1);
+};
+
+/**
+ * A faint dashed circle at each ENEMY's strike range, fading in as *you*
+ * approach it — cross the line and their weapon can reach you. Pure client
+ * derivation from snapshot data (the events/wire contract stays untouched).
+ */
+const drawRangeRings = (
+  canvas: SkCanvas,
+  players: readonly PlayerSnapshot[],
+  me: PlayerSnapshot,
+  playerRadius: number,
+): void => {
+  for (const p of players) {
+    if (!p.alive || p.id === me.id || p.team === me.team) continue;
+    // reach is measured to the victim's rim, so the danger circle around the
+    // enemy extends one body radius past it (matching hitsInArc's rule).
+    const ring = WEAPONS[p.weapon ?? "blade"].attack.reach + playerRadius;
+    const d = Math.hypot(me.x - p.x, me.y - p.y);
+    // Invisible far out; full strength well before you cross the line.
+    const fadeStart = ring + 260;
+    const fadeFull = ring + 100;
+    const a = Math.min(1, Math.max(0, (fadeStart - d) / (fadeStart - fadeFull)));
+    if (a <= 0.02) continue;
+    rangeStroke.setAlphaf(RANGE_RING_ALPHA * a);
+    canvas.drawCircle(p.x, p.y, ring, rangeStroke);
+  }
+};
 
 const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConfig): void => {
   const r = config.playerRadius;
 
-  // Windup telegraph: the arc wedge grows opaque as the strike approaches.
+  // Windup telegraph, from the striker's own weapon table: melee grows an arc
+  // wedge; ranged draws an aim line toward the locked target. Both ramp opaque
+  // as the strike approaches.
   if (p.alive && p.atk === "windup") {
-    const progress = 1 - p.atkLeft / config.windup;
-    const halfDeg = (config.arcWidth / 2) * (180 / Math.PI);
-    const facingDeg = p.lockedFacing * (180 / Math.PI);
-    const reach = config.reach + r;
-    const wedge = Skia.Path.Make();
-    wedge.moveTo(p.x, p.y);
-    wedge.arcToOval(
-      Skia.XYWHRect(p.x - reach, p.y - reach, reach * 2, reach * 2),
-      facingDeg - halfDeg,
-      halfDeg * 2,
-      false,
-    );
-    wedge.close();
-    fill.setColor(C_TELEGRAPH);
-    fill.setAlphaf(0.12 + 0.28 * progress);
-    canvas.drawPath(wedge, fill);
-    fill.setAlphaf(1);
+    const weapon = WEAPONS[p.weapon ?? "blade"];
+    const progress = 1 - p.atkLeft / weapon.attack.windup;
+    if (weapon.attack.shape === "arc") {
+      const halfDeg = ((weapon.attack.arcWidth ?? 0) / 2) * (180 / Math.PI);
+      const facingDeg = p.lockedFacing * (180 / Math.PI);
+      const reach = weapon.attack.reach + r;
+      const wedge = Skia.Path.Make();
+      wedge.moveTo(p.x, p.y);
+      wedge.arcToOval(
+        Skia.XYWHRect(p.x - reach, p.y - reach, reach * 2, reach * 2),
+        facingDeg - halfDeg,
+        halfDeg * 2,
+        false,
+      );
+      wedge.close();
+      fill.setColor(C_TELEGRAPH);
+      fill.setAlphaf(0.12 + 0.28 * progress);
+      canvas.drawPath(wedge, fill);
+      fill.setAlphaf(1);
+    } else {
+      stroke.setColor(C_TELEGRAPH);
+      stroke.setAlphaf(0.2 + 0.5 * progress);
+      stroke.setStrokeWidth(2.5);
+      stroke.setStrokeCap(StrokeCap.Round);
+      const len = 140;
+      canvas.drawLine(
+        p.x + Math.cos(p.lockedFacing) * (r + 4),
+        p.y + Math.sin(p.lockedFacing) * (r + 4),
+        p.x + Math.cos(p.lockedFacing) * (r + len),
+        p.y + Math.sin(p.lockedFacing) * (r + len),
+        stroke,
+      );
+      stroke.setAlphaf(1);
+    }
   }
 
   // Body disc (grey ghost when down).
@@ -143,10 +251,34 @@ const drawFx = (canvas: SkCanvas, fx: readonly FxItem[]): void => {
     } else if (f.text) {
       const font = f.crit ? FX_FONT_CRIT : FX_FONT;
       const rise = (1 - f.life) * 34;
-      fill.setColor(f.crit ? C_FX_CRIT : C_FX_NUM);
+      fill.setColor(f.crit ? C_FX_CRIT : f.bleed ? C_FX_BLEED : C_FX_NUM);
       fill.setAlphaf(Math.min(1, f.life * 2));
-      canvas.drawText(f.text, f.x - f.text.length * 7, f.y - 26 - rise, fill, font);
+      canvas.drawText(f.text, f.x - font.getTextWidth(f.text) / 2, f.y - 26 - rise, fill, font);
       fill.setAlphaf(1);
+    }
+  }
+};
+
+/** Live shots: bow = a short bolt along its travel line; staff = a seeking orb. */
+const drawProjectiles = (canvas: SkCanvas, projectiles: readonly ProjectileSnapshot[]): void => {
+  for (const p of projectiles) {
+    if (p.weapon === "staff") {
+      fill.setColor(C_STAFF_ORB);
+      canvas.drawCircle(p.x, p.y, 10, fill);
+      stroke.setColor(C_STAFF_RING);
+      stroke.setStrokeWidth(2);
+      canvas.drawCircle(p.x, p.y, 14, stroke);
+    } else {
+      stroke.setColor(C_BOLT);
+      stroke.setStrokeWidth(3);
+      stroke.setStrokeCap(StrokeCap.Round);
+      canvas.drawLine(
+        p.x - Math.cos(p.angle) * 8,
+        p.y - Math.sin(p.angle) * 8,
+        p.x + Math.cos(p.angle) * 8,
+        p.y + Math.sin(p.angle) * 8,
+        stroke,
+      );
     }
   }
 };
@@ -188,6 +320,11 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     fill.setColor(C_FLOOR);
     canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
 
+    // Blood sits on the floor, under walls and bodies.
+    const halfW = screenW / 2 / zoom;
+    const halfH = screenH / 2 / zoom;
+    drawBlood(canvas, r.blood, r.nowMs, cx - halfW, cy - halfH, cx + halfW, cy + halfH);
+
     // Walls (Aabbs are centre + full size).
     for (const w of ZONE.collision) {
       fill.setColor(C_WALL);
@@ -196,7 +333,9 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h), fill);
     }
 
+    if (me) drawRangeRings(canvas, view.players, me, config.playerRadius);
     for (const p of view.players) drawPlayer(canvas, p, config);
+    drawProjectiles(canvas, view.projectiles);
     drawFx(canvas, r.fx);
 
     canvas.restore();

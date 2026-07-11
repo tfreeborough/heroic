@@ -5,10 +5,10 @@
  * here. Derived/non-serialisable runtime (zone geometry, the live Rng, the
  * spatial grid) lives beside it in `ArenaSim` (sim.ts).
  */
-import type { AbilityState, AttackCycleState, Combatant, Mover } from "@heroic/core";
+import type { AbilityState, AttackCycleState, Combatant, DotState, Mover, ProjectileState } from "@heroic/core";
 import { ABILITY_READY, ATTACK_CYCLE_READY, createMover, makeCombatant } from "@heroic/core";
 import type { Vec2 } from "@heroic/core";
-import { PLAYER_RADIUS, PLAYER_STATS } from "./config";
+import { PLAYER_RADIUS, PLAYER_STATS, type WeaponId } from "./config";
 
 export type Team = 1 | 2;
 
@@ -50,6 +50,10 @@ export interface ArenaPlayer {
   team: Team;
   connected: boolean;
   alive: boolean;
+  /** Lobby pick (setPlayerWeapon); null blocks canStartMatch. */
+  weapon: WeaponId | null;
+  /** Active damage-over-time riders (the blade's bleed) — core stepDots ticks these. */
+  dots: DotState[];
   /** Kinematic body — handed to stepCrowd, which mutates it in place (state owns it). */
   mover: Mover;
   /** Radians, 0 = +x, clockwise (screen y down). */
@@ -68,7 +72,12 @@ export interface ArenaPlayer {
   lastSeq: number;
 }
 
-export type RoundPhase = "waiting" | "countdown" | "active" | "roundEnd" | "matchEnd";
+export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
+
+/** A room seat: a player, or empty. Seat index = player id = team − 1. */
+export type Seat = ArenaPlayer | null;
+
+export const SEAT_COUNT = 2;
 
 export interface RoundState {
   phase: RoundPhase;
@@ -82,23 +91,43 @@ export interface RoundState {
   lastWinner: Team | 0;
 }
 
+/** A live shot: core's kinematics plus arena identity/attribution. */
+export interface ArenaProjectile extends ProjectileState {
+  /** Monotonic per-match id — NEVER reset (the client lerps projectiles by id). */
+  id: number;
+  ownerId: number;
+  weapon: WeaponId;
+  /** Homing shots steer toward this seat while it lives; null = straight. */
+  targetId: number | null;
+}
+
 export interface ArenaState {
   tick: number;
   /** RNG identity: the seed plus how many draws have happened. The live Rng sits
    * in ArenaSim; restoreRng(seed, rngDraws) rebuilds it from these two numbers. */
   seed: number;
   rngDraws: number;
-  players: ArenaPlayer[];
+  /** Fixed seats (null = free). Loops skip nulls; ids stay stable across leaves. */
+  players: Seat[];
   round: RoundState;
+  /** Live shots (bow/staff), stepped after attack cycles, cleared each round. */
+  projectiles: ArenaProjectile[];
+  nextProjectileId: number;
 }
 
 export const createArenaState = (seed: number): ArenaState => ({
   tick: 0,
   seed,
   rngDraws: 0,
-  players: [],
-  round: { phase: "waiting", timer: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0 },
+  players: Array.from({ length: SEAT_COUNT }, () => null),
+  round: { phase: "lobby", timer: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0 },
+  projectiles: [],
+  nextProjectileId: 0,
 });
+
+/** The occupied seats, in id order. */
+export const seatedPlayers = (state: ArenaState): ArenaPlayer[] =>
+  state.players.filter((p): p is ArenaPlayer => p !== null);
 
 export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, facing: number): ArenaPlayer => ({
   id,
@@ -106,6 +135,8 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   team,
   connected: true,
   alive: true,
+  weapon: null,
+  dots: [],
   mover: createMover(spawn.x, spawn.y, PLAYER_RADIUS),
   facing,
   combatant: makeCombatant(PLAYER_STATS),
