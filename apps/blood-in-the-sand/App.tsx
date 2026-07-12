@@ -2,8 +2,11 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
+import { WEAPON_IDS, WEAPONS } from "@heroic/blood-in-the-sand-sim";
 import { ArenaClient, DEFAULT_SERVER, resolveServerUrl } from "./src/net/connection";
+import { PracticeClient } from "./src/net/practice";
 import { GameScreen } from "./src/screens/GameScreen";
 import { RoomListScreen } from "./src/screens/RoomListScreen";
 import { RoomScreen } from "./src/screens/RoomScreen";
@@ -21,8 +24,39 @@ const SERVER = process.env.EXPO_PUBLIC_AUTO_HOST ?? DEFAULT_SERVER;
 
 export default function App() {
   const [client, setClient] = useState<ArenaClient | null>(null);
+  // An offline bot match (no server involved) — takes over the screen while set.
+  const [practice, setPractice] = useState<PracticeClient | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, force] = useReducer((x: number) => x + 1, 0);
+
+  const endPractice = useCallback(() => {
+    setPractice((p) => {
+      p?.close();
+      return null;
+    });
+  }, []);
+
+  // For the connect-error screen's offline-practice shortcut (the rooms
+  // screen's own practice button collects the name properly).
+  const savedName = useRef("gladiator");
+  useEffect(() => {
+    void AsyncStorage.getItem("bits.name").then((v) => {
+      if (v?.trim()) savedName.current = v.trim();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!practice) return;
+    // The practice round machine returns to "lobby" after matchEnd — that's
+    // the offline analogue of leaving the room: back to the menu.
+    practice.onChange = () => {
+      if (practice.phase === "lobby") endPractice();
+      else force();
+    };
+    return () => {
+      practice.onChange = null;
+    };
+  }, [practice, endPractice]);
 
   const connect = useCallback(() => {
     setError(null);
@@ -81,10 +115,12 @@ export default function App() {
     }
   });
 
-  const inMatch = client?.welcome != null && client.phase !== "lobby";
+  const inMatch = practice !== null || (client?.welcome != null && client.phase !== "lobby");
 
   let screen;
-  if (!client || client.status === "connecting") {
+  if (practice) {
+    screen = <GameScreen client={practice} onLeave={endPractice} onQuit={endPractice} />;
+  } else if (!client || client.status === "connecting") {
     screen = (
       <View style={styles.centre}>
         <Text style={styles.logo}>BLOOD{"\n"}IN THE SAND</Text>
@@ -94,6 +130,18 @@ export default function App() {
             <Pressable onPress={connect} style={styles.retry}>
               <Text style={styles.retryText}>RETRY</Text>
             </Pressable>
+            <Text style={styles.offlineHint}>no server? fight a bot offline</Text>
+            <View style={styles.weaponRow}>
+              {WEAPON_IDS.map((w) => (
+                <Pressable
+                  key={w}
+                  onPress={() => setPractice(new PracticeClient(savedName.current, w))}
+                  style={styles.weaponChip}
+                >
+                  <Text style={styles.weaponChipText}>{WEAPONS[w].name.toUpperCase()}</Text>
+                </Pressable>
+              ))}
+            </View>
           </>
         ) : (
           <Text style={styles.connecting}>connecting…</Text>
@@ -101,7 +149,9 @@ export default function App() {
       </View>
     );
   } else if (!client.welcome) {
-    screen = <RoomListScreen client={client} />;
+    screen = (
+      <RoomListScreen client={client} onPractice={(name, weapon) => setPractice(new PracticeClient(name, weapon))} />
+    );
   } else if (client.phase === "lobby") {
     screen = <RoomScreen client={client} onLeave={() => client.leaveRoom()} />;
   } else {
@@ -133,4 +183,8 @@ const styles = StyleSheet.create({
   error: { color: "#e0503c", fontSize: 14, textAlign: "center", marginBottom: 16 },
   retry: { backgroundColor: "#8c2f2f", borderRadius: 8, paddingVertical: 12, paddingHorizontal: 36 },
   retryText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1 },
+  offlineHint: { color: "#8a7f70", fontSize: 12, marginTop: 28 },
+  weaponRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+  weaponChip: { backgroundColor: "#3a5a3a", borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  weaponChipText: { color: "#f5ede0", fontWeight: "800", fontSize: 12 },
 });

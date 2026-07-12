@@ -10,10 +10,13 @@
  * loop forever (bound with --matches N; 0 = run until killed).
  */
 import {
+  botThink,
+  createBotMemory,
   DEFAULT_PORT,
   PROTOCOL_VERSION,
   TICK_RATE,
   WEAPON_IDS,
+  type BotStrategy,
   type ClientMsg,
   type RoundPhase,
   type ServerMsg,
@@ -29,7 +32,7 @@ const arg = (flag: string, fallback: string): string => {
 const has = (flag: string): boolean => process.argv.includes(flag);
 
 const name = arg("--name", `bot-${Math.floor(Math.random() * 1000)}`);
-const strategy = arg("--strategy", "seek") as "seek" | "circle";
+const strategy = arg("--strategy", "seek") as BotStrategy;
 const host = arg("--host", "localhost");
 const port = Number(arg("--port", String(DEFAULT_PORT)));
 const matchLimit = Number(arg("--matches", "1"));
@@ -121,51 +124,16 @@ ws.onclose = () => {
   process.exit(0);
 };
 
-// Wall unstick: straight-line seek wedges on the LOS pillar (no pathfinding).
-// When position stagnates, slide perpendicular for a bit to skirt the obstacle.
-let lastX = 0;
-let lastY = 0;
-let stuckTicks = 0;
-let slideTicks = 0;
-let slideSign = 1;
+// The brain itself lives in the sim package (botThink) — shared with the
+// app's offline practice mode. This script is just its WebSocket body.
+const memory = createBotMemory();
 
 /** One decision per tick, from the latest snapshot. */
 const think = (): { sx: number; sy: number; dash: boolean } => {
   if (myId === null || latest === null) return { sx: 0, sy: 0, dash: false };
   const me = latest.players.find((p) => p.id === myId);
   const enemy = latest.players.find((p) => p.id !== myId && p.alive);
-  if (!me || !me.alive || !enemy) return { sx: 0, sy: 0, dash: false };
-
-  const dx = enemy.x - me.x;
-  const dy = enemy.y - me.y;
-  const dist = Math.hypot(dx, dy) || 1;
-  const toward = { x: dx / dist, y: dy / dist };
-
-  if (strategy === "seek") {
-    stuckTicks = Math.hypot(me.x - lastX, me.y - lastY) < 1.5 && dist > 60 ? stuckTicks + 1 : 0;
-    lastX = me.x;
-    lastY = me.y;
-    if (stuckTicks > 12) {
-      slideTicks = 30;
-      slideSign = -slideSign;
-      stuckTicks = 0;
-    }
-    if (slideTicks > 0) {
-      slideTicks -= 1;
-      return { sx: -toward.y * slideSign, sy: toward.x * slideSign, dash: false };
-    }
-    // Straight-line aggression; dash to close a big gap when it's ready.
-    return { sx: toward.x, sy: toward.y, dash: me.dashCd === 0 && dist > 220 };
-  }
-  // circle: strafe around the enemy with a slight inward pull, and dash to
-  // dodge when the enemy's swing telegraph is up — exercises the i-frames.
-  const strafe = { x: -toward.y, y: toward.x };
-  const inward = dist > 140 ? 0.5 : 0;
-  const sx = strafe.x + toward.x * inward;
-  const sy = strafe.y + toward.y * inward;
-  const mag = Math.hypot(sx, sy) || 1;
-  const dodge = me.dashCd === 0 && enemy.atk === "windup" && dist < 160;
-  return { sx: sx / mag, sy: sy / mag, dash: dodge };
+  return botThink(memory, strategy, me, enemy);
 };
 
 setInterval(() => {

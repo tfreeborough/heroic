@@ -65,6 +65,21 @@ export interface RoomStateInfo {
   hostId: number;
 }
 
+/**
+ * The slice of client GameScreen actually consumes — satisfied by ArenaClient
+ * (a real networked match) and PracticeClient (the offline bot match, which
+ * steps the sim in-process). The renderer can't tell them apart, by design.
+ */
+export interface GameClient {
+  readonly buffer: SnapshotBuffer;
+  status: ConnectionStatus;
+  welcome: WelcomeInfo | null;
+  roomState: RoomStateInfo | null;
+  onEvents: ((events: ArenaEvent[]) => void) | null;
+  readonly myWeapon: WeaponId | null;
+  sendInput(sx: number, sy: number, dash: boolean): void;
+}
+
 export class ArenaClient {
   /** Interpolation source — the renderer samples this every frame. */
   readonly buffer = new SnapshotBuffer(TICK_RATE);

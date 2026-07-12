@@ -6,11 +6,22 @@ import { Canvas, Picture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useKeepAwake } from "expo-keep-awake";
 import { STICK_ZERO, useGameLoop, type StickSample } from "@heroic/engine";
-import { TICK_DT, type RoundPhase } from "@heroic/blood-in-the-sand-sim";
-import type { ArenaClient } from "../net/connection";
+import { TICK_DT, type PlayerSnapshot, type RoundPhase } from "@heroic/blood-in-the-sand-sim";
+import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
+import {
+  CONTROL_SCHEMES,
+  KEY_CONTROLS,
+  padInput,
+  SCHEME_LABEL,
+  type ControlScheme,
+  type PadMode,
+} from "../game/controls";
+import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
 import { DASH_READY_PICTURE, DashButton, recordDashButton } from "../game/DashButton";
 import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
+import { FloatingStick } from "../game/FloatingStick";
+import { OrbitPad } from "../game/OrbitPad";
 import { Thumbstick } from "../game/Thumbstick";
 
 const NUMBER_TTL = 750;
@@ -38,9 +49,26 @@ interface HudState {
 
 const INITIAL_HUD: HudState = { phase: "countdown", countdown: null, wins: [0, 0], banner: null, lost: false };
 
+/** The closest living opponent — the pad's reference and the practice bot's prey. */
+const nearestEnemy = (players: readonly PlayerSnapshot[], me: PlayerSnapshot): PlayerSnapshot | undefined => {
+  let best: PlayerSnapshot | undefined;
+  let bestD = Infinity;
+  for (const p of players) {
+    if (p.team === me.team || !p.alive) continue;
+    const d = Math.hypot(p.x - me.x, p.y - me.y);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+};
+
 export interface GameScreenProps {
-  client: ArenaClient;
+  client: GameClient;
   onLeave: () => void;
+  /** Practice-only: a ✕ chip that abandons the bot match immediately. */
+  onQuit?: () => void;
 }
 
 /**
@@ -48,7 +76,7 @@ export interface GameScreenProps {
  * snapshot buffer and re-records the scene picture; `onStep` is the fixed
  * 30Hz cadence that sends input (wired in the input pass).
  */
-export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
+export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   useKeepAwake();
   const picture = useSharedValue(EMPTY_ARENA_PICTURE);
   const dashOverlay = useSharedValue(DASH_READY_PICTURE);
@@ -66,10 +94,24 @@ export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const hudKey = useRef("");
   const [stickSide, setStickSide] = useState<StickSide>(DEFAULT_STICK_SIDE);
+  // Control scheme under test (stick / float / pad) — the chip cycles it
+  // mid-match so testers can A/B without leaving a fight. Persisted.
+  const [scheme, setScheme] = useState<ControlScheme>("stick");
+  const schemeRef = useRef<ControlScheme>("stick");
+  const [padMode, setPadMode] = useState<PadMode | null>(null);
+  const padModeRef = useRef<PadMode | null>(null);
+  /** Orbit radius captured when an orbit button is engaged (see padInput). */
+  const holdDistRef = useRef(0);
 
   useEffect(() => {
     AsyncStorage.getItem(KEY_STICK_SIDE).then((v) => {
       if (v === "left" || v === "right") setStickSide(v);
+    });
+    AsyncStorage.getItem(KEY_CONTROLS).then((v) => {
+      if ((CONTROL_SCHEMES as readonly string[]).includes(v ?? "")) {
+        setScheme(v as ControlScheme);
+        schemeRef.current = v as ControlScheme;
+      }
     });
   }, []);
 
@@ -79,12 +121,51 @@ export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
     AsyncStorage.setItem(KEY_STICK_SIDE, next);
   };
 
+  const clearPadMode = () => {
+    padModeRef.current = null;
+    setPadMode(null);
+  };
+
+  const cycleScheme = () => {
+    const next = CONTROL_SCHEMES[(CONTROL_SCHEMES.indexOf(scheme) + 1) % CONTROL_SCHEMES.length]!;
+    setScheme(next);
+    schemeRef.current = next;
+    stickRef.current = STICK_ZERO; // no ghost input from the outgoing scheme
+    clearPadMode();
+    AsyncStorage.setItem(KEY_CONTROLS, next);
+  };
+
+  const handlePadMode = (mode: PadMode | null) => {
+    if (mode === "cw" || mode === "ccw") {
+      // Lock the orbit to the spacing you engaged at.
+      const view = client.buffer.sample(performance.now());
+      const me = view?.players.find((p) => p.id === client.welcome?.playerId);
+      const enemy = me ? nearestEnemy(view!.players, me) : undefined;
+      holdDistRef.current = me && enemy ? Math.hypot(enemy.x - me.x, enemy.y - me.y) : 0;
+    }
+    padModeRef.current = mode;
+    setPadMode(mode);
+  };
+
   useEffect(() => {
     client.onEvents = (events) => {
       const now = performance.now();
+      const myId = client.welcome?.playerId ?? null;
       for (const e of events) {
         if (e.type === "hit") {
           blood.splatter(e.x, e.y, e.damage, e.lethal, now);
+          if (e.lethal) {
+            // The kill spray fires out of the victim's BACK — away from the
+            // killer. The victim auto-faces their attacker, so if the killer's
+            // position isn't in the view (seat gone), -facing is the same line.
+            const view = client.buffer.sample(now);
+            const victim = view?.players.find((p) => p.id === e.targetId);
+            const attacker = view?.players.find((p) => p.id === e.attackerId);
+            const dx = attacker ? e.x - attacker.x : victim ? -Math.cos(victim.facing) : 1;
+            const dy = attacker ? e.y - attacker.y : victim ? -Math.sin(victim.facing) : 0;
+            const len = Math.hypot(dx, dy) || 1;
+            blood.deathBurst(e.x, e.y, dx / len, dy / len, now);
+          }
           fxRef.current.push({
             item: { kind: "number", x: e.x, y: e.y, life: 1, text: String(e.damage), crit: e.crit, bleed: e.bleed },
             bornMs: now,
@@ -94,6 +175,20 @@ export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
           if (!e.bleed) {
             fxRef.current.push({ item: { kind: "ring", x: e.x, y: e.y, life: 1 }, bornMs: now, ttlMs: RING_TTL });
           }
+          // Haptics (gauntlet system): heavy is reserved for kills and dying;
+          // landing a hit thuds at the weapon's weight; taking one is medium.
+          // Bleed ticks stay silent — ambient damage shouldn't buzz the hand.
+          if (e.lethal && (e.attackerId === myId || e.targetId === myId)) {
+            playStrikeHaptic("heavy", e.crit);
+          } else if (!e.bleed && e.attackerId === myId) {
+            playStrikeHaptic(WEAPON_HAPTIC[client.myWeapon ?? "blade"], e.crit);
+          } else if (!e.bleed && e.targetId === myId) {
+            playStrikeHaptic("medium");
+          }
+        } else if (e.type === "dash") {
+          if (e.playerId === myId) playStrikeHaptic("soft"); // tactile confirm of the roll
+        } else if (e.type === "roundStart") {
+          clearPadMode(); // a fresh round shouldn't inherit last round's auto-run
         } else if (e.type === "fightStart") {
           fightBannerUntil.current = now + FIGHT_BANNER_TTL;
         }
@@ -107,10 +202,26 @@ export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
   useGameLoop(
     {
       onStep: () => {
-        // One input per sim tick (30Hz): stick dir × magnitude + the dash tap
+        // One input per sim tick (30Hz): the scheme's steering + the dash tap
         // (consumed here; the server latches it so a between-tick press holds).
-        const stick = stickRef.current;
-        client.sendInput(stick.dir.x * stick.magnitude, stick.dir.y * stick.magnitude, dashRequest.current);
+        let sx = 0;
+        let sy = 0;
+        if (schemeRef.current === "pad") {
+          // Target-relative auto-run: resolve the engaged intent against the
+          // nearest enemy's CURRENT position each tick.
+          const mode = padModeRef.current;
+          if (mode) {
+            const view = client.buffer.sample(performance.now());
+            const me = view?.players.find((p) => p.id === client.welcome?.playerId);
+            const enemy = me ? nearestEnemy(view!.players, me) : undefined;
+            if (me) ({ sx, sy } = padInput(mode, me, enemy, holdDistRef.current));
+          }
+        } else {
+          const stick = stickRef.current;
+          sx = stick.dir.x * stick.magnitude;
+          sy = stick.dir.y * stick.magnitude;
+        }
+        client.sendInput(sx, sy, dashRequest.current);
         dashRequest.current = false;
       },
       onRender: () => {
@@ -213,10 +324,17 @@ export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
         </View>
       ) : null}
 
-      {/* controls — stick on stickSide, the button column on the other.
-          Default stick-right; the ⇄ chip flips and persists. */}
+      {/* controls — movement on stickSide, the button column on the other.
+          Default stick-right; the ⇄ chip flips sides, the CTRL chip cycles
+          the movement scheme (both persist). */}
       <View style={[styles.stickWrap, stickSide === "right" ? styles.onRight : styles.onLeft]}>
-        <Thumbstick size={190} onChange={(sample) => (stickRef.current = sample)} />
+        {scheme === "stick" ? (
+          <Thumbstick size={190} onChange={(sample) => (stickRef.current = sample)} />
+        ) : scheme === "float" ? (
+          <FloatingStick width={260} height={230} onChange={(sample) => (stickRef.current = sample)} />
+        ) : (
+          <OrbitPad mode={padMode} onMode={handlePadMode} />
+        )}
       </View>
       <View style={[styles.buttonsWrap, stickSide === "right" ? styles.buttonsLeft : styles.buttonsRight]}>
         <DashButton overlay={dashOverlay} onPress={() => (dashRequest.current = true)} />
@@ -225,6 +343,14 @@ export const GameScreen = ({ client, onLeave }: GameScreenProps) => {
       <Pressable onPress={flipControls} style={styles.flip} hitSlop={12}>
         <Text style={styles.flipText}>⇄</Text>
       </Pressable>
+      <Pressable onPress={cycleScheme} style={[styles.flip, styles.schemeChip]} hitSlop={12}>
+        <Text style={styles.flipText}>{SCHEME_LABEL[scheme]}</Text>
+      </Pressable>
+      {onQuit ? (
+        <Pressable onPress={onQuit} style={[styles.flip, styles.quitChip]} hitSlop={12}>
+          <Text style={styles.flipText}>✕</Text>
+        </Pressable>
+      ) : null}
 
       {hud.lost ? (
         <View style={styles.leaveWrap}>
@@ -279,6 +405,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
+  schemeChip: { left: 62 },
+  quitChip: { left: undefined, right: 18 },
   flipText: { color: "#8a7f70", fontSize: 18, fontWeight: "700" },
   leaveWrap: { position: "absolute", bottom: 260, alignSelf: "center" },
   leave: { backgroundColor: "#8c2f2f", borderRadius: 8, paddingHorizontal: 28, paddingVertical: 12 },

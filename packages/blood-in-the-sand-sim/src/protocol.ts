@@ -21,8 +21,10 @@ import type { RoundPhase, Team } from "./state";
  * v3 (2026-07-10): lobby weapon picks (setWeapon), per-player weapon in
  * snapshots/room state, projectiles in snapshots; per-weapon telegraph config
  * moved off ArenaClientConfig (the client imports WEAPONS, like ARENA_00).
+ * v4 (2026-07-12): `slowed` on player snapshots (the hammer's slow debuff
+ * replaced its knockback — the client renders a slowed marker).
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
@@ -70,6 +72,8 @@ export interface PlayerSnapshot {
   /** Arc telegraph direction, latched at windup start. */
   lockedFacing: number;
   dashing: boolean;
+  /** Under the hammer's movement slow — the client marks slowed bodies. */
+  slowed: boolean;
   /** Dash cooldown seconds remaining — drives the button's clock overlay. */
   dashCd: number;
   /** Last input seq the sim applied for this player — latency debugging. */

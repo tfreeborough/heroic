@@ -38,6 +38,7 @@ const toPlayerSnapshot = (p: ArenaPlayer): PlayerSnapshot => ({
   atkLeft: p.attack.remaining,
   lockedFacing: p.lockedFacing,
   dashing: isDashing(p.dash),
+  slowed: p.slowLeft > 0,
   dashCd: p.dash.ability.cooldownRemaining,
   lastSeq: p.lastSeq,
 });

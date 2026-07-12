@@ -21,6 +21,7 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   atkLeft: 0,
   lockedFacing: 0,
   dashing: false,
+  slowed: false,
   dashCd: 0,
   lastSeq: 0,
   ...over,

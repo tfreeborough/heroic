@@ -43,6 +43,8 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.lockedFacing = p.facing;
     p.dash = createDashState();
     p.dots.length = 0;
+    p.slowLeft = 0;
+    p.slowFactor = 1;
     p.alive = true;
   }
   state.round.phase = "countdown";

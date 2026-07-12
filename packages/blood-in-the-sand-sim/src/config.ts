@@ -51,6 +51,15 @@ export interface BleedConfig {
   damage: number;
 }
 
+/** An on-arc-hit movement debuff (the hammer's slow). Applies on every
+ * non-lethal hit — no rng draw, so the stream stays deterministic. */
+export interface SlowConfig {
+  /** Seconds the slow lasts (refreshed, never stacked). */
+  duration: number;
+  /** Multiplier on the victim's max run speed while slowed. */
+  factor: number;
+}
+
 export interface WeaponProjectileConfig {
   radius: number;
   maxRange: number;
@@ -66,6 +75,7 @@ export interface WeaponConfig {
   /** Auto-target acquisition radius (gauntlet rule: reach + a margin). */
   engagementRadius: number;
   bleed?: BleedConfig;
+  slow?: SlowConfig;
   projectile?: WeaponProjectileConfig;
 }
 
@@ -91,15 +101,17 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     bleed: { chance: 0.35, ticks: 3, interval: 1, damage: 3 },
   },
   // Long-range poke: fast arrow, biggest hit, slowest to re-aim in close.
+  // Tester pass 2026-07-12: slower cycle, faster arrow — the shot is harder
+  // to earn but harder to sidestep once loosed (dash i-frames stay the answer).
   bow: {
     name: "Bow",
     attack: {
       shape: "projectile",
       school: "physical",
       reach: 360,
-      projectileSpeed: 520,
-      windup: 0.4,
-      recovery: 0.8,
+      projectileSpeed: 650,
+      windup: 0.5,
+      recovery: 0.9,
       knockback: 260,
     },
     stats: { attack: 20 },
@@ -125,9 +137,11 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     // 2.2 rad/s can't track a close strafer — "slightly homing" by design.
     projectile: { radius: 10, maxRange: 320 + 60, homingTurnRate: 2.2 },
   },
-  // The launcher: modest damage, huge knockback — melee ZONING. Longest melee
-  // reach (out-spaces the blade) with the slowest, most readable sweep: it
-  // wins space, not duels, and the launch resets anyone who steps inside.
+  // The cruncher: the hardest single hit in the game behind the slowest, most
+  // readable sweep — and it SLOWS whoever it catches instead of launching them
+  // (reworked from huge-knockback zoning 2026-07-12: the launch reset fights;
+  // the slow sets up the NEXT hit, so landing one is a real threat). Longest
+  // melee reach (out-spaces the blade).
   hammer: {
     name: "Hammer",
     attack: {
@@ -135,21 +149,23 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
       school: "physical",
       reach: 125,
       arcWidth: (90 * Math.PI) / 180,
-      windup: 0.45,
+      windup: 0.65,
       recovery: 0.75,
-      knockback: 1400,
+      knockback: 0,
     },
-    stats: { attack: 11 },
+    stats: { attack: 19 },
     engagementRadius: 125 + 160,
+    slow: { duration: 1.5, factor: 0.5 },
   },
 };
 
 // ── Dash ───────────────────────────────────────────────────────────────────
 // PvP cooldown is far shorter than the Gauntlet's 8s — dodging telegraphs is
 // the whole defensive game here. Deliberately a short escape hop, not a
-// traversal (shortened from 180px, 2026-07-10).
-export const DASH: AbilityConfig = { activeDuration: 0.12, cooldown: 3 };
-export const DASH_DISTANCE = 100; // px covered by the committed movement
+// traversal (180px → 100px 2026-07-10; → 75px 2026-07-12, duration trimmed
+// with it so the hop stays snappy rather than becoming a slow shuffle).
+export const DASH: AbilityConfig = { activeDuration: 0.1, cooldown: 3 };
+export const DASH_DISTANCE = 75; // px covered by the committed movement
 export const DASH_SPEED = DASH_DISTANCE / DASH.activeDuration; // px/s
 export const DASH_IFRAMES = 0.2; // outlasts the movement by a grace tail
 export const DASH_SHOVE_RADIUS = 46; // the "bowling ball" barge sweep

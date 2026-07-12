@@ -123,7 +123,7 @@ describe("bow", () => {
     expect(sawShot).toBe(true);
     expect(hitsBy(events, 0).length).toBeGreaterThan(0);
     expect(hitsBy(events, 1).length).toBeGreaterThan(0);
-    // Windup (0.35s) + flight (~0.5s) gates the first hit — nothing is instant.
+    // Windup (0.5s) + flight (~0.4s) gates the first hit — nothing is instant.
     expect(ofType(events, "hit")[0]!.tick).toBeGreaterThan(20);
   });
 
@@ -199,23 +199,55 @@ describe("hammer", () => {
             const v = sim.state.players[1]!.mover.vel;
             velAtFirstHit = Math.hypot(v.x, v.y);
           }
-          // The hammer LAUNCHES bob out of its own engagement radius (the
-          // point of it) — plant him back in front for the next measurement.
+          // Undo any knockback drift so every swing is measured from the
+          // same spot (and heal chip damage out of the comparison's way).
           sim.state.players[1]!.mover.pos = { x: 260, y: 256 };
           sim.state.players[1]!.mover.vel = { x: 0, y: 0 };
         }
       }
     }
-    return { total: damages.reduce((a, b) => a + b, 0), hits: damages.length, velAtFirstHit };
+    return { perHit: damages[0] ?? 0, hits: damages.length, velAtFirstHit };
   };
 
-  test("hits far softer than the blade but launches people", () => {
+  test("hits far harder than the blade and slows instead of launching", () => {
     const hammer = measure("hammer");
     const blade = measure("blade");
     expect(hammer.hits).toBe(4);
     expect(blade.hits).toBe(4);
-    expect(hammer.total).toBeLessThan(blade.total);
-    expect(hammer.velAtFirstHit).toBeGreaterThan(blade.velAtFirstHit * 2);
+    expect(hammer.perHit).toBeGreaterThan(blade.perHit);
+    // No knockback at all — the blade's residual 100 px/s shove out-launches it.
+    expect(hammer.velAtFirstHit).toBeLessThan(blade.velAtFirstHit);
+  });
+
+  test("a hit applies the movement slow; it caps run speed, then expires", () => {
+    const sim = makeFight("hammer", "blade", 3);
+    sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 280, y: 256 };
+    sim.state.players[0]!.dash.invulnLeft = 999;
+
+    // Swing until the first hammer hit lands.
+    let hit = false;
+    for (let i = 0; i < 120 && !hit; i++) {
+      hit = stepSim(sim, new Map(), TICK_DT).some(
+        (e) => e.type === "hit" && e.attackerId === 0,
+      );
+    }
+    expect(hit).toBe(true);
+    const bob = sim.state.players[1]!;
+    expect(bob.slowLeft).toBeCloseTo(WEAPONS.hammer.slow!.duration, 1);
+
+    // Park the fighters apart so nothing else lands, then run bob flat out.
+    sim.state.players[0]!.mover.pos = { x: 64, y: 64 };
+    bob.mover.pos = { x: 416, y: 420 };
+    bob.mover.vel = { x: 0, y: 0 };
+    const sprint = new Map([[1, { seq: 0, sx: 1, sy: 0, dash: false }]]);
+    run(sim, 15, () => sprint); // 0.5s — plenty to reach the (slowed) cap
+    const slowedSpeed = Math.hypot(bob.mover.vel.x, bob.mover.vel.y);
+    expect(slowedSpeed).toBeLessThan(280 * WEAPONS.hammer.slow!.factor + 5);
+
+    run(sim, 60, () => sprint); // 2s more — the 1.5s slow has expired
+    expect(bob.slowLeft).toBe(0);
+    expect(Math.hypot(bob.mover.vel.x, bob.mover.vel.y)).toBeGreaterThan(270);
   });
 });
 
@@ -267,12 +299,14 @@ describe("bleed", () => {
     expect(ofType(events, "hit").filter((h) => h.event.bleed).length).toBeGreaterThan(0);
   });
 
-  test("round reset clears dots and projectiles", () => {
+  test("round reset clears dots, slows, and projectiles", () => {
     const sim = makeFight("blade", "blade");
     sim.state.players[1]!.dots.push({ ticksLeft: 3, tLeft: 1, interval: 1, damage: 3, sourceId: 0 });
+    sim.state.players[1]!.slowLeft = 1.5;
     sim.state.projectiles.push(shot({ pos: { x: 40, y: 450 } }));
     resetForRound(sim, []);
     expect(sim.state.players[1]!.dots).toHaveLength(0);
+    expect(sim.state.players[1]!.slowLeft).toBe(0);
     expect(sim.state.projectiles).toHaveLength(0);
   });
 });

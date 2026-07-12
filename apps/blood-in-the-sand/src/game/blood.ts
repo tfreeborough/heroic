@@ -1,7 +1,8 @@
 /**
  * Blood decals — the game's namesake. Wounded players drip a trail onto the
  * sand (worse the lower their hp), every hit splashes at the impact point, and
- * a kill leaves a lingering pool. The arena accumulates a readable history of
+ * a kill leaves a lingering pool plus a giant cone of spray fired out of the
+ * victim's back. The arena accumulates a readable history of
  * where fights happened, and a fresh trail lets you hunt a wounded runner.
  *
  * Everything here is CLIENT-DERIVED from data every client already receives —
@@ -172,6 +173,50 @@ export class BloodField {
       ttlMs: DRIP_TTL_MS,
       alpha: 0.28 + 0.32 * severity,
     });
+  }
+
+  /**
+   * The kill splatter: a giant spray fired out of the victim's BACK — a
+   * narrow cone opposite the killing blow, painted onto the sand in long
+   * streaks and flung drops. Called on top of splatter()'s pool, with
+   * (dirX, dirY) the unit direction of the blow (attacker → victim).
+   */
+  deathBurst(x: number, y: number, dirX: number, dirY: number, nowMs: number): void {
+    const CONE_HALF = (24 * Math.PI) / 180;
+    const base = Math.atan2(dirY, dirX);
+    const drops = 26;
+    for (let i = 0; i < drops; i++) {
+      const ang = base + (Math.random() - 0.5) * 2 * CONE_HALF;
+      // sqrt bias pushes mass OUT into the cone — this is spray, not a pool.
+      const dist = 20 + Math.sqrt(Math.random()) * 130;
+      const px = x + Math.cos(ang) * dist;
+      const py = y + Math.sin(ang) * dist;
+      // Mostly streaks aligned with the spray; longer the further they flew.
+      const streak = Math.random() < 0.6;
+      const len = streak ? 10 + Math.random() * 22 * (dist / 150) : 0;
+      this.push({
+        x: px,
+        y: py,
+        ...(streak ? { dx: Math.cos(ang) * len, dy: Math.sin(ang) * len } : {}),
+        r: (streak ? 1.8 : 2.5) + Math.random() * 4,
+        bornMs: nowMs,
+        ttlMs: POOL_TTL_MS,
+        alpha: 0.3 + Math.random() * 0.25,
+      });
+    }
+    // A heavy throat of blood right behind the body, bridging pool and spray.
+    for (let i = 0; i < 3; i++) {
+      const ang = base + (Math.random() - 0.5) * CONE_HALF;
+      const dist = 12 + i * 14;
+      this.push({
+        x: x + Math.cos(ang) * dist,
+        y: y + Math.sin(ang) * dist,
+        r: 9 - i * 2 + Math.random() * 3,
+        bornMs: nowMs,
+        ttlMs: POOL_TTL_MS,
+        alpha: 0.45,
+      });
+    }
   }
 
   /** Impact splash for a hit event; a lethal hit also leaves the death pool. */

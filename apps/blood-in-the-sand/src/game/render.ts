@@ -30,8 +30,9 @@ const ZONE = loadZone(ARENA_00);
 const WORLD_W = ZONE.size.x;
 const WORLD_H = ZONE.size.y;
 
-/** How much world fits on screen when following a player. */
-const FOLLOW_ZOOM = 0.85;
+/** How much world fits on screen when following a player. Pulled back from
+ * 0.85 (2026-07-12, tester feedback): the old zoom hid approaching enemies. */
+const FOLLOW_ZOOM = 0.6;
 
 // Palette parsed once (never re-string rgba per frame — floods the colour cache).
 const C_VOID = Skia.Color("#141210");
@@ -53,7 +54,8 @@ const C_BOLT = Skia.Color("#f0e8d8");
 const C_STAFF_ORB = Skia.Color("#9b6dd9");
 const C_STAFF_RING = Skia.Color("rgba(155, 109, 217, 0.45)");
 const C_FX_BLEED = Skia.Color("#e0503c");
-const C_RANGE_RING = Skia.Color("#ff4a3d");
+const C_RANGE_RING = Skia.Color("#f0e8d8");
+const C_SLOWED = Skia.Color("#e8c14e");
 
 const fill = Skia.Paint();
 const stroke = Skia.Paint();
@@ -66,8 +68,8 @@ rangeStroke.setStrokeWidth(1.5);
 rangeStroke.setColor(C_RANGE_RING);
 rangeStroke.setPathEffect(Skia.PathEffect.MakeDash([10, 8], 0));
 
-/** Enemy range rings peak at this alpha — information, not decoration. */
-const RANGE_RING_ALPHA = 0.3;
+/** Your own range ring's alpha — information, not decoration. */
+const RANGE_RING_ALPHA = 0.22;
 
 /** A transient visual: damage numbers and hit rings, aged by the caller. */
 export interface FxItem {
@@ -138,30 +140,18 @@ const drawBlood = (
 };
 
 /**
- * A faint dashed circle at each ENEMY's strike range, fading in as *you*
- * approach it — cross the line and their weapon can reach you. Pure client
- * derivation from snapshot data (the events/wire contract stays untouched).
+ * A faint dashed circle at YOUR OWN strike range — get an enemy inside it and
+ * your weapon can reach them. Only your own ring draws (2026-07-12, tester
+ * feedback): enemy rings gave away their spacing for free; now reading an
+ * opponent's reach is a skill. Pure client derivation from snapshot data.
  */
-const drawRangeRings = (
-  canvas: SkCanvas,
-  players: readonly PlayerSnapshot[],
-  me: PlayerSnapshot,
-  playerRadius: number,
-): void => {
-  for (const p of players) {
-    if (!p.alive || p.id === me.id || p.team === me.team) continue;
-    // reach is measured to the victim's rim, so the danger circle around the
-    // enemy extends one body radius past it (matching hitsInArc's rule).
-    const ring = WEAPONS[p.weapon ?? "blade"].attack.reach + playerRadius;
-    const d = Math.hypot(me.x - p.x, me.y - p.y);
-    // Invisible far out; full strength well before you cross the line.
-    const fadeStart = ring + 260;
-    const fadeFull = ring + 100;
-    const a = Math.min(1, Math.max(0, (fadeStart - d) / (fadeStart - fadeFull)));
-    if (a <= 0.02) continue;
-    rangeStroke.setAlphaf(RANGE_RING_ALPHA * a);
-    canvas.drawCircle(p.x, p.y, ring, rangeStroke);
-  }
+const drawMyRangeRing = (canvas: SkCanvas, me: PlayerSnapshot, playerRadius: number): void => {
+  if (!me.alive) return;
+  // reach is measured to the victim's rim, so the strike circle extends one
+  // body radius past it (matching hitsInArc's rule).
+  const ring = WEAPONS[me.weapon ?? "blade"].attack.reach + playerRadius;
+  rangeStroke.setAlphaf(RANGE_RING_ALPHA);
+  canvas.drawCircle(me.x, me.y, ring, rangeStroke);
 };
 
 const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConfig): void => {
@@ -213,6 +203,13 @@ const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConf
 
   if (p.alive && p.dashing) {
     stroke.setColor(C_DASH_RING);
+    stroke.setStrokeWidth(3);
+    canvas.drawCircle(p.x, p.y, r + 4, stroke);
+  }
+
+  // Hammer slow: a gold shackle ring so both sides can read the debuff.
+  if (p.alive && p.slowed) {
+    stroke.setColor(C_SLOWED);
     stroke.setStrokeWidth(3);
     canvas.drawCircle(p.x, p.y, r + 4, stroke);
   }
@@ -333,7 +330,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h), fill);
     }
 
-    if (me) drawRangeRings(canvas, view.players, me, config.playerRadius);
+    if (me) drawMyRangeRing(canvas, me, config.playerRadius);
     for (const p of view.players) drawPlayer(canvas, p, config);
     drawProjectiles(canvas, view.projectiles);
     drawFx(canvas, r.fx);

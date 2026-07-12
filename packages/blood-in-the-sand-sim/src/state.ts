@@ -54,6 +54,10 @@ export interface ArenaPlayer {
   weapon: WeaponId | null;
   /** Active damage-over-time riders (the blade's bleed) — core stepDots ticks these. */
   dots: DotState[];
+  /** Seconds of movement slow left (the hammer's debuff); 0 = unslowed. */
+  slowLeft: number;
+  /** Max-speed multiplier while slowLeft > 0 (from the slowing weapon's config). */
+  slowFactor: number;
   /** Kinematic body — handed to stepCrowd, which mutates it in place (state owns it). */
   mover: Mover;
   /** Radians, 0 = +x, clockwise (screen y down). */
@@ -137,6 +141,8 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   alive: true,
   weapon: null,
   dots: [],
+  slowLeft: 0,
+  slowFactor: 1,
   mover: createMover(spawn.x, spawn.y, PLAYER_RADIUS),
   facing,
   combatant: makeCombatant(PLAYER_STATS),

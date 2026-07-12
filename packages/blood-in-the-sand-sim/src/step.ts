@@ -94,7 +94,12 @@ export const stepSim = (
     if (latest !== undefined && Number.isFinite(latest.seq)) p.lastSeq = latest.seq;
     const input = sanitizeInput(fighting ? (latest ?? IDLE_INPUT) : IDLE_INPUT);
 
-    const desired = { x: input.sx * PLAYER_MAX_SPEED, y: input.sy * PLAYER_MAX_SPEED };
+    // The hammer's slow caps run speed while it lasts. It deliberately does
+    // NOT touch dash: the committed roll below overwrites velocity wholesale,
+    // so the escape hop stays a real answer to being slowed.
+    p.slowLeft = Math.max(0, p.slowLeft - dt);
+    const maxSpeed = PLAYER_MAX_SPEED * (p.slowLeft > 0 ? p.slowFactor : 1);
+    const desired = { x: input.sx * maxSpeed, y: input.sy * maxSpeed };
     p.mover.vel = approachVelocity(p.mover.vel, desired, dt, PLAYER_ACCEL, PLAYER_DECEL);
 
     const step = stepAbility(p.dash.ability, DASH, dt, fighting && input.dash);
@@ -240,14 +245,21 @@ export const stepSim = (
               defender.mover.vel.x = 0;
               defender.mover.vel.y = 0;
               events.push({ type: "death", playerId: defender.id });
-            } else if (weapon.bleed && sim.rng.next() < weapon.bleed.chance) {
-              applyDot(defender.dots, {
-                ticksLeft: weapon.bleed.ticks,
-                tLeft: weapon.bleed.interval,
-                interval: weapon.bleed.interval,
-                damage: weapon.bleed.damage,
-                sourceId: p.id,
-              });
+            } else {
+              if (weapon.bleed && sim.rng.next() < weapon.bleed.chance) {
+                applyDot(defender.dots, {
+                  ticksLeft: weapon.bleed.ticks,
+                  tLeft: weapon.bleed.interval,
+                  interval: weapon.bleed.interval,
+                  damage: weapon.bleed.damage,
+                  sourceId: p.id,
+                });
+              }
+              if (weapon.slow) {
+                // Refresh, never stack — repeated hammer hits extend the window.
+                defender.slowLeft = Math.max(defender.slowLeft, weapon.slow.duration);
+                defender.slowFactor = weapon.slow.factor;
+              }
             }
           }
         }
