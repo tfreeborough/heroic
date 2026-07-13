@@ -40,18 +40,37 @@ export const setFloor = (z: ZoneFile, col: number, row: number, v: number): bool
     r[col] = v;
     changed = true;
   }
-  // Floor and collision are mutually exclusive in a cell (a cell is walkable ground
-  // OR a solid, never both): painting ground onto a wall/void cell fills it, so drop
-  // any collision there. The inverse of setCollisionCell. (Free rects aren't
-  // cell-aligned, so those are removed via right-click, not by painting floor.)
+  // Floor and *visible* collision are mutually exclusive in a cell (a cell is
+  // walkable ground OR a drawn solid, never both): painting ground onto a
+  // wall/void cell fills it, so drop that collision. The inverse of
+  // setCollisionCell. Hidden barriers are exempt — they sit ON floor by design
+  // (invisible fence over normal-looking ground), so floor paints leave them.
+  // (Free rects aren't cell-aligned, so those are removed via right-click.)
   if (v !== 0 && z.collision.cells) {
     const cr = z.collision.cells[row];
-    if (cr && cr[col] !== COLLISION_CELL.none) {
+    if (cr && (cr[col] === COLLISION_CELL.wall || cr[col] === COLLISION_CELL.void)) {
       cr[col] = COLLISION_CELL.none;
       changed = true;
     }
   }
   return changed;
+};
+
+// --- Decor layer ----------------------------------------------------------------
+/** Paint the optional decor overlay (purely visual, sits above the floor — no
+ *  floor/collision exclusivity rules). The layer is created on first paint. */
+export const setDecor = (z: ZoneFile, col: number, row: number, v: number): boolean => {
+  if (!inBounds(z, col, row)) return false;
+  if (!z.layers.decor || z.layers.decor.length !== z.size.rows) {
+    if (v === 0) return false; // erasing a layer that doesn't exist
+    z.layers.decor = Array.from({ length: z.size.rows }, () =>
+      new Array<number>(z.size.cols).fill(0),
+    );
+  }
+  const r = z.layers.decor[row];
+  if (!r || r[col] === v) return false;
+  r[col] = v;
+  return true;
 };
 
 // --- Collision: painted cells + free rects ------------------------------------
@@ -75,12 +94,14 @@ export const setCollisionCell = (z: ZoneFile, col: number, row: number, v: numbe
     r[col] = v;
     changed = true;
   }
-  // A solid (wall or void) and walkable floor can't share a cell: painting collision
-  // clears the floor beneath, so there's never hidden ground under a pit or a pillar
-  // — the floorless cell renders as the void/pillar it now is. Erasing collision
-  // (v=0) leaves the cell floorless (a void via fenceVoid); repaint floor to reopen
-  // it. See docs/design/world-representation.md.
-  if (v !== COLLISION_CELL.none) {
+  // A DRAWN solid (wall or void) and walkable floor can't share a cell: painting
+  // one clears the floor beneath, so there's never hidden ground under a pit or a
+  // pillar — the floorless cell renders as the void/pillar it now is. Erasing
+  // collision (v=0) leaves the cell floorless (a void via fenceVoid); repaint
+  // floor to reopen it. A `hidden` barrier is the exception: it renders as
+  // nothing, so the floor under it must STAY painted and visible.
+  // See docs/design/world-representation.md + tilesets.md.
+  if (v === COLLISION_CELL.wall || v === COLLISION_CELL.void) {
     const fr = z.layers.floor[row];
     if (fr && fr[col] !== 0) {
       fr[col] = 0;
@@ -116,9 +137,10 @@ const clearFloorUnderBox = (z: ZoneFile, box: Aabb): void => {
 /** Append a free collision rect of `material` (the `"wall"` tag is left implicit
  *  so wall rects stay bare `Aabb`s on disk — matching legacy files). */
 export const addCollisionRect = (z: ZoneFile, box: Aabb, material: CollisionMaterial): void => {
-  z.collision.rects.push(material === "void" ? { ...box, material } : { ...box });
-  // Same floor-or-solid rule as painted cells: a rect never sits over hidden floor.
-  clearFloorUnderBox(z, box);
+  z.collision.rects.push(material === "wall" ? { ...box } : { ...box, material });
+  // Same floor-or-drawn-solid rule as painted cells: a wall/void rect never sits
+  // over unseen floor. Hidden barriers keep their floor — invisible by design.
+  if (material !== "hidden") clearFloorUnderBox(z, box);
 };
 
 /** Index of the free collision rect containing (wx,wy), or -1. */

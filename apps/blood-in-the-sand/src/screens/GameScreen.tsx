@@ -1,37 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Canvas, Picture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useKeepAwake } from "expo-keep-awake";
 import { STICK_ZERO, useGameLoop, type StickSample } from "@heroic/engine";
-import { TICK_DT, type PlayerSnapshot, type RoundPhase } from "@heroic/blood-in-the-sand-sim";
+import { TICK_DT, type RoundPhase } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
-import {
-  CONTROL_SCHEMES,
-  KEY_CONTROLS,
-  padInput,
-  SCHEME_LABEL,
-  type ControlScheme,
-  type PadMode,
-} from "../game/controls";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
 import { DASH_READY_PICTURE, DashButton, recordDashButton } from "../game/DashButton";
 import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
+import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
-import { OrbitPad } from "../game/OrbitPad";
-import { Thumbstick } from "../game/Thumbstick";
+import { StatusPulses } from "../game/statusRings";
+import { loadLefty } from "../settings";
 
 const NUMBER_TTL = 750;
 const RING_TTL = 380;
 const FIGHT_BANNER_TTL = 900;
-
-/** Which side the thumbstick sits on; buttons take the other. Persisted. */
-type StickSide = "left" | "right";
-const KEY_STICK_SIDE = "bits.stickSide";
-const DEFAULT_STICK_SIDE: StickSide = "right";
 
 interface AgedFx {
   item: FxItem;
@@ -49,21 +37,6 @@ interface HudState {
 
 const INITIAL_HUD: HudState = { phase: "countdown", countdown: null, wins: [0, 0], banner: null, lost: false };
 
-/** The closest living opponent — the pad's reference and the practice bot's prey. */
-const nearestEnemy = (players: readonly PlayerSnapshot[], me: PlayerSnapshot): PlayerSnapshot | undefined => {
-  let best: PlayerSnapshot | undefined;
-  let bestD = Infinity;
-  for (const p of players) {
-    if (p.team === me.team || !p.alive) continue;
-    const d = Math.hypot(p.x - me.x, p.y - me.y);
-    if (d < bestD) {
-      bestD = d;
-      best = p;
-    }
-  }
-  return best;
-};
-
 export interface GameScreenProps {
   client: GameClient;
   onLeave: () => void;
@@ -78,6 +51,12 @@ export interface GameScreenProps {
  */
 export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   useKeepAwake();
+  // Keep the HUD/controls clear of the notch (top) and the Android nav bar
+  // (bottom). The Skia canvas stays full-bleed — only the touch targets inset.
+  const insets = useSafeAreaInsets();
+  // The tileset atlas decodes async; recordArena draws the flat fallback until
+  // it lands (a frame or two), then bakes the floor chunks once.
+  const atlas = useArenaAtlas();
   const picture = useSharedValue(EMPTY_ARENA_PICTURE);
   const dashOverlay = useSharedValue(DASH_READY_PICTURE);
   const layoutRef = useRef({ w: 0, h: 0 });
@@ -93,59 +72,15 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const lastDashFrac = useRef(0);
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const hudKey = useRef("");
-  const [stickSide, setStickSide] = useState<StickSide>(DEFAULT_STICK_SIDE);
-  // Control scheme under test (stick / float / pad) — the chip cycles it
-  // mid-match so testers can A/B without leaving a fight. Persisted.
-  const [scheme, setScheme] = useState<ControlScheme>("stick");
-  const schemeRef = useRef<ControlScheme>("stick");
-  const [padMode, setPadMode] = useState<PadMode | null>(null);
-  const padModeRef = useRef<PadMode | null>(null);
-  /** Orbit radius captured when an orbit button is engaged (see padInput). */
-  const holdDistRef = useRef(0);
-
+  // Status-ring pulse clocks (slow/bleed), advanced per rendered frame.
+  const pulsesRef = useRef<StatusPulses | null>(null);
+  pulsesRef.current ??= new StatusPulses();
+  const pulses = pulsesRef.current;
+  // Lefty mode (settings page): read at mount, i.e. match start.
+  const [lefty, setLefty] = useState(false);
   useEffect(() => {
-    AsyncStorage.getItem(KEY_STICK_SIDE).then((v) => {
-      if (v === "left" || v === "right") setStickSide(v);
-    });
-    AsyncStorage.getItem(KEY_CONTROLS).then((v) => {
-      if ((CONTROL_SCHEMES as readonly string[]).includes(v ?? "")) {
-        setScheme(v as ControlScheme);
-        schemeRef.current = v as ControlScheme;
-      }
-    });
+    void loadLefty().then(setLefty);
   }, []);
-
-  const flipControls = () => {
-    const next: StickSide = stickSide === "right" ? "left" : "right";
-    setStickSide(next);
-    AsyncStorage.setItem(KEY_STICK_SIDE, next);
-  };
-
-  const clearPadMode = () => {
-    padModeRef.current = null;
-    setPadMode(null);
-  };
-
-  const cycleScheme = () => {
-    const next = CONTROL_SCHEMES[(CONTROL_SCHEMES.indexOf(scheme) + 1) % CONTROL_SCHEMES.length]!;
-    setScheme(next);
-    schemeRef.current = next;
-    stickRef.current = STICK_ZERO; // no ghost input from the outgoing scheme
-    clearPadMode();
-    AsyncStorage.setItem(KEY_CONTROLS, next);
-  };
-
-  const handlePadMode = (mode: PadMode | null) => {
-    if (mode === "cw" || mode === "ccw") {
-      // Lock the orbit to the spacing you engaged at.
-      const view = client.buffer.sample(performance.now());
-      const me = view?.players.find((p) => p.id === client.welcome?.playerId);
-      const enemy = me ? nearestEnemy(view!.players, me) : undefined;
-      holdDistRef.current = me && enemy ? Math.hypot(enemy.x - me.x, enemy.y - me.y) : 0;
-    }
-    padModeRef.current = mode;
-    setPadMode(mode);
-  };
 
   useEffect(() => {
     client.onEvents = (events) => {
@@ -187,8 +122,6 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           }
         } else if (e.type === "dash") {
           if (e.playerId === myId) playStrikeHaptic("soft"); // tactile confirm of the roll
-        } else if (e.type === "roundStart") {
-          clearPadMode(); // a fresh round shouldn't inherit last round's auto-run
         } else if (e.type === "fightStart") {
           fightBannerUntil.current = now + FIGHT_BANNER_TTL;
         }
@@ -202,26 +135,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   useGameLoop(
     {
       onStep: () => {
-        // One input per sim tick (30Hz): the scheme's steering + the dash tap
+        // One input per sim tick (30Hz): stick dir × magnitude + the dash tap
         // (consumed here; the server latches it so a between-tick press holds).
-        let sx = 0;
-        let sy = 0;
-        if (schemeRef.current === "pad") {
-          // Target-relative auto-run: resolve the engaged intent against the
-          // nearest enemy's CURRENT position each tick.
-          const mode = padModeRef.current;
-          if (mode) {
-            const view = client.buffer.sample(performance.now());
-            const me = view?.players.find((p) => p.id === client.welcome?.playerId);
-            const enemy = me ? nearestEnemy(view!.players, me) : undefined;
-            if (me) ({ sx, sy } = padInput(mode, me, enemy, holdDistRef.current));
-          }
-        } else {
-          const stick = stickRef.current;
-          sx = stick.dir.x * stick.magnitude;
-          sy = stick.dir.y * stick.magnitude;
-        }
-        client.sendInput(sx, sy, dashRequest.current);
+        const stick = stickRef.current;
+        client.sendInput(stick.dir.x * stick.magnitude, stick.dir.y * stick.magnitude, dashRequest.current);
         dashRequest.current = false;
       },
       onRender: () => {
@@ -239,6 +156,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
         if (view && w > 0 && client.welcome) {
           blood.update(view.players, now);
+          pulses.update(view.players, now);
           picture.value = recordArena({
             view,
             config: client.welcome.config,
@@ -247,7 +165,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             screenH: h,
             fx: fx.map((f) => f.item),
             blood: blood.decals,
+            pulses,
             nowMs: now,
+            atlas,
           });
 
           // Dash button clock: re-record only while the fraction is moving.
@@ -306,7 +226,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       </Canvas>
 
       {/* score */}
-      <View style={styles.scoreRow} pointerEvents="none">
+      <View style={[styles.scoreRow, { top: insets.top + 12 }]} pointerEvents="none">
         <Text style={[styles.score, myTeam === 1 ? styles.mine : styles.theirs]}>{hud.wins[0]}</Text>
         <Text style={styles.scoreDash}>—</Text>
         <Text style={[styles.score, myTeam === 2 ? styles.mine : styles.theirs]}>{hud.wins[1]}</Text>
@@ -324,31 +244,25 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         </View>
       ) : null}
 
-      {/* controls — movement on stickSide, the button column on the other.
-          Default stick-right; the ⇄ chip flips sides, the CTRL chip cycles
-          the movement scheme (both persist). */}
-      <View style={[styles.stickWrap, stickSide === "right" ? styles.onRight : styles.onLeft]}>
-        {scheme === "stick" ? (
-          <Thumbstick size={190} onChange={(sample) => (stickRef.current = sample)} />
-        ) : scheme === "float" ? (
-          <FloatingStick width={260} height={230} onChange={(sample) => (stickRef.current = sample)} />
-        ) : (
-          <OrbitPad mode={padMode} onMode={handlePadMode} />
-        )}
-      </View>
-      <View style={[styles.buttonsWrap, stickSide === "right" ? styles.buttonsLeft : styles.buttonsRight]}>
-        <DashButton overlay={dashOverlay} onPress={() => (dashRequest.current = true)} />
+      {/* controls — the floating-stick region flex-fills from one side; the
+          button column owns the other edge and the region resizes around it
+          (more buttons to come — powers). Movement sits under the DOMINANT
+          thumb: default = movement right + buttons left; lefty mode mirrors
+          (movement left, buttons right). Scheme test verdict 2026-07-12:
+          FLOAT won; fixed stick and orbit pad are gone. */}
+      <View
+        style={[styles.controlsRow, lefty && styles.controlsLefty, { bottom: insets.bottom + 24 }]}
+        pointerEvents="box-none"
+      >
+        <FloatingStick onChange={(sample) => (stickRef.current = sample)} />
+        <View style={styles.buttonsCol}>
+          <DashButton overlay={dashOverlay} onPress={() => (dashRequest.current = true)} />
+        </View>
       </View>
 
-      <Pressable onPress={flipControls} style={styles.flip} hitSlop={12}>
-        <Text style={styles.flipText}>⇄</Text>
-      </Pressable>
-      <Pressable onPress={cycleScheme} style={[styles.flip, styles.schemeChip]} hitSlop={12}>
-        <Text style={styles.flipText}>{SCHEME_LABEL[scheme]}</Text>
-      </Pressable>
       {onQuit ? (
-        <Pressable onPress={onQuit} style={[styles.flip, styles.quitChip]} hitSlop={12}>
-          <Text style={styles.flipText}>✕</Text>
+        <Pressable onPress={onQuit} style={[styles.quitChip, { top: insets.top + 10 }]} hitSlop={12}>
+          <Text style={styles.quitText}>✕</Text>
         </Pressable>
       ) : null}
 
@@ -389,25 +303,30 @@ const styles = StyleSheet.create({
   countdown: { fontSize: 96, fontWeight: "900", color: "#f0e8d8" },
   teamHint: { fontSize: 15, color: "#f0e8d8", opacity: 0.8, marginTop: 4 },
   banner: { fontSize: 34, fontWeight: "900", color: "#f0e8d8", letterSpacing: 2, textAlign: "center" },
-  stickWrap: { position: "absolute", bottom: 36 },
-  onLeft: { left: 20 },
-  onRight: { right: 20 },
+  // The bottom control band: stick region flexes, buttons keep their width.
+  controlsRow: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 24,
+    height: "33%", // the bottom third — tall enough for a thumb, no more
+    flexDirection: "row-reverse", // movement region fills from the RIGHT
+    alignItems: "stretch",
+    gap: 12,
+  },
+  controlsLefty: { flexDirection: "row" }, // mirrored: movement on the left
   // A column with room for the power buttons to come (grows upward).
-  buttonsWrap: { position: "absolute", bottom: 84, flexDirection: "column-reverse", gap: 14 },
-  buttonsLeft: { left: 28 },
-  buttonsRight: { right: 28 },
-  flip: {
+  buttonsCol: { justifyContent: "flex-end", paddingBottom: 48, paddingHorizontal: 12, gap: 14 },
+  quitChip: {
     position: "absolute",
     top: 54,
-    left: 18,
+    right: 18,
     backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  schemeChip: { left: 62 },
-  quitChip: { left: undefined, right: 18 },
-  flipText: { color: "#8a7f70", fontSize: 18, fontWeight: "700" },
+  quitText: { color: "#8a7f70", fontSize: 18, fontWeight: "700" },
   leaveWrap: { position: "absolute", bottom: 260, alignSelf: "center" },
   leave: { backgroundColor: "#8c2f2f", borderRadius: 8, paddingHorizontal: 28, paddingVertical: 12 },
   leaveText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1 },

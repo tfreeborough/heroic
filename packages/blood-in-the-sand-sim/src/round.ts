@@ -3,8 +3,8 @@
  * the whole match — countdowns, benches, lobby returns — is one deterministic,
  * headless-testable simulation; the server stays pure transport.
  *
- *   lobby ──(host startMatch)──▶ countdown ──▶ active ──(team wiped)──▶ roundEnd
- *     ▲                                                                   │
+ *   lobby ─(host startMatch)─▶ pick ─▶ reveal ─▶ countdown ─▶ active ─(team wiped)─▶ roundEnd
+ *     ▲                        (the draft — either phase can be 0s)       │
  *     │                                     countdown ◀─(wins < 3)────────┤
  *     └───────(timer)─── matchEnd ◀───────────────────(wins = 3)──────────┘
  *
@@ -15,13 +15,16 @@
  */
 import { ATTACK_CYCLE_READY } from "@heroic/core";
 import {
+  ABILITY_IDS,
   COUNTDOWN_SECONDS,
+  LOADOUT_ABILITY_COUNT,
   MATCH_END_SECONDS,
   ROUND_END_SECONDS,
+  WEAPON_IDS,
   WINS_TO_TAKE_MATCH,
 } from "./config";
 import type { ArenaEvent } from "./events";
-import { spawnFacing, type ArenaSim } from "./sim";
+import { setPlayerWeapon, spawnFacing, type ArenaSim } from "./sim";
 import { createDashState, seatedPlayers, type Team } from "./state";
 
 /** Respawn everyone at their team spawn with a clean slate and start the countdown. */
@@ -53,21 +56,79 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
   events.push({ type: "roundStart", roundNumber: state.round.roundNumber });
 };
 
-/** Can the host's start button do anything right now? */
+/** Can the host's start button do anything right now? Picks are NOT required —
+ * unpicked seats auto-fill at lock-in (pvp-pick-ceremony.md). */
 export const canStartMatch = (sim: ArenaSim): boolean =>
   sim.state.round.phase === "lobby" &&
-  sim.state.players.every((p) => p !== null && p.connected && p.weapon !== null);
+  sim.state.players.every((p) => p !== null && p.connected);
 
-/**
- * The host pressed start: fresh scoreboard, everyone to spawns, countdown.
- * Returns false (and does nothing) unless the lobby is full and connected.
- */
-export const startMatch = (sim: ArenaSim, events: ArenaEvent[]): boolean => {
-  if (!canStartMatch(sim)) return false;
+/** Fresh scoreboard + everyone to spawns + countdown — the ceremony's exit. */
+const beginMatch = (sim: ArenaSim, events: ArenaEvent[]): void => {
   sim.state.round.wins = [0, 0];
   sim.state.round.roundNumber = 0;
   sim.state.round.lastWinner = 0;
   resetForRound(sim, events);
+};
+
+/** Draft timings; both 0 (the default) = no ceremony at all (practice, tests). */
+export interface DraftCeremony {
+  /** Blind-pick phase length. 0 = skip it: the lobby was the blind pick (v6 flow). */
+  pickSeconds?: number;
+  /** Counterpick window after the reveal. 0 = reveal-and-go. */
+  adjustSeconds?: number;
+}
+
+/**
+ * Close a draft phase: incomplete loadouts random-fill from the sim rng
+ * (deterministic), every pick snapshots into revealed* (what the enemy team is
+ * shown), and the per-phase locks reset for whatever comes next.
+ */
+const lockAndReveal = (sim: ArenaSim): void => {
+  for (const p of seatedPlayers(sim.state)) {
+    p.lockedIn = false; // must precede setPlayerWeapon: locks block repicks
+    if (p.weapon === null) {
+      setPlayerWeapon(sim, p.id, WEAPON_IDS[Math.floor(sim.rng.next() * WEAPON_IDS.length)]!);
+    }
+    while (p.abilities.length < LOADOUT_ABILITY_COUNT) {
+      const pool = ABILITY_IDS.filter((a) => !p.abilities.includes(a));
+      p.abilities.push(pool[Math.floor(sim.rng.next() * pool.length)]!);
+    }
+    p.revealedWeapon = p.weapon;
+    p.revealedAbilities = [...p.abilities];
+  }
+};
+
+/** Every connected player locked = nobody left to wait for (a disconnected
+ * body can't lock; the clock covers it). */
+const allLocked = (sim: ArenaSim): boolean =>
+  seatedPlayers(sim.state).every((p) => p.lockedIn || !p.connected);
+
+/**
+ * The host pressed start: begin the draft (docs/design/pvp-abilities.md).
+ * With pickSeconds > 0 the blind-pick phase opens first (LOCK IN or the clock
+ * closes it); otherwise lock-in happens immediately from the lobby picks (the
+ * v6 ceremony). With adjustSeconds > 0 the reveal/counterpick window follows;
+ * otherwise the countdown starts at once. Returns false (and does nothing)
+ * unless the lobby is full and connected.
+ */
+export const startMatch = (sim: ArenaSim, events: ArenaEvent[], ceremony: DraftCeremony = {}): boolean => {
+  if (!canStartMatch(sim)) return false;
+  const pickSeconds = ceremony.pickSeconds ?? 0;
+  const adjustSeconds = ceremony.adjustSeconds ?? 0;
+  sim.state.round.adjustSeconds = adjustSeconds;
+  if (pickSeconds > 0) {
+    for (const p of seatedPlayers(sim.state)) p.lockedIn = false;
+    sim.state.round.phase = "pick";
+    sim.state.round.timer = pickSeconds;
+    return true;
+  }
+  lockAndReveal(sim);
+  if (adjustSeconds > 0) {
+    sim.state.round.phase = "reveal";
+    sim.state.round.timer = adjustSeconds;
+  } else {
+    beginMatch(sim, events);
+  }
   return true;
 };
 
@@ -80,6 +141,26 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
   switch (round.phase) {
     case "lobby":
       return false; // host-driven only — nothing ticks here
+    case "pick": {
+      // The blind pick: everyone drafting, enemy rows show lock states only.
+      round.timer -= dt;
+      if (round.timer <= 0 || allLocked(sim)) {
+        lockAndReveal(sim);
+        if (round.adjustSeconds > 0) {
+          round.phase = "reveal";
+          round.timer = round.adjustSeconds;
+        } else {
+          beginMatch(sim, events);
+        }
+      }
+      return false;
+    }
+    case "reveal": {
+      // The counterpick window: repicks land via setPlayer*; locks end it early.
+      round.timer -= dt;
+      if (round.timer <= 0 || allLocked(sim)) beginMatch(sim, events);
+      return false;
+    }
     case "countdown": {
       round.timer -= dt;
       if (round.timer <= 0) {
@@ -116,6 +197,12 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
         for (let i = 0; i < sim.state.players.length; i++) {
           const p = sim.state.players[i];
           if (p && !p.connected) sim.state.players[i] = null;
+          // Last draft's reveal and locks are stale once repicking opens again.
+          else if (p) {
+            p.revealedWeapon = null;
+            p.revealedAbilities = null;
+            p.lockedIn = false;
+          }
         }
       }
       return false;

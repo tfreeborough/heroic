@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -16,11 +16,8 @@ const TRAVEL = (PAD_SIZE - KNOB_SIZE) / 2;
 const SATURATION = 0.55;
 
 export interface FloatingStickProps {
-  /** Same contract as Thumbstick.onChange — called from gesture callbacks. */
+  /** Same contract as the old Thumbstick.onChange — called from gesture callbacks. */
   onChange: (sample: StickSample) => void;
-  /** Touch region size; the pad can spawn anywhere inside it. */
-  width: number;
-  height: number;
 }
 
 /**
@@ -29,19 +26,24 @@ export interface FloatingStickProps {
  * along behind the thumb — the thumb can wander and relax without the input
  * changing, because there is no fixed anchor to drift from. The other half of
  * the fatigue fix is SATURATION above.
+ *
+ * The region fills whatever space its parent gives it (flex: 1) and measures
+ * itself — the button column on the other side simply shrinks it.
  */
-export const FloatingStick = ({ onChange, width, height }: FloatingStickProps) => {
+export const FloatingStick = ({ onChange }: FloatingStickProps) => {
   const originX = useSharedValue(0);
   const originY = useSharedValue(0);
   const knobX = useSharedValue(0);
   const knobY = useSharedValue(0);
   const active = useSharedValue(0);
+  const size = useRef({ w: 0, h: 0 });
 
   const pan = useMemo(() => {
     const begin = (x: number, y: number): void => {
       // Keep the pad's visual fully inside the region.
-      originX.value = Math.min(Math.max(x, PAD_SIZE / 2), width - PAD_SIZE / 2);
-      originY.value = Math.min(Math.max(y, PAD_SIZE / 2), height - PAD_SIZE / 2);
+      const { w, h } = size.current;
+      originX.value = Math.min(Math.max(x, PAD_SIZE / 2), Math.max(PAD_SIZE / 2, w - PAD_SIZE / 2));
+      originY.value = Math.min(Math.max(y, PAD_SIZE / 2), Math.max(PAD_SIZE / 2, h - PAD_SIZE / 2));
       knobX.value = 0;
       knobY.value = 0;
       active.value = withTiming(1, { duration: 80 });
@@ -72,7 +74,7 @@ export const FloatingStick = ({ onChange, width, height }: FloatingStickProps) =
       .onBegin((e) => begin(e.x, e.y))
       .onUpdate((e) => track(e.x, e.y))
       .onFinalize(release);
-  }, [originX, originY, knobX, knobY, active, onChange, width, height]);
+  }, [originX, originY, knobX, knobY, active, onChange]);
 
   const padStyle = useAnimatedStyle(() => ({
     opacity: active.value,
@@ -87,7 +89,12 @@ export const FloatingStick = ({ onChange, width, height }: FloatingStickProps) =
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={[styles.region, { width, height }]}>
+      <View
+        style={styles.region}
+        onLayout={(e) => {
+          size.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+        }}
+      >
         <Animated.View style={[styles.pad, padStyle]} pointerEvents="none">
           <Animated.View style={[styles.knob, knobStyle]} />
         </Animated.View>
@@ -97,8 +104,9 @@ export const FloatingStick = ({ onChange, width, height }: FloatingStickProps) =
 };
 
 const styles = StyleSheet.create({
-  // Invisible, but faintly bordered so testers can find the touch area.
+  // Invisible, but faintly bordered so players can find the touch area.
   region: {
+    flex: 1,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.06)",

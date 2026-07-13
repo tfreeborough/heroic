@@ -81,6 +81,7 @@ export const OBJECT_KINDS: ZoneObjectKind[] = [
   "key",
   "trigger",
   "poi",
+  "prop",
 ];
 
 /** A freshly-placed trigger's region size, in tiles per side (resize per-instance). */
@@ -126,4 +127,6 @@ export const defaultObjectProps = (
         ? { color: KEY_COLOR_IDS[0]! }
         : kind === "trigger"
           ? scalarTriggerDefaults()
-          : {};
+          : kind === "prop"
+            ? { prop: "" } // App threads the palette's chosen prop in at placement
+            : {};

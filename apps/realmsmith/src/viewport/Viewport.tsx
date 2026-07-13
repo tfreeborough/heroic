@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
 import type { Aabb, Zone } from "@heroic/core";
-import { drawZone, type View } from "./zoneRenderer";
+import { drawZone, type TilesetArt, type View } from "./zoneRenderer";
 import type { Corner, EditPointer, Selection } from "../edit/types";
 
 interface Props {
   /** The runtime zone (derived in App so it can also validate placements). */
   zone: Zone;
+  /** The zone's resolved tileset art; null → placeholder checker look. */
+  art: TilesetArt | null;
   /** Changes only when a different file is opened → triggers a refit. */
   fitToken: number;
   selection: Selection | null;
@@ -25,6 +27,7 @@ interface Props {
 
 export const Viewport = ({
   zone,
+  art,
   fitToken,
   selection,
   showGrid,
@@ -40,6 +43,7 @@ export const Viewport = ({
 
   const live = useRef({
     zone,
+    art,
     onPointer,
     selection,
     validateHover,
@@ -49,6 +53,7 @@ export const Viewport = ({
     hover: null as { col: number; row: number } | null,
   });
   live.current.zone = zone;
+  live.current.art = art;
   live.current.onPointer = onPointer;
   live.current.selection = selection;
   live.current.validateHover = validateHover;
@@ -64,7 +69,7 @@ export const Viewport = ({
   }, [fitToken]);
   useEffect(() => {
     drawRef.current();
-  }, [zone, selection, showGrid, pending, resizeBox]);
+  }, [zone, art, selection, showGrid, pending, resizeBox]);
   // Centre the camera on a focused point (e.g. clicking a validation issue).
   useEffect(() => {
     if (!focus) return;
@@ -99,14 +104,22 @@ export const Viewport = ({
       // Recompute validity each draw so it stays fresh after an edit, not just on move.
       const valid = hv ? live.current.validateHover(hv.col, hv.row) : true;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawZone(ctx, z, viewRef.current, cssW, cssH, {
-        grid: live.current.showGrid,
-        hover: hv,
-        hoverValid: valid,
-        selection: live.current.selection,
-        pending: live.current.pending,
-        resize: live.current.resizeBox,
-      });
+      drawZone(
+        ctx,
+        z,
+        viewRef.current,
+        cssW,
+        cssH,
+        {
+          grid: live.current.showGrid,
+          hover: hv,
+          hoverValid: valid,
+          selection: live.current.selection,
+          pending: live.current.pending,
+          resize: live.current.resizeBox,
+        },
+        live.current.art,
+      );
     };
     drawRef.current = draw;
     const requestDraw = () => {

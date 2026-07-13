@@ -13,7 +13,9 @@
 import type { Server, ServerWebSocket } from "bun";
 import {
   ARENA_00,
+  PICK_PHASE_SECONDS,
   PROTOCOL_VERSION,
+  REVEAL_ADJUST_SECONDS,
   SNAPSHOT_DIVISOR,
   TICK_DT,
   addPlayer,
@@ -24,6 +26,8 @@ import {
   removePlayer,
   sanitizeInput,
   seatedPlayers,
+  lockInPlayer,
+  setPlayerAbilities,
   setPlayerWeapon,
   startMatch,
   stepSim,
@@ -35,6 +39,8 @@ import {
   type PlayerInput,
   type RoomListing,
   type ServerMsg,
+  type AbilityId,
+  type Team,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 
@@ -60,6 +66,8 @@ export class Room {
 
   private readonly server: Server<ClientData>;
   private readonly seats = new Map<number, Socket>();
+  /** Seatless spectators — they get the neutral (team-0) roomState view. */
+  private readonly watchers = new Set<Socket>();
   private readonly inputs = new Map<number, PlayerInput>();
   private readonly dashLatch = new Set<number>();
   private eventBuffer: ArenaEvent[] = [];
@@ -139,11 +147,37 @@ export class Room {
     return playerId;
   }
 
+  /** Is the host's seat still occupied? (A mid-match disconnect keeps the seat
+   * — disconnected but present — so the match plays on; the seat only frees at
+   * match end, which is when a never-returning host trips the room's closure.) */
+  hostPresent(): boolean {
+    return this.sim.state.players[this.meta.hostId] != null;
+  }
+
+  /** Tear the room down: tell every seat and watcher why, detach them, and let
+   * the manager drop the room from its registry. Idempotent. */
+  kickAll(reason: string): void {
+    const msg: ServerMsg = { t: "roomClosed", reason };
+    for (const ws of this.seats.values()) this.detach(ws, msg);
+    for (const ws of this.watchers) this.detach(ws, msg);
+    this.seats.clear();
+    this.watchers.clear();
+  }
+
+  private detach(ws: Socket, farewell: ServerMsg): void {
+    this.send(ws, farewell);
+    ws.unsubscribe(this.topic);
+    ws.data.roomCode = null;
+    ws.data.playerId = null;
+  }
+
   watch(ws: Socket): void {
     ws.data.roomCode = this.meta.code;
     ws.data.playerId = null;
     ws.subscribe(this.topic);
+    this.watchers.add(ws);
     this.send(ws, { t: "watching", roomCode: this.meta.code, roomName: this.meta.name });
+    this.send(ws, this.roomStateFor(0));
   }
 
   /**
@@ -155,7 +189,10 @@ export class Room {
     ws.unsubscribe(this.topic);
     ws.data.roomCode = null;
     ws.data.playerId = null;
-    if (id === null) return; // watcher
+    if (id === null) {
+      this.watchers.delete(ws);
+      return;
+    }
 
     if (this.seats.get(id) !== ws) return; // superseded by a rejoin
     this.seats.delete(id);
@@ -170,14 +207,27 @@ export class Room {
 
   startByHost(playerId: number): void {
     if (playerId !== this.meta.hostId) return;
-    if (startMatch(this.sim, this.eventBuffer)) {
-      console.log(`[${this.meta.code}] host started a match`);
+    // The 4-beat draft: timed blind pick → reveal → timed counterpick → sand.
+    const ceremony = { pickSeconds: PICK_PHASE_SECONDS, adjustSeconds: REVEAL_ADJUST_SECONDS };
+    if (startMatch(this.sim, this.eventBuffer, ceremony)) {
+      console.log(`[${this.meta.code}] host started the draft`);
+      this.syncRoomState(performance.now()); // lock flags reset for phase I
     }
   }
 
-  /** A lobby weapon pick; the roomState diff broadcasts the change. */
+  /** A lobby/draft weapon pick; the roomState diff sends the change. */
   setWeapon(playerId: number, weapon: WeaponId, nowMs: number): void {
     if (setPlayerWeapon(this.sim, playerId, weapon)) this.syncRoomState(nowMs);
+  }
+
+  /** The drafted hand (whole list each change); same phase/lock gate. */
+  setAbilities(playerId: number, abilities: AbilityId[], nowMs: number): void {
+    if (setPlayerAbilities(this.sim, playerId, abilities)) this.syncRoomState(nowMs);
+  }
+
+  /** "I'm done adjusting" — all locked ends the draft phase early (next tick). */
+  lockIn(playerId: number, nowMs: number): void {
+    if (lockInPlayer(this.sim, playerId)) this.syncRoomState(nowMs);
   }
 
   input(playerId: number, msg: Extract<ClientMsg, { t: "input" }>): void {
@@ -209,24 +259,44 @@ export class Room {
     this.syncRoomState(nowMs);
   }
 
-  /** Host migration + roomState broadcast + empty tracking, on any change. */
+  /** roomState broadcast + empty tracking, on any change. (The host never
+   * migrates: they own the room, and their departure closes it — the manager
+   * reaps a host-less room via hostPresent(), see manager.reapHostless.) */
   private syncRoomState(nowMs: number): void {
-    // Host gone entirely (seat freed)? Crown the lowest occupied seat.
-    if (!this.sim.state.players[this.meta.hostId]) {
-      const next = seatedPlayers(this.sim.state)[0];
-      if (next) {
-        this.meta.hostId = next.id;
-        console.log(`[${this.meta.code}] host left — crown passes to ${next.name}`);
-      }
-    }
     this.emptySinceMs = this.connectedCount() === 0 ? (this.emptySinceMs ?? nowMs) : null;
 
-    const players = toRoomStatePlayers(this.sim.state);
-    const key = JSON.stringify([players, this.meta.hostId]);
+    // Diff on the OMNISCIENT roster (any viewer's view derives from it), but
+    // send per-viewer: live picks are team secrets, so roomState can't ride
+    // the room topic any more (pvp-pick-ceremony.md).
+    const key = JSON.stringify([
+      seatedPlayers(this.sim.state).map((p) => [
+        p.id, p.name, p.team, p.connected,
+        p.weapon, p.abilities, p.lockedIn, p.revealedWeapon, p.revealedAbilities,
+      ]),
+      this.meta.hostId,
+    ]);
     if (key !== this.lastRoomStateKey) {
       this.lastRoomStateKey = key;
-      this.broadcast({ t: "roomState", players, hostId: this.meta.hostId });
+      const byTeam = new Map<Team | 0, ServerMsg>();
+      const viewFor = (team: Team | 0): ServerMsg => {
+        let msg = byTeam.get(team);
+        if (!msg) byTeam.set(team, (msg = this.roomStateFor(team)));
+        return msg;
+      };
+      for (const [id, ws] of this.seats) {
+        const team = this.sim.state.players[id]?.team;
+        if (team) this.send(ws, viewFor(team));
+      }
+      for (const ws of this.watchers) this.send(ws, viewFor(0));
     }
+  }
+
+  private roomStateFor(viewerTeam: Team | 0): ServerMsg {
+    return {
+      t: "roomState",
+      players: toRoomStatePlayers(this.sim.state, viewerTeam),
+      hostId: this.meta.hostId,
+    };
   }
 
   private logEvents(): void {

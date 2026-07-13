@@ -1,5 +1,5 @@
 /** What the active tool edits. Left-click applies it; right-click erases/deletes. */
-export type Tool = "floor" | "collision" | "breakable" | "object";
+export type Tool = "floor" | "decor" | "collision" | "breakable" | "object";
 
 export type PointerPhase = "down" | "drag" | "up";
 export type PointerButton = "left" | "right";

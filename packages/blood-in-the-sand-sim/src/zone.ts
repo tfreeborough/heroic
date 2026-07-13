@@ -4,11 +4,13 @@
  * the SAME file — a mismatch is impossible and there's no disk-path plumbing.
  * `welcome.zoneId` exists only to assert both ends agree.
  *
- * Authored by hand for M1; it's ordinary Realmsmith format-v1 JSON, so it can
- * be opened and polished in Realmsmith later. Layout notes: 1024×1024, a
- * centre pillar plus two 180°-symmetric slabs — the pillar breaks line of
- * sight (auto-targeting drops, attacks lock-break), which is what gives the
- * dash a juke purpose.
+ * Ordinary Realmsmith format-v1 JSON — open it in Realmsmith to edit. Layout
+ * notes: 1024×1024, a centre pillar plus two 180°-symmetric slabs — the pillar
+ * breaks line of sight (auto-targeting drops, attacks lock-break), which is
+ * what gives the dash a juke purpose. Dressed with the desert tileset
+ * (docs/design/tilesets.md): floor tile ids index the desert atlas, and the
+ * prop objects (cacti/tufts, 180°-symmetric) carry hidden footprints — body
+ * cover that blocks movement but not sight.
  */
 import type { ZoneFile } from "@heroic/core";
 import arena00 from "./zones/arena-00.json";

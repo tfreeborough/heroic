@@ -13,7 +13,7 @@ import type {
   RoundSnapshot,
   SnapshotMsg,
 } from "./protocol";
-import { seatedPlayers, type ArenaPlayer, type ArenaProjectile, type ArenaState } from "./state";
+import { seatedPlayers, type ArenaPlayer, type ArenaProjectile, type ArenaState, type Team } from "./state";
 
 export const makeClientConfig = (): ArenaClientConfig => ({
   tickRate: TICK_RATE,
@@ -23,11 +23,18 @@ export const makeClientConfig = (): ArenaClientConfig => ({
   countdownSeconds: COUNTDOWN_SECONDS,
 });
 
-const toPlayerSnapshot = (p: ArenaPlayer): PlayerSnapshot => ({
+/** Seconds until a player's LAST pending bleed tick (0 = no active dots). */
+const bleedRemaining = (p: ArenaPlayer): number => {
+  let left = 0;
+  for (const d of p.dots) left = Math.max(left, d.tLeft + (d.ticksLeft - 1) * d.interval);
+  return left;
+};
+
+const toPlayerSnapshot = (p: ArenaPlayer, hideWeapon: boolean): PlayerSnapshot => ({
   id: p.id,
   team: p.team,
   name: p.name,
-  weapon: p.weapon,
+  weapon: hideWeapon ? null : p.weapon,
   x: p.mover.pos.x,
   y: p.mover.pos.y,
   hp: p.combatant.hp,
@@ -38,7 +45,8 @@ const toPlayerSnapshot = (p: ArenaPlayer): PlayerSnapshot => ({
   atkLeft: p.attack.remaining,
   lockedFacing: p.lockedFacing,
   dashing: isDashing(p.dash),
-  slowed: p.slowLeft > 0,
+  slowLeft: p.slowLeft,
+  bleedLeft: bleedRemaining(p),
   dashCd: p.dash.ability.cooldownRemaining,
   lastSeq: p.lastSeq,
 });
@@ -59,20 +67,38 @@ const toProjectileSnapshot = (p: ArenaProjectile): ProjectileSnapshot => ({
   weapon: p.weapon,
 });
 
-export const toSnapshot = (state: ArenaState, events: ArenaEvent[]): SnapshotMsg => ({
-  t: "snapshot",
-  tick: state.tick,
-  round: toRoundSnapshot(state),
-  players: seatedPlayers(state).map(toPlayerSnapshot),
-  projectiles: state.projectiles.map(toProjectileSnapshot),
-  events,
-});
+export const toSnapshot = (state: ArenaState, events: ArenaEvent[]): SnapshotMsg => {
+  // Snapshots are ONE broadcast for the whole room, so hidden-pick phases
+  // scrub the weapon for everyone (nothing renders weapons before countdown).
+  const hideWeapon =
+    state.round.phase === "lobby" || state.round.phase === "pick" || state.round.phase === "reveal";
+  return {
+    t: "snapshot",
+    tick: state.tick,
+    round: toRoundSnapshot(state),
+    players: seatedPlayers(state).map((p) => toPlayerSnapshot(p, hideWeapon)),
+    projectiles: state.projectiles.map(toProjectileSnapshot),
+    events,
+  };
+};
 
-export const toRoomStatePlayers = (state: ArenaState): RoomStatePlayer[] =>
+/**
+ * The room roster AS SEEN BY one team — live picks are team secrets until the
+ * match starts (pvp-pick-ceremony.md). `viewerTeam` 0 is the neutral (watcher)
+ * view: no live picks at all, just the public flags + the lock-in reveal.
+ */
+export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): RoomStatePlayer[] =>
   seatedPlayers(state).map((p) => ({
     id: p.id,
     name: p.name,
     team: p.team,
     connected: p.connected,
-    weapon: p.weapon,
+    weapon: p.team === viewerTeam ? p.weapon : null,
+    abilities: p.team === viewerTeam ? [...p.abilities] : null,
+    // Weapon-only until the loadout sheet makes abilities draftable in the UI —
+    // loadoutComplete(p) here would read "choosing…" forever to the enemy.
+    picked: p.weapon !== null,
+    locked: p.lockedIn,
+    revealed: p.revealedWeapon,
+    revealedAbilities: p.revealedAbilities === null ? null : [...p.revealedAbilities],
   }));

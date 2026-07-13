@@ -8,12 +8,21 @@ import {
   keyColorDef,
   parseSpawnerConfig,
   SPAWNER_NEST_TILES,
+  tileSourceRect,
   voidRimBands,
   wallLeanVector,
   type Aabb,
+  type TilesetDef,
   type Zone,
 } from "@heroic/core";
 import type { Selection } from "../edit/types";
+
+/** The zone's resolved tileset art: registry geometry + the loaded atlas image.
+ *  Null (unknown name / image still loading) → the placeholder checker look. */
+export interface TilesetArt {
+  def: TilesetDef;
+  image: CanvasImageSource;
+}
 
 /** Camera: the world coordinate under the canvas centre + screen-px-per-world-px. */
 export interface View {
@@ -176,6 +185,7 @@ export const drawZone = (
   cssW: number,
   cssH: number,
   overlay: EditOverlay = {},
+  art: TilesetArt | null = null,
 ): void => {
   // Void backdrop (shows through the zone's void cells, as in-game).
   ctx.fillStyle = ZONE_PALETTE.void;
@@ -190,16 +200,39 @@ export const drawZone = (
   const t = zone.tileSize;
   const ct = zone.chunkTiles;
 
-  // Floor: the light base + dark checker the game bakes (placeholder tiles). Void
-  // cells (id 0) are skipped, so an irregular/L-shaped zone reads as its shape.
+  // Floor (+ decor): real atlas tiles when the zone's tileset resolved, else the
+  // light/dark placeholder checker. Void cells (id 0) are skipped either way, so
+  // an irregular/L-shaped zone reads as its shape. Pixel art stays crisp with
+  // smoothing off; ids the atlas doesn't cover fall back to the checker cell.
+  ctx.imageSmoothingEnabled = false;
   for (const chunk of zone.chunks) {
     for (let ly = 0; ly < ct; ly++) {
       for (let lx = 0; lx < ct; lx++) {
-        if (chunk.floor[ly * ct + lx] === 0) continue;
+        const id = chunk.floor[ly * ct + lx]!;
+        if (id === 0) continue;
         const gx = chunk.cx * ct + lx;
         const gy = chunk.cy * ct + ly;
-        ctx.fillStyle = isCheckerDark(gx, gy) ? ZONE_PALETTE.tileDark : ZONE_PALETTE.tileLight;
-        ctx.fillRect(gx * t, gy * t, t, t);
+        const src = art ? tileSourceRect(art.def, id) : null;
+        if (src) {
+          ctx.drawImage(art!.image, src.x, src.y, src.w, src.h, gx * t, gy * t, t, t);
+        } else {
+          ctx.fillStyle = isCheckerDark(gx, gy) ? ZONE_PALETTE.tileDark : ZONE_PALETTE.tileLight;
+          ctx.fillRect(gx * t, gy * t, t, t);
+        }
+      }
+    }
+  }
+  if (art) {
+    for (const chunk of zone.chunks) {
+      if (!chunk.decor) continue;
+      for (let ly = 0; ly < ct; ly++) {
+        for (let lx = 0; lx < ct; lx++) {
+          const src = tileSourceRect(art.def, chunk.decor[ly * ct + lx]!);
+          if (!src) continue;
+          const gx = chunk.cx * ct + lx;
+          const gy = chunk.cy * ct + ly;
+          ctx.drawImage(art.image, src.x, src.y, src.w, src.h, gx * t, gy * t, t, t);
+        }
       }
     }
   }
@@ -281,15 +314,63 @@ export const drawZone = (
     }
   }
 
+  // Standing props (docs/design/tilesets.md): sprites anchored at their feet,
+  // y-sorted among themselves as the game sorts them with entities — a lower
+  // baseline draws on top. Without the atlas each prop shows as a dashed stand-in
+  // box + name, so layout work isn't blocked on art loading.
+  const sortedProps = [...zone.props].sort((a, b) => a.y - b.y);
+  for (const p of sortedProps) {
+    if (art) {
+      ctx.drawImage(art.image, p.src.x, p.src.y, p.src.w, p.src.h, p.x - p.w / 2, p.y - p.h, p.w, p.h);
+    } else {
+      ctx.lineWidth = 1.5 / view.zoom;
+      ctx.strokeStyle = "rgba(140,220,140,0.8)";
+      ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+      ctx.strokeRect(p.x - p.w / 2, p.y - p.h, p.w, p.h);
+      ctx.setLineDash([]);
+      const fontPx = 11 / view.zoom;
+      ctx.font = `${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(200,240,200,0.9)";
+      ctx.fillText(p.prop, p.x, p.y - p.h / 2);
+      ctx.textAlign = "left";
+    }
+  }
+
   // --- Editor overlays (NOT part of the game's depiction) -------------------
+  // Hidden barriers, made visible: invisible in-game (the terrain art is the
+  // visual), translucent blue here so authored fences stay editable.
+  for (const b of zone.hidden) {
+    ctx.fillStyle = "rgba(80,140,255,0.22)";
+    ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    ctx.lineWidth = 1 / view.zoom;
+    ctx.strokeStyle = "rgba(80,140,255,0.75)";
+    ctx.strokeRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+  }
+
+  // Hidden prop footprints, made visible: the collision the game folds in but
+  // never draws. Amber = blocks movement only; red-tinged = also blocks sight.
+  for (const p of sortedProps) {
+    const f = p.foot;
+    if (!f) continue;
+    const rgb = p.occludes ? "235,105,80" : "245,165,36";
+    ctx.fillStyle = `rgba(${rgb},0.18)`;
+    ctx.fillRect(f.x - f.w / 2, f.y - f.h / 2, f.w, f.h);
+    ctx.lineWidth = 1 / view.zoom;
+    ctx.strokeStyle = `rgba(${rgb},0.7)`;
+    ctx.strokeRect(f.x - f.w / 2, f.y - f.h / 2, f.w, f.h);
+  }
+
   // Zone bounds (kept ~1px on screen by dividing by zoom).
   ctx.lineWidth = 1 / view.zoom;
   ctx.strokeStyle = "rgba(120,140,180,0.5)";
   ctx.strokeRect(0, 0, zone.size.x, zone.size.y);
 
   // Placed objects: player spawn (cyan), spawners (crimson, with their activation
-  // radius drawn), everything else (gold).
+  // radius drawn), everything else (gold). Props are skipped — they're depicted
+  // above as their sprites, not as markers.
   for (const o of zone.objects) {
+    if (o.kind === "prop") continue;
     if (o.kind === "spawner") {
       const cfg = parseSpawnerConfig(o.props);
       // Activation radius — the dormant→active trigger. Dashed (and in world px, so
@@ -461,7 +542,18 @@ export const drawZone = (
       }
     } else {
       const o = zone.objects.find((o) => o.id === sel.id);
-      if (o && o.kind === "trigger") {
+      const placed = o?.kind === "prop" ? zone.props.find((p) => p.id === sel.id) : undefined;
+      if (placed) {
+        // A prop: outline its sprite rect (feet-anchored), so the pick reads on
+        // the art rather than as a dot at its feet.
+        const pad = 3 / view.zoom;
+        ctx.strokeRect(
+          placed.x - placed.w / 2 - pad,
+          placed.y - placed.h - pad,
+          placed.w + pad * 2,
+          placed.h + pad * 2,
+        );
+      } else if (o && o.kind === "trigger") {
         // A region object: outline its rect (so it pairs with the resize handles).
         const w = o.w && o.w > 0 ? o.w : 2 * t;
         const h = o.h && o.h > 0 ? o.h : 2 * t;

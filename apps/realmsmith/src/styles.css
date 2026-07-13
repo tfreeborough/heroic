@@ -494,3 +494,96 @@ body {
   border-radius: 4px;
   padding: 0 4px;
 }
+
+/* --- Tileset palette (docs/design/tilesets.md) --------------------------------
+   Floated over the LEFT edge of the body, mirroring the inspector on the right —
+   showing/hiding it never resizes the viewport. */
+.palette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 10;
+  width: 300px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  box-shadow: 10px 0 28px rgba(0, 0, 0, 0.38);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.palette-head {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.palette-head .muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.palette-hint {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.palette-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #0b0d12;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.palette-scroll canvas {
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+
+.palette-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: flex-start;
+}
+
+.prop-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: #131720;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.prop-swatch:hover {
+  border-color: #3a4a64;
+}
+
+.prop-swatch.on {
+  border-color: #5fd0ff;
+  color: var(--text);
+}
+
+.prop-thumb {
+  display: block;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+}
+
+.prop-name {
+  font-size: 10px;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

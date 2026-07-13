@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CREATURE_IDS,
   KEY_COLORS,
+  TILESETS,
   parseSpawnerConfig,
   parseTriggerConfig,
   type BreakEffect,
@@ -11,6 +12,7 @@ import {
 } from "@heroic/core";
 import type { Selection } from "./edit/types";
 import { BREAKABLE_KINDS, OBJECT_KINDS, creaturePickerLabel } from "./edit/defaults";
+import { fetchTilesetIndex } from "./tiles/atlas";
 
 interface Props {
   zoneFile: ZoneFile;
@@ -39,6 +41,13 @@ export const Inspector = ({
   onDuplicate,
   onDelete,
 }: Props) => {
+  // Every atlas the dev server can find — the tileset switcher's options, so a
+  // zone can hop between desert and any future set without hand-editing JSON.
+  const [tilesetIndex, setTilesetIndex] = useState<string[]>([]);
+  useEffect(() => {
+    void fetchTilesetIndex().then(setTilesetIndex);
+  }, []);
+
   // Arm on focus, snapshot on the first change of that focus session → one undo
   // step per field interaction (not per keystroke).
   const armed = useRef(false);
@@ -84,6 +93,24 @@ export const Inspector = ({
           onFocus={arm}
           onChange={(e) => edit(() => (zoneFile.name = e.target.value))}
         />
+      </label>
+      <label>
+        Tileset
+        <select
+          value={zoneFile.tileset}
+          onFocus={arm}
+          onChange={(e) => edit(() => (zoneFile.tileset = e.target.value))}
+          title="Which atlas this zone's tiles/props draw from (docs/design/tilesets.md). Names not in the registry render as the placeholder checker."
+        >
+          {/* Always include the file's current value so an unknown/legacy name
+              (e.g. "placeholder") stays selectable rather than being clobbered. */}
+          {[...new Set([zoneFile.tileset, ...tilesetIndex])].map((name) => (
+            <option key={name} value={name}>
+              {name}
+              {TILESETS[name] ? "" : " (no registry entry)"}
+            </option>
+          ))}
+        </select>
       </label>
       <div className="pair">
         <label>
@@ -357,6 +384,28 @@ export const Inspector = ({
                 {creaturePickerLabel(id)}
               </option>
             ))}
+          </select>
+        </label>
+      )}
+      {o.kind === "prop" && (
+        <label>
+          Prop
+          <select
+            value={String(o.props.prop ?? "")}
+            onFocus={arm}
+            onChange={(e) => setProp("prop", e.target.value)}
+          >
+            {Object.keys(TILESETS[zoneFile.tileset]?.props ?? {}).map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            {/* Keep an unknown/legacy value visible instead of silently swapping it. */}
+            {!TILESETS[zoneFile.tileset]?.props[String(o.props.prop ?? "")] && (
+              <option value={String(o.props.prop ?? "")}>
+                {String(o.props.prop ?? "")} (unknown)
+              </option>
+            )}
           </select>
         </label>
       )}

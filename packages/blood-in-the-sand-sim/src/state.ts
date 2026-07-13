@@ -8,7 +8,7 @@
 import type { AbilityState, AttackCycleState, Combatant, DotState, Mover, ProjectileState } from "@heroic/core";
 import { ABILITY_READY, ATTACK_CYCLE_READY, createMover, makeCombatant } from "@heroic/core";
 import type { Vec2 } from "@heroic/core";
-import { PLAYER_RADIUS, PLAYER_STATS, type WeaponId } from "./config";
+import { PLAYER_RADIUS, PLAYER_STATS, type AbilityId, type WeaponId } from "./config";
 
 export type Team = 1 | 2;
 
@@ -50,8 +50,21 @@ export interface ArenaPlayer {
   team: Team;
   connected: boolean;
   alive: boolean;
-  /** Lobby pick (setPlayerWeapon); null blocks canStartMatch. */
+  /** Lobby pick (setPlayerWeapon); null auto-fills at lock-in (startMatch). */
   weapon: WeaponId | null;
+  /** The pick snapshotted at lock-in — what the enemy team was shown. Null
+   * outside the ceremony (cleared on the return to lobby). */
+  revealedWeapon: WeaponId | null;
+  /** Drafted abilities in pick order (= in-match button order), max
+   * LOADOUT_ABILITY_COUNT, no duplicates. Auto-filled at lock-in like the
+   * weapon. The match doesn't consume these yet (dash stays hardwired until
+   * the ability-slot slice) — the draft carries them. */
+  abilities: AbilityId[];
+  /** Ability picks snapshotted at lock-in (the reveal), like revealedWeapon. */
+  revealedAbilities: AbilityId[] | null;
+  /** Locked this draft phase (pick or counterpick). All-connected-locked ends
+   * the phase early; cleared at every phase boundary and on lobby return. */
+  lockedIn: boolean;
   /** Active damage-over-time riders (the blade's bleed) — core stepDots ticks these. */
   dots: DotState[];
   /** Seconds of movement slow left (the hammer's debuff); 0 = unslowed. */
@@ -76,7 +89,7 @@ export interface ArenaPlayer {
   lastSeq: number;
 }
 
-export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
+export type RoundPhase = "lobby" | "pick" | "reveal" | "countdown" | "active" | "roundEnd" | "matchEnd";
 
 /** A room seat: a player, or empty. Seat index = player id = team − 1. */
 export type Seat = ArenaPlayer | null;
@@ -85,8 +98,12 @@ export const SEAT_COUNT = 2;
 
 export interface RoundState {
   phase: RoundPhase;
-  /** Seconds left in the timed phases (countdown / roundEnd / matchEnd). */
+  /** Seconds left in the timed phases (pick / reveal / countdown / roundEnd / matchEnd). */
   timer: number;
+  /** Length of the counterpick window that follows the pick phase — latched by
+   * startMatch so the machine knows it when the pick clock (or all-locked)
+   * closes the phase. 0 = skip straight to countdown. */
+  adjustSeconds: number;
   /** 1-based; 0 before the first round starts. */
   roundNumber: number;
   /** Round wins, indexed team − 1. */
@@ -124,7 +141,7 @@ export const createArenaState = (seed: number): ArenaState => ({
   seed,
   rngDraws: 0,
   players: Array.from({ length: SEAT_COUNT }, () => null),
-  round: { phase: "lobby", timer: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0 },
+  round: { phase: "lobby", timer: 0, adjustSeconds: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0 },
   projectiles: [],
   nextProjectileId: 0,
 });
@@ -140,6 +157,10 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   connected: true,
   alive: true,
   weapon: null,
+  revealedWeapon: null,
+  abilities: [],
+  revealedAbilities: null,
+  lockedIn: false,
   dots: [],
   slowLeft: 0,
   slowFactor: 1,

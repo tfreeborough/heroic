@@ -11,6 +11,7 @@ import {
   PROTOCOL_VERSION,
   SnapshotBuffer,
   TICK_RATE,
+  type AbilityId,
   type ArenaClientConfig,
   type ArenaEvent,
   type ClientMsg,
@@ -78,6 +79,23 @@ export interface GameClient {
   onEvents: ((events: ArenaEvent[]) => void) | null;
   readonly myWeapon: WeaponId | null;
   sendInput(sx: number, sy: number, dash: boolean): void;
+}
+
+/**
+ * What RoomScreen needs on top of GameClient to run the lobby + pick ceremony
+ * — satisfied by ArenaClient (real rooms) AND PracticeClient (offline, so the
+ * ceremony is testable without a second player).
+ */
+export interface LobbyClient extends GameClient {
+  phase: RoundPhase;
+  readonly hostId: number | null;
+  readonly isHost: boolean;
+  /** Own drafted hand, in button order (from the team-filtered roomState). */
+  readonly myAbilities: AbilityId[];
+  setWeapon(weapon: WeaponId): void;
+  setAbilities(abilities: AbilityId[]): void;
+  lockIn(): void;
+  startMatch(): void;
 }
 
 export class ArenaClient {
@@ -165,6 +183,17 @@ export class ArenaClient {
       case "watching":
       case "left":
         return;
+      case "roomClosed":
+        // Kicked because the host left / is gone. Drop the seat and fall back to
+        // the room list, surfacing the reason there.
+        this.welcome = null;
+        this.roomState = null;
+        this.phase = "lobby";
+        this.lastError = msg.reason;
+        this.buffer.reset();
+        this.listRooms();
+        this.onChange?.();
+        return;
       case "snapshot": {
         const events = this.buffer.push(msg, performance.now());
         if (events.length > 0) this.onEvents?.(events);
@@ -220,11 +249,28 @@ export class ArenaClient {
     this.send({ t: "setWeapon", weapon });
   }
 
-  /** Our own lobby pick, from the latest roomState broadcast. */
-  get myWeapon(): WeaponId | null {
+  setAbilities(abilities: AbilityId[]): void {
+    this.send({ t: "setAbilities", abilities });
+  }
+
+  /** Done adjusting — all locked ends the draft phase early. */
+  lockIn(): void {
+    this.send({ t: "lockIn" });
+  }
+
+  /** Our own row in the latest team-filtered roomState broadcast. */
+  private get myRow(): RoomStatePlayer | undefined {
     const myId = this.welcome?.playerId;
-    if (myId === undefined) return null;
-    return this.roomState?.players.find((p) => p.id === myId)?.weapon ?? null;
+    if (myId === undefined) return undefined;
+    return this.roomState?.players.find((p) => p.id === myId);
+  }
+
+  get myWeapon(): WeaponId | null {
+    return this.myRow?.weapon ?? null;
+  }
+
+  get myAbilities(): AbilityId[] {
+    return this.myRow?.abilities ?? [];
   }
 
   leaveRoom(): void {

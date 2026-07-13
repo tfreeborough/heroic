@@ -19,6 +19,8 @@ import type { Aabb } from "../physics/crowd";
 import type { Vec2 } from "../math/vec2";
 import type { DoorLock } from "../keys/keys";
 import type { LevelRange } from "../progression/levelGap";
+// Type-only, so the format↔tileset import cycle is erased at compile time.
+import type { PlacedProp } from "./tileset";
 
 /** Bump when the authored shape changes incompatibly; `loadZone` rejects mismatches. */
 export const ZONE_FORMAT_VERSION = 1;
@@ -101,10 +103,15 @@ export interface ZoneAudio {
  *   - `"void"` — a chasm: blocks *movement* only. Sight, projectiles, and ranged
  *     targeting pass straight across it (you can shoot to the far side of a bridge).
  *     Drawn as a dark, drifting-mist pit — the swirling cloud, not a wall.
+ *   - `"hidden"` — an invisible barrier: blocks *movement* only and is **never
+ *     drawn in-game** — the terrain art (a painted cliff-face tile, a map edge)
+ *     is the visual. The editor shows it as a translucent blue box. Unlike
+ *     wall/void it coexists with floor in the same cell: the ground under it
+ *     stays painted and visible. Same idea as a prop's footprint, but paintable.
  * Open to extension (e.g. `"water"`) — add the material, then decide which sets
  * (movement / occluders / a slow field) it joins in `loadZone`.
  */
-export type CollisionMaterial = "wall" | "void";
+export type CollisionMaterial = "wall" | "void" | "hidden";
 
 /** A free collision rectangle (centre + size, world px) plus what it's made of. */
 export interface CollisionRect extends Aabb {
@@ -117,8 +124,8 @@ export interface ZoneCollision {
   rects: CollisionRect[];
   /**
    * Painted solid cells, `[row][col]` of material codes: `0` empty, `1` wall,
-   * `2` void. Greedy-meshed per material into rects at load. (Legacy `0/1`
-   * grids stay correct — `1` has always meant a wall.)
+   * `2` void, `3` hidden. Greedy-meshed per material into rects at load.
+   * (Legacy `0/1` grids stay correct — `1` has always meant a wall.)
    */
   cells?: number[][];
   /** Px per collision cell — independent of `tileSize`. Defaults to `tileSize`. */
@@ -126,7 +133,7 @@ export interface ZoneCollision {
 }
 
 /** Painted-cell material codes (the non-empty values in `ZoneCollision.cells`). */
-export const COLLISION_CELL = { none: 0, wall: 1, void: 2 } as const;
+export const COLLISION_CELL = { none: 0, wall: 1, void: 2, hidden: 3 } as const;
 
 /** Extra effect run when a breakable is destroyed (it always vanishes regardless). */
 export type BreakEffect =
@@ -173,7 +180,13 @@ export type ZoneObjectKind =
   | "settlement"
   | "playerSpawn"
   | "exit"
-  | "poi";
+  | "poi"
+  /** A standing prop (cactus, rock…): a multi-cell sprite from the zone's
+   *  tileset, placed by its bottom-centre. `props.prop` names a `PropDef` in
+   *  the tileset's registry entry, which supplies the sprite region, the
+   *  hidden collision footprint, and occlusion. Y-sorted with entities at
+   *  render so players walk behind its top. See docs/design/tilesets.md. */
+  | "prop";
 
 /** A free-placed entity (world px). `props` carry the kind-specific config. */
 export interface ZoneObject {
@@ -226,8 +239,28 @@ export interface Zone {
    * `false`).
    */
   voids: Aabb[];
+  /**
+   * The `"hidden"` subset of `collision`: invisible barriers — block movement,
+   * never drawn in-game, never occlude. Renderers ignore this list entirely
+   * (it's already in `collision` for physics/nav); the editor draws it as
+   * translucent blue boxes so authored barriers stay visible while designing.
+   */
+  hidden: Aabb[];
   /** Dynamic, destructible collision — live state, dropped on break. */
   breakables: Breakable[];
+  /**
+   * Placed standing props, resolved against the tileset registry (unknown
+   * tileset/prop names simply don't resolve — the placeholder philosophy).
+   * Their footprints are already folded into `collision`; renderers draw these
+   * y-sorted with entities. See zone/tileset.ts.
+   */
+  props: PlacedProp[];
+  /**
+   * Occluding prop footprints (`PropDef.occludes`): they block sight /
+   * projectiles / targeting like `walls`, but are **never drawn** — the sprite
+   * is the visual. Build occluders from `walls` ∪ `propOccluders`.
+   */
+  propOccluders: Aabb[];
   objects: ZoneObject[];
   /** The `playerSpawn` object's position, or the zone centre if none authored. */
   spawn: Vec2;

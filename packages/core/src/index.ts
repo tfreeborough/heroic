@@ -42,6 +42,7 @@ export * from "./abilities/ability";
 export * from "./ecs/world";
 export * from "./sim/loop";
 export * from "./zone/format";
+export * from "./zone/tileset";
 export * from "./zone/mesh";
 export * from "./zone/load";
 export * from "./zone/view";

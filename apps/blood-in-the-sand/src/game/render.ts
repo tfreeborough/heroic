@@ -7,14 +7,17 @@
 import { Platform } from "react-native";
 import {
   createPicture,
+  FilterMode,
   matchFont,
+  MipmapMode,
   PaintStyle,
   Skia,
   StrokeCap,
   type SkCanvas,
+  type SkImage,
   type SkPicture,
 } from "@shopify/react-native-skia";
-import { loadZone } from "@heroic/core";
+import { loadZone, tileSourceRect, TILESETS } from "@heroic/core";
 import {
   ARENA_00,
   WEAPONS,
@@ -24,11 +27,53 @@ import {
   type ProjectileSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
 import { decalAlpha, type BloodDecal } from "./blood";
+import type { StatusPulses } from "./statusRings";
 
 // Zone geometry is static — derive once at module scope (loadZone is pure).
 const ZONE = loadZone(ARENA_00);
 const WORLD_W = ZONE.size.x;
 const WORLD_H = ZONE.size.y;
+const TILESET = TILESETS[ZONE.tileset];
+
+// Props pre-resolved for the draw loop: cached src/dst rects + sprite bounds,
+// sorted by baseline (feet y) once — the per-frame y-sort only interleaves
+// players between them. `fade` is mutable per-frame state: the current alpha,
+// eased toward FADE_ALPHA while someone stands behind the sprite.
+const PROPS_SORTED = [...ZONE.props]
+  .sort((a, b) => a.y - b.y)
+  .map((p) => ({
+    y: p.y,
+    left: p.x - p.w / 2,
+    top: p.y - p.h,
+    w: p.w,
+    h: p.h,
+    src: Skia.XYWHRect(p.src.x, p.src.y, p.src.w, p.src.h),
+    dst: Skia.XYWHRect(p.x - p.w / 2, p.y - p.h, p.w, p.h),
+    fade: 1,
+  }));
+
+/**
+ * PVP information beats the depth illusion: a prop with ANY living player
+ * drawn behind it goes see-through (2026-07-13), so nobody hides in a cactus
+ * canopy — the sim's targeting can already see them (only rocks occlude), the
+ * pixels must agree. Alpha eases per frame so cover fades, never pops.
+ */
+const FADE_ALPHA = 0.7;
+const FADE_RATE = 0.25;
+const propPaint = Skia.Paint(); // dedicated: its alpha never leaks into shared paints
+
+/** Does this player's disc overlap the prop sprite while being drawn UNDER it
+ *  (feet above the prop's baseline)? Players in front cover the prop anyway. */
+const hiddenBehind = (
+  prop: { y: number; left: number; top: number; w: number; h: number },
+  p: PlayerSnapshot,
+  radius: number,
+): boolean => {
+  if (!p.alive || p.y + radius > prop.y) return false;
+  const nx = Math.min(Math.max(p.x, prop.left), prop.left + prop.w);
+  const ny = Math.min(Math.max(p.y, prop.top), prop.top + prop.h);
+  return (p.x - nx) ** 2 + (p.y - ny) ** 2 <= radius * radius;
+};
 
 /** How much world fits on screen when following a player. Pulled back from
  * 0.85 (2026-07-12, tester feedback): the old zoom hid approaching enemies. */
@@ -55,7 +100,10 @@ const C_STAFF_ORB = Skia.Color("#9b6dd9");
 const C_STAFF_RING = Skia.Color("rgba(155, 109, 217, 0.45)");
 const C_FX_BLEED = Skia.Color("#e0503c");
 const C_RANGE_RING = Skia.Color("#f0e8d8");
-const C_SLOWED = Skia.Color("#e8c14e");
+// Status rings: pulse rate carries the "expiring soon" signal (statusRings.ts).
+const C_RING_SLOW = Skia.Color("#4da3d9");
+const C_RING_BLEED = Skia.Color("#e0503c");
+const C_NAME = Skia.Color("#f0e8d8");
 
 const fill = Skia.Paint();
 const stroke = Skia.Paint();
@@ -70,6 +118,55 @@ rangeStroke.setPathEffect(Skia.PathEffect.MakeDash([10, 8], 0));
 
 /** Your own range ring's alpha — information, not decoration. */
 const RANGE_RING_ALPHA = 0.22;
+
+/**
+ * Floor (+ decor) baked per chunk into replayable pictures, the gauntlet's
+ * per-chunk-bake pattern (docs/design/tilesets.md): tile draws are paid once
+ * when the atlas decodes, then each frame merely replays 4 pictures. Keyed on
+ * the atlas so a (dev-time) image swap rebakes. Ids the atlas doesn't cover
+ * fall back to the flat sand fill, so a half-painted zone still reads.
+ */
+let bakedAtlas: SkImage | null = null;
+let bakedFloor: SkPicture[] = [];
+const floorChunks = (atlas: SkImage): SkPicture[] => {
+  if (bakedAtlas === atlas) return bakedFloor;
+  const t = ZONE.tileSize;
+  const ct = ZONE.chunkTiles;
+  bakedFloor = ZONE.chunks.map((chunk) =>
+    createPicture((canvas) => {
+      const paint = Skia.Paint();
+      const drawLayer = (layer: Uint16Array | null, floorFallback: boolean): void => {
+        if (!layer) return;
+        for (let ly = 0; ly < ct; ly++) {
+          for (let lx = 0; lx < ct; lx++) {
+            const id = layer[ly * ct + lx]!;
+            if (id === 0) continue;
+            const wx = (chunk.cx * ct + lx) * t;
+            const wy = (chunk.cy * ct + ly) * t;
+            const src = TILESET ? tileSourceRect(TILESET, id) : null;
+            if (src) {
+              canvas.drawImageRectOptions(
+                atlas,
+                Skia.XYWHRect(src.x, src.y, src.w, src.h),
+                Skia.XYWHRect(wx, wy, t, t),
+                FilterMode.Nearest, // pixel art scales crisp, never smeared
+                MipmapMode.None,
+                paint,
+              );
+            } else if (floorFallback) {
+              paint.setColor(C_FLOOR);
+              canvas.drawRect(Skia.XYWHRect(wx, wy, t, t), paint);
+            }
+          }
+        }
+      };
+      drawLayer(chunk.floor, true);
+      drawLayer(chunk.decor, false);
+    }),
+  );
+  bakedAtlas = atlas;
+  return bakedFloor;
+};
 
 /** A transient visual: damage numbers and hit rings, aged by the caller. */
 export interface FxItem {
@@ -92,6 +189,7 @@ const C_FX_CRIT = Skia.Color("#f2c14e");
 const FX_FONT_FAMILY = Platform.select({ ios: "Helvetica", default: "sans-serif" });
 const FX_FONT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 26, fontWeight: "bold" });
 const FX_FONT_CRIT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 34, fontWeight: "bold" });
+const NAME_FONT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 12, fontWeight: "600" });
 
 export interface ArenaRenderInput {
   view: InterpolatedView;
@@ -103,8 +201,13 @@ export interface ArenaRenderInput {
   fx: readonly FxItem[];
   /** Blood decals (birth-ordered), faded per-frame via decalAlpha. */
   blood: readonly BloodDecal[];
+  /** Per-player status-ring pulse phases, advanced by the caller per frame. */
+  pulses: StatusPulses;
   /** The clock the decals were aged against (performance.now). */
   nowMs: number;
+  /** The zone's tileset atlas (useArenaAtlas). Null while decoding / for a
+   *  tileset-less zone → flat pre-tileset floor, props invisible. */
+  atlas: SkImage | null;
 }
 
 /** Floor blood, culled to the camera rect (translucent overlaps darken into pools).
@@ -154,7 +257,7 @@ const drawMyRangeRing = (canvas: SkCanvas, me: PlayerSnapshot, playerRadius: num
   canvas.drawCircle(me.x, me.y, ring, rangeStroke);
 };
 
-const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConfig): void => {
+const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConfig, pulses: StatusPulses): void => {
   const r = config.playerRadius;
 
   // Windup telegraph, from the striker's own weapon table: melee grows an arc
@@ -207,12 +310,32 @@ const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConf
     canvas.drawCircle(p.x, p.y, r + 4, stroke);
   }
 
-  // Hammer slow: a gold shackle ring so both sides can read the debuff.
-  if (p.alive && p.slowed) {
-    stroke.setColor(C_SLOWED);
-    stroke.setStrokeWidth(3);
-    canvas.drawCircle(p.x, p.y, r + 4, stroke);
+  // Status rings: blue = slowed, red = bleeding, stacked so both can show.
+  // Brightness pulses at the clock's rate — quickening toward expiry is the
+  // "about to drop" tell (see statusRings.ts).
+  if (p.alive) {
+    const slow = pulses.strength(p.id, "slow");
+    if (slow > 0) {
+      stroke.setColor(C_RING_SLOW);
+      stroke.setAlphaf(0.25 + 0.6 * slow);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(p.x, p.y, r + 6, stroke);
+    }
+    const bleed = pulses.strength(p.id, "bleed");
+    if (bleed > 0) {
+      stroke.setColor(C_RING_BLEED);
+      stroke.setAlphaf(0.25 + 0.6 * bleed);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(p.x, p.y, r + 10, stroke);
+    }
+    stroke.setAlphaf(1);
   }
+
+  // Name tag, small under the body — who is who (dead stay labelled, dimmer).
+  fill.setColor(C_NAME);
+  fill.setAlphaf(p.alive ? 0.7 : 0.35);
+  canvas.drawText(p.name, p.x - NAME_FONT.getTextWidth(p.name) / 2, p.y + r + 16, fill, NAME_FONT);
+  fill.setAlphaf(1);
 
   if (p.alive) {
     // Facing notch.
@@ -311,19 +434,26 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     canvas.translate(screenW / 2 - cx * zoom, screenH / 2 - cy * zoom);
     canvas.scale(zoom, zoom);
 
-    // Floor with a darker rim so the arena edge reads.
-    fill.setColor(C_FLOOR_EDGE);
-    canvas.drawRect(Skia.XYWHRect(0, 0, WORLD_W, WORLD_H), fill);
-    fill.setColor(C_FLOOR);
-    canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
+    // Floor: baked tileset chunks when the atlas is ready, else the flat sand
+    // with a darker rim (the pre-tileset look, kept as the loading/fallback).
+    if (r.atlas) {
+      for (const chunk of floorChunks(r.atlas)) canvas.drawPicture(chunk);
+    } else {
+      fill.setColor(C_FLOOR_EDGE);
+      canvas.drawRect(Skia.XYWHRect(0, 0, WORLD_W, WORLD_H), fill);
+      fill.setColor(C_FLOOR);
+      canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
+    }
 
     // Blood sits on the floor, under walls and bodies.
     const halfW = screenW / 2 / zoom;
     const halfH = screenH / 2 / zoom;
     drawBlood(canvas, r.blood, r.nowMs, cx - halfW, cy - halfH, cx + halfW, cy + halfH);
 
-    // Walls (Aabbs are centre + full size).
-    for (const w of ZONE.collision) {
+    // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
+    // collision list also folds in prop footprints, which are hidden geometry:
+    // the prop sprite is their visual (docs/design/tilesets.md).
+    for (const w of ZONE.walls) {
       fill.setColor(C_WALL);
       canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h), fill);
       fill.setColor(C_WALL_TOP);
@@ -331,7 +461,31 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     }
 
     if (me) drawMyRangeRing(canvas, me, config.playerRadius);
-    for (const p of view.players) drawPlayer(canvas, p, config);
+
+    // Bodies and props in one painter's pass, ordered by baseline (feet) y — a
+    // player north of a cactus draws under it (walks behind); south, over it.
+    // PROPS_SORTED is static so only the handful of players sort per frame.
+    const byFeet = [...view.players].sort((a, b) => a.y - b.y);
+    let pi = 0;
+    for (const prop of PROPS_SORTED) {
+      while (pi < byFeet.length && byFeet[pi]!.y + config.playerRadius <= prop.y) {
+        drawPlayer(canvas, byFeet[pi]!, config, r.pulses);
+        pi++;
+      }
+      if (r.atlas) {
+        // Anyone drawn behind this sprite → ease toward see-through; else back
+        // to solid. Eased per rendered frame (~60Hz), so ~0.25 reaches the
+        // target in a few frames without popping.
+        const covered = view.players.some((p) => hiddenBehind(prop, p, config.playerRadius));
+        const target = covered ? FADE_ALPHA : 1;
+        prop.fade += (target - prop.fade) * FADE_RATE;
+        if (Math.abs(prop.fade - target) < 0.01) prop.fade = target;
+        propPaint.setAlphaf(prop.fade);
+        canvas.drawImageRectOptions(r.atlas, prop.src, prop.dst, FilterMode.Nearest, MipmapMode.None, propPaint);
+      }
+    }
+    for (; pi < byFeet.length; pi++) drawPlayer(canvas, byFeet[pi]!, config, r.pulses);
+
     drawProjectiles(canvas, view.projectiles);
     drawFx(canvas, r.fx);
 

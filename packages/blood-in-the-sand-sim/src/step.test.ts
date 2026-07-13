@@ -98,10 +98,8 @@ describe("lobby machine", () => {
     addPlayer(sim, "bob");
     run(sim, 30);
     expect(sim.state.round.phase).toBe("lobby"); // full room STILL idles
-    expect(startMatch(sim, [])).toBe(false); // nobody has picked a weapon
 
     setPlayerWeapon(sim, 0, "blade");
-    expect(startMatch(sim, [])).toBe(false); // ONE unpicked player still blocks
     setPlayerWeapon(sim, 1, "hammer");
 
     const pre: ArenaEvent[] = [];
@@ -136,7 +134,6 @@ describe("lobby machine", () => {
     expect(removePlayer(sim, 1)).toBe(true); // lobby: seat frees
     expect(sim.state.players[1]).toBeNull();
     expect(addPlayer(sim, "carol")).not.toBeNull(); // and is claimable again
-    expect(startMatch(sim, [])).toBe(false); // carol hasn't picked yet
     expect(setPlayerWeapon(sim, 1, "bow")).toBe(true);
 
     expect(startMatch(sim, [])).toBe(true);

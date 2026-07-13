@@ -15,6 +15,7 @@
 import type { Vec2 } from "../math/vec2";
 import type { Aabb } from "../physics/crowd";
 import { greedyMesh } from "./mesh";
+import { TILESETS, resolveProp, type PlacedProp } from "./tileset";
 import {
   COLLISION_CELL,
   ZONE_FORMAT_VERSION,
@@ -96,10 +97,12 @@ export const loadZone = (file: ZoneFile): Zone => {
   const rects = file.collision.rects ?? [];
   const walls: Aabb[] = rects.filter((r) => (r.material ?? "wall") === "wall").map(toAabb);
   const voids: Aabb[] = rects.filter((r) => r.material === "void").map(toAabb);
+  const hidden: Aabb[] = rects.filter((r) => r.material === "hidden").map(toAabb);
   const cells = file.collision.cells;
   if (cells && cells.length > 0) {
     walls.push(...meshMaterial(cells, cellSize, COLLISION_CELL.wall));
     voids.push(...meshMaterial(cells, cellSize, COLLISION_CELL.void));
+    hidden.push(...meshMaterial(cells, cellSize, COLLISION_CELL.hidden));
   }
 
   // 1b. Fence the void: floorless cells (floor id 0) are outside the painted shape,
@@ -120,9 +123,31 @@ export const loadZone = (file: ZoneFile): Zone => {
     voids.push(...greedyMesh(floorless, tileSize));
   }
 
+  // 1c. Standing props (docs/design/tilesets.md): resolve `"prop"` objects
+  // against the tileset registry. Footprints are *hidden* movement collision —
+  // they join `collision` like authored rects (so physics/nav/the PvP sim see
+  // them with zero extra plumbing) but never `walls`, which renderers draw as
+  // pillars; the sprite is the visual. Occluding footprints (solid rocks) go in
+  // their own channel for apps to union with `walls` when building sight.
+  // Unknown tileset/prop names resolve to nothing — placeholder philosophy.
+  const tilesetDef = TILESETS[file.tileset];
+  const props: PlacedProp[] = [];
+  const propOccluders: Aabb[] = [];
+  const footprints: Aabb[] = [];
+  for (const obj of file.objects ?? []) {
+    if (obj.kind !== "prop") continue;
+    const placed = resolveProp(obj, tilesetDef, tileSize);
+    if (!placed) continue;
+    props.push(placed);
+    if (!placed.foot) continue;
+    footprints.push(placed.foot);
+    if (placed.occludes) propOccluders.push(placed.foot);
+  }
+
   // Movement collision = every solid, regardless of material (walls first, to match
-  // authored order). Occluders are built from `walls` alone, app-side.
-  const collision: Aabb[] = [...walls, ...voids];
+  // authored order). Occluders are built from `walls` (+ `propOccluders`) app-side;
+  // hidden barriers and footprints block movement only and are never drawn.
+  const collision: Aabb[] = [...walls, ...voids, ...hidden, ...footprints];
 
   // 2. Slice visual layers into chunks (row-major: chunks[cy * chunkCols + cx]).
   const chunkCols = Math.ceil(cols / chunkTiles);
@@ -166,7 +191,10 @@ export const loadZone = (file: ZoneFile): Zone => {
     collision,
     walls,
     voids,
+    hidden,
     breakables,
+    props,
+    propOccluders,
     objects: file.objects ?? [],
     spawn,
     audio: file.audio,

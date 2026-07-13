@@ -10,6 +10,8 @@
 import type { Server } from "bun";
 import { advanceFixed } from "@heroic/core";
 import {
+  ABILITIES,
+  LOADOUT_ABILITY_COUNT,
   MAX_ROOMS,
   PROTOCOL_VERSION,
   TICK_DT,
@@ -65,8 +67,15 @@ export class RoomManager {
       case "watchRoom":
         return this.onWatch(ws, msg.code);
       case "leaveRoom": {
-        this.roomOf(ws)?.dropSocket(ws, performance.now());
-        return this.send(ws, { t: "left" });
+        const room = this.roomOf(ws);
+        const wasHost = room != null && ws.data.playerId === room.meta.hostId;
+        room?.dropSocket(ws, performance.now());
+        this.send(ws, { t: "left" });
+        // An explicit host leave closes the room outright — even mid-match
+        // (unlike a disconnect, this is a deliberate "I'm done"). The leaver is
+        // already detached above, so kickAll only reaches the others.
+        if (wasHost && room) this.closeRoom(room, "the host left the room");
+        return;
       }
       case "setWeapon": {
         const id = ws.data.playerId;
@@ -74,6 +83,24 @@ export class RoomManager {
         if (id !== null && typeof msg.weapon === "string" && msg.weapon in WEAPONS) {
           this.roomOf(ws)?.setWeapon(id, msg.weapon, performance.now());
         }
+        return;
+      }
+      case "setAbilities": {
+        const id = ws.data.playerId;
+        // Shape check here; the sim re-validates (distinct, known) regardless.
+        if (
+          id !== null &&
+          Array.isArray(msg.abilities) &&
+          msg.abilities.length <= LOADOUT_ABILITY_COUNT &&
+          msg.abilities.every((a) => typeof a === "string" && a in ABILITIES)
+        ) {
+          this.roomOf(ws)?.setAbilities(id, msg.abilities, performance.now());
+        }
+        return;
+      }
+      case "lockIn": {
+        const id = ws.data.playerId;
+        if (id !== null) this.roomOf(ws)?.lockIn(id, performance.now());
         return;
       }
       case "startMatch": {
@@ -91,6 +118,28 @@ export class RoomManager {
 
   close(ws: Socket): void {
     this.roomOf(ws)?.dropSocket(ws, performance.now());
+    // A host who drops in the LOBBY frees their seat here → the room is now
+    // host-less and gets reaped. A mid-match host disconnect keeps the seat
+    // (disconnected, not freed), so the match plays on; that seat only frees at
+    // match end, and the next reap sweep closes the room then (Tom, 2026-07-13).
+    this.reapHostless();
+  }
+
+  /** Close a room and drop it from the registry — everyone still seated gets a
+   * `roomClosed` kick with the reason. */
+  private closeRoom(room: Room, reason: string): void {
+    room.kickAll(reason);
+    this.rooms.delete(room.meta.code);
+    console.log(`✝ room ${room.meta.code} "${room.meta.name}" closed — ${reason}`);
+  }
+
+  /** Close any room whose host seat is gone. Cheap to run after any departure
+   * and after each tick (it catches the host who never returned from a
+   * mid-match disconnect, whose seat frees only at match end). */
+  private reapHostless(): void {
+    for (const room of this.rooms.values()) {
+      if (!room.hostPresent()) this.closeRoom(room, "the host left the room");
+    }
   }
 
   private roomOf(ws: Socket): Room | undefined {
@@ -154,6 +203,7 @@ export class RoomManager {
   /** A socket already in a room must leave it before creating/joining another. */
   private leaveFirst(ws: Socket): boolean {
     this.roomOf(ws)?.dropSocket(ws, performance.now());
+    this.reapHostless(); // a host who hops rooms closes the one they left
     return false; // never blocks — just cleans up
   }
 
@@ -174,6 +224,8 @@ export class RoomManager {
     this.accumulator = result.accumulator;
     if (result.steps === 0) return;
     for (const room of this.rooms.values()) room.step(result.steps, now);
+    // Match end frees a never-returned host's seat — reap the room in that case.
+    this.reapHostless();
   }
 
   private sweep(): void {

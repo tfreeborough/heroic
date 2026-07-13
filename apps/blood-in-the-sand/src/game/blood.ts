@@ -182,39 +182,43 @@ export class BloodField {
    * (dirX, dirY) the unit direction of the blow (attacker → victim).
    */
   deathBurst(x: number, y: number, dirX: number, dirY: number, nowMs: number): void {
-    const CONE_HALF = (24 * Math.PI) / 180;
+    const CONE_HALF = (26 * Math.PI) / 180;
     const base = Math.atan2(dirY, dirX);
-    const drops = 26;
+    // Bombast comes from COUNT and reach, not droplet size (Tom, 2026-07-12:
+    // it must stay "small little droplets, just a lot more of it") — a dense
+    // mist of trail-scale drops fanning ~3 body-lengths out the back.
+    const drops = 80;
     for (let i = 0; i < drops; i++) {
       const ang = base + (Math.random() - 0.5) * 2 * CONE_HALF;
       // sqrt bias pushes mass OUT into the cone — this is spray, not a pool.
-      const dist = 20 + Math.sqrt(Math.random()) * 130;
+      const dist = 20 + Math.sqrt(Math.random()) * 200;
       const px = x + Math.cos(ang) * dist;
       const py = y + Math.sin(ang) * dist;
       // Mostly streaks aligned with the spray; longer the further they flew.
       const streak = Math.random() < 0.6;
-      const len = streak ? 10 + Math.random() * 22 * (dist / 150) : 0;
+      const len = streak ? 8 + Math.random() * 24 * (dist / 220) : 0;
       this.push({
         x: px,
         y: py,
         ...(streak ? { dx: Math.cos(ang) * len, dy: Math.sin(ang) * len } : {}),
-        r: (streak ? 1.8 : 2.5) + Math.random() * 4,
+        r: (streak ? 1.2 : 1.6) + Math.random() * 2.2,
         bornMs: nowMs,
         ttlMs: POOL_TTL_MS,
-        alpha: 0.3 + Math.random() * 0.25,
+        alpha: 0.32 + Math.random() * 0.25,
       });
     }
-    // A heavy throat of blood right behind the body, bridging pool and spray.
-    for (let i = 0; i < 3; i++) {
+    // A short trail of modest gouts right behind the body, bridging pool and
+    // spray — small enough to read as blood, not blobs.
+    for (let i = 0; i < 5; i++) {
       const ang = base + (Math.random() - 0.5) * CONE_HALF;
-      const dist = 12 + i * 14;
+      const dist = 10 + i * 12;
       this.push({
         x: x + Math.cos(ang) * dist,
         y: y + Math.sin(ang) * dist,
-        r: 9 - i * 2 + Math.random() * 3,
+        r: 7 - i * 0.8 + Math.random() * 2,
         bornMs: nowMs,
         ttlMs: POOL_TTL_MS,
-        alpha: 0.45,
+        alpha: 0.5,
       });
     }
   }
@@ -244,12 +248,12 @@ export class BloodField {
     if (lethal) {
       // An irregular pool: one big blob plus offset lobes (the skeleton
       // marker will sit on top of this later).
-      this.push({ x, y, r: 15, bornMs: nowMs, ttlMs: POOL_TTL_MS, alpha: 0.5 });
-      for (let i = 0; i < 3; i++) {
+      this.push({ x, y, r: 16, bornMs: nowMs, ttlMs: POOL_TTL_MS, alpha: 0.5 });
+      for (let i = 0; i < 5; i++) {
         const ang = Math.random() * Math.PI * 2;
         this.push({
-          x: x + Math.cos(ang) * (6 + Math.random() * 7),
-          y: y + Math.sin(ang) * (6 + Math.random() * 7),
+          x: x + Math.cos(ang) * (6 + Math.random() * 8),
+          y: y + Math.sin(ang) * (6 + Math.random() * 8),
           r: 7 + Math.random() * 5,
           bornMs: nowMs,
           ttlMs: POOL_TTL_MS,

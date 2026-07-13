@@ -159,6 +159,52 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
   },
 };
 
+// ── Abilities ──────────────────────────────────────────────────────────────
+// The pickable roster (docs/design/pvp-abilities.md): every player drafts
+// LOADOUT_ABILITY_COUNT of these alongside their weapon — pick order IS the
+// in-match button order. Only the draft knows about these yet; match-side
+// effects land per-ability (dash still runs on its dedicated path until the
+// ability-slot generalisation). Cooldowns are first guesses; a re-tune for
+// 3-ability loadouts is owed once they're castable.
+
+export type AbilityCategory = "offensive" | "defensive" | "support";
+
+export type AbilityId =
+  | "sandtrap"
+  | "tremor"
+  | "harpoon"
+  | "dash"
+  | "mirror-guard"
+  | "ironhide"
+  | "straw-man"
+  | "war-drums"
+  | "blood-font"
+  | "sandstorm";
+
+export interface AbilityDef {
+  name: string;
+  category: AbilityCategory;
+  cooldown: number;
+}
+
+export const ABILITIES: Record<AbilityId, AbilityDef> = {
+  sandtrap: { name: "Sandtrap", category: "offensive", cooldown: 10 },
+  tremor: { name: "Tremor", category: "offensive", cooldown: 9 },
+  harpoon: { name: "Harpoon", category: "offensive", cooldown: 12 },
+  dash: { name: "Dash", category: "defensive", cooldown: 3 },
+  "mirror-guard": { name: "Mirror Guard", category: "defensive", cooldown: 12 },
+  ironhide: { name: "Ironhide", category: "defensive", cooldown: 12 },
+  "straw-man": { name: "Straw Man", category: "defensive", cooldown: 14 },
+  "war-drums": { name: "War Drums", category: "support", cooldown: 12 },
+  "blood-font": { name: "Blood Font", category: "support", cooldown: 16 },
+  sandstorm: { name: "Sandstorm", category: "support", cooldown: 14 },
+};
+
+export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
+
+/** Abilities per loadout; pick order = button order in the match. */
+export const LOADOUT_ABILITY_COUNT = 3;
+
 // ── Dash ───────────────────────────────────────────────────────────────────
 // PvP cooldown is far shorter than the Gauntlet's 8s — dodging telegraphs is
 // the whole defensive game here. Deliberately a short escape hop, not a
@@ -172,6 +218,13 @@ export const DASH_SHOVE_RADIUS = 46; // the "bowling ball" barge sweep
 export const DASH_KNOCKBACK = 840; // px/s outward cap on shoved victims
 
 // ── Rounds ─────────────────────────────────────────────────────────────────
+/** The draft's blind-pick phase: host START opens it, LOCK IN (or the clock)
+ * closes it. 0 in the server call = the v6 lobby-is-the-pick flow. */
+export const PICK_PHASE_SECONDS = 30;
+/** The counterpick window: picks reveal, then this long to repick (hidden
+ * from the enemy) before the countdown. The client's reveal overlay plays
+ * inside the front of this window. See pvp-pick-ceremony.md. */
+export const REVEAL_ADJUST_SECONDS = 15;
 export const COUNTDOWN_SECONDS = 3;
 export const ROUND_END_SECONDS = 2.5;
 export const MATCH_END_SECONDS = 8; // then a fresh match with the same players

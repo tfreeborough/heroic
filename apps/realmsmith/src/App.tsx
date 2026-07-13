@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   COLLISION_CELL,
   CREATURE_IDS,
+  TILESETS,
   loadZone,
   type Aabb,
   type CollisionMaterial,
@@ -11,8 +12,11 @@ import {
   type ZoneObjectKind,
 } from "@heroic/core";
 import { Viewport } from "./viewport/Viewport";
+import type { TilesetArt } from "./viewport/zoneRenderer";
 import { Inspector } from "./Inspector";
+import { Palette } from "./Palette";
 import { ForgePanel } from "./forge/ForgePanel";
+import { loadAtlas } from "./tiles/atlas";
 import type { EditPointer, Selection, Tool } from "./edit/types";
 import {
   BREAKABLE_KINDS,
@@ -36,6 +40,7 @@ import {
   placeObject,
   rectIndexAt,
   setCollisionCell,
+  setDecor,
   setFloor,
 } from "./edit/zoneEdits";
 import {
@@ -44,6 +49,8 @@ import {
   cellFreeForCollision,
   objectAt,
   objectPlaceable,
+  propIdAt,
+  propPlaceable,
   rectFitsCollision,
 } from "./edit/validity";
 import { validateZone } from "./edit/validate";
@@ -58,7 +65,7 @@ import {
 } from "./fs/fileAccess";
 
 const fsSupported = typeof window !== "undefined" && "showOpenFilePicker" in window;
-const TOOLS: Tool[] = ["floor", "collision", "breakable", "object"];
+const TOOLS: Tool[] = ["floor", "decor", "collision", "breakable", "object"];
 const MAX_HISTORY = 100;
 
 const clone = (z: ZoneFile): ZoneFile => JSON.parse(JSON.stringify(z)) as ZoneFile;
@@ -103,6 +110,13 @@ export const App = () => {
   const [collisionMaterial, setCollisionMaterial] = useState<CollisionMaterial>("wall");
   const [breakableKind, setBreakableKind] = useState<BreakableKind>("barrel");
   const [objectKind, setObjectKind] = useState<ZoneObjectKind>("playerSpawn");
+  // What the tile brushes paint (picked in the palette; floor and decor remember
+  // their own last pick) and which standing prop the object tool places.
+  const [floorTileId, setFloorTileId] = useState(1);
+  const [decorTileId, setDecorTileId] = useState(1);
+  const [propName, setPropName] = useState("");
+  // The zone's tileset atlas image, resolved by name from the dev server.
+  const [atlas, setAtlas] = useState<HTMLImageElement | null>(null);
   // Which creature the object tool stamps when placing `creature` markers (so you
   // can lay down several of one type, then switch — like the breakable-kind picker).
   const [creatureId, setCreatureId] = useState<CreatureId>(CREATURE_IDS[0]!);
@@ -124,6 +138,31 @@ export const App = () => {
     () => (loaded && zoneRef.current ? loadZone(zoneRef.current) : null),
     [version, loaded],
   );
+
+  // Resolve the zone's tileset: registry geometry + the served atlas image.
+  // Unknown names / missing images leave art null → the placeholder checker.
+  const tilesetName = zone?.tileset ?? "";
+  const tilesetDef = TILESETS[tilesetName];
+  useEffect(() => {
+    if (!tilesetName || !tilesetDef) {
+      setAtlas(null);
+      return;
+    }
+    let cancelled = false;
+    void loadAtlas(tilesetName).then((img) => {
+      if (!cancelled) setAtlas(img);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tilesetName, tilesetDef]);
+  const art: TilesetArt | null = tilesetDef && atlas ? { def: tilesetDef, image: atlas } : null;
+
+  // Keep the prop pick valid for the current tileset (first prop as the default).
+  useEffect(() => {
+    const names = tilesetDef ? Object.keys(tilesetDef.props) : [];
+    setPropName((p) => (names.includes(p) ? p : (names[0] ?? "")));
+  }, [tilesetDef]);
   const issues = useMemo(
     () => (loaded && zoneRef.current ? validateZone(zoneRef.current) : []),
     [version, loaded],
@@ -277,7 +316,9 @@ export const App = () => {
 
       let changed = false;
       if (tool === "floor") {
-        if (e.phase !== "up") changed = setFloor(z, e.col, e.row, left ? 1 : 0);
+        if (e.phase !== "up") changed = setFloor(z, e.col, e.row, left ? floorTileId : 0);
+      } else if (tool === "decor") {
+        if (e.phase !== "up") changed = setDecor(z, e.col, e.row, left ? decorTileId : 0);
       } else if (tool === "collision") {
         if (left && snapMode === "off") {
           // Free-rect: drag a box → a free collision rect (with live dashed preview).
@@ -297,7 +338,12 @@ export const App = () => {
             }
           }
         } else if (left) {
-          const code = collisionMaterial === "void" ? COLLISION_CELL.void : COLLISION_CELL.wall;
+          const code =
+            collisionMaterial === "void"
+              ? COLLISION_CELL.void
+              : collisionMaterial === "hidden"
+                ? COLLISION_CELL.hidden
+                : COLLISION_CELL.wall;
           if (e.phase !== "up" && cellFreeForCollision(zone, e.col, e.row))
             changed = setCollisionCell(z, e.col, e.row, code);
         } else if (e.phase === "down") {
@@ -370,14 +416,29 @@ export const App = () => {
         }
       } else if (tool === "object") {
         const radius = t * 0.5;
-        // A `creature` placement carries the toolbar's chosen creature id; other
-        // kinds fall back to their own defaults (defaultObjectProps).
-        const objInit = objectKind === "creature" ? { creature: creatureId } : undefined;
+        // A `creature` placement carries the toolbar's chosen creature id, a `prop`
+        // the palette's chosen prop; other kinds fall back to defaultObjectProps.
+        const objInit: Record<string, string | number | boolean> | undefined =
+          objectKind === "creature"
+            ? { creature: creatureId }
+            : objectKind === "prop"
+              ? { prop: propName }
+              : undefined;
         // A trigger is an abstract region — it may sit over walls/voids (it just
         // detects the player entering), so it bypasses the solid-avoidance gate
-        // that point markers obey.
-        const placeableAt = (kind: ZoneObjectKind, x: number, y: number): boolean =>
-          kind === "trigger" || objectPlaceable(zone, x, y);
+        // that point markers obey. A prop tests its own footprint (not the feet
+        // point — the generic gate would see its own collision), ignoring itself
+        // when moved.
+        const placeableAt = (
+          kind: ZoneObjectKind,
+          x: number,
+          y: number,
+          moveOf?: { id: string; prop: string },
+        ): boolean =>
+          kind === "trigger" ||
+          (kind === "prop"
+            ? propPlaceable(zone, tilesetDef, moveOf?.prop ?? propName, x, y, moveOf?.id)
+            : objectPlaceable(zone, x, y));
         const selObj =
           selection?.type === "object" ? z.objects.find((o) => o.id === selection.id) : undefined;
         if (e.handle && selObj && selObj.kind === "trigger") {
@@ -400,7 +461,10 @@ export const App = () => {
           }
         } else if (left) {
           if (e.phase === "down") {
-            const hit = objectIdAt(z, e.wx, e.wy, radius);
+            // Point markers first (small, drawn on top), then any prop whose
+            // sprite body is under the cursor — a prop is draggable anywhere
+            // on its art, not just at its feet.
+            const hit = objectIdAt(z, e.wx, e.wy, radius) ?? propIdAt(zone, e.wx, e.wy);
             if (hit) {
               strokeKindRef.current = "move";
               dragRef.current = { type: "object", id: hit };
@@ -416,7 +480,10 @@ export const App = () => {
           } else if (e.phase === "drag") {
             if (strokeKindRef.current === "move" && dragRef.current?.type === "object") {
               const moving = z.objects.find((o) => o.id === dragRef.current!.id);
-              if (moving && placeableAt(moving.kind, sx, sy))
+              const moveOf = moving
+                ? { id: moving.id, prop: String(moving.props.prop ?? "") }
+                : undefined;
+              if (moving && placeableAt(moving.kind, sx, sy, moveOf))
                 changed = moveObject(z, dragRef.current.id, sx, sy);
             } else if (
               strokeKindRef.current === "place" &&
@@ -429,7 +496,7 @@ export const App = () => {
             }
           }
         } else if (e.phase !== "up") {
-          const hit = objectIdAt(z, e.wx, e.wy, radius);
+          const hit = objectIdAt(z, e.wx, e.wy, radius) ?? propIdAt(zone, e.wx, e.wy);
           if (hit) {
             changed = deleteObject(z, hit);
             setSelection((s) => (s?.id === hit ? null : s));
@@ -458,7 +525,7 @@ export const App = () => {
         strokePreRef.current = null;
       }
     },
-    [tool, collisionMaterial, breakableKind, objectKind, creatureId, snapMode, selection, zone, bump],
+    [tool, collisionMaterial, breakableKind, objectKind, creatureId, floorTileId, decorTileId, propName, tilesetDef, snapMode, selection, zone, bump],
   );
 
   // Clicking a validation issue: select the offending entity + centre the camera.
@@ -473,7 +540,7 @@ export const App = () => {
   const validateHover = useCallback(
     (col: number, row: number): boolean => {
       if (!zone) return true;
-      if (tool === "floor") return true;
+      if (tool === "floor" || tool === "decor") return true;
       const t = zone.tileSize;
       const cx = col * t + t / 2;
       const cy = row * t + t / 2;
@@ -484,9 +551,11 @@ export const App = () => {
           breakableAt(zone, cx, cy) ||
           breakableFits(zone, breakableDefaults(breakableKind, cx, cy, t).box)
         );
+      if (objectKind === "prop")
+        return objectAt(zone, cx, cy, t * 0.5) || propPlaceable(zone, tilesetDef, propName, cx, cy);
       return objectAt(zone, cx, cy, t * 0.5) || objectPlaceable(zone, cx, cy);
     },
-    [zone, tool, breakableKind, snapMode],
+    [zone, tool, breakableKind, objectKind, propName, tilesetDef, snapMode],
   );
 
   const deleteSelection = useCallback(() => {
@@ -628,10 +697,11 @@ export const App = () => {
               <select
                 value={collisionMaterial}
                 onChange={(e) => setCollisionMaterial(e.target.value as CollisionMaterial)}
-                title="Collision material: wall (solid, blocks sight) or void (chasm — blocks movement only)"
+                title="Collision material: wall (solid, blocks sight), void (chasm — blocks movement only), or hidden (invisible barrier — blocks movement, renders as nothing in-game)"
               >
                 <option value="wall">wall</option>
                 <option value="void">void</option>
+                <option value="hidden">hidden</option>
               </select>
             )}
             {tool === "breakable" && (
@@ -779,8 +849,24 @@ export const App = () => {
 
       {loaded && zoneRef.current && zone ? (
         <div className="body">
+          {/* The tileset palette rides beside the viewport whenever the active
+              tool consumes atlas art: tile picks for the floor/decor brushes,
+              prop picks for the object tool. */}
+          {(tool === "floor" || tool === "decor" || (tool === "object" && objectKind === "prop")) && (
+            <Palette
+              tilesetName={tilesetName}
+              def={tilesetDef}
+              atlas={atlas}
+              mode={tool === "object" ? "props" : "tiles"}
+              selectedTile={tool === "decor" ? decorTileId : floorTileId}
+              onPickTile={tool === "decor" ? setDecorTileId : setFloorTileId}
+              selectedProp={propName}
+              onPickProp={setPropName}
+            />
+          )}
           <Viewport
             zone={zone}
+            art={art}
             fitToken={fitToken}
             selection={selection}
             showGrid={showGrid}

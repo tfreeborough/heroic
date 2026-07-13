@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { forgePlugin } from "./forge/plugin";
+import { tilesetServerPlugin } from "./tilesetServer/plugin";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -12,7 +13,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 // logic (loadZone/greedyMesh) + palette as the game — the basis of map accuracy.
 export default defineConfig({
   // forgePlugin: the Asset Forge's dev-only endpoints (docs/design/asset-forge.md).
-  plugins: [react(), forgePlugin()],
+  // tilesetServerPlugin: serves atlas PNGs from the games' asset folders (tilesets.md).
+  plugins: [react(), forgePlugin(), tilesetServerPlugin()],
   resolve: {
     alias: {
       "@heroic/core": resolve(here, "../../packages/core/src/index.ts"),

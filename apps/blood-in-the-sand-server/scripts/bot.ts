@@ -102,7 +102,9 @@ ws.onmessage = (e) => {
       process.exit(1);
     case "snapshot": {
       latest = msg;
+      const prevPhase = phase;
       phase = msg.round.phase;
+      if (phase === "reveal" && prevPhase !== "reveal") playCeremony();
       for (const ev of msg.events) {
         if (ev.type === "fightStart") log("FIGHT!");
         else if (ev.type === "roundEnd") log(`round → team ${ev.winnerTeam} · ${ev.wins[0]}–${ev.wins[1]}`);
@@ -122,6 +124,29 @@ ws.onmessage = (e) => {
 ws.onclose = () => {
   log("connection closed");
   process.exit(0);
+};
+
+/**
+ * The pick ceremony, bot-style: half the time it bait-swaps its revealed
+ * weapon (hidden from the enemy team — the human tester sees the swap land
+ * only when the fight starts), then locks in. Locking matters: everyone
+ * locked ends the adjust window early, so a solo tester + this bot exercises
+ * the early-start path too.
+ */
+const playCeremony = (): void => {
+  const swapDelay = 1500 + Math.random() * 4500;
+  if (Math.random() < 0.5) {
+    const others = WEAPON_IDS.filter((w) => w !== weapon);
+    const to = others[Math.floor(Math.random() * others.length)]!;
+    setTimeout(() => {
+      log(`bait! secretly swapping to the ${to}`);
+      send({ t: "setWeapon", weapon: to });
+    }, swapDelay);
+  }
+  setTimeout(() => {
+    log("locking in");
+    send({ t: "lockIn" });
+  }, swapDelay + 800 + Math.random() * 3200);
 };
 
 // The brain itself lives in the sim package (botThink) — shared with the

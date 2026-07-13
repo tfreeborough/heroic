@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { WEAPON_IDS, WEAPONS, type RoomListing, type WeaponId } from "@heroic/blood-in-the-sand-sim";
+import type { RoomListing } from "@heroic/blood-in-the-sand-sim";
 import type { ArenaClient } from "../net/connection";
 
 const REFRESH_MS = 4000;
@@ -10,8 +11,8 @@ const KEY_NAME = "bits.name";
 
 export interface RoomListScreenProps {
   client: ArenaClient;
-  /** Start an offline bot match with this weapon pick (the bot picks randomly). */
-  onPractice: (playerName: string, weapon: WeaponId) => void;
+  /** Back to the title screen. */
+  onBack: () => void;
 }
 
 /**
@@ -19,11 +20,11 @@ export interface RoomListScreenProps {
  * expand an inline passcode prompt on tap. The list re-polls every few
  * seconds while this screen is mounted.
  */
-export const RoomListScreen = ({ client, onPractice }: RoomListScreenProps) => {
+export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [nameHint, setNameHint] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [practicing, setPracticing] = useState(false);
   const [roomName, setRoomName] = useState("");
   const [createPass, setCreatePass] = useState("");
   const [passFor, setPassFor] = useState<string | null>(null); // room code awaiting a passcode
@@ -69,11 +70,6 @@ export const RoomListScreen = ({ client, onPractice }: RoomListScreenProps) => {
     if (n) client.createRoom(n, roomName.trim() || `${n}'s room`, createPass);
   };
 
-  const practice = (weapon: WeaponId): void => {
-    const n = requireName();
-    if (n) onPractice(n, weapon);
-  };
-
   const renderRoom = ({ item }: { item: RoomListing }) => (
     <View style={styles.roomCard}>
       <Pressable onPress={() => join(item)} style={styles.roomRow}>
@@ -110,9 +106,14 @@ export const RoomListScreen = ({ client, onPractice }: RoomListScreenProps) => {
   );
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>ROOMS</Text>
+        <View style={styles.titleRow}>
+          <Pressable onPress={onBack} hitSlop={12}>
+            <Text style={styles.backText}>‹</Text>
+          </Pressable>
+          <Text style={styles.title}>ROOMS</Text>
+        </View>
         <View style={styles.nameWrap}>
           <Text style={styles.nameLabel}>playing as</Text>
           <TextInput
@@ -170,27 +171,6 @@ export const RoomListScreen = ({ client, onPractice }: RoomListScreenProps) => {
         </Pressable>
       )}
 
-      {/* practice vs a bot — fully offline, tap expands the weapon pick */}
-      {practicing ? (
-        <View style={styles.practiceForm}>
-          <Text style={styles.practiceHint}>pick your weapon — the bot picks its own</Text>
-          <View style={styles.weaponRow}>
-            {WEAPON_IDS.map((w) => (
-              <Pressable key={w} onPress={() => practice(w)} style={styles.weaponChip}>
-                <Text style={styles.weaponChipText}>{WEAPONS[w].name.toUpperCase()}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable onPress={() => setPracticing(false)} style={[styles.smallButton, styles.ghost, styles.practiceCancel]}>
-            <Text style={styles.smallButtonText}>CANCEL</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable onPress={() => setPracticing(true)} style={[styles.createButton, styles.practiceButton]}>
-          <Text style={styles.createButtonText}>⚔ PRACTICE vs BOT</Text>
-        </Pressable>
-      )}
-
       {/* join by code */}
       <View style={styles.codeRow}>
         <TextInput
@@ -223,7 +203,9 @@ export const RoomListScreen = ({ client, onPractice }: RoomListScreenProps) => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { color: "#d94141", fontSize: 28, fontWeight: "900", letterSpacing: 3 },
+  backText: { color: "#8a7f70", fontSize: 30, fontWeight: "800", marginTop: -3 },
   nameWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
   nameLabel: { color: "#8a7f70", fontSize: 12 },
   nameInput: { minWidth: 120 },
@@ -244,25 +226,6 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
-  practiceButton: { backgroundColor: "#3a5a3a", marginTop: 10 },
-  practiceForm: {
-    backgroundColor: "#1d1915",
-    borderRadius: 8,
-    marginTop: 10,
-    padding: 12,
-    gap: 10,
-  },
-  practiceHint: { color: "#8a7f70", fontSize: 12 },
-  weaponRow: { flexDirection: "row", gap: 8 },
-  weaponChip: {
-    flex: 1,
-    backgroundColor: "#3a5a3a",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  weaponChipText: { color: "#f5ede0", fontWeight: "800", fontSize: 12 },
-  practiceCancel: { alignSelf: "flex-end" },
   createButtons: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
   codeRow: { flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" },
   codeInput: { flex: 1 },
