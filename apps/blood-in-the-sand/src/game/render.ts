@@ -120,53 +120,61 @@ rangeStroke.setPathEffect(Skia.PathEffect.MakeDash([10, 8], 0));
 const RANGE_RING_ALPHA = 0.22;
 
 /**
- * Floor (+ decor) baked per chunk into replayable pictures, the gauntlet's
- * per-chunk-bake pattern (docs/design/tilesets.md): tile draws are paid once
- * when the atlas decodes, then each frame merely replays 4 pictures. Keyed on
- * the atlas so a (dev-time) image swap rebakes. Ids the atlas doesn't cover
- * fall back to the flat sand fill, so a half-painted zone still reads.
+ * Floor (+ decor) rasterized ONCE into a single world-resolution image when the
+ * atlas decodes, then drawn as one quad per frame. Rasterizing (not recording a
+ * picture) matters: replayed per-tile draws re-sample under the camera's
+ * fractional zoom, and each tile edge rounds independently — hairline cracks +
+ * atlas-neighbour bleed that read as a faint grid over the sand. Baking at
+ * integer coordinates samples every tile exactly; the one resulting image has
+ * no interior edges to crack. (~10MB for the 1600² arena — fine for one zone;
+ * revisit per-chunk images if zones grow.) Keyed on the atlas so a (dev-time)
+ * image swap rebakes. Ids the atlas doesn't cover fall back to the flat sand
+ * fill, so a half-painted zone still reads.
  */
 let bakedAtlas: SkImage | null = null;
-let bakedFloor: SkPicture[] = [];
-const floorChunks = (atlas: SkImage): SkPicture[] => {
+let bakedFloor: SkImage | null = null;
+const floorImage = (atlas: SkImage): SkImage | null => {
   if (bakedAtlas === atlas) return bakedFloor;
+  const surface = Skia.Surface.Make(WORLD_W, WORLD_H);
+  if (!surface) return null; // keep the flat fallback; retry next frame
+  const canvas = surface.getCanvas();
   const t = ZONE.tileSize;
   const ct = ZONE.chunkTiles;
-  bakedFloor = ZONE.chunks.map((chunk) =>
-    createPicture((canvas) => {
-      const paint = Skia.Paint();
-      const drawLayer = (layer: Uint16Array | null, floorFallback: boolean): void => {
-        if (!layer) return;
-        for (let ly = 0; ly < ct; ly++) {
-          for (let lx = 0; lx < ct; lx++) {
-            const id = layer[ly * ct + lx]!;
-            if (id === 0) continue;
-            const wx = (chunk.cx * ct + lx) * t;
-            const wy = (chunk.cy * ct + ly) * t;
-            const src = TILESET ? tileSourceRect(TILESET, id) : null;
-            if (src) {
-              canvas.drawImageRectOptions(
-                atlas,
-                Skia.XYWHRect(src.x, src.y, src.w, src.h),
-                Skia.XYWHRect(wx, wy, t, t),
-                FilterMode.Nearest, // pixel art scales crisp, never smeared
-                MipmapMode.None,
-                paint,
-              );
-            } else if (floorFallback) {
-              paint.setColor(C_FLOOR);
-              canvas.drawRect(Skia.XYWHRect(wx, wy, t, t), paint);
-            }
+  const paint = Skia.Paint();
+  for (const chunk of ZONE.chunks) {
+    const drawLayer = (layer: Uint16Array | null, floorFallback: boolean): void => {
+      if (!layer) return;
+      for (let ly = 0; ly < ct; ly++) {
+        for (let lx = 0; lx < ct; lx++) {
+          const id = layer[ly * ct + lx]!;
+          if (id === 0) continue;
+          const wx = (chunk.cx * ct + lx) * t;
+          const wy = (chunk.cy * ct + ly) * t;
+          const src = TILESET ? tileSourceRect(TILESET, id) : null;
+          if (src) {
+            canvas.drawImageRectOptions(
+              atlas,
+              Skia.XYWHRect(src.x, src.y, src.w, src.h),
+              Skia.XYWHRect(wx, wy, t, t),
+              FilterMode.Nearest, // integer 4× upscale at bake: crisp, exact
+              MipmapMode.None,
+              paint,
+            );
+          } else if (floorFallback) {
+            paint.setColor(C_FLOOR);
+            canvas.drawRect(Skia.XYWHRect(wx, wy, t, t), paint);
           }
         }
-      };
-      drawLayer(chunk.floor, true);
-      drawLayer(chunk.decor, false);
-    }),
-  );
+      }
+    };
+    drawLayer(chunk.floor, true);
+    drawLayer(chunk.decor, false);
+  }
+  bakedFloor = surface.makeImageSnapshot();
   bakedAtlas = atlas;
   return bakedFloor;
 };
+const FLOOR_RECT = Skia.XYWHRect(0, 0, WORLD_W, WORLD_H);
 
 /** A transient visual: damage numbers and hit rings, aged by the caller. */
 export interface FxItem {
@@ -434,10 +442,13 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     canvas.translate(screenW / 2 - cx * zoom, screenH / 2 - cy * zoom);
     canvas.scale(zoom, zoom);
 
-    // Floor: baked tileset chunks when the atlas is ready, else the flat sand
+    // Floor: the baked world image when the atlas is ready, else the flat sand
     // with a darker rim (the pre-tileset look, kept as the loading/fallback).
-    if (r.atlas) {
-      for (const chunk of floorChunks(r.atlas)) canvas.drawPicture(chunk);
+    // Linear filtering — the bake is already at world resolution, so this is a
+    // smooth downscale under the camera zoom, no nearest-neighbour shimmer.
+    const floor = r.atlas ? floorImage(r.atlas) : null;
+    if (floor) {
+      canvas.drawImageRectOptions(floor, FLOOR_RECT, FLOOR_RECT, FilterMode.Linear, MipmapMode.None, fill);
     } else {
       fill.setColor(C_FLOOR_EDGE);
       canvas.drawRect(Skia.XYWHRect(0, 0, WORLD_W, WORLD_H), fill);
