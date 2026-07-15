@@ -6,17 +6,18 @@
  * sim-package brain (botThink) — the same opponent the server's headless bot
  * script runs.
  *
- * Practice runs the SAME 4-beat draft as real rooms (RoomScreen via the
- * LobbyClient interface): blind pick → reveal → counterpick → sand. The bot
- * plays every beat on its own clock — it drafts a loadout and locks during
- * the blind pick, and in the counterpick window it may bait-swap its revealed
- * weapon before locking again. Lock in on both beats and the draft fast-
- * forwards (all-locked ends a phase early). This is the no-second-player
- * test bed for the whole draft.
+ * Practice runs the SAME arming flow as real rooms (pvp-loadout-flow.md):
+ * you arm through the wizard on RoomScreen, the bot arms itself moments after
+ * sitting down, and the sim's own 10s arming countdown starts the match —
+ * nobody presses START. After matchEnd the sim disarms everyone and returns
+ * to the lobby, so the wizard reopens (run-it-back is one tap) — the offline
+ * loop matches the online one exactly. This is the no-second-player test bed
+ * for the whole flow.
  *
- * Clock ownership: DURING the draft an internal 30Hz interval steps the sim
- * (RoomScreen sends no input); from the countdown on, GameScreen's 30Hz
- * sendInput IS the tick, exactly as before.
+ * Clock ownership: WHILE the phase is "lobby" an internal 30Hz interval steps
+ * the sim (the wizard sends no input — the arming countdown needs a clock);
+ * from the countdown on, GameScreen's 30Hz sendInput IS the tick, exactly as
+ * before. The lobby interval re-arms itself on the return from a match.
  */
 import {
   ABILITY_IDS,
@@ -26,15 +27,12 @@ import {
   botThink,
   createBotMemory,
   createSim,
+  forceStartMatch,
   LOADOUT_ABILITY_COUNT,
-  lockInPlayer,
   makeClientConfig,
-  PICK_PHASE_SECONDS,
-  REVEAL_ADJUST_SECONDS,
   setPlayerAbilities,
   setPlayerWeapon,
   SnapshotBuffer,
-  startMatch,
   stepSim,
   TICK_DT,
   TICK_RATE,
@@ -56,45 +54,15 @@ const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus"];
 
 const randomWeapon = (): WeaponId => WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!;
 
+/** The bot's hand always leads with dash — the only ability its brain casts
+ * (cheapest v1, per pvp-abilities.md); the other slots are random dressing. */
 const randomHand = (): AbilityId[] => {
-  const pool = [...ABILITY_IDS];
-  const hand: AbilityId[] = [];
-  for (let i = 0; i < LOADOUT_ABILITY_COUNT; i++) {
+  const pool = ABILITY_IDS.filter((a) => a !== "dash");
+  const hand: AbilityId[] = ["dash"];
+  while (hand.length < LOADOUT_ABILITY_COUNT) {
     hand.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
   }
   return hand;
-};
-
-/** The bot's clock for one draft phase — everything in ms since the phase opened. */
-interface BotDraftPlan {
-  /** Blind pick: when the bot commits its loadout. */
-  pickAtMs: number;
-  /** Counterpick: when a bait weapon-swap lands (null = it stays honest). */
-  swapAtMs: number | null;
-  swapTo: WeaponId;
-  lockAtMs: number;
-}
-
-const makePickPlan = (): BotDraftPlan => {
-  const pickAtMs = 1500 + Math.random() * 3000;
-  return {
-    pickAtMs,
-    swapAtMs: null,
-    swapTo: randomWeapon(),
-    lockAtMs: pickAtMs + 1200 + Math.random() * 3800,
-  };
-};
-
-const makeRevealPlan = (revealed: WeaponId): BotDraftPlan => {
-  const swapping = Math.random() < 0.5;
-  const others = WEAPON_IDS.filter((w) => w !== revealed);
-  const swapAtMs = 1500 + Math.random() * 4000;
-  return {
-    pickAtMs: 0,
-    swapAtMs: swapping ? swapAtMs : null,
-    swapTo: others[Math.floor(Math.random() * others.length)]!,
-    lockAtMs: swapAtMs + 800 + Math.random() * 3200, // decide first, then commit
-  };
 };
 
 export class PracticeClient implements LobbyClient {
@@ -102,8 +70,8 @@ export class PracticeClient implements LobbyClient {
   status: ConnectionStatus = "open";
   welcome: WelcomeInfo | null;
   roomState: RoomStateInfo | null = null;
-  /** Round phase from the newest tick — App routes pick/reveal → RoomScreen,
-   * match phases → GameScreen, and back to the menu on "lobby". */
+  /** Round phase from the newest tick — App routes lobby → RoomScreen (the
+   * wizard), match phases → GameScreen. */
   phase: RoundPhase;
 
   onChange: (() => void) | null = null;
@@ -112,10 +80,11 @@ export class PracticeClient implements LobbyClient {
   private readonly sim: ArenaSim;
   private readonly botMemory: BotMemory = createBotMemory();
   private readonly botStrategy: BotStrategy;
-  private botPlan: BotDraftPlan;
-  private draftPhase: RoundPhase;
-  private phaseStartMs: number;
-  private draftTimer: ReturnType<typeof setInterval> | null = null;
+  /** ms after entering the lobby at which the bot arms itself — a beat, not a
+   * wait, so the roster ticker visibly flips while you're mid-wizard. */
+  private botArmAtMs: number;
+  private lobbyEnteredMs: number;
+  private lobbyTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnap: SnapshotMsg;
   private seq = 0;
 
@@ -127,16 +96,9 @@ export class PracticeClient implements LobbyClient {
 
     addPlayer(this.sim, playerName);
     addPlayer(this.sim, botName);
-    const events: ArenaEvent[] = [];
-    // The real draft, real timings — practice is the draft's test bed.
-    startMatch(this.sim, events, {
-      pickSeconds: PICK_PHASE_SECONDS,
-      adjustSeconds: REVEAL_ADJUST_SECONDS,
-    });
-    this.phase = this.sim.state.round.phase;
-    this.draftPhase = this.phase;
-    this.phaseStartMs = performance.now();
-    this.botPlan = makePickPlan();
+    this.phase = this.sim.state.round.phase; // "lobby" — the wizard opens here
+    this.lobbyEnteredMs = performance.now();
+    this.botArmAtMs = 1200 + Math.random() * 1800;
 
     this.welcome = {
       playerId: 0,
@@ -150,11 +112,11 @@ export class PracticeClient implements LobbyClient {
     this.refreshRoomState();
 
     // Seed the buffer so the very first render has a view to sample.
-    this.lastSnap = toSnapshot(this.sim.state, events);
+    this.lastSnap = toSnapshot(this.sim.state, []);
     this.buffer.push(this.lastSnap, performance.now());
 
-    // The draft owns the clock until the countdown starts.
-    this.draftTimer = setInterval(() => this.draftTick(), 1000 / TICK_RATE);
+    // The lobby owns the clock until the countdown starts.
+    this.startLobbyClock();
   }
 
   get myWeapon(): WeaponId | null {
@@ -187,86 +149,72 @@ export class PracticeClient implements LobbyClient {
     }
   }
 
-  lockIn(): void {
-    if (lockInPlayer(this.sim, 0)) {
+  /** The host backstop, offline flavour — fills the bot if it hasn't armed
+   * yet (it will have; this exists for interface parity and paranoia). */
+  forceStart(): void {
+    if (forceStartMatch(this.sim)) {
       this.refreshRoomState();
-      this.onChange?.(); // all-locked ends the phase on the next draft tick
+      this.onChange?.();
     }
   }
 
-  /** The draft starts itself in the constructor — nothing for the host button. */
-  startMatch(): void {}
+  private startLobbyClock(): void {
+    if (this.lobbyTimer !== null) return;
+    this.lobbyEnteredMs = performance.now();
+    this.botArmAtMs = 1200 + Math.random() * 1800;
+    this.lobbyTimer = setInterval(() => this.lobbyTick(), 1000 / TICK_RATE);
+  }
 
-  /** One 30Hz draft tick: run the bot's phase plan, then advance the machine. */
-  private draftTick(): void {
-    const phase = this.sim.state.round.phase;
-    if (phase !== this.draftPhase) {
-      // A phase flipped since the last tick — restart the bot's clock.
-      this.draftPhase = phase;
-      this.phaseStartMs = performance.now();
-      if (phase === "reveal") {
-        const revealed = this.sim.state.players[1]?.revealedWeapon ?? randomWeapon();
-        this.botPlan = makeRevealPlan(revealed);
-      }
-    }
-
-    const elapsed = performance.now() - this.phaseStartMs;
-    const plan = this.botPlan;
+  /** One 30Hz lobby tick: arm the bot on its beat, let the arming countdown
+   * run, and hand the clock to GameScreen the moment the countdown phase
+   * begins. */
+  private lobbyTick(): void {
     const bot = this.sim.state.players[1];
-    if (bot && !bot.lockedIn) {
-      if (phase === "pick" && elapsed >= plan.pickAtMs && bot.weapon === null) {
-        setPlayerWeapon(this.sim, 1, randomWeapon());
-        setPlayerAbilities(this.sim, 1, randomHand());
-        this.refreshRoomState(); // enemy rows only show the lock state — but keep truthful
-        this.onChange?.();
-      }
-      if (phase === "reveal" && plan.swapAtMs !== null && elapsed >= plan.swapAtMs && bot.weapon !== plan.swapTo) {
-        setPlayerWeapon(this.sim, 1, plan.swapTo); // the bait — hidden, like a human's
-        this.refreshRoomState();
-        this.onChange?.();
-      }
-      const ready = phase === "reveal" || bot.weapon !== null;
-      if (ready && elapsed >= plan.lockAtMs) {
-        lockInPlayer(this.sim, 1);
-        this.refreshRoomState();
-        this.onChange?.();
-      }
+    if (bot && bot.weapon === null && performance.now() - this.lobbyEnteredMs >= this.botArmAtMs) {
+      setPlayerWeapon(this.sim, 1, randomWeapon());
+      setPlayerAbilities(this.sim, 1, randomHand());
+      this.refreshRoomState();
+      this.onChange?.();
     }
 
     this.step(new Map()); // nobody moves pre-countdown; the clock still runs
-    const p = this.sim.state.round.phase;
-    if (p !== "pick" && p !== "reveal" && this.draftTimer !== null) {
-      clearInterval(this.draftTimer); // draft closed — GameScreen takes over
-      this.draftTimer = null;
+    if (this.sim.state.round.phase !== "lobby" && this.lobbyTimer !== null) {
+      clearInterval(this.lobbyTimer); // armed & counted down — GameScreen takes over
+      this.lobbyTimer = null;
     }
   }
 
   /** GameScreen's fixed 30Hz input send IS the sim tick from the countdown on. */
-  sendInput(sx: number, sy: number, dash: boolean): void {
-    if (this.draftTimer !== null) return; // the draft still owns the clock
+  sendInput(sx: number, sy: number, casts: boolean[]): void {
+    if (this.lobbyTimer !== null) return; // the lobby still owns the clock
     const bot = botThink(
       this.botMemory,
       this.botStrategy,
       this.lastSnap.players.find((p) => p.id === 1),
       this.lastSnap.players.find((p) => p.id === 0),
     );
+    // The brain's dash flag lands on whichever slot holds dash in the bot's hand.
+    const botCasts = (this.sim.state.players[1]?.slots ?? []).map((s) => bot.dash && s.id === "dash");
     this.step(
       new Map([
-        [0, { seq: this.seq++, sx, sy, dash }],
-        [1, { seq: 0, sx: bot.sx, sy: bot.sy, dash: bot.dash }],
+        [0, { seq: this.seq++, sx, sy, casts }],
+        [1, { seq: 0, sx: bot.sx, sy: bot.sy, casts: botCasts }],
       ]),
     );
   }
 
-  private step(inputs: Map<number, { seq: number; sx: number; sy: number; dash: boolean }>): void {
+  private step(inputs: Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>): void {
     const events = stepSim(this.sim, inputs, TICK_DT);
     this.lastSnap = toSnapshot(this.sim.state, events);
     const drained = this.buffer.push(this.lastSnap, performance.now());
     if (drained.length > 0) this.onEvents?.(drained);
     if (this.lastSnap.round.phase !== this.phase) {
-      this.phase = this.lastSnap.round.phase; // pick → reveal → countdown → … routes the UI
+      this.phase = this.lastSnap.round.phase; // lobby → countdown → … routes the UI
       this.refreshRoomState();
       this.onChange?.();
+      // Back in the lobby after a match: everyone is disarmed — the wizard
+      // reopens and this clock resumes so the next arming countdown can run.
+      if (this.phase === "lobby") this.startLobbyClock();
     }
   }
 
@@ -275,8 +223,8 @@ export class PracticeClient implements LobbyClient {
   }
 
   close(): void {
-    if (this.draftTimer !== null) clearInterval(this.draftTimer);
-    this.draftTimer = null;
+    if (this.lobbyTimer !== null) clearInterval(this.lobbyTimer);
+    this.lobbyTimer = null;
     this.onChange = null;
     this.onEvents = null;
   }

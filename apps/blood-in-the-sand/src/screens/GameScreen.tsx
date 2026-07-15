@@ -6,11 +6,23 @@ import { Canvas, Picture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useKeepAwake } from "expo-keep-awake";
 import { STICK_ZERO, useGameLoop, type StickSample } from "@heroic/engine";
-import { TICK_DT, type RoundPhase } from "@heroic/blood-in-the-sand-sim";
+import {
+  ABILITIES,
+  isDeployableId,
+  LOADOUT_ABILITY_COUNT,
+  TICK_DT,
+  TREMOR,
+  type AbilityId,
+  type RoundPhase,
+} from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
+import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
-import { DASH_READY_PICTURE, DashButton, recordDashButton } from "../game/DashButton";
+import { playSound, unlockAudio } from "../audio";
+import { KillStreaks, type MultiKillTier } from "../audio/killstreaks";
+import { AbilityButton, EMPTY_BUTTON_PICTURE, recordAbilityButton } from "../game/AbilityButton";
+import { useAbilityIconImages } from "../game/abilityIcons";
 import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
 import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
@@ -20,6 +32,20 @@ import { loadLefty } from "../settings";
 const NUMBER_TTL = 750;
 const RING_TTL = 380;
 const FIGHT_BANNER_TTL = 900;
+/** How long a First Blood / multi-kill call stays on screen. */
+const ANNOUNCE_TTL = 1900;
+/** Booming-voice announcement text per multi-kill tier. */
+const MULTI_KILL_TEXT: Record<MultiKillTier, string> = {
+  double: "DOUBLE KILL",
+  multi: "MULTI KILL",
+  mega: "MEGA KILL",
+  ultra: "ULTRA KILL",
+  monster: "MONSTER KILL",
+};
+/** Cast flash: how long the icon lingers, and where it pops relative to the
+ * caster's disc (above the name-tag/hp-bar clutter). */
+const CAST_FLASH_TTL = 950;
+const CAST_FLASH_RISE_FROM = 24;
 
 interface AgedFx {
   item: FxItem;
@@ -57,8 +83,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   // The tileset atlas decodes async; recordArena draws the flat fallback until
   // it lands (a frame or two), then bakes the floor chunks once.
   const atlas = useArenaAtlas();
+  // Forge icon art for the cast flash (decodes async; flashes skip until ready).
+  const abilityIcons = useAbilityIconImages();
   const picture = useSharedValue(EMPTY_ARENA_PICTURE);
-  const dashOverlay = useSharedValue(DASH_READY_PICTURE);
+  // One face per ability slot (fixed count — pick order = button order).
+  const overlay0 = useSharedValue(EMPTY_BUTTON_PICTURE);
+  const overlay1 = useSharedValue(EMPTY_BUTTON_PICTURE);
+  const overlay2 = useSharedValue(EMPTY_BUTTON_PICTURE);
+  const overlays = [overlay0, overlay1, overlay2];
   const layoutRef = useRef({ w: 0, h: 0 });
   const fxRef = useRef<AgedFx[]>([]);
   // Blood persists across rounds (the arena remembers); a new match remounts
@@ -66,10 +98,22 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const bloodRef = useRef<BloodField | null>(null);
   bloodRef.current ??= new BloodField();
   const blood = bloodRef.current;
+  // Tremor's cracked earth — same lifecycle as the blood (arena remembers).
+  const cracksRef = useRef<CrackField | null>(null);
+  cracksRef.current ??= new CrackField();
+  const cracks = cracksRef.current;
   const fightBannerUntil = useRef(0);
+  // Last countdown digit sounded, so 3·2·1 ticks fire once each (null between rounds).
+  const lastCountdown = useRef<number | null>(null);
+  // Audio needs a user gesture to start (web/iOS); unlock on the first touch.
+  const audioUnlocked = useRef(false);
   const stickRef = useRef<StickSample>(STICK_ZERO);
-  const dashRequest = useRef(false);
-  const lastDashFrac = useRef(0);
+  // Cast taps latched per slot until the next input send (the dash pattern ×3).
+  const castRequests = useRef<boolean[]>(Array.from({ length: LOADOUT_ABILITY_COUNT }, () => false));
+  const lastButtonKeys = useRef<string[]>(Array.from({ length: LOADOUT_ABILITY_COUNT }, () => ""));
+  // The drafted hand, from snapshots — names the buttons once the match feeds us.
+  const [buttonIds, setButtonIds] = useState<AbilityId[]>([]);
+  const buttonIdsKey = useRef("");
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const hudKey = useRef("");
   // Status-ring pulse clocks (slow/bleed), advanced per rendered frame.
@@ -82,13 +126,32 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
     void loadLefty().then(setLefty);
   }, []);
 
+  // First Blood + multi-kill announcements — client-derived from lethal hits
+  // (fresh tracker per match, since this screen remounts per match). The banner
+  // is event-driven, so setState here is fine (kills are infrequent).
+  const killStreaksRef = useRef<KillStreaks | null>(null);
+  killStreaksRef.current ??= new KillStreaks();
+  const killStreaks = killStreaksRef.current;
+  const [announce, setAnnounce] = useState<string | null>(null);
+  const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showAnnounce = (text: string): void => {
+    setAnnounce(text);
+    if (announceTimer.current) clearTimeout(announceTimer.current);
+    announceTimer.current = setTimeout(() => setAnnounce(null), ANNOUNCE_TTL);
+  };
+  useEffect(() => () => {
+    if (announceTimer.current) clearTimeout(announceTimer.current);
+  }, []);
+
   useEffect(() => {
     client.onEvents = (events) => {
       const now = performance.now();
       const myId = client.welcome?.playerId ?? null;
+      const myTeam = client.welcome?.team ?? 1;
       for (const e of events) {
         if (e.type === "hit") {
-          blood.splatter(e.x, e.y, e.damage, e.lethal, now);
+          // Straw men don't bleed — deployable-target hits skip the decals.
+          if (!isDeployableId(e.targetId)) blood.splatter(e.x, e.y, e.damage, e.lethal, now);
           if (e.lethal) {
             // The kill spray fires out of the victim's BACK — away from the
             // killer. The victim auto-faces their attacker, so if the killer's
@@ -100,6 +163,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             const dy = attacker ? e.y - attacker.y : victim ? -Math.sin(victim.facing) : 0;
             const len = Math.hypot(dx, dy) || 1;
             blood.deathBurst(e.x, e.y, dx / len, dy / len, now);
+            // First Blood + Unreal-style kill chains (everyone hears them). Only
+            // real players count — dummies never report a lethal hit anyway.
+            if (!isDeployableId(e.targetId)) {
+              const call = killStreaks.registerKill(e.attackerId, e.targetId, now);
+              if (call?.firstBlood) {
+                playSound("firstBlood");
+                showAnnounce("FIRST BLOOD");
+              } else if (call?.tier) {
+                playSound("multiKill", call.tier);
+                showAnnounce(MULTI_KILL_TEXT[call.tier]);
+              }
+            }
           }
           fxRef.current.push({
             item: { kind: "number", x: e.x, y: e.y, life: 1, text: String(e.damage), crit: e.crit, bleed: e.bleed },
@@ -120,10 +195,68 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           } else if (!e.bleed && e.targetId === myId) {
             playStrikeHaptic("medium");
           }
-        } else if (e.type === "dash") {
-          if (e.playerId === myId) playStrikeHaptic("soft"); // tactile confirm of the roll
+          // SFX: your own pain reads apart from the impacts around you; the
+          // strike is qualified by the attacker's weapon (null/hidden → the
+          // generic thud). Bleed ticks are ambient — silent, like their haptics.
+          if (!e.bleed && !isDeployableId(e.targetId)) {
+            if (e.targetId === myId) {
+              playSound("hitTaken");
+            } else {
+              const weapon =
+                client.buffer.sample(now)?.players.find((p) => p.id === e.attackerId)?.weapon;
+              playSound("weaponStrike", weapon ?? undefined);
+            }
+          }
+        } else if (e.type === "death") {
+          playSound("death");
+        } else if (e.type === "cast") {
+          if (e.playerId === myId) playStrikeHaptic("soft"); // tactile confirm of the cast
+          playSound("abilityCast", e.ability); // every cast is audible — the tell is information
+          const caster = client.buffer.sample(now)?.players.find((p) => p.id === e.playerId);
+          if (caster) {
+            // The cast flash: the ability's icon pops above the caster —
+            // "they just pressed this button". The ONLY way enemy kits show
+            // (pvp-loadout-flow.md); allies and self flash too, one language.
+            fxRef.current.push({
+              item: { kind: "castFlash", x: caster.x, y: caster.y - CAST_FLASH_RISE_FROM, life: 1, ability: e.ability },
+              bornMs: now,
+              ttlMs: CAST_FLASH_TTL,
+            });
+            // Tremor also fractures the sand where the caster stood.
+            if (e.ability === "tremor") cracks.add(caster.x, caster.y, TREMOR.radius, now);
+          }
+        } else if (e.type === "harpoon") {
+          // The chain flash: caster → hook point, gone in a blink.
+          fxRef.current.push({
+            item: { kind: "line", x: e.fromX, y: e.fromY, x2: e.toX, y2: e.toY, life: 1 },
+            bornMs: now,
+            ttlMs: 260,
+          });
+          playSound("harpoonWhip");
+        } else if (e.type === "detonate") {
+          fxRef.current.push({
+            item: { kind: "ring", x: e.x, y: e.y, life: 1, big: true },
+            bornMs: now,
+            ttlMs: RING_TTL * 1.6,
+          });
+          playStrikeHaptic("medium"); // a mine going off is felt by everyone
+          playSound("abilityDetonate", "sandtrap"); // the only thing that detonates (for now)
+        } else if (e.type === "heal") {
+          fxRef.current.push({
+            item: { kind: "number", x: e.x, y: e.y, life: 1, text: `+${e.amount}`, heal: true },
+            bornMs: now,
+            ttlMs: NUMBER_TTL,
+          });
+          playSound("heal");
+        } else if (e.type === "roundStart") {
+          playSound("roundStart");
         } else if (e.type === "fightStart") {
           fightBannerUntil.current = now + FIGHT_BANNER_TTL;
+          playSound("fightStart");
+        } else if (e.type === "roundEnd") {
+          playSound("roundEnd", e.winnerTeam === 0 ? "draw" : e.winnerTeam === myTeam ? "win" : "loss");
+        } else if (e.type === "matchEnd") {
+          playSound("matchEnd", e.winnerTeam === myTeam ? "win" : "loss");
         }
       }
     };
@@ -135,11 +268,13 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   useGameLoop(
     {
       onStep: () => {
-        // One input per sim tick (30Hz): stick dir × magnitude + the dash tap
-        // (consumed here; the server latches it so a between-tick press holds).
+        // One input per sim tick (30Hz): stick dir × magnitude + the cast taps
+        // (consumed here; the server latches them so a between-tick press holds).
         const stick = stickRef.current;
-        client.sendInput(stick.dir.x * stick.magnitude, stick.dir.y * stick.magnitude, dashRequest.current);
-        dashRequest.current = false;
+        client.sendInput(stick.dir.x * stick.magnitude, stick.dir.y * stick.magnitude, [
+          ...castRequests.current,
+        ]);
+        castRequests.current.fill(false);
       },
       onRender: () => {
         const now = performance.now();
@@ -156,6 +291,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
         if (view && w > 0 && client.welcome) {
           blood.update(view.players, now);
+          cracks.update(now);
           pulses.update(view.players, now);
           picture.value = recordArena({
             view,
@@ -165,17 +301,39 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             screenH: h,
             fx: fx.map((f) => f.item),
             blood: blood.decals,
+            cracks: cracks.decals,
             pulses,
             nowMs: now,
             atlas,
+            abilityIcons,
           });
 
-          // Dash button clock: re-record only while the fraction is moving.
+          // Ability buttons: name them from the snapshot's slot list (pick
+          // order), re-record a face only when its clock or state moved.
           const me = view.players.find((p) => p.id === client.welcome!.playerId);
-          const frac = me ? Math.min(1, Math.max(0, me.dashCd / client.welcome.config.dashCooldown)) : 0;
-          if (frac !== lastDashFrac.current) {
-            lastDashFrac.current = frac;
-            dashOverlay.value = frac > 0 ? recordDashButton(frac) : DASH_READY_PICTURE;
+          const slots = me?.abilities ?? [];
+          const idsKey = slots.map((s) => s.id).join(",");
+          if (idsKey !== buttonIdsKey.current) {
+            buttonIdsKey.current = idsKey;
+            setButtonIds(slots.map((s) => s.id));
+          }
+          for (let i = 0; i < overlays.length; i++) {
+            const slot = slots[i];
+            if (!slot) {
+              if (lastButtonKeys.current[i] !== "") {
+                lastButtonKeys.current[i] = "";
+                overlays[i]!.value = EMPTY_BUTTON_PICTURE;
+              }
+              continue;
+            }
+            const def = ABILITIES[slot.id];
+            const frac = Math.min(1, Math.max(0, slot.cd / def.cooldown));
+            const active = slot.active > 0;
+            const key = `${slot.id}:${frac}:${active}:${slot.charges}`;
+            if (key !== lastButtonKeys.current[i]) {
+              lastButtonKeys.current[i] = key;
+              overlays[i]!.value = recordAbilityButton(frac, active, slot.charges, def.charges);
+            }
           }
         }
 
@@ -194,6 +352,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         else if (round && phase === "matchEnd") banner = round.lastWinner === myTeam ? "VICTORY" : "DEFEAT";
         else if (phase === "active" && now < fightBannerUntil.current) banner = "FIGHT";
         else if (phase === "active" && enemyGone) banner = "opponent disconnected — finish them";
+
+        // A soft tick on each new pre-round digit (roundStart already boomed).
+        if (countdown !== null && countdown !== lastCountdown.current) playSound("countdownTick");
+        lastCountdown.current = countdown;
 
         const next: HudState = {
           phase,
@@ -232,6 +394,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         <Text style={[styles.score, myTeam === 2 ? styles.mine : styles.theirs]}>{hud.wins[1]}</Text>
       </View>
 
+      {/* kill announcements (First Blood / DOUBLE KILL …) — sits below the score,
+          clear of the centre countdown/banner */}
+      {announce ? (
+        <View style={[styles.announceWrap, { top: insets.top + 70 }]} pointerEvents="none">
+          <Text style={styles.announceText}>{announce}</Text>
+        </View>
+      ) : null}
+
       {/* centre banner / countdown */}
       {hud.countdown !== null ? (
         <View style={styles.centre} pointerEvents="none">
@@ -254,9 +424,30 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         style={[styles.controlsRow, lefty && styles.controlsLefty, { bottom: insets.bottom + 24 }]}
         pointerEvents="box-none"
       >
-        <FloatingStick onChange={(sample) => (stickRef.current = sample)} />
+        <FloatingStick
+          onChange={(sample) => {
+            stickRef.current = sample;
+            if (!audioUnlocked.current) {
+              audioUnlocked.current = true;
+              unlockAudio();
+            }
+          }}
+        />
         <View style={styles.buttonsCol}>
-          <DashButton overlay={dashOverlay} onPress={() => (dashRequest.current = true)} />
+          {buttonIds.map((id, i) => (
+            <AbilityButton
+              key={`${i}-${id}`}
+              id={id}
+              overlay={overlays[i]!}
+              onPress={() => {
+                castRequests.current[i] = true;
+                if (!audioUnlocked.current) {
+                  audioUnlocked.current = true;
+                  unlockAudio();
+                }
+              }}
+            />
+          ))}
         </View>
       </View>
 
@@ -299,6 +490,17 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
+  },
+  announceWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
+  announceText: {
+    fontSize: 32,
+    fontWeight: "900",
+    color: "#d99a41",
+    letterSpacing: 3,
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   countdown: { fontSize: 96, fontWeight: "900", color: "#f0e8d8" },
   teamHint: { fontSize: 15, color: "#f0e8d8", opacity: 0.8, marginTop: 4 },

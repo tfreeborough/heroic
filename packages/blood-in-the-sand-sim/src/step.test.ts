@@ -10,10 +10,11 @@ import {
   reconnectPlayer,
   removePlayer,
   restoreRng,
+  setPlayerAbilities,
   setPlayerWeapon,
   type ArenaSim,
 } from "./sim";
-import { seatedPlayers, type PlayerInput } from "./state";
+import { seatedPlayers, slotOf, type PlayerInput } from "./state";
 import { stepSim } from "./step";
 
 // ── Fixture: a small square test zone (512×512) with an off-centre pillar ──
@@ -37,13 +38,15 @@ const makeZone = (): ZoneFile => ({
   ],
 });
 
-/** Two players seated (both on the blade), still in the lobby. */
+/** Two players seated (both on the blade, dash in slot 0), still in the lobby. */
 const makeSim = (seed = 0xb100d): ArenaSim => {
   const sim = createSim(makeZone(), seed);
   addPlayer(sim, "alice");
   addPlayer(sim, "bob");
   setPlayerWeapon(sim, 0, "blade");
   setPlayerWeapon(sim, 1, "blade");
+  setPlayerAbilities(sim, 0, ["dash", "tremor", "sandstorm"]);
+  setPlayerAbilities(sim, 1, ["dash", "tremor", "sandstorm"]);
   return sim;
 };
 
@@ -76,7 +79,7 @@ const seek = (sim: ArenaSim, id: number, seq = 0): PlayerInput => {
   const me = sim.state.players[id]!;
   const enemy = seatedPlayers(sim.state).find((p) => p.team !== me.team)!;
   const dir = normalize(sub(enemy.mover.pos, me.mover.pos));
-  return { seq, sx: dir.x, sy: dir.y, dash: false };
+  return { seq, sx: dir.x, sy: dir.y, casts: [] };
 };
 
 const COUNTDOWN_TICKS = Math.ceil(COUNTDOWN_SECONDS / TICK_DT);
@@ -193,7 +196,7 @@ describe("combat", () => {
     const strikeTick = controlHits[0]!.tick;
 
     const dodged = setup();
-    dodged.state.players[1]!.dash.invulnLeft = (strikeTick + 5) * TICK_DT; // covers the strike
+    slotOf(dodged.state.players[1]!, "dash")!.invulnLeft = (strikeTick + 5) * TICK_DT; // covers the strike
     const events = run(dodged, strikeTick + 3);
     expect(hitsOnBob(events)).toHaveLength(0);
     expect(dodged.state.players[1]!.combatant.hp).toBe(PLAYER_STATS.maxHp);
@@ -205,12 +208,12 @@ describe("combat", () => {
     const p0 = sim.state.players[0]!;
     const startX = p0.mover.pos.x;
 
-    // Dash pressed on the first tick, stick held east.
+    // Dash (slot 0) pressed on the first tick, stick held east.
     const events = run(sim, 10, (tick) =>
-      new Map([[0, { seq: tick, sx: 1, sy: 0, dash: tick === 0 }]]),
+      new Map([[0, { seq: tick, sx: 1, sy: 0, casts: [tick === 0] }]]),
     );
-    expect(ofType(events, "dash")).toHaveLength(1);
-    expect(p0.dash.ability.phase).toBe("cooldown");
+    expect(ofType(events, "cast").filter((e) => e.event.ability === "dash")).toHaveLength(1);
+    expect(slotOf(p0, "dash")!.ability.phase).toBe("cooldown");
     // The committed movement covers most of DASH_DISTANCE ⇒ past accel range.
     expect(p0.mover.pos.x - startX).toBeGreaterThan(DASH_DISTANCE * 0.6);
   });
@@ -225,7 +228,7 @@ describe("combat", () => {
     // before windup-tracking this whiffed forever. Counterplay is dash/range.
     const events = run(sim, 60, (_, s) => {
       const strafe = seek(s, 1);
-      return new Map([[1, { seq: 0, sx: -strafe.sy, sy: strafe.sx, dash: false }]]);
+      return new Map([[1, { seq: 0, sx: -strafe.sy, sy: strafe.sx, casts: [] }]]);
     });
     expect(ofType(events, "hit").filter((h) => h.event.targetId === 1).length).toBeGreaterThan(0);
   });
@@ -308,7 +311,7 @@ describe("match flow", () => {
     expect(p1.name).toBe("bob-again");
     const xBefore = p1.mover.pos.x;
     run(sim, 15, (_, s) =>
-      new Map([[1, { seq: 0, sx: p1.alive ? -1 : 0, sy: 0, dash: false }]]),
+      new Map([[1, { seq: 0, sx: p1.alive ? -1 : 0, sy: 0, casts: [] }]]),
     );
     if (p1.alive && sim.state.round.phase === "active") {
       expect(p1.mover.pos.x).toBeLessThan(xBefore); // inputs move him again
@@ -343,7 +346,7 @@ describe("determinism", () => {
     const a = seek(s, 0, tick);
     const bSeek = seek(s, 1, tick);
     // Bob strafes (perpendicular to the seek line) and dashes periodically.
-    const b: PlayerInput = { seq: tick, sx: -bSeek.sy, sy: bSeek.sx, dash: tick % 90 === 0 };
+    const b: PlayerInput = { seq: tick, sx: -bSeek.sy, sy: bSeek.sx, casts: [tick % 90 === 0] };
     return new Map([
       [0, a],
       [1, b],

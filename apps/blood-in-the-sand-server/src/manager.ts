@@ -98,14 +98,9 @@ export class RoomManager {
         }
         return;
       }
-      case "lockIn": {
+      case "forceStart": {
         const id = ws.data.playerId;
-        if (id !== null) this.roomOf(ws)?.lockIn(id, performance.now());
-        return;
-      }
-      case "startMatch": {
-        const id = ws.data.playerId;
-        if (id !== null) this.roomOf(ws)?.startByHost(id);
+        if (id !== null) this.roomOf(ws)?.forceStart(id, performance.now());
         return;
       }
       case "input": {

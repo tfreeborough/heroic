@@ -78,24 +78,26 @@ export interface GameClient {
   roomState: RoomStateInfo | null;
   onEvents: ((events: ArenaEvent[]) => void) | null;
   readonly myWeapon: WeaponId | null;
-  sendInput(sx: number, sy: number, dash: boolean): void;
+  /** `casts` indexed by ability slot (= pick = button order). */
+  sendInput(sx: number, sy: number, casts: boolean[]): void;
 }
 
 /**
- * What RoomScreen needs on top of GameClient to run the lobby + pick ceremony
+ * What RoomScreen needs on top of GameClient to run the lobby + arming wizard
  * — satisfied by ArenaClient (real rooms) AND PracticeClient (offline, so the
- * ceremony is testable without a second player).
+ * whole flow is testable without a second player). Nobody starts the match:
+ * the sim's arming countdown does (pvp-loadout-flow.md).
  */
 export interface LobbyClient extends GameClient {
   phase: RoundPhase;
   readonly hostId: number | null;
   readonly isHost: boolean;
-  /** Own drafted hand, in button order (from the team-filtered roomState). */
+  /** Own picked hand, in button order (from the team-filtered roomState). */
   readonly myAbilities: AbilityId[];
   setWeapon(weapon: WeaponId): void;
   setAbilities(abilities: AbilityId[]): void;
-  lockIn(): void;
-  startMatch(): void;
+  /** Host-only AFK backstop: auto-arm the stragglers; the countdown follows. */
+  forceStart(): void;
 }
 
 export class ArenaClient {
@@ -241,10 +243,6 @@ export class ArenaClient {
     this.send({ t: "listRooms" });
   }
 
-  startMatch(): void {
-    this.send({ t: "startMatch" });
-  }
-
   setWeapon(weapon: WeaponId): void {
     this.send({ t: "setWeapon", weapon });
   }
@@ -253,9 +251,9 @@ export class ArenaClient {
     this.send({ t: "setAbilities", abilities });
   }
 
-  /** Done adjusting — all locked ends the draft phase early. */
-  lockIn(): void {
-    this.send({ t: "lockIn" });
+  /** Host-only: auto-arm the stragglers; the server ignores it from others. */
+  forceStart(): void {
+    this.send({ t: "forceStart" });
   }
 
   /** Our own row in the latest team-filtered roomState broadcast. */
@@ -283,8 +281,8 @@ export class ArenaClient {
     this.onChange?.();
   }
 
-  sendInput(sx: number, sy: number, dash: boolean): void {
-    this.send({ t: "input", seq: this.seq++, sx, sy, dash });
+  sendInput(sx: number, sy: number, casts: boolean[]): void {
+    this.send({ t: "input", seq: this.seq++, sx, sy, casts });
   }
 
   private send(msg: ClientMsg): void {

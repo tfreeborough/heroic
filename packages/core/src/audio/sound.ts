@@ -64,8 +64,16 @@ export interface SoundDef extends SoundConfig {
   variants?: Record<string, SoundBank>;
 }
 
-/** event → its definition. A game supplies only the events it has sounds for. */
-export type SoundCatalogue = Partial<Record<SoundEvent, SoundDef>>;
+/**
+ * event → its definition. A game supplies only the events it has sounds for.
+ *
+ * Generic over the event key so a game with its own event vocabulary (Blood in
+ * the Sand's `BitsSoundEvent`) reuses this whole scheduler without widening the
+ * shared {@link SoundEvent} union — the union stays the small, stable contract
+ * for games that speak it, and the type param carries anything bespoke. Defaults
+ * to `SoundEvent`, so existing callers are unchanged.
+ */
+export type SoundCatalogue<E extends string = SoundEvent> = Partial<Record<E, SoundDef>>;
 
 /** What the scheduler decided to play — handed straight to the engine's `playSfx`. */
 export interface PlaySound {
@@ -80,7 +88,7 @@ export interface PlaySound {
 /** Default minimum ms between two plays of the *same* resolved sound — tuned like the haptics floor. */
 export const DEFAULT_THROTTLE_MS = 60;
 
-export interface SoundScheduler {
+export interface SoundScheduler<E extends string = SoundEvent> {
   /**
    * Decide whether `event` should sound right now. `qualifier` selects a variant
    * bank (creature kind / surface / weapon); omit it (or pass an unknown one) to
@@ -89,12 +97,12 @@ export interface SoundScheduler {
    * sound is throttled or the catalogue has nothing for it — the app hands any
    * non-null result to the AudioDirector's `playSfx`, fire-and-forget.
    */
-  play(event: SoundEvent, qualifier?: string, overrides?: SoundConfig): PlaySound | null;
+  play(event: E, qualifier?: string, overrides?: SoundConfig): PlaySound | null;
 }
 
-export interface SoundSchedulerDeps {
+export interface SoundSchedulerDeps<E extends string = SoundEvent> {
   /** What each event sounds like. */
-  catalogue: SoundCatalogue;
+  catalogue: SoundCatalogue<E>;
   /** Clock in ms — the app passes `Date.now`; tests pass a controllable stub. */
   now: () => number;
   /** Seeded RNG for clip choice + (later) any random shaping. Deterministic in tests. */
@@ -112,7 +120,9 @@ const pickClip = (clips: string[], key: string, lastClip: Map<string, number>, r
   return clips[i]!;
 };
 
-export const createSoundScheduler = (deps: SoundSchedulerDeps): SoundScheduler => {
+export const createSoundScheduler = <E extends string = SoundEvent>(
+  deps: SoundSchedulerDeps<E>,
+): SoundScheduler<E> => {
   const { catalogue, now, rng } = deps;
   const defaultThrottleMs = deps.defaultThrottleMs ?? DEFAULT_THROTTLE_MS;
   /** Resolved bank key → last play time (ms). Throttling is per-bank so the *same* sound

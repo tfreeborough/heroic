@@ -17,10 +17,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { loadEnv, type Plugin } from "vite";
-import { EXPANDER, SFX } from "./styleBible";
+import { EXPANDER_MODEL, ICON, SFX, SFX_BITS, expanderSystem, type SfxSpec } from "./styleBible";
 import { SFX_MODEL_ID, generateSfx } from "./elevenlabs";
-import { expandPrompt } from "./openai";
+import { IMAGE_MODEL_ID, expandPrompt, generateImage } from "./openai";
 import { processSfx } from "./audio";
+import { processIcon } from "./images";
 import type {
   Candidate,
   ExpandRequest,
@@ -34,6 +35,12 @@ import type {
 
 /** Bank names are file names and manifest keys — snake_case, letter first. */
 const NAME_RE = /^[a-z][a-z0-9_]*$/;
+/** Icon ids are kebab-case (they mirror the sim's WeaponId/AbilityId unions). */
+const ICON_NAME_RE = /^[a-z][a-z0-9-]*$/;
+
+/** The two ElevenLabs SFX types share a pipeline — only tone/destination differ. */
+const sfxSpec = (type: string): SfxSpec | null =>
+  type === SFX.id ? SFX : type === SFX_BITS.id ? SFX_BITS : null;
 
 const json = (res: ServerResponse, code: number, body: unknown): void => {
   res.statusCode = code;
@@ -79,14 +86,31 @@ export const forgePlugin = (): Plugin => {
   let openaiKey = "";
   let repoRoot = "";
 
-  const status = (): ForgeStatus => ({
-    types: [{ id: SFX.id, label: SFX.label, provider: SFX.provider, candidates: SFX.candidates }],
-    keys: { elevenlabs: elevenKey.length > 0, openai: openaiKey.length > 0 },
-  });
+  const status = async (): Promise<ForgeStatus> => {
+    const listDir = async (dir: string, ext: string): Promise<string[]> => {
+      const abs = join(repoRoot, dir);
+      return existsSync(abs) ? (await readdir(abs)).filter((f) => f.endsWith(ext)) : [];
+    };
+    const [iconFiles, sfxFiles] = await Promise.all([
+      listDir(ICON.destination, ".png"),
+      listDir(SFX_BITS.destination, ".mp3"),
+    ]);
+    return {
+      types: [
+        { id: SFX_BITS.id, label: SFX_BITS.label, provider: SFX_BITS.provider, candidates: SFX_BITS.candidates },
+        { id: ICON.id, label: ICON.label, provider: ICON.provider, candidates: ICON.candidates },
+        { id: SFX.id, label: SFX.label, provider: SFX.provider, candidates: SFX.candidates },
+      ],
+      keys: { elevenlabs: elevenKey.length > 0, openai: openaiKey.length > 0 },
+      iconFiles,
+      sfxFiles,
+    };
+  };
 
   const expand = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const body = await readJson<ExpandRequest>(req);
-    if (body.type !== SFX.id) return json(res, 400, { error: `unknown asset type "${body.type}"` });
+    const spec = sfxSpec(body.type);
+    if (!spec) return json(res, 400, { error: `unknown asset type "${body.type}"` });
     const subject = (body.subject ?? "").trim();
     if (!subject) return json(res, 400, { error: "subject is required" });
     if (!openaiKey)
@@ -96,13 +120,49 @@ export const forgePlugin = (): Plugin => {
       });
     const duration = clampDuration(body.durationSeconds);
     const user = duration ? `${subject}\n\nTarget length: about ${duration} seconds.` : subject;
-    const prompt = await expandPrompt(openaiKey, EXPANDER.model, EXPANDER.system, user);
+    const prompt = await expandPrompt(
+      openaiKey,
+      EXPANDER_MODEL,
+      expanderSystem(spec.soundIdentity),
+      user,
+    );
     json(res, 200, { prompt } satisfies ExpandResponse);
+  };
+
+  /** Icon generation: N transparent PNGs. The panel builds the prompt (it owns
+   * the set — sim tables + subject overlay) and sends it verbatim; the bare
+   * subject fallback below only serves curl/testing. */
+  const generateIcons = async (body: GenerateRequest, res: ServerResponse): Promise<void> => {
+    if (!openaiKey)
+      return json(res, 503, {
+        error:
+          "OPENAI_API_KEY is missing — add it to apps/realmsmith/.env.local and restart the dev server",
+      });
+    const subject = (body.subject ?? "").trim();
+    const explicit = (body.prompt ?? "").trim().slice(0, 2400);
+    if (!explicit && !subject) return json(res, 400, { error: "a prompt or subject is required" });
+    const prompt = explicit || ICON.template(subject, "weapon");
+
+    const settled = await Promise.allSettled(
+      Array.from({ length: ICON.candidates }, () => generateImage(openaiKey, prompt)),
+    );
+    const candidates: Candidate[] = [];
+    for (const r of settled) {
+      if (r.status === "fulfilled")
+        candidates.push({ id: candidates.length, mime: "image/png", b64: r.value.toString("base64") });
+    }
+    if (candidates.length === 0) {
+      const first = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+      return json(res, 502, { error: `generation failed: ${first ? String(first.reason) : "unknown"}` });
+    }
+    json(res, 200, { prompt, candidates } satisfies GenerateResponse);
   };
 
   const generate = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const body = await readJson<GenerateRequest>(req);
-    if (body.type !== SFX.id) return json(res, 400, { error: `unknown asset type "${body.type}"` });
+    if (body.type === ICON.id) return generateIcons(body, res);
+    const spec = sfxSpec(body.type);
+    if (!spec) return json(res, 400, { error: `unknown asset type "${body.type}"` });
     const subject = (body.subject ?? "").trim();
     if (!subject) return json(res, 400, { error: "subject is required" });
     if (!elevenKey)
@@ -113,11 +173,11 @@ export const forgePlugin = (): Plugin => {
 
     // An explicit prompt (the panel's editable box — hand-written or LLM-expanded)
     // is sent verbatim; otherwise the style-bible template seeds from the subject.
-    const prompt = (body.prompt ?? "").trim().slice(0, 800) || SFX.template(subject);
+    const prompt = (body.prompt ?? "").trim().slice(0, 800) || spec.template(subject);
     const durationSeconds = clampDuration(body.durationSeconds);
-    const promptInfluence = clampInfluence(body.promptInfluence) ?? SFX.promptInfluence;
+    const promptInfluence = clampInfluence(body.promptInfluence) ?? spec.promptInfluence;
     const settled = await Promise.allSettled(
-      Array.from({ length: SFX.candidates }, () =>
+      Array.from({ length: spec.candidates }, () =>
         generateSfx(elevenKey, { text: prompt, durationSeconds, promptInfluence }),
       ),
     );
@@ -133,9 +193,61 @@ export const forgePlugin = (): Plugin => {
     json(res, 200, { prompt, candidates } satisfies GenerateResponse);
   };
 
+  /** Icon save: one PNG per id, overwritten on regeneration; sidecar refreshed. */
+  const saveIcon = async (body: SaveRequest, res: ServerResponse): Promise<void> => {
+    const id = body.baseName ?? "";
+    if (!ICON_NAME_RE.test(id) || id.length > 48)
+      return json(res, 400, {
+        error: "icon name must be kebab-case — lowercase letters/digits/hyphens, starting with a letter",
+      });
+    const take = Array.isArray(body.takes) ? body.takes.find((t) => typeof t === "string" && t.length > 0) : undefined;
+    if (!take) return json(res, 400, { error: "no candidate selected" });
+
+    const raw = Buffer.from(take, "base64");
+    if (raw.length === 0) return json(res, 400, { error: "the selected candidate had an empty payload" });
+    const dir = join(repoRoot, ICON.destination);
+    await mkdir(dir, { recursive: true });
+    const file = `${id}.png`;
+    await writeFile(join(dir, file), await processIcon(raw, ICON.savedSize));
+
+    // Sidecar: keep `created` across regenerations, refresh everything else.
+    const sidecarPath = join(dir, `${id}.forge.json`);
+    const now = new Date().toISOString();
+    let created = now;
+    if (existsSync(sidecarPath)) {
+      try {
+        const prev = JSON.parse(await readFile(sidecarPath, "utf8")) as { created?: unknown };
+        if (typeof prev.created === "string") created = prev.created;
+      } catch {
+        /* unreadable sidecar → rewrite it */
+      }
+    }
+    const sidecar = {
+      type: ICON.id,
+      subject: body.subject ?? "",
+      prompt: body.prompt ?? "",
+      provider: ICON.provider,
+      model: IMAGE_MODEL_ID,
+      params: { size: "1024x1024", quality: "medium", background: "transparent", savedSize: ICON.savedSize },
+      files: [file],
+      created,
+      updated: now,
+    };
+    await writeFile(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`);
+
+    json(res, 200, {
+      files: [file],
+      sidecar: `${ICON.destination}/${id}.forge.json`,
+      // The require-map line for the app's icons.tsx (src/loadout → assets).
+      manifestLines: [`  "${id}": require("../../assets/icons/${file}"),`],
+    } satisfies SaveResponse);
+  };
+
   const save = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const body = await readJson<SaveRequest>(req);
-    if (body.type !== SFX.id) return json(res, 400, { error: `unknown asset type "${body.type}"` });
+    if (body.type === ICON.id) return saveIcon(body, res);
+    const spec = sfxSpec(body.type);
+    if (!spec) return json(res, 400, { error: `unknown asset type "${body.type}"` });
     const base = body.baseName ?? "";
     if (!NAME_RE.test(base) || base.length > 48)
       return json(res, 400, {
@@ -146,7 +258,7 @@ export const forgePlugin = (): Plugin => {
       : [];
     if (takes.length === 0) return json(res, 400, { error: "no takes selected" });
 
-    const dir = join(repoRoot, SFX.destination);
+    const dir = join(repoRoot, spec.destination);
     await mkdir(dir, { recursive: true });
 
     // Continue the variation-bank numbering from whatever is already on disk, so
@@ -163,7 +275,7 @@ export const forgePlugin = (): Plugin => {
     for (const b64 of takes) {
       const raw = Buffer.from(b64, "base64");
       if (raw.length === 0) return json(res, 400, { error: "a selected take had an empty payload" });
-      const processed = await processSfx(raw, SFX.loudnessLufs, SFX.truePeakDb);
+      const processed = await processSfx(raw, spec.loudnessLufs, spec.truePeakDb);
       const file = `${base}_${next++}.mp3`;
       await writeFile(join(dir, file), processed);
       files.push(file);
@@ -189,16 +301,16 @@ export const forgePlugin = (): Plugin => {
       }
     }
     const sidecar = {
-      type: SFX.id,
+      type: spec.id,
       subject: body.subject ?? "",
       prompt: body.prompt ?? "",
-      provider: SFX.provider,
+      provider: spec.provider,
       model: SFX_MODEL_ID,
       params: {
         durationSeconds: clampDuration(body.durationSeconds) ?? null,
-        promptInfluence: clampInfluence(body.promptInfluence) ?? SFX.promptInfluence,
-        loudnessLufs: SFX.loudnessLufs,
-        truePeakDb: SFX.truePeakDb,
+        promptInfluence: clampInfluence(body.promptInfluence) ?? spec.promptInfluence,
+        loudnessLufs: spec.loudnessLufs,
+        truePeakDb: spec.truePeakDb,
       },
       files: [...prevFiles, ...files],
       created,
@@ -207,11 +319,11 @@ export const forgePlugin = (): Plugin => {
     await writeFile(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`);
 
     const manifestLines = files.map(
-      (f) => `  ${f.replace(/\.mp3$/, "")}: require("../../../assets/audio/sfx/${f}"),`,
+      (f) => `  ${f.replace(/\.mp3$/, "")}: require("${spec.manifestDir}/${f}"),`,
     );
     json(res, 200, {
       files,
-      sidecar: `${SFX.destination}/${base}.forge.json`,
+      sidecar: `${spec.destination}/${base}.forge.json`,
       manifestLines,
     } satisfies SaveResponse);
   };
@@ -219,7 +331,7 @@ export const forgePlugin = (): Plugin => {
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // Mounted at /forge, so req.url arrives with that prefix stripped.
     const url = (req.url ?? "").split("?")[0];
-    if (req.method === "GET" && url === "/status") return json(res, 200, status());
+    if (req.method === "GET" && url === "/status") return json(res, 200, await status());
     if (req.method === "POST" && url === "/expand") return expand(req, res);
     if (req.method === "POST" && url === "/generate") return generate(req, res);
     if (req.method === "POST" && url === "/save") return save(req, res);
@@ -238,7 +350,15 @@ export const forgePlugin = (): Plugin => {
       repoRoot = resolve(config.root, "../..");
     },
     configureServer(server) {
-      server.middlewares.use("/forge", (req, res) => {
+      server.middlewares.use("/forge", (req, res, next) => {
+        // Only claim the actual endpoints. Everything else under /forge/ is
+        // Vite serving this very directory as browser modules (the panel
+        // imports styleBible.ts at runtime) — pass it through.
+        const url = (req.url ?? "").split("?")[0];
+        const isEndpoint =
+          (req.method === "GET" && url === "/status") ||
+          (req.method === "POST" && (url === "/expand" || url === "/generate" || url === "/save"));
+        if (!isEndpoint) return next();
         void handle(req, res).catch((e: unknown) => {
           if (!res.headersSent) json(res, 500, { error: e instanceof Error ? e.message : String(e) });
         });

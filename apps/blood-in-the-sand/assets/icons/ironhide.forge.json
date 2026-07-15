@@ -1,0 +1,19 @@
+{
+  "type": "icon-bits",
+  "subject": "a flexing forearm and fist turned to cracked dark iron",
+  "prompt": "a flexing forearm and fist turned to cracked dark iron. A grim dark-fantasy game ability icon for a brutal gladiator arena game set in a scorched desert. Hand-inked woodcut illustration: one bold central silhouette filling about 80% of the frame, heavy black ink, rough expressive hatching, sun-bleached bone (#f0e8d8) highlights carving the shape out of the dark, scorched sand-ochre (#b39763) midtones like heat-baked dust settled on every surface, and a steel blue (#4da3d9) accent burning on the focal element. Gladiatorial desert materials: hammered bronze, cracked leather wraps, sun-split wood, rust and dried blood. A rough aged-bone die-cut outline traces the whole silhouette, like a woodcut poster cut from pale paper — it separates the shape from a near-black UI. Grim, sun-scoured, blood-and-sand mood — never cute, never photorealistic, never a clean flat vector. Chunky shapes that stay readable at 32 pixels. The cut-out floats alone on a fully transparent background — no backdrop, no glow, no vignette; every pixel outside the cut line is transparent. No text.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1024",
+    "quality": "medium",
+    "background": "transparent",
+    "savedSize": 256,
+    "quantized": "libimagequant q80 dither1"
+  },
+  "files": [
+    "ironhide.png"
+  ],
+  "created": "2026-07-14T22:56:21.843Z",
+  "updated": "2026-07-14T23:06:33.488Z"
+}

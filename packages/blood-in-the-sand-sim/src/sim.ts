@@ -19,7 +19,14 @@ import {
   type ZoneFile,
 } from "@heroic/core";
 import { ABILITIES, LOADOUT_ABILITY_COUNT, PLAYER_STATS, WEAPONS, type AbilityId, type WeaponId } from "./config";
-import { createArenaState, createPlayer, type ArenaPlayer, type ArenaState, type RoundPhase, type Team } from "./state";
+import {
+  createAbilitySlots,
+  createArenaState,
+  createPlayer,
+  type ArenaPlayer,
+  type ArenaState,
+  type Team,
+} from "./state";
 
 const GRID_CELL = 64;
 
@@ -103,59 +110,41 @@ export const addPlayer = (sim: ArenaSim, name: string): ArenaPlayer | null => {
   const spawn = sim.zone.spawns[id]!;
   const player = createPlayer(id, name, team, spawn, spawnFacing(sim, spawn));
   sim.state.players[id] = player;
+  // A join cancels a running arming countdown — the newcomer needs to arm
+  // (pvp-loadout-flow.md); it restarts fresh once every seat is armed again.
+  sim.state.round.timer = 0;
   return player;
 };
 
-/** Every phase where loadouts may still change: the lobby, the draft's blind
- * pick, and the counterpick window. Locked everywhere else. */
-const repickPhase = (phase: RoundPhase): boolean =>
-  phase === "lobby" || phase === "pick" || phase === "reveal";
-
 /**
  * A weapon pick (duplicates allowed — variety by choice, not by rule).
- * Rebuilds the combatant so the weapon's stat overlay lands. Rejected once
- * this draft phase is locked in (lockInPlayer) — repicking means unlocking
- * was never offered: a lock is a lock.
+ * Rebuilds the combatant so the weapon's stat overlay lands. Lobby only —
+ * picks REPLACE, never clear, so a player can never become un-armed (which is
+ * what lets the arming countdown ignore edits).
  */
 export const setPlayerWeapon = (sim: ArenaSim, id: number, weapon: WeaponId): boolean => {
   const player = sim.state.players[id];
-  if (!player || !repickPhase(sim.state.round.phase) || player.lockedIn) return false;
+  if (!player || sim.state.round.phase !== "lobby") return false;
   player.weapon = weapon;
   player.combatant = makeCombatant({ ...PLAYER_STATS, ...WEAPONS[weapon].stats });
   return true;
 };
 
 /**
- * The ability draft: up to LOADOUT_ABILITY_COUNT distinct ids, order = the
+ * The ability picks: up to LOADOUT_ABILITY_COUNT distinct ids, order = the
  * in-match button order. The client sends the whole list each change
- * (idempotent, no add/remove protocol). Same phase/lock gate as the weapon.
+ * (idempotent, no add/remove protocol). Same lobby-only gate as the weapon.
  */
 export const setPlayerAbilities = (sim: ArenaSim, id: number, abilities: AbilityId[]): boolean => {
   const player = sim.state.players[id];
-  if (!player || !repickPhase(sim.state.round.phase) || player.lockedIn) return false;
+  if (!player || sim.state.round.phase !== "lobby") return false;
   if (!Array.isArray(abilities) || abilities.length > LOADOUT_ABILITY_COUNT) return false;
   if (abilities.some((a) => !(a in ABILITIES))) return false;
   if (new Set(abilities).size !== abilities.length) return false;
   player.abilities = [...abilities];
-  return true;
-};
-
-/** A loadout that can lock: a weapon plus a full ability hand. */
-export const loadoutComplete = (p: ArenaPlayer): boolean =>
-  p.weapon !== null && p.abilities.length === LOADOUT_ABILITY_COUNT;
-
-/**
- * LOCK IN — commits the loadout for this draft phase (pick or counterpick).
- * Requires a complete loadout; incomplete players are auto-filled when the
- * clock closes the phase instead. Once every connected player is locked the
- * round machine ends the phase early.
- */
-export const lockInPlayer = (sim: ArenaSim, id: number): boolean => {
-  const phase = sim.state.round.phase;
-  if (phase !== "pick" && phase !== "reveal") return false;
-  const player = sim.state.players[id];
-  if (!player || !loadoutComplete(player)) return false;
-  player.lockedIn = true;
+  // Keep the match runtimes in step with the picks — the round reset rebuilds
+  // these anyway; syncing here means hand-forced states (tests) are castable.
+  player.slots = createAbilitySlots(player.abilities);
   return true;
 };
 
@@ -164,6 +153,9 @@ export const removePlayer = (sim: ArenaSim, id: number): boolean => {
   if (sim.state.round.phase !== "lobby") return false;
   if (!sim.state.players[id]) return false;
   sim.state.players[id] = null;
+  // A leaver cancels a running arming countdown, same as a join — the party
+  // changed; the countdown restarts fresh if everyone left is still armed.
+  sim.state.round.timer = 0;
   return true;
 };
 

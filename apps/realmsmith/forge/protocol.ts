@@ -16,6 +16,14 @@ export interface ForgeStatus {
   types: ForgeTypeInfo[];
   /** Which provider keys the dev server found — the panel warns on the missing ones. */
   keys: { elevenlabs: boolean; openai: boolean };
+  /** PNGs already in the icon destination folder. The panel derives done-ness
+   * by matching these against the set it builds from the SIM's own tables
+   * (src/forge/iconSet.ts) — the server has no icon list of its own. */
+  iconFiles: string[];
+  /** mp3s already in the Blood in the Sand SFX folder. The panel matches these
+   * against the sound set it builds (src/forge/soundSet.ts): a bank is done when
+   * any `<id>_<n>.mp3` exists. Same server-has-no-list pattern as iconFiles. */
+  sfxFiles: string[];
 }
 
 export interface ExpandRequest {
@@ -58,7 +66,9 @@ export interface GenerateResponse {
 
 export interface SaveRequest {
   type: string;
-  /** snake_case bank name; files land as `<baseName>_<n>` continuing on-disk numbering. */
+  /** SFX: snake_case bank name, files land as `<baseName>_<n>` continuing
+   * on-disk numbering. Icons: the kebab-case manifest id, saved as `<id>.png`
+   * (one file per icon — regenerating overwrites). */
   baseName: string;
   subject: string;
   prompt: string;

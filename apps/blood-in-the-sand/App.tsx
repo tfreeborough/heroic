@@ -3,6 +3,12 @@ import { StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import {
+  ABILITY_IDS,
+  LOADOUT_ABILITY_COUNT,
+  WEAPON_IDS,
+  type AbilityId,
+} from "@heroic/blood-in-the-sand-sim";
 import { ArenaClient, DEFAULT_SERVER, resolveServerUrl } from "./src/net/connection";
 import { PracticeClient } from "./src/net/practice";
 import { GameScreen } from "./src/screens/GameScreen";
@@ -25,6 +31,16 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  */
 const SERVER = process.env.EXPO_PUBLIC_AUTO_HOST ?? DEFAULT_SERVER;
 
+/** AUTO_START's random hand — dev convenience only, mirrors the bot script. */
+const randomAutoHand = (): AbilityId[] => {
+  const pool = [...ABILITY_IDS];
+  const hand: AbilityId[] = [];
+  while (hand.length < LOADOUT_ABILITY_COUNT) {
+    hand.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
+  }
+  return hand;
+};
+
 type Route = "home" | "play" | "practice" | "settings";
 
 export default function App() {
@@ -44,16 +60,14 @@ export default function App() {
 
   useEffect(() => {
     if (!practice) return;
-    // The practice round machine returns to "lobby" after matchEnd — that's
-    // the offline analogue of leaving the room: back to the weapon lobby.
-    practice.onChange = () => {
-      if (practice.phase === "lobby") endPractice();
-      else force();
-    };
+    // The lobby is a live screen now (the arming wizard) — matchEnd returns
+    // there disarmed and the wizard reopens; leaving practice is RoomScreen's
+    // LEAVE button (endPractice), never a phase change.
+    practice.onChange = force;
     return () => {
       practice.onChange = null;
     };
-  }, [practice, endPractice]);
+  }, [practice]);
 
   const connect = useCallback(() => {
     setError(null);
@@ -90,8 +104,9 @@ export default function App() {
   }, [client]);
 
   // Simulator-loop conveniences: AUTO_JOIN=first hops into the first open
-  // room; AUTO_START presses the host's button when the lobby fills. Together
-  // with a bot, "expo start" alone produces a running match.
+  // room; AUTO_START arms this client with a random loadout (the server's
+  // arming countdown does the actual starting). Together with a bot,
+  // "expo start" alone produces a running match.
   const autoActedAt = useRef(0);
   useEffect(() => {
     if (!client || client.status !== "open") return;
@@ -104,22 +119,22 @@ export default function App() {
         setRoute("play");
         client.joinRoom("sim", open.code, "");
       }
-    } else if (process.env.EXPO_PUBLIC_AUTO_START && client.welcome && client.phase === "lobby" && client.isHost) {
-      const connected = client.roomState?.players.filter((p) => p.connected).length ?? 0;
-      if (connected >= 2) {
-        autoActedAt.current = now;
-        client.startMatch();
-      }
+    } else if (
+      process.env.EXPO_PUBLIC_AUTO_START &&
+      client.welcome &&
+      client.phase === "lobby" &&
+      client.myWeapon === null
+    ) {
+      autoActedAt.current = now;
+      client.setWeapon(WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!);
+      client.setAbilities(randomAutoHand());
     }
   });
 
-  // Every phase RoomScreen owns (the lobby + both draft beats); the rest is match.
-  const lobbyPhase = (phase: string): boolean =>
-    phase === "lobby" || phase === "pick" || phase === "reveal";
-
+  // RoomScreen owns the lobby (the arming wizard lives there); the rest is match.
   const inMatch =
-    (practice !== null && !lobbyPhase(practice.phase)) ||
-    (route === "play" && client?.welcome != null && !lobbyPhase(client.phase));
+    (practice !== null && practice.phase !== "lobby") ||
+    (route === "play" && client?.welcome != null && client.phase !== "lobby");
 
   let screen;
   if (route === "home") {
@@ -133,10 +148,10 @@ export default function App() {
   } else if (route === "settings") {
     screen = <SettingsScreen onBack={() => setRoute("home")} />;
   } else if (route === "practice") {
-    // Practice runs the SAME 4-beat draft as real rooms before the match.
+    // Practice runs the SAME arming wizard as real rooms before the match.
     screen = !practice ? (
       <PracticeScreen onBack={() => setRoute("home")} onStart={(name) => setPractice(new PracticeClient(name))} />
-    ) : practice.phase === "pick" || practice.phase === "reveal" ? (
+    ) : practice.phase === "lobby" ? (
       <RoomScreen client={practice} onLeave={endPractice} />
     ) : (
       <GameScreen client={practice} onLeave={endPractice} onQuit={endPractice} />
@@ -162,8 +177,8 @@ export default function App() {
     );
   } else if (!client.welcome) {
     screen = <RoomListScreen client={client} onBack={() => setRoute("home")} />;
-  } else if (lobbyPhase(client.phase)) {
-    // The whole draft (blind pick → reveal → counterpick) plays out on the lobby screen.
+  } else if (client.phase === "lobby") {
+    // The arming wizard + lobby (and its 10s countdown) all live on RoomScreen.
     screen = <RoomScreen client={client} onLeave={() => client.leaveRoom()} />;
   } else {
     screen = <GameScreen client={client} onLeave={() => client.leaveRoom()} />;

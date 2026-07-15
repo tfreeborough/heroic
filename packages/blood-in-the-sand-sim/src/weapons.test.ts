@@ -3,8 +3,8 @@ import type { ZoneFile } from "@heroic/core";
 import { TICK_DT, WEAPONS, type WeaponId } from "./config";
 import type { ArenaEvent } from "./events";
 import { resetForRound, startMatch } from "./round";
-import { addPlayer, createSim, setPlayerWeapon, type ArenaSim } from "./sim";
-import type { ArenaProjectile, PlayerInput } from "./state";
+import { addPlayer, createSim, setPlayerAbilities, setPlayerWeapon, type ArenaSim } from "./sim";
+import { slotOf, type ArenaProjectile, type PlayerInput } from "./state";
 import { stepSim } from "./step";
 
 // Same fixture as step.test.ts: 512×512, off-centre pillar at (256,128).
@@ -33,6 +33,9 @@ const makeFight = (w0: WeaponId, w1: WeaponId, seed = 0xb100d): ArenaSim => {
   addPlayer(sim, "bob");
   setPlayerWeapon(sim, 0, w0);
   setPlayerWeapon(sim, 1, w1);
+  // Dash in slot 0 so the i-frame forcings below have a slot to poke.
+  setPlayerAbilities(sim, 0, ["dash", "tremor", "sandstorm"]);
+  setPlayerAbilities(sim, 1, ["dash", "tremor", "sandstorm"]);
   sim.state.round.phase = "active";
   return sim;
 };
@@ -74,7 +77,7 @@ const shot = (over: Partial<ArenaProjectile>): ArenaProjectile => ({
   turnLeft: 0,
   id: 999,
   ownerId: 0,
-  weapon: "bow",
+  kind: "bow",
   targetId: null,
   ...over,
 });
@@ -131,7 +134,7 @@ describe("bow", () => {
     const sim = makeFight("bow", "blade");
     sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
     sim.state.players[1]!.mover.pos = { x: 346, y: 256 };
-    sim.state.players[1]!.dash.invulnLeft = 999; // i-frames cover every flight
+    slotOf(sim.state.players[1]!, "dash")!.invulnLeft = 999; // i-frames cover every flight
     const events = run(sim, 90);
     expect(hitsBy(events, 0)).toHaveLength(0);
     expect(sim.state.players[1]!.combatant.hp).toBe(100);
@@ -162,7 +165,7 @@ describe("staff", () => {
     const sim = makeFight("blade", "blade");
     sim.state.players[1]!.mover.pos = { x: 300, y: 400 }; // south-east of the shot line
     sim.state.projectiles.push(
-      shot({ pos: { x: 96, y: 256 }, weapon: "staff", speed: 300, radius: 10, targetId: 1 }),
+      shot({ pos: { x: 96, y: 256 }, kind: "staff", speed: 300, radius: 10, targetId: 1 }),
     );
     run(sim, 6);
     const orb = sim.state.projectiles.find((p) => p.id === 999);
@@ -175,7 +178,7 @@ describe("staff", () => {
     sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
     sim.state.players[1]!.mover.pos = { x: 330, y: 256 };
     // Bob strafes straight south at full speed, forever.
-    const events = run(sim, 300, () => new Map([[1, { seq: 0, sx: 0, sy: 1, dash: false }]]));
+    const events = run(sim, 300, () => new Map([[1, { seq: 0, sx: 0, sy: 1, casts: [] }]]));
     expect(hitsBy(events, 0).length).toBeGreaterThan(0);
   });
 });
@@ -186,7 +189,7 @@ describe("hammer", () => {
     const sim = makeFight(weapon, "blade", 3);
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
     sim.state.players[1]!.mover.pos = { x: 260, y: 256 };
-    sim.state.players[0]!.dash.invulnLeft = 999;
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999;
 
     const damages: number[] = [];
     let velAtFirstHit = 0;
@@ -223,7 +226,7 @@ describe("hammer", () => {
     const sim = makeFight("hammer", "blade", 3);
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
     sim.state.players[1]!.mover.pos = { x: 280, y: 256 };
-    sim.state.players[0]!.dash.invulnLeft = 999;
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999;
 
     // Swing until the first hammer hit lands.
     let hit = false;
@@ -240,7 +243,7 @@ describe("hammer", () => {
     sim.state.players[0]!.mover.pos = { x: 64, y: 64 };
     bob.mover.pos = { x: 416, y: 420 };
     bob.mover.vel = { x: 0, y: 0 };
-    const sprint = new Map([[1, { seq: 0, sx: 1, sy: 0, dash: false }]]);
+    const sprint = new Map([[1, { seq: 0, sx: 1, sy: 0, casts: [] }]]);
     run(sim, 15, () => sprint); // 0.5s — plenty to reach the (slowed) cap
     const slowedSpeed = Math.hypot(bob.mover.vel.x, bob.mover.vel.y);
     expect(slowedSpeed).toBeLessThan(280 * WEAPONS.hammer.slow!.factor + 5);
@@ -294,7 +297,7 @@ describe("bleed", () => {
     const sim = makeFight("blade", "blade", 0xfeed);
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
     sim.state.players[1]!.mover.pos = { x: 260, y: 256 };
-    sim.state.players[0]!.dash.invulnLeft = 999; // one-sided, so bob just soaks
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999; // one-sided, so bob just soaks
     const events = run(sim, 600);
     expect(ofType(events, "hit").filter((h) => h.event.bleed).length).toBeGreaterThan(0);
   });

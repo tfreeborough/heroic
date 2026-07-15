@@ -9,7 +9,19 @@
 import {
   ABILITIES,
   ABILITY_IDS,
+  BLOOD_FONT,
+  DASH_DISTANCE,
+  DASH_IFRAMES,
+  DASH_SHOVE_RADIUS,
+  HARPOON,
+  IRONHIDE,
+  MIRROR_GUARD,
   PLAYER_STATS,
+  SANDSTORM,
+  SANDTRAP,
+  STRAW_MAN,
+  TREMOR,
+  WAR_DRUMS,
   WEAPONS,
   WEAPON_IDS,
   type AbilityCategory,
@@ -72,15 +84,22 @@ const weaponDamage = (id: WeaponId): number => WEAPONS[id].stats.attack ?? PLAYE
 const weaponCycle = (id: WeaponId): number => WEAPONS[id].attack.windup + WEAPONS[id].attack.recovery;
 const weaponReach = (id: WeaponId): number => WEAPONS[id].attack.reach;
 
-const maxDamage = Math.max(...WEAPON_IDS.map(weaponDamage));
-const minCycle = Math.min(...WEAPON_IDS.map(weaponCycle));
-const maxReach = Math.max(...WEAPON_IDS.map(weaponReach));
+/**
+ * Roster-normalised bar (Tom 2026-07-15): the roster's best value fills the
+ * bar, the worst floors at 20% — never empty, and the scale auto-adjusts as
+ * weapons join the roster. Pass negated values for lower-is-better stats.
+ */
+const barFrac = (value: number, all: number[]): number => {
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  return max === min ? 1 : 0.2 + 0.8 * ((value - min) / (max - min));
+};
 
 /** Damage / speed / reach, straight from WEAPONS — the codex can never drift. */
 export const weaponBars = (id: WeaponId): StatBar[] => [
-  { label: "DAMAGE", frac: weaponDamage(id) / maxDamage, display: String(weaponDamage(id)) },
-  { label: "SPEED", frac: minCycle / weaponCycle(id), display: `${weaponCycle(id).toFixed(1)}s cycle` },
-  { label: "REACH", frac: weaponReach(id) / maxReach, display: `${weaponReach(id)}px` },
+  { label: "DAMAGE", frac: barFrac(weaponDamage(id), WEAPON_IDS.map(weaponDamage)), display: String(weaponDamage(id)) },
+  { label: "SPEED", frac: barFrac(-weaponCycle(id), WEAPON_IDS.map((w) => -weaponCycle(w))), display: `${weaponCycle(id).toFixed(1)}s cycle` },
+  { label: "REACH", frac: barFrac(weaponReach(id), WEAPON_IDS.map(weaponReach)), display: `${weaponReach(id)}px` },
 ];
 
 const deg = (rad: number): number => Math.round((rad * 180) / Math.PI);
@@ -109,39 +128,41 @@ export const weaponChips = (id: WeaponId): CodexChip[] => {
 };
 
 // ── Abilities ──────────────────────────────────────────────────────────────
-// Chips carry the design-doc numbers until each ability's effect is built in
-// the sim — then its chip values move into (and read from) config, like weapons.
+// Chip values read straight from the sim's per-ability config tables (the
+// weapons rule): the codex can never drift from what the arena actually does.
 
 export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; desc: string; chips: CodexChip[] }> = {
   sandtrap: {
-    hint: "bury a mine — 2s to arm, then it bites",
-    quote: "Bury a blade beneath the sand. Two breaths to arm — then the first fool to step close eats it.",
-    desc: "Drops a visible mine at your feet. It arms over 2 seconds, then detonates on the first enemy in range. One live mine at a time — placing a new one fizzles the old.",
+    hint: "bury a charge — 2s to arm, then it erupts",
+    quote: "Bury a powder charge beneath the sand. Two breaths to arm — then the ground itself turns on them.",
+    desc: "Buries an explosive charge at your feet. It arms over 2 seconds, then erupts on the first enemy to step close, throwing everyone caught in the blast. One live charge at a time — placing a new one fizzles the old.",
     chips: [
-      { label: "ARM", value: "2s" },
-      { label: "DAMAGE", value: "30" },
-      { label: "BLAST", value: "90px" },
-      { label: "TRIGGER", value: "40px" },
+      { label: "ARM", value: `${SANDTRAP.armSeconds}s` },
+      { label: "DAMAGE", value: String(SANDTRAP.damage) },
+      { label: "BLAST", value: `${SANDTRAP.blastRadius}px` },
+      { label: "TRIGGER", value: `${SANDTRAP.triggerRadius}px` },
     ],
   },
   tremor: {
-    hint: "instant slam — throws everyone off you",
+    hint: "instant slam — hurls everyone off you",
     quote: "Slam the ground and send everyone around you sprawling. Best served surrounded.",
-    desc: "Instantly slams the ground: every enemy in the circle takes damage and is hurled outward.",
+    desc: "Instantly slams the ground: every enemy in the circle takes damage and is hurled away hard. The sand remembers the blow.",
     chips: [
-      { label: "RADIUS", value: "110px" },
-      { label: "DAMAGE", value: "12" },
+      { label: "RADIUS", value: `${TREMOR.radius}px` },
+      { label: "DAMAGE", value: String(TREMOR.damage) },
+      { label: "KNOCKBACK", value: String(TREMOR.knockback) },
       { label: "WINDUP", value: "none" },
     ],
   },
   harpoon: {
-    hint: "fast hook — drags your mark to you",
-    quote: "Hurl a barbed harpoon at your mark. It flies fast, it rarely misses, and it drags them straight to you.",
-    desc: "Fires at your current target — no target, no cast. On hit, drags them to just outside your reach.",
+    hint: "chain a mark, then haul them in — you hold your ground",
+    quote: "Hurl a barbed harpoon at your mark. It does not miss — and then you haul, and they come.",
+    desc: "Snaps a chain onto a mark in range — no mark, no cast. The chain lands the instant it's thrown, then reels them in against their will. You stand rooted while you haul; moving lets the chain go.",
     chips: [
-      { label: "SPEED", value: "950 px/s" },
-      { label: "RANGE", value: "300px" },
-      { label: "DAMAGE", value: "8" },
+      { label: "LANDING", value: "instant" },
+      { label: "REEL", value: `${HARPOON.reelSpeed} px/s` },
+      { label: "RANGE", value: `${HARPOON.maxRange}px` },
+      { label: "DAMAGE", value: String(HARPOON.damage) },
     ],
   },
   dash: {
@@ -149,9 +170,9 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     quote: "A short, sharp burst of speed — and a heartbeat where nothing can touch you.",
     desc: "A short hop with a moment of invulnerability — attacks and projectiles pass through you if timed right. Barges anyone in your path.",
     chips: [
-      { label: "DISTANCE", value: "75px" },
-      { label: "I-FRAMES", value: "0.2s" },
-      { label: "SHOVE", value: "46px sweep" },
+      { label: "DISTANCE", value: `${DASH_DISTANCE}px` },
+      { label: "I-FRAMES", value: `${DASH_IFRAMES}s` },
+      { label: "SHOVE", value: `${DASH_SHOVE_RADIUS}px sweep` },
     ],
   },
   "mirror-guard": {
@@ -159,7 +180,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     quote: "Raise a polished shield. Arrows and orbs fly back where they came from. Swords, sadly, do not.",
     desc: "While raised, projectiles that hit you become yours and fly back at the shooter. Melee passes straight through it.",
     chips: [
-      { label: "DURATION", value: "2s" },
+      { label: "DURATION", value: `${MIRROR_GUARD.duration}s` },
       { label: "REFLECT", value: "full damage" },
     ],
   },
@@ -168,9 +189,9 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     quote: "Turn your flesh to iron. Shrug off blows, slows and shoves — but iron is heavy, and you’ll move like it.",
     desc: "Hardens you: incoming damage is cut and slows, shoves and pulls don’t take — but your own speed is halved while it lasts.",
     chips: [
-      { label: "DURATION", value: "2.5s" },
-      { label: "DAMAGE TAKEN", value: "×0.3" },
-      { label: "SELF-SLOW", value: "×0.5" },
+      { label: "DURATION", value: `${IRONHIDE.duration}s` },
+      { label: "DAMAGE TAKEN", value: `×${IRONHIDE.damageTakenFactor}` },
+      { label: "SELF-SLOW", value: `×${IRONHIDE.selfSlowFactor}` },
     ],
   },
   "straw-man": {
@@ -178,8 +199,8 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     quote: "Plant a convincing stand-in. Enemy eyes — and blades — snap to it while you slip away.",
     desc: "Drops a dummy where you stand. Enemy targeting treats it as a real mark until it breaks or expires.",
     chips: [
-      { label: "DUMMY HP", value: "30" },
-      { label: "LIFETIME", value: "4s" },
+      { label: "DUMMY HP", value: String(STRAW_MAN.hp) },
+      { label: "LIFETIME", value: `${STRAW_MAN.lifetime}s` },
     ],
   },
   "war-drums": {
@@ -187,9 +208,9 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     quote: "Beat the drums. You and every ally in the circle surge while the rhythm lasts.",
     desc: "A circle of speed that moves with you. Allies inside surge; step out and it’s gone. The beat plays for as long as the drums do.",
     chips: [
-      { label: "RADIUS", value: "130px" },
-      { label: "DURATION", value: "3s" },
-      { label: "SPEED", value: "×1.35" },
+      { label: "RADIUS", value: `${WAR_DRUMS.radius}px` },
+      { label: "DURATION", value: `${WAR_DRUMS.duration}s` },
+      { label: "SPEED", value: `×${WAR_DRUMS.speedFactor}` },
     ],
   },
   "blood-font": {
@@ -197,25 +218,37 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     quote: "Raise a font of lifeblood. Allies standing in its circle knit their wounds shut.",
     desc: "Pours a stationary healing circle at your feet. Allies standing inside recover health while it lasts.",
     chips: [
-      { label: "RADIUS", value: "100px" },
-      { label: "DURATION", value: "4s" },
-      { label: "HEALING", value: "4hp / 0.5s" },
+      { label: "RADIUS", value: `${BLOOD_FONT.radius}px` },
+      { label: "DURATION", value: `${BLOOD_FONT.duration}s` },
+      { label: "HEALING", value: `${BLOOD_FONT.healPerTick}hp / ${BLOOD_FONT.tickInterval}s` },
     ],
   },
   sandstorm: {
-    hint: "a blinding cloud — no one inside can be marked",
-    quote: "Kick up a blinding whirl of sand. Nothing inside it can be marked — friend or foe.",
-    desc: "Kicks up a cloud at your feet. Anyone inside can’t be targeted — existing locks break, new ones won’t take. Friend and foe alike.",
+    hint: "a blinding whirl — no marks in, no aim out",
+    quote: "Kick up a blinding whirl of sand. Nothing inside it can mark, or be marked — friend or foe.",
+    desc: "Kicks up a swirling cloud at your feet. Anyone inside can’t be targeted — and can’t take aim out of it either. Existing locks break both ways. Friend and foe alike.",
     chips: [
-      { label: "RADIUS", value: "120px" },
-      { label: "DURATION", value: "3s" },
-      { label: "EFFECT", value: "untargetable inside" },
+      { label: "RADIUS", value: `${SANDSTORM.radius}px` },
+      { label: "DURATION", value: `${SANDSTORM.duration}s` },
+      { label: "EFFECT", value: "no aim in or out" },
     ],
   },
 };
 
+// Every ability carries its round budget (the charge economy, Tom 2026-07-15)
+// — appended from config once so no hand-written chip can drift.
+for (const id of ABILITY_IDS) {
+  ABILITY_CODEX[id].chips.push({ label: "CHARGES", value: `${ABILITIES[id].charges} / round` });
+}
+
 export const categoryOf = (id: AbilityId): AbilityCategory => ABILITIES[id].category;
 
-/** Ability ids grouped by category, in catalogue order — the sheet's sections. */
+/** Ability ids grouped by category, alphabetical (Tom 2026-07-15) — the pick lists' order. */
 export const abilitiesByCategory = (category: AbilityCategory): AbilityId[] =>
-  ABILITY_IDS.filter((id) => categoryOf(id) === category);
+  ABILITY_IDS.filter((id) => categoryOf(id) === category).sort((a, b) =>
+    ABILITIES[a].name.localeCompare(ABILITIES[b].name),
+  );
+
+/** Weapon ids alphabetical — same ordering rule as abilities. */
+export const sortedWeaponIds = (): WeaponId[] =>
+  [...WEAPON_IDS].sort((a, b) => WEAPONS[a].name.localeCompare(WEAPONS[b].name));

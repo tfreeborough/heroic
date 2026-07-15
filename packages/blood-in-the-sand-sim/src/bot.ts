@@ -30,10 +30,16 @@ export const createBotMemory = (): BotMemory => ({
 export interface BotDecision {
   sx: number;
   sy: number;
+  /** "Use the escape hop now" — the body maps this onto whichever slot holds
+   * dash (the cheapest v1 brain only ever casts dash; see pvp-abilities.md). */
   dash: boolean;
 }
 
 const IDLE: BotDecision = { sx: 0, sy: 0, dash: false };
+
+/** Is the bot's dash drafted, off cooldown, and still budgeted? */
+const dashReady = (me: PlayerSnapshot): boolean =>
+  me.abilities.some((s) => s.id === "dash" && s.cd === 0 && s.charges > 0);
 
 /**
  * Decide this tick's input. `me`/`enemy` come from the latest snapshot;
@@ -72,7 +78,7 @@ export const botThink = (
       memory.slideTicks -= 1;
       return { sx: -toward.y * memory.slideSign, sy: toward.x * memory.slideSign, dash: false };
     }
-    return { sx: toward.x, sy: toward.y, dash: me.dashCd === 0 && dist > 220 };
+    return { sx: toward.x, sy: toward.y, dash: dashReady(me) && dist > 220 };
   }
 
   // circle
@@ -81,6 +87,6 @@ export const botThink = (
   const sx = strafe.x + toward.x * inward;
   const sy = strafe.y + toward.y * inward;
   const mag = Math.hypot(sx, sy) || 1;
-  const dodge = me.dashCd === 0 && enemy.atk === "windup" && dist < 160;
+  const dodge = dashReady(me) && enemy.atk === "windup" && dist < 160;
   return { sx: sx / mag, sy: sy / mag, dash: dodge };
 };

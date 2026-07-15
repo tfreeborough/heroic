@@ -14,7 +14,7 @@
 import type { AttackPhase } from "@heroic/core";
 import type { AbilityId, WeaponId } from "./config";
 import type { ArenaEvent } from "./events";
-import type { RoundPhase, Team } from "./state";
+import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
 
 /**
  * v2 (2026-07-09): rooms + host-driven lobbies replaced the single global room.
@@ -35,8 +35,29 @@ import type { RoundPhase, Team } from "./state";
  * v7 (2026-07-13): the host owns the room — when the host leaves (or is gone
  * after the match), the room closes for everyone instead of migrating the crown.
  * Adds `roomClosed` (a kick with a reason; the client drops back to the list).
+ * v8 (2026-07-14): abilities are castable (pvp-abilities.md). `input.dash`
+ * generalises to `casts[]` (one latched flag per drafted slot); player
+ * snapshots carry the slot list (id + cooldown + active seconds — cooldown
+ * clocks and body-effect rings derive from these, replacing `dashCd`);
+ * snapshots gain `deployables`; projectiles carry `kind` (weapon or harpoon);
+ * events gain cast/detonate/heal. `dashCooldown` leaves the welcome config —
+ * the client reads ABILITIES[id].cooldown from this package, the WEAPONS rule.
+ * Amended 2026-07-15 (still unshipped, folded in): deployables carry `team`
+ * (the sandtrap's yours/theirs rendering); slots carry `charges` (the
+ * per-round budget); the harpoon is an instant chain — its projectile kind is
+ * gone and a `harpoon` event carries the chain-line endpoints.
+ * v9 (2026-07-15): the guided loadout flow (pvp-loadout-flow.md) replaces the
+ * draft ceremony. GONE: `lockIn` + `startMatch` messages, the `pick`/`reveal`
+ * RoundPhases, and `picked`/`locked`/`revealed`/`revealedAbilities` on
+ * RoomStatePlayer (there is no reveal, ever — in-match, ability picks show
+ * only through cast events, the cast flash). NEW: `armed` on RoomStatePlayer
+ * (public: weapon + full hand picked), `forceStart` (host-only AFK backstop —
+ * random-fills stragglers, then the same countdown runs). The 10s arming
+ * countdown rides `round.timer` while the phase is "lobby" (0 = not running);
+ * the `armingComplete` event cues the banner. Snapshots scrub picks in the
+ * lobby only.
  */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 9;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
@@ -47,15 +68,14 @@ export type ClientMsg =
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }
   | { t: "leaveRoom" }
-  /** Weapon pick — lobby or an open draft phase (rejected once locked in). */
+  /** Weapon pick — lobby only; picks replace, never clear. */
   | { t: "setWeapon"; weapon: WeaponId }
-  /** The whole drafted hand each change (idempotent) — same gate as setWeapon. */
+  /** The whole picked hand each change (idempotent) — same gate as setWeapon. */
   | { t: "setAbilities"; abilities: AbilityId[] }
-  /** "I'm done adjusting" during a draft phase; everyone locked ends it early. */
-  | { t: "lockIn" }
-  /** Host only; ignored unless the lobby is full and connected. */
-  | { t: "startMatch" }
-  | { t: "input"; seq: number; sx: number; sy: number; dash: boolean };
+  /** Host-only AFK backstop: random-fill every unarmed seat, then the normal
+   * 10s arming countdown runs (never instant). Ignored from non-hosts. */
+  | { t: "forceStart" }
+  | { t: "input"; seq: number; sx: number; sy: number; casts: boolean[] };
 
 // ── server → client ────────────────────────────────────────────────────────
 
@@ -65,9 +85,22 @@ export type ClientMsg =
 export interface ArenaClientConfig {
   tickRate: number;
   playerRadius: number;
-  dashCooldown: number;
   winsToTake: number;
   countdownSeconds: number;
+}
+
+/** One drafted slot as the HUD sees it: which ability, how long until it's
+ * ready (drives the button clock), how long its effect window has left
+ * (drives body-effect rings and zone auras), and the round budget left
+ * (drives the charge pips; 0 = spent until the next round). */
+export interface AbilitySlotSnapshot {
+  id: AbilityId;
+  /** Cooldown seconds remaining; 0 = ready. */
+  cd: number;
+  /** Active-window seconds remaining; 0 = not running. */
+  active: number;
+  /** Uses left this round. */
+  charges: number;
 }
 
 export interface PlayerSnapshot {
@@ -75,8 +108,8 @@ export interface PlayerSnapshot {
   team: Team;
   name: string;
   /** Drives the per-player telegraph (reach/arc/windup from WEAPONS[weapon]).
-   * Scrubbed to null for EVERYONE while the phase is lobby/reveal — snapshots
-   * are one uniform broadcast and must not leak hidden picks. */
+   * Scrubbed to null for EVERYONE while the phase is "lobby" — snapshots are
+   * one uniform broadcast and must not leak hidden picks. */
   weapon: WeaponId | null;
   x: number;
   y: number;
@@ -96,8 +129,13 @@ export interface PlayerSnapshot {
   /** Seconds until the last pending bleed tick lands (0 = clean) — the red
    * status ring, same pulse rule. */
   bleedLeft: number;
-  /** Dash cooldown seconds remaining — drives the button's clock overlay. */
-  dashCd: number;
+  /** The picked hand in button order. Scrubbed to [] alongside `weapon` in
+   * the lobby. In-match it IS broadcast (cooldown clocks need it), but the
+   * client renders enemy abilities only as they're cast — the cast flash. */
+  abilities: AbilitySlotSnapshot[];
+  /** The player id this player's harpoon chain is currently REELING in, or
+   * null — the client draws the taut chain between the two for the haul. */
+  reeling: number | null;
   /** Last input seq the sim applied for this player — latency debugging. */
   lastSeq: number;
 }
@@ -115,20 +153,13 @@ export interface RoomStatePlayer {
   name: string;
   team: Team;
   connected: boolean;
-  /** VIEWER-DEPENDENT: the live pick for your own team; always null for the
-   * enemy team (their pick is hidden — see `revealed`) and for watchers. */
+  /** VIEWER-DEPENDENT: the live pick for your own team; ALWAYS null for the
+   * enemy team and for watchers — there is no reveal, ever. */
   weapon: WeaponId | null;
-  /** VIEWER-DEPENDENT like `weapon`: drafted abilities in button order. */
+  /** VIEWER-DEPENDENT like `weapon`: picked abilities in button order. */
   abilities: AbilityId[] | null;
-  /** Public: has this player picked — enemies see "ready"/"choosing…". */
-  picked: boolean;
-  /** Public: locked in for this draft phase (the League-style check mark). */
-  locked: boolean;
-  /** Public: the pick snapshotted at lock-in, shown to both teams through the
-   * adjust window. Post-reveal repicks do NOT update this — that's the game. */
-  revealed: WeaponId | null;
-  /** Public partner of `revealed` for the drafted abilities. */
-  revealedAbilities: AbilityId[] | null;
+  /** Public: weapon + full hand picked — enemies see "armed"/"choosing…". */
+  armed: boolean;
 }
 
 /** A live shot, projected for rendering (the client lerps x/y/angle by id). */
@@ -138,7 +169,26 @@ export interface ProjectileSnapshot {
   y: number;
   /** Travel direction, radians. */
   angle: number;
-  weapon: WeaponId;
+  kind: ProjectileKind;
+}
+
+/** A placed thing, projected for rendering (keyed by id; static once placed).
+ * Sent to everyone — but the sandtrap RENDERS team-dependent (Tom,
+ * 2026-07-14): the owning team sees a clear marker, enemies a faint
+ * occasional glint. Every other kind stays uniformly visible. */
+export interface DeployableSnapshot {
+  id: number;
+  kind: DeployableKind;
+  /** Who placed it — drives the sandtrap's yours/theirs rendering split. */
+  team: Team;
+  x: number;
+  y: number;
+  /** Sandtrap: seconds until armed (drives the arming countdown circle). */
+  armLeft: number;
+  /** Seconds until it expires (zones fade on this). */
+  lifeLeft: number;
+  /** Straw man durability left; 0 for kinds without hp. */
+  hp: number;
 }
 
 /** Public directory entry — never carries the passcode. */
@@ -157,6 +207,7 @@ export interface SnapshotMsg {
   round: RoundSnapshot;
   players: PlayerSnapshot[];
   projectiles: ProjectileSnapshot[];
+  deployables: DeployableSnapshot[];
   events: ArenaEvent[];
 }
 

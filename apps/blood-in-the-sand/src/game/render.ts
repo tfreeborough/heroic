@@ -13,6 +13,7 @@ import {
   PaintStyle,
   Skia,
   StrokeCap,
+  StrokeJoin,
   type SkCanvas,
   type SkImage,
   type SkPicture,
@@ -20,13 +21,22 @@ import {
 import { loadZone, tileSourceRect, TILESETS } from "@heroic/core";
 import {
   ARENA_00,
+  BLOOD_FONT,
+  PLAYER_RADIUS as SIM_PLAYER_RADIUS,
+  SANDSTORM,
+  SANDTRAP,
+  STRAW_MAN,
+  WAR_DRUMS,
   WEAPONS,
+  type AbilityId,
   type ArenaClientConfig,
+  type DeployableSnapshot,
   type InterpolatedView,
   type PlayerSnapshot,
   type ProjectileSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
 import { decalAlpha, type BloodDecal } from "./blood";
+import { crackAlpha, type CrackDecal } from "./cracks";
 import type { StatusPulses } from "./statusRings";
 
 // Zone geometry is static — derive once at module scope (loadZone is pure).
@@ -103,7 +113,24 @@ const C_RANGE_RING = Skia.Color("#f0e8d8");
 // Status rings: pulse rate carries the "expiring soon" signal (statusRings.ts).
 const C_RING_SLOW = Skia.Color("#4da3d9");
 const C_RING_BLEED = Skia.Color("#e0503c");
+// Body-effect ring for Mirror Guard (Ironhide gets a full shield bubble).
+const C_RING_MIRROR = Skia.Color("#cfe0ec");
+// Ironhide's shield bubble: translucent iron dome + rotating plates.
+const C_IRON_FILL = Skia.Color("#aeb6bd");
+const C_IRON_RIM = Skia.Color("#d4dae0");
 const C_NAME = Skia.Color("#f0e8d8");
+// Deployables + zones (visible to everyone, always — the readability rule).
+const C_FONT = Skia.Color("#c23636");
+const C_STORM = Skia.Color("#d8b878");
+const C_STORM_STREAK = Skia.Color("#efe0b8");
+const C_DRUMS = Skia.Color("#f2c14e");
+const C_MINE = Skia.Color("#3a332b");
+const C_MINE_GLINT = Skia.Color("#d8b878");
+const C_DUMMY = Skia.Color("#c9a86a");
+const C_DUMMY_DARK = Skia.Color("#6f5c3d");
+const C_HARPOON = Skia.Color("#d9d2c6");
+const C_CRACK = Skia.Color("#4f3f2a");
+const C_FX_HEAL = Skia.Color("#5fc75f");
 
 const fill = Skia.Paint();
 const stroke = Skia.Paint();
@@ -176,9 +203,10 @@ const floorImage = (atlas: SkImage): SkImage | null => {
 };
 const FLOOR_RECT = Skia.XYWHRect(0, 0, WORLD_W, WORLD_H);
 
-/** A transient visual: damage numbers and hit rings, aged by the caller. */
+/** A transient visual: damage numbers, hit rings, the harpoon's chain flash,
+ * the cast flash (an ability icon popping above its caster). */
 export interface FxItem {
-  kind: "number" | "ring";
+  kind: "number" | "ring" | "line" | "castFlash";
   x: number;
   y: number;
   /** 1 → 0 over the effect's life. */
@@ -187,6 +215,15 @@ export interface FxItem {
   crit?: boolean;
   /** Bleed-tick numbers render red (and the caller skips the ring). */
   bleed?: boolean;
+  /** Heal numbers render green. */
+  heal?: boolean;
+  /** A big ring (the sandtrap detonation) instead of the hit ping. */
+  big?: boolean;
+  /** Line endpoint (the harpoon chain: x/y = caster, x2/y2 = the hook). */
+  x2?: number;
+  y2?: number;
+  /** castFlash: which icon pops. */
+  ability?: AbilityId;
 }
 
 const C_FX_NUM = Skia.Color("#ffffff");
@@ -209,6 +246,8 @@ export interface ArenaRenderInput {
   fx: readonly FxItem[];
   /** Blood decals (birth-ordered), faded per-frame via decalAlpha. */
   blood: readonly BloodDecal[];
+  /** Tremor's cracked-earth decals — same client-derived floor-layer rule. */
+  cracks: readonly CrackDecal[];
   /** Per-player status-ring pulse phases, advanced by the caller per frame. */
   pulses: StatusPulses;
   /** The clock the decals were aged against (performance.now). */
@@ -216,6 +255,9 @@ export interface ArenaRenderInput {
   /** The zone's tileset atlas (useArenaAtlas). Null while decoding / for a
    *  tileset-less zone → flat pre-tileset floor, props invisible. */
   atlas: SkImage | null;
+  /** Forge icon art keyed by ability — the cast flash draws from these
+   *  (useAbilityIconImages; an icon still decoding just skips its flash). */
+  abilityIcons: Partial<Record<AbilityId, SkImage>>;
 }
 
 /** Floor blood, culled to the camera rect (translucent overlaps darken into pools).
@@ -265,7 +307,13 @@ const drawMyRangeRing = (canvas: SkCanvas, me: PlayerSnapshot, playerRadius: num
   canvas.drawCircle(me.x, me.y, ring, rangeStroke);
 };
 
-const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConfig, pulses: StatusPulses): void => {
+const drawPlayer = (
+  canvas: SkCanvas,
+  p: PlayerSnapshot,
+  config: ArenaClientConfig,
+  pulses: StatusPulses,
+  nowMs: number,
+): void => {
   const r = config.playerRadius;
 
   // Windup telegraph, from the striker's own weapon table: melee grows an arc
@@ -318,9 +366,44 @@ const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConf
     canvas.drawCircle(p.x, p.y, r + 4, stroke);
   }
 
-  // Status rings: blue = slowed, red = bleeding, stacked so both can show.
-  // Brightness pulses at the clock's rate — quickening toward expiry is the
-  // "about to drop" tell (see statusRings.ts).
+  // Ironhide: a proper shield dome (Tom, 2026-07-15 — the old pulse ring
+  // didn't read at all): translucent iron fill, a bold rim, and three plate
+  // arcs slowly orbiting the body. Fades out over its last 0.4s.
+  if (p.alive) {
+    const iron = p.abilities.find((s) => s.id === "ironhide");
+    if (iron && iron.active > 0) {
+      const a = Math.min(1, iron.active / 0.4);
+      const shieldR = r + 9;
+      fill.setColor(C_IRON_FILL);
+      fill.setAlphaf(0.2 * a);
+      canvas.drawCircle(p.x, p.y, shieldR, fill);
+      stroke.setColor(C_IRON_RIM);
+      stroke.setAlphaf(0.7 * a);
+      stroke.setStrokeWidth(2);
+      canvas.drawCircle(p.x, p.y, shieldR, stroke);
+      // The orbiting plates.
+      const spin = ((nowMs / 1000) * 65) % 360; // deg/s
+      stroke.setStrokeWidth(3.5);
+      stroke.setAlphaf(0.9 * a);
+      stroke.setStrokeCap(StrokeCap.Round);
+      for (let i = 0; i < 3; i++) {
+        const arc = Skia.Path.Make();
+        arc.addArc(
+          Skia.XYWHRect(p.x - shieldR - 2, p.y - shieldR - 2, (shieldR + 2) * 2, (shieldR + 2) * 2),
+          spin + i * 120,
+          55,
+        );
+        canvas.drawPath(arc, stroke);
+      }
+      fill.setAlphaf(1);
+      stroke.setAlphaf(1);
+    }
+  }
+
+  // Status rings, concentric (inner → outer): slow · bleed · ability — the
+  // pvp-abilities.md ring order, so stacked states stay legible. Brightness
+  // pulses at the clock's rate — quickening toward expiry is the "about to
+  // drop" tell (see statusRings.ts).
   if (p.alive) {
     const slow = pulses.strength(p.id, "slow");
     if (slow > 0) {
@@ -335,6 +418,15 @@ const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConf
       stroke.setAlphaf(0.25 + 0.6 * bleed);
       stroke.setStrokeWidth(2.5);
       canvas.drawCircle(p.x, p.y, r + 10, stroke);
+    }
+    // Body-effect ring: Mirror Guard, one radius step further out. (Ironhide
+    // draws its shield dome above instead of a ring.)
+    const mirror = pulses.strength(p.id, "mirror-guard");
+    if (mirror > 0) {
+      stroke.setColor(C_RING_MIRROR);
+      stroke.setAlphaf(0.3 + 0.55 * mirror);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(p.x, p.y, r + 14, stroke);
     }
     stroke.setAlphaf(1);
   }
@@ -370,16 +462,68 @@ const drawPlayer = (canvas: SkCanvas, p: PlayerSnapshot, config: ArenaClientConf
   }
 };
 
-const drawFx = (canvas: SkCanvas, fx: readonly FxItem[]): void => {
+/** The cast flash's drawn size, world px. */
+const CAST_FLASH_SIZE = 30;
+
+const drawFx = (
+  canvas: SkCanvas,
+  fx: readonly FxItem[],
+  abilityIcons: Partial<Record<AbilityId, SkImage>>,
+): void => {
   for (const f of fx) {
-    if (f.kind === "ring") {
+    if (f.kind === "castFlash") {
+      // "They just pressed this button": the ability's icon pops in above the
+      // caster, drifts up, and fades — the only way enemy kits are ever shown
+      // (pvp-loadout-flow.md). Snaps in fast, lingers, fades over the tail.
+      const img = f.ability !== undefined ? abilityIcons[f.ability] : undefined;
+      if (!img) continue;
+      const born = 1 - f.life;
+      const alpha = Math.min(1, born * 8) * Math.min(1, f.life / 0.35);
+      const scale = 0.8 + Math.min(1, born * 6) * 0.2; // snap-in pop
+      const size = CAST_FLASH_SIZE * scale;
+      const rise = born * 16;
+      const cx = f.x;
+      const cy = f.y - 12 - rise;
+      fill.setColor(Skia.Color("#ffffff"));
+      fill.setAlphaf(alpha);
+      canvas.drawImageRectOptions(
+        img,
+        Skia.XYWHRect(0, 0, img.width(), img.height()),
+        Skia.XYWHRect(cx - size / 2, cy - size, size, size),
+        FilterMode.Linear,
+        MipmapMode.Linear,
+        fill,
+      );
+      fill.setAlphaf(1);
+    } else if (f.kind === "ring") {
       stroke.setColor(C_DASH_RING);
       stroke.setStrokeWidth(2 + 2 * f.life);
-      canvas.drawCircle(f.x, f.y, 20 + (1 - f.life) * 26, stroke);
+      // Big = the sandtrap detonation: the ring expands out to the blast edge.
+      const base = f.big ? 30 : 20;
+      const grow = f.big ? SANDTRAP.blastRadius - base : 26;
+      canvas.drawCircle(f.x, f.y, base + (1 - f.life) * grow, stroke);
+    } else if (f.kind === "line" && f.x2 !== undefined && f.y2 !== undefined) {
+      // The harpoon chain flash: one taut line, a hook at the far end, chain
+      // dots along it — gone in a blink, like the throw itself.
+      stroke.setColor(C_HARPOON);
+      stroke.setAlphaf(Math.min(1, f.life * 1.5));
+      stroke.setStrokeWidth(3);
+      stroke.setStrokeCap(StrokeCap.Round);
+      canvas.drawLine(f.x, f.y, f.x2, f.y2, stroke);
+      fill.setColor(C_HARPOON);
+      fill.setAlphaf(Math.min(1, f.life * 1.5));
+      canvas.drawCircle(f.x2, f.y2, 5, fill);
+      const dx = f.x2 - f.x;
+      const dy = f.y2 - f.y;
+      for (let i = 1; i <= 4; i++) {
+        canvas.drawCircle(f.x + (dx * i) / 5, f.y + (dy * i) / 5, 1.8, fill);
+      }
+      stroke.setAlphaf(1);
+      fill.setAlphaf(1);
     } else if (f.text) {
       const font = f.crit ? FX_FONT_CRIT : FX_FONT;
       const rise = (1 - f.life) * 34;
-      fill.setColor(f.crit ? C_FX_CRIT : f.bleed ? C_FX_BLEED : C_FX_NUM);
+      fill.setColor(f.crit ? C_FX_CRIT : f.bleed ? C_FX_BLEED : f.heal ? C_FX_HEAL : C_FX_NUM);
       fill.setAlphaf(Math.min(1, f.life * 2));
       canvas.drawText(f.text, f.x - font.getTextWidth(f.text) / 2, f.y - 26 - rise, fill, font);
       fill.setAlphaf(1);
@@ -387,10 +531,280 @@ const drawFx = (canvas: SkCanvas, fx: readonly FxItem[]): void => {
   }
 };
 
-/** Live shots: bow = a short bolt along its travel line; staff = a seeking orb. */
+/** Fade a placed thing out over its last half-second. */
+const deployAlpha = (d: DeployableSnapshot): number => Math.min(1, d.lifeLeft / 0.5);
+
+/** The enemy sandtrap's occasional tell: a brief glint every few seconds.
+ * Returns the flash envelope 0..1 (0 almost always; a short sine bump when
+ * the glint fires). Phase-offset by id so two mines never blink in sync. */
+const MINE_FLASH_PERIOD_MS = 3000;
+const MINE_FLASH_MS = 320;
+const mineFlash = (d: DeployableSnapshot, nowMs: number): number => {
+  const t = (nowMs + d.id * 811) % MINE_FLASH_PERIOD_MS;
+  if (t >= MINE_FLASH_MS) return 0;
+  return Math.sin((t / MINE_FLASH_MS) * Math.PI);
+};
+
+/**
+ * Everything placed on the sand — zones under the bodies (the pvp-abilities
+ * layer rule: ground ring + interior, under players, over blood decals), plus
+ * the mine and the dummy, which stand ON the sand but read fine below the
+ * discs at v1. Everything is uniformly visible to both teams EXCEPT the
+ * sandtrap (Tom, 2026-07-14): your own team gets the clear marker; an enemy
+ * mine is a faint thing — a very dim trigger ring and a 3-second glint —
+ * hard to spot mid-fight, findable in the calm.
+ */
+const drawDeployables = (
+  canvas: SkCanvas,
+  deployables: readonly DeployableSnapshot[],
+  myTeam: number,
+  nowMs: number,
+): void => {
+  for (const d of deployables) {
+    const a = deployAlpha(d);
+    if (d.kind === "blood-font") {
+      // The font BREATHES (Tom, 2026-07-15): the boundary stays honest and
+      // fixed; the interior and an inner ring pulse on a slow heartbeat.
+      const beat = 0.5 + 0.5 * Math.sin((nowMs / 1200) * Math.PI * 2 + d.id);
+      fill.setColor(C_FONT);
+      fill.setAlphaf((0.06 + 0.09 * beat) * a);
+      canvas.drawCircle(d.x, d.y, BLOOD_FONT.radius, fill);
+      stroke.setColor(C_FONT);
+      stroke.setAlphaf(0.45 * a);
+      stroke.setStrokeWidth(2);
+      canvas.drawCircle(d.x, d.y, BLOOD_FONT.radius, stroke);
+      stroke.setAlphaf((0.2 + 0.4 * beat) * a);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(d.x, d.y, BLOOD_FONT.radius * (0.55 + 0.3 * beat), stroke);
+      fill.setAlphaf((0.35 + 0.3 * beat) * a);
+      canvas.drawCircle(d.x, d.y, 6, fill); // the font itself
+    } else if (d.kind === "sandstorm") {
+      // Just the ground boundary here — the swirling body of the storm draws
+      // OVER the players (drawSandstormOverlays), since it obscures them.
+      stroke.setColor(C_STORM);
+      stroke.setAlphaf(0.4 * a);
+      stroke.setStrokeWidth(2);
+      canvas.drawCircle(d.x, d.y, SANDSTORM.radius, stroke);
+    } else if (d.kind === "sandtrap") {
+      const arming = d.armLeft > 0;
+      const mine = d.team === myTeam;
+      if (mine) {
+        // Your team's mine: a clear, steady marker — it's your resource.
+        stroke.setColor(C_MINE_GLINT);
+        stroke.setAlphaf((arming ? 0.15 : 0.3) * a);
+        stroke.setStrokeWidth(1.5);
+        canvas.drawCircle(d.x, d.y, SANDTRAP.triggerRadius, stroke);
+        fill.setColor(C_MINE);
+        fill.setAlphaf(0.9 * a);
+        canvas.drawCircle(d.x, d.y, 8, fill);
+        if (arming) {
+          // Arming countdown: an arc that closes as the 2s run out.
+          const sweep = 360 * (1 - d.armLeft / SANDTRAP.armSeconds);
+          stroke.setColor(C_MINE_GLINT);
+          stroke.setAlphaf(0.8 * a);
+          stroke.setStrokeWidth(2.5);
+          const arc = Skia.Path.Make();
+          arc.addArc(Skia.XYWHRect(d.x - 13, d.y - 13, 26, 26), -90, sweep);
+          canvas.drawPath(arc, stroke);
+        } else {
+          stroke.setColor(C_MINE_GLINT);
+          stroke.setAlphaf(0.85 * a);
+          stroke.setStrokeWidth(2);
+          canvas.drawCircle(d.x, d.y, 12, stroke); // armed: a steady glint ring
+        }
+      } else {
+        // An ENEMY mine: hard to spot mid-fight, findable in the calm. A very
+        // dim trigger ring, a barely-there mound, and a brief glint every
+        // MINE_FLASH_PERIOD. The plant itself still telegraphs: the arming
+        // arc shows (dimmer than the owner's) for its two seconds.
+        const flash = mineFlash(d, nowMs);
+        stroke.setColor(C_MINE_GLINT);
+        stroke.setAlphaf((0.06 + 0.14 * flash) * a);
+        stroke.setStrokeWidth(1.5);
+        canvas.drawCircle(d.x, d.y, SANDTRAP.triggerRadius, stroke);
+        fill.setColor(C_MINE);
+        fill.setAlphaf((0.1 + 0.4 * flash) * a);
+        canvas.drawCircle(d.x, d.y, 8, fill);
+        if (arming) {
+          const sweep = 360 * (1 - d.armLeft / SANDTRAP.armSeconds);
+          stroke.setColor(C_MINE_GLINT);
+          stroke.setAlphaf(0.35 * a);
+          stroke.setStrokeWidth(2);
+          const arc = Skia.Path.Make();
+          arc.addArc(Skia.XYWHRect(d.x - 13, d.y - 13, 26, 26), -90, sweep);
+          canvas.drawPath(arc, stroke);
+        } else if (flash > 0) {
+          stroke.setColor(C_MINE_GLINT);
+          stroke.setAlphaf(0.5 * flash * a);
+          stroke.setStrokeWidth(2);
+          canvas.drawCircle(d.x, d.y, 12, stroke); // the glint itself
+        }
+      }
+    } else {
+      // Straw man: a body-coloured stand-in with its own little hp bar.
+      fill.setColor(C_DUMMY);
+      fill.setAlphaf(a);
+      canvas.drawCircle(d.x, d.y, 18, fill);
+      stroke.setColor(C_DUMMY_DARK);
+      stroke.setAlphaf(a);
+      stroke.setStrokeWidth(2.5);
+      stroke.setStrokeCap(StrokeCap.Round);
+      canvas.drawLine(d.x - 7, d.y - 7, d.x + 7, d.y + 7, stroke);
+      canvas.drawLine(d.x + 7, d.y - 7, d.x - 7, d.y + 7, stroke);
+      const w = 32;
+      const frac = Math.max(0, d.hp / STRAW_MAN.hp);
+      fill.setColor(C_HP_BACK);
+      canvas.drawRect(Skia.XYWHRect(d.x - w / 2 - 1, d.y - 33, w + 2, 6), fill);
+      fill.setColor(frac > 0.35 ? C_HP_FILL : C_HP_LOW);
+      canvas.drawRect(Skia.XYWHRect(d.x - w / 2, d.y - 32, w * frac, 4), fill);
+    }
+  }
+  fill.setAlphaf(1);
+  stroke.setAlphaf(1);
+};
+
+/** Cheap deterministic 0..1 hash — per-streak variety with zero stored state. */
+const hash01 = (n: number): number => {
+  const s = Math.sin(n * 12.9898) * 43758.5453;
+  return s - Math.floor(s);
+};
+
+/**
+ * The sandstorm's body, drawn OVER players and shots (Tom, 2026-07-15: the
+ * cloud should visibly obscure whoever stands in it): a dense sand fill plus
+ * a dozen swirling streak arcs orbiting at mixed radii, speeds and
+ * directions. Tier-1 canvas particles (the blood-decal pattern) — promote to
+ * the flagged SkSL swirl only on profiler evidence.
+ */
+const drawSandstormOverlays = (
+  canvas: SkCanvas,
+  deployables: readonly DeployableSnapshot[],
+  nowMs: number,
+): void => {
+  for (const d of deployables) {
+    if (d.kind !== "sandstorm") continue;
+    const a = deployAlpha(d);
+    fill.setColor(C_STORM);
+    fill.setAlphaf(0.42 * a);
+    canvas.drawCircle(d.x, d.y, SANDSTORM.radius, fill);
+    fill.setAlphaf(0.22 * a);
+    canvas.drawCircle(d.x, d.y, SANDSTORM.radius * 0.6, fill); // denser core
+
+    stroke.setColor(C_STORM_STREAK);
+    stroke.setStrokeCap(StrokeCap.Round);
+    for (let i = 0; i < 12; i++) {
+      const seed = d.id * 31 + i;
+      const radius = SANDSTORM.radius * (0.25 + 0.68 * hash01(seed));
+      const speed = (40 + 90 * hash01(seed + 1)) * (i % 2 === 0 ? 1 : -1); // deg/s, mixed directions
+      const start = hash01(seed + 2) * 360 + (nowMs / 1000) * speed;
+      const sweep = 45 + 55 * hash01(seed + 3);
+      stroke.setAlphaf((0.22 + 0.3 * hash01(seed + 4)) * a);
+      stroke.setStrokeWidth(2 + 2 * hash01(seed + 5));
+      const arc = Skia.Path.Make();
+      arc.addArc(Skia.XYWHRect(d.x - radius, d.y - radius, radius * 2, radius * 2), start % 360, sweep);
+      canvas.drawPath(arc, stroke);
+    }
+  }
+  fill.setAlphaf(1);
+  stroke.setAlphaf(1);
+};
+
+/** Tremor's cracked earth, culled to the camera rect — floor-layer decals
+ * under the blood (fresh blood pools over old fractures). */
+const drawCracks = (
+  canvas: SkCanvas,
+  cracks: readonly CrackDecal[],
+  nowMs: number,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+): void => {
+  stroke.setColor(C_CRACK);
+  stroke.setStrokeCap(StrokeCap.Round);
+  stroke.setStrokeJoin(StrokeJoin.Round);
+  for (const c of cracks) {
+    const reach = 90; // generous bound — arms max out well under this
+    if (c.x + reach < left || c.x - reach > right || c.y + reach < top || c.y - reach > bottom) continue;
+    const a = crackAlpha(c, nowMs);
+    if (a <= 0) continue;
+    stroke.setAlphaf(0.55 * a);
+    for (const path of c.paths) {
+      const line = Skia.Path.Make();
+      line.moveTo(path[0]!.x, path[0]!.y);
+      for (let i = 1; i < path.length; i++) line.lineTo(path[i]!.x, path[i]!.y);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawPath(line, stroke);
+    }
+  }
+  stroke.setAlphaf(1);
+};
+
+/** Live harpoon chains — taut from each rooted puller to whoever they're
+ * hauling in, redrawn from lerped positions every frame so the drag reads as
+ * one continuous "against their will" pull. */
+const drawReelChains = (canvas: SkCanvas, players: readonly PlayerSnapshot[]): void => {
+  for (const p of players) {
+    if (p.reeling === null) continue;
+    const victim = players.find((v) => v.id === p.reeling);
+    if (!victim) continue;
+    stroke.setColor(C_HARPOON);
+    stroke.setAlphaf(0.9);
+    stroke.setStrokeWidth(3);
+    stroke.setStrokeCap(StrokeCap.Round);
+    canvas.drawLine(p.x, p.y, victim.x, victim.y, stroke);
+    fill.setColor(C_HARPOON);
+    canvas.drawCircle(victim.x, victim.y, 5, fill); // the barb, sunk in
+    const dx = victim.x - p.x;
+    const dy = victim.y - p.y;
+    const links = Math.max(3, Math.floor(Math.hypot(dx, dy) / 34));
+    for (let i = 1; i < links; i++) {
+      canvas.drawCircle(p.x + (dx * i) / links, p.y + (dy * i) / links, 1.8, fill);
+    }
+    stroke.setAlphaf(1);
+  }
+};
+
+/** The drums' tempo, beats per second — the rings ARE the rhythm (Tom,
+ * 2026-07-15: the effect should mimic the drumming; real SFX will lock to
+ * the same tempo when Asset Forge delivers it). */
+const DRUM_BPS = 1.9;
+
+/** War Drums' moving aura — drawn around every player whose drums are live:
+ * the boundary circle, plus beat rings that pound outward from the drummer
+ * to the aura's edge, two per cycle like alternating drum hands. */
+const drawDrumAuras = (canvas: SkCanvas, players: readonly PlayerSnapshot[], nowMs: number): void => {
+  for (const p of players) {
+    if (!p.alive) continue;
+    const drums = p.abilities.find((s) => s.id === "war-drums");
+    if (!drums || drums.active <= 0) continue;
+    const a = Math.min(1, drums.active / 0.4); // quick fade as the beat dies
+    fill.setColor(C_DRUMS);
+    fill.setAlphaf(0.05 * a);
+    canvas.drawCircle(p.x, p.y, WAR_DRUMS.radius, fill);
+    stroke.setColor(C_DRUMS);
+    stroke.setAlphaf(0.35 * a);
+    stroke.setStrokeWidth(2);
+    canvas.drawCircle(p.x, p.y, WAR_DRUMS.radius, stroke);
+
+    // The beats: rings born at the drummer's body, swelling to the boundary
+    // and dying there — offset by half a cycle (left hand, right hand).
+    for (const offset of [0, 0.5]) {
+      const beat = ((nowMs / 1000) * DRUM_BPS + offset) % 1;
+      stroke.setAlphaf(0.55 * (1 - beat) * a);
+      stroke.setStrokeWidth(3 * (1 - beat) + 1);
+      canvas.drawCircle(p.x, p.y, SIM_PLAYER_RADIUS + beat * (WAR_DRUMS.radius - SIM_PLAYER_RADIUS), stroke);
+    }
+  }
+  fill.setAlphaf(1);
+  stroke.setAlphaf(1);
+};
+
+/** Live shots: bow = a short bolt along its travel line; staff = a seeking
+ * orb. (The harpoon is an instant chain — it draws as a line FX, not here.) */
 const drawProjectiles = (canvas: SkCanvas, projectiles: readonly ProjectileSnapshot[]): void => {
   for (const p of projectiles) {
-    if (p.weapon === "staff") {
+    if (p.kind === "staff") {
       fill.setColor(C_STAFF_ORB);
       canvas.drawCircle(p.x, p.y, 10, fill);
       stroke.setColor(C_STAFF_RING);
@@ -456,9 +870,10 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
     }
 
-    // Blood sits on the floor, under walls and bodies.
+    // Ground scars: cracks first, then blood — fresh pools cover old fractures.
     const halfW = screenW / 2 / zoom;
     const halfH = screenH / 2 / zoom;
+    drawCracks(canvas, r.cracks, r.nowMs, cx - halfW, cy - halfH, cx + halfW, cy + halfH);
     drawBlood(canvas, r.blood, r.nowMs, cx - halfW, cy - halfH, cx + halfW, cy + halfH);
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
@@ -473,6 +888,11 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
 
     if (me) drawMyRangeRing(canvas, me, config.playerRadius);
 
+    // Placed things + moving auras: zones under bodies, over blood decals.
+    // Spectators (no seat) get the enemy-faint sandtrap view of BOTH teams.
+    drawDeployables(canvas, view.deployables, me?.team ?? 0, r.nowMs);
+    drawDrumAuras(canvas, view.players, r.nowMs);
+
     // Bodies and props in one painter's pass, ordered by baseline (feet) y — a
     // player north of a cactus draws under it (walks behind); south, over it.
     // PROPS_SORTED is static so only the handful of players sort per frame.
@@ -480,7 +900,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     let pi = 0;
     for (const prop of PROPS_SORTED) {
       while (pi < byFeet.length && byFeet[pi]!.y + config.playerRadius <= prop.y) {
-        drawPlayer(canvas, byFeet[pi]!, config, r.pulses);
+        drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
         pi++;
       }
       if (r.atlas) {
@@ -495,10 +915,13 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         canvas.drawImageRectOptions(r.atlas, prop.src, prop.dst, FilterMode.Nearest, MipmapMode.None, propPaint);
       }
     }
-    for (; pi < byFeet.length; pi++) drawPlayer(canvas, byFeet[pi]!, config, r.pulses);
+    for (; pi < byFeet.length; pi++) drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
 
     drawProjectiles(canvas, view.projectiles);
-    drawFx(canvas, r.fx);
+    drawReelChains(canvas, view.players);
+    // The storm's swirling body sits OVER bodies and shots — it obscures.
+    drawSandstormOverlays(canvas, view.deployables, r.nowMs);
+    drawFx(canvas, r.fx, r.abilityIcons);
 
     canvas.restore();
   });

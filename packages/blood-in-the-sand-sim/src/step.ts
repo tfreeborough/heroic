@@ -5,8 +5,8 @@
  * and events, which is what the tests assert and the netcode relies on.
  *
  * Tick order (each stage feeds the next):
- *   round machine → locomotion → dash → crowd physics → targeting/facing →
- *   attack cycles → projectiles → bleeds → round-over check → tick++
+ *   round machine → locomotion → abilities → crowd physics → targeting/facing →
+ *   attack cycles → projectiles → deployables → bleeds → round-over check → tick++
  */
 import {
   angleDiff,
@@ -22,31 +22,47 @@ import {
   segmentClear,
   selectTarget,
   spawnProjectile,
-  stepAbility,
   stepAttackCycle,
   stepCrowd,
   stepDots,
   stepProjectile,
   sub,
-  resolveAttack,
   type HurtCircle,
   type Mover,
   type TargetCandidate,
+  type Vec2,
 } from "@heroic/core";
 import {
   CROWD_PUSH,
-  DASH,
+  MIRROR_GUARD,
   PLAYER_ACCEL,
   PLAYER_DECEL,
   PLAYER_MAX_SPEED,
   PLAYER_RADIUS,
   WEAPONS,
 } from "./config";
-import { applyDashShove, beginDash, dashInvulnerable, dashVelocity, isDashing, tickDashInvuln } from "./dash";
+import {
+  applyDashShove,
+  applyImpulse,
+  damageDummy,
+  dashInvulnerable,
+  inSandstorm,
+  ironhideActive,
+  isDashing,
+  killPlayer,
+  mirrorGuardActive,
+  resolvePlayerHit,
+  speedFactorOf,
+  stepDeployables,
+  stepHarpoonReels,
+  stepPlayerAbilities,
+  targetView,
+} from "./abilities";
 import type { ArenaEvent } from "./events";
 import { checkRoundOver, tickRoundMachine } from "./round";
 import {
   IDLE_INPUT,
+  isDeployableId,
   sanitizeInput,
   seatedPlayers,
   type ArenaPlayer,
@@ -59,13 +75,9 @@ const moverScratch: Mover[] = [];
 const candidateScratch: TargetCandidate[] = [];
 const hurtScratch: HurtCircle[] = [];
 
-/** Line of sight between two players, past the zone's sight-blocking walls. */
-const canSee = (sim: ArenaSim, a: ArenaPlayer, b: ArenaPlayer): boolean =>
-  segmentClear(a.mover.pos, b.mover.pos, sim.zone.occluders);
-
-/** Edge distance (to the target's rim), matching hitsInArc's range rule. */
-const edgeDistance = (a: ArenaPlayer, b: ArenaPlayer): number =>
-  distance(a.mover.pos, b.mover.pos) - PLAYER_RADIUS;
+/** Line of sight from a player to a point, past the zone's sight-blocking walls. */
+const canSeePos = (sim: ArenaSim, from: ArenaPlayer, pos: Vec2): boolean =>
+  segmentClear(from.mover.pos, pos, sim.zone.occluders);
 
 /** The player's picked weapon config. The blade fallback only serves
  * hand-forced test states — real matches can't start with an empty pick. */
@@ -87,39 +99,34 @@ export const stepSim = (
   const seats = state.players;
   const players = seatedPlayers(state);
 
-  // ── Locomotion + dash ─────────────────────────────────────────────────────
+  // ── Locomotion + abilities ────────────────────────────────────────────────
   for (const p of players) {
     if (!p.alive) continue;
     const latest = inputs.get(p.id);
     if (latest !== undefined && Number.isFinite(latest.seq)) p.lastSeq = latest.seq;
     const input = sanitizeInput(fighting ? (latest ?? IDLE_INPUT) : IDLE_INPUT);
 
-    // The hammer's slow caps run speed while it lasts. It deliberately does
-    // NOT touch dash: the committed roll below overwrites velocity wholesale,
+    // Speed statuses cap run speed while they last (hammer slow, Ironhide's
+    // self-slow, a War Drums aura). They deliberately do NOT touch dash: the
+    // committed roll overwrites velocity wholesale (in stepPlayerAbilities),
     // so the escape hop stays a real answer to being slowed.
     p.slowLeft = Math.max(0, p.slowLeft - dt);
-    const maxSpeed = PLAYER_MAX_SPEED * (p.slowLeft > 0 ? p.slowFactor : 1);
+    const maxSpeed = PLAYER_MAX_SPEED * speedFactorOf(p, players);
     const desired = { x: input.sx * maxSpeed, y: input.sy * maxSpeed };
     p.mover.vel = approachVelocity(p.mover.vel, desired, dt, PLAYER_ACCEL, PLAYER_DECEL);
 
-    const step = stepAbility(p.dash.ability, DASH, dt, fighting && input.dash);
-    p.dash.ability = step.state;
-    if (step.activated) {
-      const mag = Math.hypot(input.sx, input.sy);
-      const dir =
-        mag > 0.01
-          ? { x: input.sx / mag, y: input.sy / mag }
-          : { x: Math.cos(p.facing), y: Math.sin(p.facing) };
-      beginDash(p.dash, dir.x, dir.y);
-      events.push({ type: "dash", playerId: p.id });
-    }
-    tickDashInvuln(p.dash, dt);
-    if (isDashing(p.dash)) p.mover.vel = dashVelocity(p.dash);
+    // The drafted hand: lifecycles, cast effects, dash i-frames + velocity.
+    stepPlayerAbilities(sim, p, input, fighting, dt, events, players);
   }
+
+  // Harpoon reels: victims hauled toward their rooted casters. After the
+  // ability pass (a chain landed this tick starts dragging this tick), before
+  // the crowd step moves anyone.
+  stepHarpoonReels(sim, players, dt);
 
   // Barge: dashers scatter the enemies they plow through.
   for (const p of players) {
-    if (!p.alive || !isDashing(p.dash)) continue;
+    if (!p.alive || !isDashing(p)) continue;
     applyDashShove(p, players.filter((e) => e.team !== p.team));
   }
 
@@ -137,19 +144,39 @@ export const stepSim = (
 
   if (fighting) {
     // ── Auto-targeting + facing ───────────────────────────────────────────
+    // The target pool is enemy players PLUS enemy straw men (a decoy is a
+    // first-class mark), MINUS anyone stood in a sandstorm (no new locks).
+    // The cloud blinds BOTH ways (Tom, 2026-07-15): stand in it and you
+    // can't take aim either — no hiding inside while shooting out.
     for (const p of players) {
       if (!p.alive) continue;
       candidateScratch.length = 0;
+      if (inSandstorm(state, p.mover.pos)) {
+        p.targetId = null;
+        const input = inputs.get(p.id);
+        if (input) {
+          const mag = Math.hypot(input.sx, input.sy);
+          if (mag > 0.01) p.facing = Math.atan2(input.sy, input.sx);
+        }
+        continue;
+      }
       for (const e of players) {
         if (e.team === p.team || !e.alive) continue;
-        if (!canSee(sim, p, e)) continue;
+        if (inSandstorm(state, e.mover.pos)) continue;
+        if (!canSeePos(sim, p, e.mover.pos)) continue;
         candidateScratch.push({ id: e.id, pos: e.mover.pos });
+      }
+      for (const d of state.deployables) {
+        if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
+        if (inSandstorm(state, d.pos)) continue;
+        if (!canSeePos(sim, p, d.pos)) continue;
+        candidateScratch.push({ id: d.id, pos: d.pos });
       }
       p.targetId = selectTarget(candidateScratch, p.mover.pos, weaponOf(p).engagementRadius, p.targetId);
 
-      const target = p.targetId === null ? undefined : (seats[p.targetId] ?? undefined);
+      const target = targetView(state, p.targetId);
       if (target) {
-        p.facing = angleTo(p.mover.pos, target.mover.pos);
+        p.facing = angleTo(p.mover.pos, target.pos);
       } else {
         const input = inputs.get(p.id);
         if (input) {
@@ -165,15 +192,21 @@ export const stepSim = (
       if (!p.alive) continue;
       const weapon = weaponOf(p);
 
-      const target = p.targetId === null ? undefined : (seats[p.targetId] ?? undefined);
+      const target = targetView(state, p.targetId);
       const targetInRange =
-        target !== undefined && target.alive && edgeDistance(p, target) <= weapon.attack.reach;
-      const locked = p.lockedTargetId === null ? undefined : (seats[p.lockedTargetId] ?? undefined);
+        target !== null &&
+        target.alive &&
+        distance(p.mover.pos, target.pos) - target.radius <= weapon.attack.reach;
+      const locked = targetView(state, p.lockedTargetId);
+      // A smoked mark counts as lost (the sandstorm rule) — mid-windup too,
+      // and stepping into the cloud yourself breaks your own windup.
       const lockValid =
-        locked !== undefined &&
+        locked !== null &&
         locked.alive &&
-        distance(p.mover.pos, locked.mover.pos) <= weapon.engagementRadius &&
-        canSee(sim, p, locked);
+        distance(p.mover.pos, locked.pos) <= weapon.engagementRadius &&
+        !inSandstorm(state, locked.pos) &&
+        !inSandstorm(state, p.mover.pos) &&
+        canSeePos(sim, p, locked.pos);
 
       const step = stepAttackCycle(p.attack, weapon.attack, dt, { targetInRange, lockValid });
       p.attack = step.state;
@@ -192,14 +225,14 @@ export const stepSim = (
           const aim = locked ?? target;
           if (aim) {
             const shot: ArenaProjectile = {
-              ...spawnProjectile(p.mover.pos, aim.mover.pos, {
+              ...spawnProjectile(p.mover.pos, aim.pos, {
                 speed: weapon.attack.projectileSpeed!,
                 radius: weapon.projectile!.radius,
                 maxRange: weapon.projectile!.maxRange,
               }),
               id: state.nextProjectileId++,
               ownerId: p.id,
-              weapon: p.weapon ?? "blade",
+              kind: p.weapon ?? "blade",
               targetId: weapon.projectile!.homingTurnRate ? aim.id : null,
             };
             state.projectiles.push(shot);
@@ -210,6 +243,10 @@ export const stepSim = (
             if (e.team === p.team || !e.alive) continue;
             hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: PLAYER_RADIUS });
           }
+          for (const d of state.deployables) {
+            if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
+            hurtScratch.push({ id: d.id, pos: d.pos, radius: PLAYER_RADIUS });
+          }
           const hits = hitsInArc(
             p.mover.pos,
             p.lockedFacing,
@@ -218,17 +255,33 @@ export const stepSim = (
             hurtScratch,
           );
           for (const hitId of hits) {
+            if (isDeployableId(hitId)) {
+              // The decoy soaks it: a full resolve against the dummy sheet.
+              const dummy = state.deployables.find((d) => d.id === hitId);
+              if (!dummy) continue;
+              const result = damageDummy(p, dummy, sim.rng);
+              events.push({
+                type: "hit",
+                attackerId: p.id,
+                targetId: dummy.id,
+                damage: result.damage,
+                crit: result.crit,
+                lethal: false, // dummies break, they don't die
+                x: dummy.pos.x,
+                y: dummy.pos.y,
+              });
+              continue;
+            }
             const defender = seats[hitId];
-            if (!defender || dashInvulnerable(defender.dash)) continue; // dodged through it
+            if (!defender || dashInvulnerable(defender)) continue; // dodged through it
 
-            const result = resolveAttack(p.combatant, defender.combatant, sim.rng);
+            const result = resolvePlayerHit(p.combatant, defender, sim.rng);
             const knockback = weapon.attack.knockback ?? 0;
             let away = normalize(sub(defender.mover.pos, p.mover.pos));
             if (away.x === 0 && away.y === 0) {
               away = { x: Math.cos(p.lockedFacing), y: Math.sin(p.lockedFacing) };
             }
-            defender.mover.vel.x += away.x * knockback;
-            defender.mover.vel.y += away.y * knockback;
+            applyImpulse(defender, away.x, away.y, knockback);
 
             events.push({
               type: "hit",
@@ -241,10 +294,7 @@ export const stepSim = (
               y: defender.mover.pos.y,
             });
             if (result.lethal) {
-              defender.alive = false;
-              defender.mover.vel.x = 0;
-              defender.mover.vel.y = 0;
-              events.push({ type: "death", playerId: defender.id });
+              killPlayer(defender, events);
             } else {
               if (weapon.bleed && sim.rng.next() < weapon.bleed.chance) {
                 applyDot(defender.dots, {
@@ -255,7 +305,7 @@ export const stepSim = (
                   sourceId: p.id,
                 });
               }
-              if (weapon.slow) {
+              if (weapon.slow && !ironhideActive(defender)) {
                 // Refresh, never stack — repeated hammer hits extend the window.
                 defender.slowLeft = Math.max(defender.slowLeft, weapon.slow.duration);
                 defender.slowFactor = weapon.slow.factor;
@@ -268,6 +318,7 @@ export const stepSim = (
     }
 
     stepProjectiles(sim, players, events, dt);
+    stepDeployables(state, players, events, dt);
     stepBleeds(players, events, dt);
     checkRoundOver(sim, events);
   }
@@ -277,9 +328,9 @@ export const stepSim = (
 };
 
 /**
- * Advance every live shot: steer (staff homing), move, resolve body hits,
- * stop on walls. Homing lives HERE, not in core — flight.ts deliberately
- * defers mid-flight steering to the caller.
+ * Advance every live shot: steer (staff homing / reflected fire), move,
+ * resolve body hits, stop on walls. Homing lives HERE, not in core —
+ * flight.ts deliberately defers mid-flight steering to the caller.
  */
 const stepProjectiles = (
   sim: ArenaSim,
@@ -296,14 +347,17 @@ const stepProjectiles = (
     const shot = state.projectiles[read]!;
     const owner = seats[shot.ownerId];
     if (!owner) continue; // seat vanished (lobby edge) — drop the shot
-    const weapon = WEAPONS[shot.weapon];
+    const weapon = WEAPONS[shot.kind];
 
     // Steer toward the fire-time target while it lives, capped per tick — a
     // low cap is the "slightly homing" feel: real at range, outrunnable close.
-    const homingRate = weapon.projectile?.homingTurnRate ?? 0;
-    const target = shot.targetId === null ? null : seats[shot.targetId];
+    // Reflected shots home HARD (Mirror Guard's return fire is a real threat).
+    const homingRate = shot.reflected
+      ? MIRROR_GUARD.homingTurnRate
+      : (weapon.projectile?.homingTurnRate ?? 0);
+    const target = targetView(state, shot.targetId);
     if (homingRate > 0 && target && target.alive) {
-      const desired = angleTo(shot.pos, target.mover.pos);
+      const desired = angleTo(shot.pos, target.pos);
       const current = Math.atan2(shot.dir.y, shot.dir.x);
       const turnCap = homingRate * dt;
       const turn = Math.max(-turnCap, Math.min(turnCap, angleDiff(desired, current)));
@@ -311,21 +365,52 @@ const stepProjectiles = (
     }
 
     // Dash i-frames exclude you from the shot's targets entirely — you can
-    // dash THROUGH an arrow, matching the melee i-frame rule.
+    // dash THROUGH an arrow, matching the melee i-frame rule. Straw men are
+    // bodies too: a decoy eats arrows exactly like the player it imitates.
     hurtScratch.length = 0;
     for (const e of players) {
-      if (e.team === owner.team || !e.alive || dashInvulnerable(e.dash)) continue;
+      if (e.team === owner.team || !e.alive || dashInvulnerable(e)) continue;
       hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: PLAYER_RADIUS });
+    }
+    for (const d of state.deployables) {
+      if (d.kind !== "straw-man" || d.team === owner.team || d.hp <= 0) continue;
+      hurtScratch.push({ id: d.id, pos: d.pos, radius: PLAYER_RADIUS });
     }
 
     const result = stepProjectile(shot, dt, hurtScratch);
+    let reflected = false;
     for (const hitId of result.hits) {
+      if (isDeployableId(hitId)) {
+        const dummy = state.deployables.find((d) => d.id === hitId);
+        if (!dummy) continue;
+        const rolled = damageDummy(owner, dummy, sim.rng);
+        events.push({
+          type: "hit", attackerId: shot.ownerId, targetId: dummy.id, damage: rolled.damage,
+          crit: rolled.crit, lethal: false, x: dummy.pos.x, y: dummy.pos.y,
+        });
+        continue;
+      }
       const defender = seats[hitId];
       if (!defender) continue;
-      const rolled = resolveAttack(owner.combatant, defender.combatant, sim.rng);
+
+      if (mirrorGuardActive(defender)) {
+        // The bounce is a field swap, not a new system: ownership flips, the
+        // shot turns on its shooter with strong homing and a fresh range
+        // budget. hitIds already holds the reflector, so it can't re-hit them.
+        shot.ownerId = defender.id;
+        shot.targetId = owner.id;
+        shot.reflected = true;
+        shot.traveled = 0;
+        let back = normalize(sub(owner.mover.pos, shot.pos));
+        if (back.x === 0 && back.y === 0) back = { x: -shot.dir.x, y: -shot.dir.y };
+        shot.dir = back;
+        reflected = true;
+        break;
+      }
+
+      const rolled = resolvePlayerHit(owner.combatant, defender, sim.rng);
       const impulse = projectileKnockback(shot, weapon.attack.knockback ?? 0);
-      defender.mover.vel.x += impulse.x;
-      defender.mover.vel.y += impulse.y;
+      applyImpulse(defender, impulse.x, impulse.y, 1);
       events.push({
         type: "hit",
         attackerId: shot.ownerId,
@@ -336,16 +421,11 @@ const stepProjectiles = (
         x: defender.mover.pos.x,
         y: defender.mover.pos.y,
       });
-      if (rolled.lethal) {
-        defender.alive = false;
-        defender.mover.vel.x = 0;
-        defender.mover.vel.y = 0;
-        events.push({ type: "death", playerId: defender.id });
-      }
+      if (rolled.lethal) killPlayer(defender, events);
     }
 
     // Walls stop shots (core leaves level geometry to the caller).
-    let expired = result.expired;
+    let expired = result.expired && !reflected;
     if (!expired) {
       for (const wall of zone.collision) {
         if (distanceToAabb(shot.pos, wall) <= shot.radius) {
@@ -361,7 +441,8 @@ const stepProjectiles = (
 
 /**
  * Tick bleeds. Dot damage is fixed (no rng draws, no defense — see core
- * status.ts) and deliberately ignores dash i-frames: the blade's already in you.
+ * status.ts) and deliberately ignores dash i-frames AND Ironhide: the blade's
+ * already in you.
  */
 const stepBleeds = (players: readonly ArenaPlayer[], events: ArenaEvent[], dt: number): void => {
   for (const p of players) {
@@ -381,13 +462,7 @@ const stepBleeds = (players: readonly ArenaPlayer[], events: ArenaEvent[], dt: n
         x: p.mover.pos.x,
         y: p.mover.pos.y,
       });
-      if (lethal) {
-        p.alive = false;
-        p.mover.vel.x = 0;
-        p.mover.vel.y = 0;
-        p.dots.length = 0;
-        events.push({ type: "death", playerId: p.id });
-      }
+      if (lethal) killPlayer(p, events);
     }
   }
 };

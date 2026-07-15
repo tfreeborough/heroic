@@ -6,16 +6,22 @@
  *   bun scripts/bot.ts --name fifi --strategy circle                 # joins the first open room
  *   bun scripts/bot.ts --name kilo --room KRVX --pass hunter2        # joins a specific room
  *
- * A hosting bot auto-presses START whenever the lobby is full, so bot matches
- * loop forever (bound with --matches N; 0 = run until killed).
+ * Bots arm the moment they're seated (weapon + hand), so with everyone armed
+ * the server's own arming countdown starts each match — nobody presses
+ * anything (pvp-loadout-flow.md). Bound with --matches N; 0 = run until
+ * killed. `--noarm` seats a bot that never picks — the straggler, for testing
+ * the host's force-start from a phone.
  */
 import {
+  ABILITY_IDS,
   botThink,
   createBotMemory,
   DEFAULT_PORT,
+  LOADOUT_ABILITY_COUNT,
   PROTOCOL_VERSION,
   TICK_RATE,
   WEAPON_IDS,
+  type AbilityId,
   type BotStrategy,
   type ClientMsg,
   type RoundPhase,
@@ -37,8 +43,8 @@ const host = arg("--host", "localhost");
 const port = Number(arg("--port", String(DEFAULT_PORT)));
 const matchLimit = Number(arg("--matches", "1"));
 const create = has("--create");
-/** Host a lobby but never press START — for testing the lobby screens. */
-const noStart = has("--nostart");
+/** Never arm — the straggler bot, for testing the host's force-start. */
+const noArm = has("--noarm");
 const roomCode = arg("--room", "");
 const pass = arg("--pass", "");
 /** Lobby weapon pick; unset = random. Matches can't start until all pick. */
@@ -47,16 +53,24 @@ const weapon: WeaponId = (WEAPON_IDS as readonly string[]).includes(weaponArg)
   ? (weaponArg as WeaponId)
   : WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!;
 
+/** The drafted hand: dash first (the only ability this brain casts — see
+ * bot.ts's cheapest-v1 rule) plus random filler for the other slots. */
+const abilities: AbilityId[] = ["dash"];
+{
+  const pool = ABILITY_IDS.filter((a) => a !== "dash");
+  while (abilities.length < LOADOUT_ABILITY_COUNT) {
+    abilities.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
+  }
+}
+
 const log = (line: string): void => console.log(`[${name}] ${line}`);
 
 let myId: number | null = null;
 let iAmHost = false;
-let connectedInRoom = 0;
 let phase: RoundPhase = "lobby";
 let latest: SnapshotMsg | null = null;
 let seq = 0;
 let matchesSeen = 0;
-let lastStartSentMs = 0;
 
 const ws = new WebSocket(`ws://${host}:${port}`);
 const send = (msg: ClientMsg): void => {
@@ -86,12 +100,17 @@ ws.onmessage = (e) => {
       myId = msg.playerId;
       iAmHost = msg.hostId === msg.playerId;
       log(`seated as player ${msg.playerId} (team ${msg.team}) in ${msg.roomCode} "${msg.roomName}"${iAmHost ? " — hosting" : ""}`);
-      log(`picking the ${weapon}`);
-      send({ t: "setWeapon", weapon });
+      if (noArm) {
+        log("staying unarmed (--noarm) — force-start me");
+      } else {
+        // Bots arm instantly; the server's countdown does the rest.
+        log(`arming: ${weapon} + [${abilities.join(", ")}]`);
+        send({ t: "setWeapon", weapon });
+        send({ t: "setAbilities", abilities });
+      }
       return;
     case "roomState":
       iAmHost = myId !== null && msg.hostId === myId;
-      connectedInRoom = msg.players.filter((p) => p.connected).length;
       log(`room: ${msg.players.map((p) => `${p.name}${p.connected ? "" : " (gone)"}`).join(" vs ") || "empty"}`);
       return;
     case "watching":
@@ -104,9 +123,16 @@ ws.onmessage = (e) => {
       latest = msg;
       const prevPhase = phase;
       phase = msg.round.phase;
-      if (phase === "reveal" && prevPhase !== "reveal") playCeremony();
+      // The lobby return disarms everyone (no auto-rematch by flow) — a bot
+      // that wants another match re-arms, which restarts the countdown.
+      if (phase === "lobby" && prevPhase === "matchEnd" && !noArm) {
+        log("re-arming for the next match");
+        send({ t: "setWeapon", weapon });
+        send({ t: "setAbilities", abilities });
+      }
       for (const ev of msg.events) {
-        if (ev.type === "fightStart") log("FIGHT!");
+        if (ev.type === "armingComplete") log("all armed — the countdown runs");
+        else if (ev.type === "fightStart") log("FIGHT!");
         else if (ev.type === "roundEnd") log(`round → team ${ev.winnerTeam} · ${ev.wins[0]}–${ev.wins[1]}`);
         else if (ev.type === "matchEnd") {
           log(`MATCH → team ${ev.winnerTeam}`);
@@ -126,29 +152,6 @@ ws.onclose = () => {
   process.exit(0);
 };
 
-/**
- * The pick ceremony, bot-style: half the time it bait-swaps its revealed
- * weapon (hidden from the enemy team — the human tester sees the swap land
- * only when the fight starts), then locks in. Locking matters: everyone
- * locked ends the adjust window early, so a solo tester + this bot exercises
- * the early-start path too.
- */
-const playCeremony = (): void => {
-  const swapDelay = 1500 + Math.random() * 4500;
-  if (Math.random() < 0.5) {
-    const others = WEAPON_IDS.filter((w) => w !== weapon);
-    const to = others[Math.floor(Math.random() * others.length)]!;
-    setTimeout(() => {
-      log(`bait! secretly swapping to the ${to}`);
-      send({ t: "setWeapon", weapon: to });
-    }, swapDelay);
-  }
-  setTimeout(() => {
-    log("locking in");
-    send({ t: "lockIn" });
-  }, swapDelay + 800 + Math.random() * 3200);
-};
-
 // The brain itself lives in the sim package (botThink) — shared with the
 // app's offline practice mode. This script is just its WebSocket body.
 const memory = createBotMemory();
@@ -162,13 +165,7 @@ const think = (): { sx: number; sy: number; dash: boolean } => {
 };
 
 setInterval(() => {
-  // Hosting bot: press START whenever the lobby is full (throttled).
-  const now = Date.now();
-  if (!noStart && iAmHost && phase === "lobby" && connectedInRoom >= 2 && now - lastStartSentMs > 2000) {
-    lastStartSentMs = now;
-    log("lobby full — starting the match");
-    send({ t: "startMatch" });
-  }
   const d = think();
-  send({ t: "input", seq: seq++, sx: d.sx, sy: d.sy, dash: d.dash });
+  // Dash sits in slot 0 by construction (the hand is sent dash-first).
+  send({ t: "input", seq: seq++, sx: d.sx, sy: d.sy, casts: [d.dash, false, false] });
 }, 1000 / TICK_RATE);

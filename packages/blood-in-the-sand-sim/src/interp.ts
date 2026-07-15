@@ -9,7 +9,13 @@
  */
 import { angleDiff } from "@heroic/core";
 import type { ArenaEvent } from "./events";
-import type { PlayerSnapshot, ProjectileSnapshot, RoundSnapshot, SnapshotMsg } from "./protocol";
+import type {
+  DeployableSnapshot,
+  PlayerSnapshot,
+  ProjectileSnapshot,
+  RoundSnapshot,
+  SnapshotMsg,
+} from "./protocol";
 
 export const INTERP_DELAY_TICKS = 2;
 
@@ -22,6 +28,8 @@ export interface InterpolatedView {
   round: RoundSnapshot;
   players: PlayerSnapshot[];
   projectiles: ProjectileSnapshot[];
+  /** Static once placed — no lerp, straight from the newer snapshot. */
+  deployables: DeployableSnapshot[];
 }
 
 interface Entry {
@@ -126,6 +134,6 @@ export class SnapshotBuffer {
       return lerpProjectile(a, b, t);
     });
 
-    return { tick: target, round: newer.round, players, projectiles };
+    return { tick: target, round: newer.round, players, projectiles, deployables: newer.deployables };
   }
 }

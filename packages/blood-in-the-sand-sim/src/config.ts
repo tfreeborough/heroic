@@ -162,10 +162,11 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
 // ── Abilities ──────────────────────────────────────────────────────────────
 // The pickable roster (docs/design/pvp-abilities.md): every player drafts
 // LOADOUT_ABILITY_COUNT of these alongside their weapon — pick order IS the
-// in-match button order. Only the draft knows about these yet; match-side
-// effects land per-ability (dash still runs on its dedicated path until the
-// ability-slot generalisation). Cooldowns are first guesses; a re-tune for
-// 3-ability loadouts is owed once they're castable.
+// in-match button order. Lifecycle numbers (activeDuration/cooldown) live on
+// the roster table so ABILITIES[id] plugs straight into core's stepAbility;
+// each ability's effect numbers sit in its own table below. All first-pass
+// numbers; a cooldown re-tune for 3-ability loadouts is owed (see the doc's
+// balance caveat).
 
 export type AbilityCategory = "offensive" | "defensive" | "support";
 
@@ -181,29 +182,14 @@ export type AbilityId =
   | "blood-font"
   | "sandstorm";
 
-export interface AbilityDef {
+export interface AbilityDef extends AbilityConfig {
   name: string;
   category: AbilityCategory;
-  cooldown: number;
+  /** Uses per ROUND (Tom, 2026-07-15 — the ability economy): a finite budget
+   * that replenishes at every round reset, with the cooldown still gating
+   * back-to-back uses. Spam-capped without cross-round snowballing. */
+  charges: number;
 }
-
-export const ABILITIES: Record<AbilityId, AbilityDef> = {
-  sandtrap: { name: "Sandtrap", category: "offensive", cooldown: 10 },
-  tremor: { name: "Tremor", category: "offensive", cooldown: 9 },
-  harpoon: { name: "Harpoon", category: "offensive", cooldown: 12 },
-  dash: { name: "Dash", category: "defensive", cooldown: 3 },
-  "mirror-guard": { name: "Mirror Guard", category: "defensive", cooldown: 12 },
-  ironhide: { name: "Ironhide", category: "defensive", cooldown: 12 },
-  "straw-man": { name: "Straw Man", category: "defensive", cooldown: 14 },
-  "war-drums": { name: "War Drums", category: "support", cooldown: 12 },
-  "blood-font": { name: "Blood Font", category: "support", cooldown: 16 },
-  sandstorm: { name: "Sandstorm", category: "support", cooldown: 14 },
-};
-
-export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
-
-/** Abilities per loadout; pick order = button order in the match. */
-export const LOADOUT_ABILITY_COUNT = 3;
 
 // ── Dash ───────────────────────────────────────────────────────────────────
 // PvP cooldown is far shorter than the Gauntlet's 8s — dodging telegraphs is
@@ -217,14 +203,122 @@ export const DASH_IFRAMES = 0.2; // outlasts the movement by a grace tail
 export const DASH_SHOVE_RADIUS = 46; // the "bowling ball" barge sweep
 export const DASH_KNOCKBACK = 840; // px/s outward cap on shoved victims
 
+// ── Per-ability effect tables ──────────────────────────────────────────────
+// Every number is fixed — no rng draws anywhere in the ability layer, so the
+// seed/rngDraws restore contract is untouched (the BleedConfig pattern). The
+// codex reads these at runtime; nothing is hand-copied into UI copy.
+
+/** Sandtrap: a buried powder charge — big blast, area denial (re-flavoured
+ * from a blade trap and sized WAY up, Tom 2026-07-15 after play). */
+export const SANDTRAP = {
+  armSeconds: 2,
+  /** Edge distance (to a body's rim) that sets it off once armed. */
+  triggerRadius: 120,
+  blastRadius: 240,
+  damage: 30,
+  /** Radial impulse on everyone caught in the blast, px/s. */
+  knockback: 700,
+  /** Effectively "until triggered or round end" (deployables clear each round). */
+  lifetime: 600,
+};
+
+/** Tremor: the anti-dogpile slam — instant, centred on the caster. Knockback
+ * sized to genuinely HURL (Tom 2026-07-15: "really knock players back"). */
+export const TREMOR = { radius: 110, damage: 12, knockback: 1500 };
+
+/** Harpoon: an instant chain at the auto-target — one line, a hook on the
+ * end, incredibly fast (reworked from a dodgeable projectile, Tom
+ * 2026-07-15: it whiffed constantly against normal strafing). It auto-locks:
+ * if the mark is alive when the throw lands, it sticks — only dash i-frames
+ * (timing), Ironhide (the pull) or Mirror Guard (the reflect) answer it. */
+export const HARPOON = {
+  windup: 0.1,
+  /** Chain reach — deliberately past every weapon's engagement radius (Tom,
+   * 2026-07-15): the harpoon does its OWN acquisition at press time, so it
+   * isn't capped by the picked weapon's lock-on distance. */
+  maxRange: 550,
+  damage: 8,
+  /** The reel ends this far (centre distance) in front of the puller. */
+  pullGap: 50,
+  /** The REEL (Tom, 2026-07-15): the chain lands instantly, then hauls the
+   * victim in at this speed — faster than a sprint (280), well under a dash —
+   * while the caster stands ROOTED, dragging. px/s. */
+  reelSpeed: 360,
+  /** Safety timeout on a reel that can't finish (snagged on a corner). */
+  maxReelSeconds: 2.5,
+};
+
+/** Mirror Guard: reflected shots re-home hard enough to be a real threat. */
+export const MIRROR_GUARD = { duration: 2, homingTurnRate: 4 };
+
+/** Ironhide: walk through the telegraph instead of dodging it. */
+export const IRONHIDE = { duration: 2.5, damageTakenFactor: 0.3, selfSlowFactor: 0.5 };
+
+/** Straw Man: a targetable decoy (a combatant that can't act). */
+export const STRAW_MAN = { hp: 30, lifetime: 4 };
+
+/** War Drums: a moving ally aura — the slow plumbing mirrored (>1 factor).
+ * Radius doubled 130→260 (Tom, 2026-07-15: the circle should feel like a
+ * war-band's worth of ground, not a personal bubble). */
+export const WAR_DRUMS = { radius: 260, duration: 3, speedFactor: 1.35 };
+
+/** Blood Font: bleed-in-reverse — fixed heal ticks inside a held circle. */
+export const BLOOD_FONT = { radius: 100, duration: 4, healPerTick: 4, tickInterval: 0.5 };
+
+/** Sandstorm: nothing inside can be auto-targeted, friend or foe. */
+export const SANDSTORM = { radius: 120, duration: 3 };
+
+export const ABILITIES: Record<AbilityId, AbilityDef> = {
+  sandtrap: { name: "Sandtrap", category: "offensive", cooldown: 10, activeDuration: 0, charges: 2 },
+  tremor: { name: "Tremor", category: "offensive", cooldown: 9, activeDuration: 0, charges: 2 },
+  // The harpoon's active window IS its (near-zero) windup — it fires at the end.
+  harpoon: { name: "Harpoon", category: "offensive", cooldown: 12, activeDuration: HARPOON.windup, charges: 2 },
+  // Dash keeps the fattest budget — it's the metronome pick, small value often.
+  dash: {
+    name: "Dash", category: "defensive", cooldown: DASH.cooldown, activeDuration: DASH.activeDuration, charges: 4,
+  },
+  "mirror-guard": {
+    name: "Mirror Guard", category: "defensive", cooldown: 12, activeDuration: MIRROR_GUARD.duration, charges: 3,
+  },
+  ironhide: { name: "Ironhide", category: "defensive", cooldown: 12, activeDuration: IRONHIDE.duration, charges: 3 },
+  "straw-man": { name: "Straw Man", category: "defensive", cooldown: 14, activeDuration: 0, charges: 2 },
+  "war-drums": {
+    name: "War Drums", category: "support", cooldown: 12, activeDuration: WAR_DRUMS.duration, charges: 3,
+  },
+  // ONE pour per round — healing is enormous in a one-life mode.
+  "blood-font": { name: "Blood Font", category: "support", cooldown: 16, activeDuration: 0, charges: 1 },
+  sandstorm: { name: "Sandstorm", category: "support", cooldown: 14, activeDuration: 0, charges: 2 },
+};
+
+export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
+
+/** Abilities per loadout; pick order = button order in the match. */
+export const LOADOUT_ABILITY_COUNT = 3;
+
+/** Deployable ids live above the seat range so they can share the target-id
+ * space with players (a straw man is a valid auto-target). Room for 5v5. */
+export const DEPLOYABLE_ID_BASE = 100;
+
+/** The straw man's stat sheet — resolveAttack needs a full combatant, and a
+ * dummy is exactly that: hittable, critable, and utterly harmless. */
+export const STRAW_MAN_STATS: CombatStats = {
+  maxHp: STRAW_MAN.hp,
+  attack: 0,
+  defense: 0,
+  critChance: 0,
+  critMultiplier: 1,
+};
+
 // ── Rounds ─────────────────────────────────────────────────────────────────
-/** The draft's blind-pick phase: host START opens it, LOCK IN (or the clock)
- * closes it. 0 in the server call = the v6 lobby-is-the-pick flow. */
-export const PICK_PHASE_SECONDS = 30;
-/** The counterpick window: picks reveal, then this long to repick (hidden
- * from the enemy) before the countdown. The client's reveal overlay plays
- * inside the front of this window. See pvp-pick-ceremony.md. */
-export const REVEAL_ADJUST_SECONDS = 15;
+/** The arming countdown (pvp-loadout-flow.md): the moment every seat is armed
+ * the round machine counts this down and starts the match ITSELF — no host
+ * button. Joins/leaves cancel it; it restarts fresh. Rides round.timer while
+ * the phase is still "lobby" (timer 0 = no countdown running). */
+export const LOBBY_COUNTDOWN_SECONDS = 10;
+/** How long a straggler may sit unarmed (while everyone else is ready) before
+ * the host's force-start appears. Client-side gate only — the sim accepts a
+ * force-start whenever someone is unarmed. */
+export const FORCE_START_GRACE_SECONDS = 30;
 export const COUNTDOWN_SECONDS = 3;
 export const ROUND_END_SECONDS = 2.5;
 export const MATCH_END_SECONDS = 8; // then a fresh match with the same players

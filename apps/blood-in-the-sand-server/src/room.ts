@@ -7,29 +7,26 @@
  *
  * Input model per player:
  * - stick: latest-input-wins (an old stick sample is worthless).
- * - dash: an OR-latch — a press that lands between ticks is held until the
- *   next simulated step, so a tap is never lost to timing.
+ * - ability presses: an OR-latch per slot — a press that lands between ticks
+ *   is held until the next simulated step, so a tap is never lost to timing.
  */
 import type { Server, ServerWebSocket } from "bun";
 import {
   ARENA_00,
-  PICK_PHASE_SECONDS,
   PROTOCOL_VERSION,
-  REVEAL_ADJUST_SECONDS,
   SNAPSHOT_DIVISOR,
   TICK_DT,
   addPlayer,
   createSim,
+  forceStartMatch,
   makeClientConfig,
   markDisconnected,
   reconnectPlayer,
   removePlayer,
   sanitizeInput,
   seatedPlayers,
-  lockInPlayer,
   setPlayerAbilities,
   setPlayerWeapon,
-  startMatch,
   stepSim,
   toRoomStatePlayers,
   toSnapshot,
@@ -69,7 +66,8 @@ export class Room {
   /** Seatless spectators — they get the neutral (team-0) roomState view. */
   private readonly watchers = new Set<Socket>();
   private readonly inputs = new Map<number, PlayerInput>();
-  private readonly dashLatch = new Set<number>();
+  /** Per-player OR-latch of ability presses since the last simulated step. */
+  private readonly castLatch = new Map<number, boolean[]>();
   private eventBuffer: ArenaEvent[] = [];
   private lastRoomStateKey = "";
 
@@ -205,48 +203,49 @@ export class Room {
     this.syncRoomState(nowMs);
   }
 
-  startByHost(playerId: number): void {
+  /** The host's AFK backstop: fills every unarmed seat, then the sim's own
+   * 10s arming countdown runs (the machine notices the gate passing — the
+   * server never starts a match; pvp-loadout-flow.md). */
+  forceStart(playerId: number, nowMs: number): void {
     if (playerId !== this.meta.hostId) return;
-    // The 4-beat draft: timed blind pick → reveal → timed counterpick → sand.
-    const ceremony = { pickSeconds: PICK_PHASE_SECONDS, adjustSeconds: REVEAL_ADJUST_SECONDS };
-    if (startMatch(this.sim, this.eventBuffer, ceremony)) {
-      console.log(`[${this.meta.code}] host started the draft`);
-      this.syncRoomState(performance.now()); // lock flags reset for phase I
+    if (forceStartMatch(this.sim)) {
+      console.log(`[${this.meta.code}] host force-started — stragglers auto-armed`);
+      this.syncRoomState(nowMs);
     }
   }
 
-  /** A lobby/draft weapon pick; the roomState diff sends the change. */
+  /** A lobby weapon pick; the roomState diff sends the change. */
   setWeapon(playerId: number, weapon: WeaponId, nowMs: number): void {
     if (setPlayerWeapon(this.sim, playerId, weapon)) this.syncRoomState(nowMs);
   }
 
-  /** The drafted hand (whole list each change); same phase/lock gate. */
+  /** The picked hand (whole list each change); same lobby-only gate. */
   setAbilities(playerId: number, abilities: AbilityId[], nowMs: number): void {
     if (setPlayerAbilities(this.sim, playerId, abilities)) this.syncRoomState(nowMs);
   }
 
-  /** "I'm done adjusting" — all locked ends the draft phase early (next tick). */
-  lockIn(playerId: number, nowMs: number): void {
-    if (lockInPlayer(this.sim, playerId)) this.syncRoomState(nowMs);
-  }
-
   input(playerId: number, msg: Extract<ClientMsg, { t: "input" }>): void {
-    const input = sanitizeInput({ seq: msg.seq, sx: msg.sx, sy: msg.sy, dash: msg.dash });
+    const input = sanitizeInput({ seq: msg.seq, sx: msg.sx, sy: msg.sy, casts: msg.casts });
     this.inputs.set(playerId, input);
-    if (input.dash) this.dashLatch.add(playerId);
+    if (input.casts.some(Boolean)) {
+      const latch = this.castLatch.get(playerId) ?? input.casts.map(() => false);
+      for (let i = 0; i < input.casts.length; i++) latch[i] = latch[i] || input.casts[i]!;
+      this.castLatch.set(playerId, latch);
+    }
   }
 
   /** Advance `steps` fixed ticks and broadcast. Called by the manager's loop. */
   step(steps: number, nowMs: number): void {
+    const noCasts: boolean[] = [];
     for (let i = 0; i < steps; i++) {
       const stepInputs = new Map<number, PlayerInput>();
       for (const [id, input] of this.inputs) {
-        // The latch fires on the first catch-up step only — one press, one dash.
-        stepInputs.set(id, { ...input, dash: i === 0 && this.dashLatch.has(id) });
+        // The latch fires on the first catch-up step only — one press, one cast.
+        stepInputs.set(id, { ...input, casts: i === 0 ? (this.castLatch.get(id) ?? noCasts) : noCasts });
       }
       this.eventBuffer.push(...stepSim(this.sim, stepInputs, TICK_DT));
     }
-    this.dashLatch.clear();
+    this.castLatch.clear();
     this.logEvents();
 
     if (this.sim.state.tick % SNAPSHOT_DIVISOR === 0) {
@@ -270,8 +269,7 @@ export class Room {
     // the room topic any more (pvp-pick-ceremony.md).
     const key = JSON.stringify([
       seatedPlayers(this.sim.state).map((p) => [
-        p.id, p.name, p.team, p.connected,
-        p.weapon, p.abilities, p.lockedIn, p.revealedWeapon, p.revealedAbilities,
+        p.id, p.name, p.team, p.connected, p.weapon, p.abilities,
       ]),
       this.meta.hostId,
     ]);

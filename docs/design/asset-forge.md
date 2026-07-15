@@ -1,12 +1,24 @@
 # Asset Forge — AI asset generation in Realmsmith
 
-Status: **SFX path built (v1)** — plugin + panel + ElevenLabs + trim/normalize verified end-to-end;
-image types not started · Applies to: both games (tooling; first consumer: Enter the Gauntlet) ·
-Last decided: 2026-07-05
+Status: **SFX path built (v1); image path built (v1, 2026-07-14)** — the `icon-bits` type
+generates Blood in the Sand's weapon/ability icons (gpt-image-1, transparent 1024 → sharp
+downscale to 256 + libimagequant palette quantization: ~15KB per icon vs ~240KB lossless,
+alpha-dithered, verified visually indistinguishable on the game void), verified end-to-end ·
+Applies to: both games (tooling; consumers: Enter the Gauntlet SFX, Blood in the Sand icons) ·
+Last decided: 2026-07-14
 
 Built: `apps/realmsmith/forge/` (Vite plugin: `/forge/status|expand|generate|save`, style bible,
-ElevenLabs + OpenAI calls, ffmpeg-static processing) + the Forge panel (`src/forge/ForgePanel.tsx`,
-toolbar toggle). Keys live in `apps/realmsmith/.env.local` (see `.env.example`).
+ElevenLabs + OpenAI calls, ffmpeg-static audio + sharp image processing) + the Forge panel
+(`src/forge/ForgePanel.tsx`, toolbar toggle). Keys live in `apps/realmsmith/.env.local` (see
+`.env.example`).
+
+Image path (2026-07-14): the style bible carries an **ICON spec + checked-in 14-icon manifest**
+(ids mirror the sim's WeaponId/AbilityId; subjects from the pvp-abilities identity pass; a
+per-category accent — gold/red/steel/green — bakes the game's category-colour system into the
+art). The panel gains a manifest picker with done-ticks ("3 of 14"), generates 2 candidates,
+previews each **at 32px on the game's void colour** (the roster-row acceptance test), keeps
+exactly one, and saves `<id>.png` (+ sidecar; regenerating overwrites). Save hands back the
+`icons.tsx` require-map line for when the app switches off the placeholder Skia glyphs.
 
 How we kit out the games with art and sound as a solo developer. The Forge is a panel in Realmsmith:
 type a short sentence, pick an **asset type**, and the tool builds a full on-brand prompt, calls the

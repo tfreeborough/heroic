@@ -587,3 +587,109 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Forge: Blood in the Sand icons ─────────────────────────────────────── */
+
+.forge .icon-manifest {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forge .icon-manifest-head {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.forge .icon-cat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.forge .icon-cat {
+  width: 64px;
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.forge .icon-cat-weapon { color: #d99a41; }
+.forge .icon-cat-offensive { color: #d94141; }
+.forge .icon-cat-defensive { color: #4da3d9; }
+.forge .icon-cat-support { color: #5fc75f; }
+
+/* Blood in the Sand sound-manifest categories (reuses .icon-cat layout). */
+.forge .sound-cat-combat { color: #d94141; }
+.forge .sound-cat-ability { color: #d99a41; }
+.forge .sound-cat-flow { color: #b39763; }
+.forge .sound-cat-ui { color: #8aa0b0; }
+
+.forge .icon-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.forge .icon-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.forge .icon-chip.done {
+  opacity: 0.65;
+}
+
+.forge .icon-chip.active {
+  border-color: #d99a41;
+  color: #d99a41;
+}
+
+.forge .icon-candidates {
+  display: flex;
+  gap: 8px;
+}
+
+/* Candidates sit on the game's void colour — judging bone-on-transparent
+   against the editor's blue-grey would lie about in-game contrast. */
+.forge .icon-candidate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #141210;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.forge .icon-candidate.keep {
+  border-color: #2c6b3f;
+}
+
+.forge .icon-candidate .icon-full {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.forge .icon-candidate .icon-small-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.forge .icon-candidate .icon-small {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}

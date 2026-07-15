@@ -45,10 +45,19 @@ your feet, or fired at your current auto-target).
 - Categories exist to help the pick UI read at a glance: **Offensive /
   Defensive / Support**. Current split is 3 / 4 / 3 (dash lands in Defensive);
   rounding out to 4 / 4 / 4 later is expected, not required.
-- **Balance caveat:** the cooldowns below were first-guessed for a one-ability
-  loadout. With three running concurrently a player has something available
-  every ~4s — expect a global cooldown-lengthening pass (or an ability GCD)
-  once it's playable. Numbers stay first-pass until then.
+- **The ability economy (DECIDED Tom, 2026-07-15, replacing the cooldown
+  caveat):** three concurrent cooldowns made an ability spam-fest, so every
+  ability now has a **finite number of charges that replenishes every round**,
+  with the existing cooldown kept as the between-use gate. Spam is capped by
+  the budget, back-to-back dumping by the cooldown, and nothing snowballs
+  across rounds — a lost round never leaves you resource-starved for the next.
+  First-pass budgets: **dash 4** (the metronome pick keeps the fattest
+  wallet), **Mirror Guard / Ironhide / War Drums 3** (Tom, 2026-07-15 —
+  the self-statuses can afford more swings), **blood font 1** (healing is
+  enormous in a one-life mode), everything else **2**. Buttons show charge
+  pips; a spent slot goes dark until the round reset. Charges ride
+  `AbilityRuntime.chargesLeft` (rebuilt with the slots each round) and the
+  slot snapshot.
 
 ### Picker UI (agreed via mockup, 2026-07-12)
 
@@ -65,6 +74,12 @@ your feet, or fired at your current auto-target).
 - One shared `LoadoutSheet` component serves both the room lobby and Practice.
 
 ### The draft: pick → reveal → counterpick (Tom, 2026-07-12)
+
+> **SUPERSEDED 2026-07-14** by the guided loadout flow
+> ([pvp-loadout-flow](./pvp-loadout-flow.md)): casual testers bounced off the
+> draft, so the default lobby becomes a weapon → 1 → 2 → 3 pick wizard with
+> server auto-start and *no reveal* — enemy loadouts show only through
+> in-game iconography. Kept for the record; ranked-mode candidate.
 
 The host pressing START begins a four-beat draft, not the match:
 
@@ -111,29 +126,29 @@ The host pressing START begins a four-beat draft, not the match:
   - *Practice runs the identical draft* (Tom: solo-testable on dev builds) —
     the bot drafts, locks, and bait-swaps in the counterpick on its own
     clock. Verified headlessly: full draft → counterpick → fight.
-  - Still owed: match-side ability *effects* (dash remains the hardwired
-    button; the drafted hand is carried but not yet castable) and the
-    cooldown re-tune once they are.
+  - Match-side ability *effects* **BUILT 2026-07-14** (protocol v8, see "New
+    sim machinery" below) — all ten castable, three buttons in the column.
+    Still owed: the cooldown re-tune for 3-ability loadouts, per-ability cast
+    SFX (Asset Forge), and real button/ability icon art (line glyphs stand in).
 
 ## Roster at a glance
 
-| # | Ability | Category | Shape | Cooldown |
-| --- | --- | --- | --- | --- |
-| 1 | Sandtrap | Offensive | deployable (mine) | 10s |
-| 2 | Tremor | Offensive | instant self-AOE | 9s |
-| 3 | Harpoon | Offensive | projectile at auto-target | 12s |
-| 4 | Dash | Defensive | committed move + i-frames | 3s |
-| 5 | Mirror Guard | Defensive | self status | 12s |
-| 6 | Ironhide | Defensive | self status | 12s |
-| 7 | Straw Man | Defensive | deployable (decoy) | 14s |
-| 8 | War Drums | Support | moving ally aura | 12s |
-| 9 | Blood Font | Support | deployable (heal zone) | 16s |
-| 10 | Sandstorm | Support | deployable (no-target zone) | 14s |
+| # | Ability | Category | Shape | Cooldown | Charges/round |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Sandtrap | Offensive | deployable (explosive) | 10s | 2 |
+| 2 | Tremor | Offensive | instant self-AOE | 9s | 2 |
+| 3 | Harpoon | Offensive | instant chain (own lock-on) | 12s | 2 |
+| 4 | Dash | Defensive | committed move + i-frames | 3s | 4 |
+| 5 | Mirror Guard | Defensive | self status | 12s | 3 |
+| 6 | Ironhide | Defensive | self status | 12s | 3 |
+| 7 | Straw Man | Defensive | deployable (decoy) | 14s | 2 |
+| 8 | War Drums | Support | moving ally aura | 12s | 3 |
+| 9 | Blood Font | Support | deployable (heal zone) | 16s | 1 |
+| 10 | Sandstorm | Support | deployable (no-target zone) | 14s | 2 |
 
-Dash's 3s cooldown is deliberately an order of magnitude cheaper than the rest:
-it's the metronome pick — small value, constantly. Everything else is a
-moment — big value, rarely. First-pass rule of thumb: one ability use per
-~10–15s of a round.
+Dash's 3s cooldown and four charges are deliberately the cheapest in the set:
+it's the metronome pick — small value, often (but no longer *constantly*).
+Everything else is a moment — big value, once or twice a round.
 
 ---
 
@@ -141,21 +156,30 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
 
 ### 1 · Sandtrap
 
-> *"Bury a blade beneath the sand. Two breaths to arm — then the first fool to
-> step close eats it."*
+> *"Bury a powder charge beneath the sand. Two breaths to arm — then the
+> ground itself turns on them."*
 
-- **Mechanics:** drops a mine at your feet. Arms over **2s** (status circle
-  counts it down), then detonates when any enemy enters the trigger radius.
-  One live mine per player — placing a new one fizzles the old.
-- **Numbers:** trigger radius **40px** · blast radius **90px** · damage **30
-  fixed** (no crit/defense — deterministic, like bleed ticks) · radial
-  knockback impulse **500 px/s** · lives until triggered or round end.
-- **Readability rule (Tom, 2026-07-12):** the mine is **clearly visible to
-  everyone**, both teams alike — a hidden or subtle mine has no counterplay,
-  and this game's telegraph philosophy is that everything dangerous is
-  readable. The threat isn't stealth; it's *area denial* — the mine takes a
-  patch of sand off the board, and forcing you to path around it (or eat it
-  mid-chase) is the value.
+- **Flavour REVISED (Tom, 2026-07-15, after play):** an **explosive charge**,
+  not a small blade trap — and sized WAY up. The blast is the identity now.
+- **Mechanics:** buries a charge at your feet. Arms over **2s** (status circle
+  counts it down), then erupts when any enemy enters the trigger radius.
+  One live charge per player — placing a new one fizzles the old.
+- **Numbers:** trigger radius **120px** · blast radius **240px** · damage
+  **30 fixed** (no crit/defense — deterministic, like bleed ticks) · radial
+  knockback impulse **700 px/s** · lives until triggered or round end.
+  (Blast tuning walk: 90 → 160 → 320 → settled at **240**, Tom 2026-07-15
+  "meet in the middle"; trigger settled at 120; was 40/90/500 at first build.)
+- **Readability rule (REVISED Tom, 2026-07-14; was clearly-visible-to-all,
+  2026-07-12):** the sandtrap is now the one deployable with **team-dependent
+  rendering**. Your own team sees a clear, steady marker (it's your resource —
+  one live mine, you need to know where it sits). To the **enemy** it's faint:
+  a very dim trigger-radius ring plus a brief glint **every ~3s** — hard to
+  spot in the middle of a fight, findable when nothing is going on. Counterplay
+  shifts from "you can always see it" to two honest reads: the **plant is
+  still telegraphed** (the cast + a dim arming arc for its 2s), and a calm
+  moment lets you **scan for the glint**. Built as described (flash period
+  3s, ~0.3s sine envelope, per-mine phase offset so two mines never blink in
+  sync; spectators get the faint view of both teams).
 - **Icon:** a glinting spike-trap half-buried in a sand mound.
 - **Cast SFX:** gritty scoop of sand ending in a muffled metallic *click*.
   (Detonation is its own sound: sharp snap into a dry boom.)
@@ -170,7 +194,12 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
 - **Mechanics:** instant slam centred on yourself — the anti-dogpile button.
   No windup (it's a panic tool; a telegraph would gut it).
 - **Numbers:** radius **110px** · damage **12 fixed** · radial knockback
-  impulse **700 px/s** on every enemy in radius.
+  impulse **1500 px/s** on every enemy in radius (Tom, 2026-07-15: it should
+  *really* hurl — was 700, which read as a shrug).
+- **Floor scar (Tom, 2026-07-15):** the slam leaves **cracked-earth decals**
+  where it landed — client-derived from the cast event, never networked,
+  fading over ~30s (the blood-trail rule exactly; `cracks.ts`, drawn in the
+  floor pass under the blood).
 - **Icon:** a boot with cracked-earth rings radiating outward.
 - **Cast SFX:** deep sub-bass thump, rock-crack transient, short rumble tail.
 - **Reuses:** resolve-on-cast against all enemies in radius (the arc resolve's
@@ -178,22 +207,45 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
 
 ### 3 · Harpoon
 
-> *"Hurl a barbed harpoon at your mark. It flies fast, it rarely misses, and it
-> drags them straight to you."*
+> *"Hurl a barbed harpoon at your mark. It does not miss, and it drags them
+> straight to you."*
 
-- **Mechanics:** fires at your **current auto-target** (same acquisition as
-  weapons — no target, no cast). On hit, drags the victim to just outside your
-  melee reach. **Very hard to dodge by design** (Tom, 2026-07-12): near-zero
-  windup, faster than any weapon shot. Balanced by cooldown + range instead.
-- **Numbers:** windup **0.1s** · projectile speed **950 px/s** (bow arrow:
-  650) · radius **8px** · max range **300px** · damage **8 fixed** · pull ends
-  **50px** in front of the caster · Ironhide's knockback-immunity blocks the
-  pull (its counter-pick, on purpose).
+- **REWORKED (Tom, 2026-07-15, after play):** the projectile version whiffed
+  constantly against ordinary strafing and was "too annoying to use". Now it's
+  an **instant chain**: no flight time at all — the cast latches a mark (no
+  mark in chain range, no cast), the near-zero windup plays, and the chain
+  lands the moment it closes as **one complete line with a hook on the end**.
+  Auto-locked, not dodgeable by movement.
+- **The REEL (Tom, 2026-07-15, second pass):** landing doesn't teleport the
+  victim — it starts a **haul**: they're dragged toward the caster at
+  **360 px/s** (faster than a sprint, dragged *against their will* — their
+  own input does nothing) while the **caster stands ROOTED**, pulling ("it
+  doesn't make sense for the caster to still be able to move"). The chain
+  **snaps** if: the victim gains dash i-frames (the roll cuts it) or Ironhide
+  mid-haul · the **caster dashes** (letting go is the caster's out) · either
+  side dies · line of sight breaks (geometry cuts it) · a 2.5s safety timeout
+  (snagged on a corner). Arriving at the gap plants the victim. The taut
+  chain renders for the whole haul (snapshot `reeling` field).
+- **The three answers, by design:** dash **i-frames** — at the landing moment
+  OR mid-reel — cut the chain · **Ironhide** blocks the haul (still counter-
+  pick #1) · **Mirror Guard reflects it** — the guard catches the chain and
+  **yanks the caster in instead** (instant: the guard isn't rooted by someone
+  else's harpoon), barb damage included.
+- **Numbers:** windup **0.1s** · landing **instant** · reel **360 px/s**,
+  max **2.5s** · max range **550px** (checked at cast — a gated press costs
+  nothing) · damage **8 fixed** · the haul ends **50px** in front of the
+  puller.
+- **Own lock-on (Tom, 2026-07-15):** 550px is past every weapon's engagement
+  radius, so the harpoon **acquires its own mark at press time** — the current
+  auto-target if the chain reaches it, else the nearest visible enemy (player
+  or straw man) in chain range. LOS and sandstorm rules apply exactly as in
+  weapon targeting; weapon lock-on distances are untouched.
 - **Icon:** a barbed hook trailing a taut chain.
 - **Cast SFX:** whip-crack launch with rattling chain; on hit, a meaty *thunk*
   and a dragging scrape through sand.
-- **Reuses:** `ArenaProjectile` pipeline (id, owner, target) · pull is
-  knockback with the sign flipped.
+- **Reuses:** `targetView` for the mark · the wall-sampled pull · a transient
+  `harpoon` event carries the chain-line endpoints for the client flash (drawn
+  even on an i-frame whiff — the chain whips through empty air).
 
 ---
 
@@ -242,7 +294,11 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
   to dash: you don't dodge the hammer's telegraph, you *walk through it*.
 - **Numbers:** duration **2.5s** · damage taken **×0.3** · immune to
   slow/knockback/pull · self move speed **×0.5** · cooldown **12s**.
-- **Body-effect ring:** as Mirror Guard, own colour.
+- **Visual REVISED (Tom, 2026-07-15 — the pulse ring "didn't look cool
+  enough at all"):** a proper **shield dome** around the player: translucent
+  iron fill, a bold rim, and three plate arcs slowly orbiting the body,
+  fading out over the last 0.4s. Replaces the body-effect ring for this
+  ability only (Mirror Guard keeps its ring).
 - **Icon:** a flexing arm turned to cracked iron.
 - **Cast SFX:** grinding stone resolving into one deep, settling clang.
 - **Reuses:** the slow plumbing (`slowLeft`/`slowFactor`) for the self-slow;
@@ -280,8 +336,13 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
 
 - **Mechanics:** aura centred on (and moving with) you. You and allies inside
   gain a speed surge, re-checked per tick — step out, lose it.
-- **Numbers:** radius **130px** · duration **3s** · max speed **×1.35** ·
-  cooldown **12s**.
+- **Numbers:** radius **260px** (doubled from 130, Tom 2026-07-15 — a
+  war-band's worth of ground, not a personal bubble) · duration **3s** · max
+  speed **×1.35** · cooldown **12s**.
+- **Visual (Tom, 2026-07-15):** the aura **drums** — beat rings pound outward
+  from the drummer to the boundary at ~1.9 beats/s, two per cycle like
+  alternating hands. The rings ARE the rhythm; the Asset Forge drum loop
+  should lock to the same tempo when it lands.
 - **Icon:** a war drum with radiating rings.
 - **Cast SFX:** an accelerating drum loop — the sound IS the duration cue: the
   beat plays while the aura lives. Strongest audio identity in the set.
@@ -299,6 +360,9 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
 - **Numbers:** radius **100px** · duration **4s** · **+4hp per 0.5s tick**
   (max 32hp for standing the full pour — about two weapon hits back) ·
   cooldown **16s** (longest in the set).
+- **Visual (Tom, 2026-07-15):** the circle **pulses** on a slow heartbeat —
+  the boundary ring stays fixed (the zone edge is information), the interior
+  fill and an inner ring breathe.
 - **Icon:** a chalice overflowing with red droplets inside a ring.
 - **Cast SFX:** low choral hum under a liquid trickle.
 - **Reuses:** `Deployable` entity · bleed-in-reverse (fixed tick, no RNG,
@@ -312,18 +376,36 @@ moment — big value, rarely. First-pass rule of thumb: one ability use per
 - **Mechanics:** cloud placed at your feet. Anyone inside **cannot be
   auto-targeted**: existing locks on them break (the lock-break rule treats a
   smoked target as lost, including mid-windup `lockedTargetId`), and no new
-  locks acquire. Double-edged — enemies can stand in your storm too.
+  locks acquire. **The blindness goes BOTH ways (Tom, 2026-07-15):** anyone
+  standing inside can't take aim out either — no locks acquire *from* the
+  cloud, and stepping in mid-windup breaks your own swing. No hiding inside
+  while shooting out. Double-edged — enemies can stand in your storm too.
 - **Numbers:** radius **120px** · duration **3s** · cooldown **14s**.
+- **Visual (Tom, 2026-07-15):** an actual **swirling storm that obscures**:
+  the cloud body draws OVER players and shots (dense sand fill + a dozen
+  streak arcs orbiting at mixed radii/speeds/directions), so whoever stands
+  in it is genuinely hard to make out. Tier-1 canvas particles; still the
+  flagged tier-3 SkSL candidate if the profiler complains.
 - **Icon:** a swirling cloud with a slashed-out eye.
 - **Cast SFX:** harsh dry gust rising fast, then hissing sand falling back to
   earth.
-- **Reuses:** `Deployable` entity · a filter clause in acquisition + the
-  existing lock-break check. Re-themed from "smoke" to sand (2026-07-12) so
-  the cloud sits on the arena palette next to the blood decals.
+- **Reuses:** `Deployable` entity · a filter clause in acquisition (both
+  directions) + the existing lock-break check. Re-themed from "smoke" to sand
+  (2026-07-12) so the cloud sits on the arena palette next to the blood
+  decals.
 
 ---
 
 ## New sim machinery (shared, built once)
+
+**BUILT 2026-07-14** — all three additions plus every ability's effect
+(sim `abilities/` folder: lifecycle dispatch, dash, tremor, harpoon,
+statuses, deployables; protocol v8; three `AbilityButton`s replace the
+hardwired dash button; bots draft dash-first hands and cast via slot 0).
+Implementation notes vs. the sheet: Ironhide's reduction re-scales the SAME
+resolveAttack roll (identical rng draws buff or no buff); the harpoon pull
+samples the drag path against wall colliders (the open question, answered the
+cheap way); mine blasts are dodgeable by dash i-frames like the arc resolve.
 
 Three additions carry all ten abilities:
 
@@ -361,6 +443,9 @@ anywhere, so the seed/`rngDraws` restore contract is untouched.
 - **Deployables are clearly visible to all players** (Tom, 2026-07-12) — no
   team-dependent rendering, no subtlety. Counterplay requires seeing the
   thing; deployables are area denial and target pollution, not ambushes.
+  **One exception since 2026-07-14: the sandtrap** — enemy-side it renders
+  faint (dim trigger ring + a ~3s glint; see its readability rule above).
+  Every other deployable keeps the uniform rule.
 - **Particles** come in three tiers — see [pvp-particles](#particles) below.
 
 ### Particles
@@ -384,13 +469,15 @@ interior is the flagged tier-3 candidate because noise-swirl fog is exactly
 what a fragment shader is for and exactly what per-particle drawing is worst
 at.
 
-## Open questions (decide before/while building)
+## Open questions (answered in the 2026-07-14 build)
 
-- **Bot brains:** `bot.ts` needs a per-ability heuristic (when does a bot pop
-  Ironhide?). Cheapest v1: bots only pick Dash.
-- **Harpoon pull vs walls:** clamp the drag path against wall colliders (reuse
-  the mover's collision step) so nobody gets pulled through geometry.
-- **Straw Man + Sandstorm interaction:** a dummy inside a storm can't be
-  targeted — fine, but confirm it doesn't NaN the acquisition loop.
-- **Practice lobby:** ability pick joins the weapon pick in Practice; the
-  PracticeClient path should exercise deployables before netplay does.
+- **Bot brains:** cheapest v1 shipped — bots draft a dash-first hand and only
+  ever cast dash (`BotDecision.dash` maps onto whichever slot holds it). A
+  per-ability heuristic (when does a bot pop Ironhide?) is still future work.
+- **Harpoon pull vs walls:** the drag path is sampled in half-radius steps
+  against the wall colliders; the victim stops at the last clear spot.
+- **Straw Man + Sandstorm interaction:** a smoked dummy simply drops out of
+  the candidate pool — selectTarget handles an empty pool (null), no NaN.
+- **Practice lobby:** the practice draft already picks abilities; the bot's
+  hand is dash-first, and PracticeClient steps the same sim — deployables run
+  offline before netplay.

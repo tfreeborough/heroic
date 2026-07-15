@@ -1,244 +1,884 @@
 /**
- * The room lobby AND the draft (docs/design/pvp-abilities.md, mock-approved
- * 2026-07-12): lobby → host STARTS THE DRAFT → timed blind pick (LOCK IN or
- * the clock) → the reveal moment → timed counterpick (hidden changes) → sand.
+ * The Arming (docs/design/pvp-loadout-flow.md, mock-approved 2026-07-15): a
+ * guided wizard — weapon → ability 1 → 2 → 3, one decision per screen — then
+ * the lobby, where the server's own 10s countdown starts the match once every
+ * seat is armed. Nobody presses START; the host's only control is the
+ * force-start backstop for AFK stragglers.
  *
- * Information rules are the server's (per-team filtered roomState); this
- * screen just renders what it was sent: your team's live picks + lock checks,
- * the enemy's lock checks, and — from the reveal on — their phase-1 locks.
+ * Layout per approved mock: roster ticker (who's armed — never WHAT they
+ * picked) · socket strip (◆①②③, tap to revisit) · snap carousel with codex
+ * content (ability steps open on a category gate) · CHOOSE → stamp + the icon
+ * flies into its socket → auto-advance → "YOU ARE ARMED" splash → lobby.
+ * Returning players get RUN IT BACK (last loadout, one tap).
  *
- * Works identically for ArenaClient (real rooms) and PracticeClient (offline
- * vs a bot) through the LobbyClient interface — practice IS the test bed.
+ * The wizard owns its picks LOCALLY and sends the full state on every choose
+ * (idempotent messages) — roomState round-trips never race a fast picker.
+ * Works identically for ArenaClient and PracticeClient via LobbyClient.
  */
-import { useEffect, useReducer, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Animated, Easing, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import {
+  ABILITIES,
+  FORCE_START_GRACE_SECONDS,
   LOADOUT_ABILITY_COUNT,
-  PICK_PHASE_SECONDS,
-  REVEAL_ADJUST_SECONDS,
+  LOBBY_COUNTDOWN_SECONDS,
   WEAPONS,
+  type AbilityCategory,
   type AbilityId,
   type RoomStatePlayer,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import type { LobbyClient } from "../net/connection";
 import { playStrikeHaptic } from "../game/haptics";
-import { LoadoutSheet, type SheetMode } from "../loadout/LoadoutSheet";
-import { LoadoutIcon } from "../loadout/icons";
-import { categoryOf, CATEGORY_META, C_BONE, C_GOLD, C_MUTED } from "../loadout/catalogue";
+import { playSound, unlockAudio } from "../audio";
+import { LoadoutIcon, type IconId } from "../loadout/icons";
+import {
+  ABILITY_CODEX,
+  abilitiesByCategory,
+  categoryOf,
+  CATEGORY_META,
+  C_BONE,
+  C_GOLD,
+  C_MUTED,
+  sortedWeaponIds,
+  WEAPON_CODEX,
+  weaponBars,
+} from "../loadout/catalogue";
+import { loadLastLoadout, saveLastLoadout, type SavedLoadout } from "../settings";
 
 export interface RoomScreenProps {
-  /** ArenaClient for real rooms; PracticeClient drives the same draft offline. */
+  /** ArenaClient for real rooms; PracticeClient drives the same flow offline. */
   client: LobbyClient;
   onLeave: () => void;
 }
 
-const REVEAL_SPLASH_MS = 4600;
+const STEP_TITLES = ["CHOOSE YOUR WEAPON", "YOUR TOP BUTTON", "YOUR MIDDLE BUTTON", "YOUR BOTTOM BUTTON"];
+const ROMAN = ["I", "II", "III", "IV"];
+const SOCKET_LABELS = ["◆", "①", "②", "③"];
+const CATEGORY_DESC: Record<AbilityCategory, string> = {
+  offensive: "pressure, damage, and drags",
+  defensive: "escapes, armour, misdirection",
+  support: "auras and zones for your team",
+};
+const CARD_W = 250;
+const CARD_GAP = 14;
+const SPLASH_MS = 3600;
+const FLY_MS = 460;
+const LAND_BEAT_MS = 320;
+
+/** The wizard's local draft: weapon + partial hand, filled in step order. */
+interface Picks {
+  weapon: WeaponId | null;
+  hand: AbilityId[];
+}
+
+interface WizardState {
+  step: number; // 0 = weapon, 1..3 = abilities
+  cat: AbilityCategory | null; // ability steps: null = the category gate
+  /** true = a single-slot edit from the lobby (returns straight there). */
+  edit: boolean;
+}
+
+interface FlyState {
+  icon: IconId;
+  from: { x: number; y: number; size: number };
+  to: { x: number; y: number; size: number };
+}
+
+const slotComplete = (picks: Picks, i: number): boolean =>
+  i === 0 ? picks.weapon !== null : picks.hand[i - 1] !== undefined;
+
+const allComplete = (picks: Picks): boolean =>
+  picks.weapon !== null && picks.hand.length === LOADOUT_ABILITY_COUNT;
 
 export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   const insets = useSafeAreaInsets();
-  const phase = client.phase;
-  const drafting = phase === "pick" || phase === "reveal";
+  const { width: screenW } = useWindowDimensions();
+  const welcome = client.welcome;
 
-  // The draft countdown lives in snapshots, which don't re-render this screen
-  // — tick it ourselves while a draft phase is open.
+  // The countdown + roster live in snapshots, which don't re-render this
+  // screen on their own — tick it while mounted (the lobby is short-lived).
   const [, force] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
-    if (!drafting) return;
     const id = setInterval(force, 250);
     return () => clearInterval(id);
-  }, [drafting]);
+  }, []);
 
-  const [sheetMode, setSheetMode] = useState<SheetMode | null>(null);
-
-  // The reveal moment: a staged overlay when the reveal phase opens.
+  // ── Wizard state (local picks are the source of truth while arming) ──────
+  // Seed from the client so a remount mid-lobby (already armed) lands in the
+  // lobby view, not a fresh wizard.
+  const [picks, setPicks] = useState<Picks>(() => ({
+    weapon: client.myWeapon,
+    hand: [...client.myAbilities],
+  }));
+  const [wizard, setWizard] = useState<WizardState | null>(() =>
+    client.myWeapon !== null && client.myAbilities.length === LOADOUT_ABILITY_COUNT
+      ? null
+      : { step: 0, cat: null, edit: false },
+  );
   const [splash, setSplash] = useState(false);
-  const prevPhase = useRef(phase);
-  useEffect(() => {
-    if (prevPhase.current !== "reveal" && phase === "reveal") {
-      setSplash(true);
-      playStrikeHaptic("medium"); // TODO real reveal SFX via Asset Forge
-      const id = setTimeout(() => setSplash(false), REVEAL_SPLASH_MS);
-      return () => clearTimeout(id);
-    }
-    prevPhase.current = phase;
-  }, [phase]);
-  useEffect(() => {
-    prevPhase.current = phase;
-  }, [phase]);
+  const [rib, setRib] = useState<SavedLoadout | null>(null);
+  const [fly, setFly] = useState<FlyState | null>(null);
+  const flyT = useRef(new Animated.Value(0)).current;
+  const [landedSlot, setLandedSlot] = useState<number | null>(null);
+  const socketRefs = useRef<(View | null)[]>([null, null, null, null]);
+  const focusedIconRef = useRef<View | null>(null);
 
-  const welcome = client.welcome;
+  // The RUN IT BACK offer — once, on entering an unarmed lobby.
+  const startedUnarmed = useRef(wizard !== null);
+  useEffect(() => {
+    if (!startedUnarmed.current) return;
+    let live = true;
+    void loadLastLoadout().then((saved) => {
+      if (live && saved) setRib(saved);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Host force-start grace clock — refs must sit above the welcome guard.
+  const graceSince = useRef<{ key: string; atMs: number }>({ key: "", atMs: 0 });
+  // The overlay coordinate space: fly endpoints are measured relative to this
+  // (collapsable={false} keeps it a real native node on Android).
+  const rootRef = useRef<View | null>(null);
+
+  // ── The arming countdown, from the snapshot stream ───────────────────────
+  const view = client.buffer.sample(performance.now());
+  const timer = client.phase === "lobby" ? (view?.round.timer ?? 0) : 0;
+  const timerCeil = Math.ceil(timer);
+  const lastTick = useRef(0);
+  useEffect(() => {
+    if (timer > 0 && timerCeil !== lastTick.current) {
+      lastTick.current = timerCeil;
+      playSound("countdownTick");
+    }
+    if (timer <= 0) lastTick.current = 0;
+  }, [timer, timerCeil]);
+
+  const commit = useCallback(
+    (next: Picks): void => {
+      setPicks(next);
+      if (next.weapon !== null) client.setWeapon(next.weapon);
+      client.setAbilities(next.hand);
+    },
+    [client],
+  );
+
+  const armedNow = useCallback(
+    (final: Picks): void => {
+      saveLastLoadout({ weapon: final.weapon!, abilities: final.hand });
+      playStrikeHaptic("heavy");
+      playSound("uiConfirm"); // TODO a real "you are armed" fanfare via Asset Forge
+      setWizard(null);
+      setSplash(true);
+    },
+    [],
+  );
+
+  // ── Choose: stamp → fly to socket → advance ──────────────────────────────
+  const advance = useCallback(
+    (w: WizardState, after: Picks): void => {
+      if (w.edit) {
+        setWizard(null); // single-slot edit: straight back to the lobby
+        return;
+      }
+      const nextEmpty = [0, 1, 2, 3].find((i) => !slotComplete(after, i));
+      if (nextEmpty !== undefined) {
+        setWizard({ step: nextEmpty, cat: null, edit: false });
+      } else if (w.step < 3 && !allWalked.current) {
+        // Prefilled walk (run-it-back CHANGE): step through every slot once.
+        setWizard({ step: w.step + 1, cat: catOfSlot(after, w.step + 1), edit: false });
+      } else {
+        armedNow(after);
+      }
+    },
+    [armedNow],
+  );
+  /** Once the walk has visited slot 3, any advance completes the arming. */
+  const allWalked = useRef(false);
+  useEffect(() => {
+    if (wizard?.step === 3) allWalked.current = true;
+    if (wizard === null) allWalked.current = false;
+  }, [wizard]);
+
+  const catOfSlot = (p: Picks, step: number): AbilityCategory | null => {
+    const id = step > 0 ? p.hand[step - 1] : undefined;
+    return id ? categoryOf(id) : null;
+  };
+
+  const choose = (w: WizardState, id: IconId): void => {
+    unlockAudio();
+    const after: Picks =
+      w.step === 0
+        ? { ...picks, weapon: id as WeaponId }
+        : { ...picks, hand: replaceSlot(picks.hand, w.step - 1, id as AbilityId) };
+    const kept = w.step === 0 ? picks.weapon === id : picks.hand[w.step - 1] === id;
+    commit(after);
+    if (kept) {
+      playSound("uiTap");
+      advance(w, after);
+      return;
+    }
+    playStrikeHaptic("heavy");
+    playSound("uiConfirm");
+    // The moment: the chosen icon flies from the card into its socket. All
+    // THREE rects (root, icon, socket) are measured the same way — on-screen
+    // window coords — and the root's origin is subtracted, so the fly's
+    // coordinates live in the overlay's own space no matter what padding,
+    // status bars, or the carousel's scroll offset are doing. (measureLayout
+    // reads the layout tree, which ignores scroll — icons launched from
+    // off-screen; measureInWindow alone drifted by the root's old padding.)
+    const iconEl = focusedIconRef.current;
+    const sockEl = socketRefs.current[w.step];
+    const rootEl = rootRef.current;
+    if (iconEl && sockEl && rootEl) {
+      rootEl.measureInWindow((rx, ry) => {
+        iconEl.measureInWindow((ix, iy, iw) => {
+          sockEl.measureInWindow((sx, sy, sw) => {
+            setFly({
+              icon: id,
+              from: { x: ix - rx, y: iy - ry, size: iw },
+              to: { x: sx - rx + sw * 0.13, y: sy - ry + sw * 0.13, size: sw * 0.74 },
+            });
+            flyT.setValue(0);
+            Animated.timing(flyT, {
+              toValue: 1,
+              duration: FLY_MS,
+              easing: Easing.bezier(0.5, 0, 0.2, 1),
+              useNativeDriver: true,
+            }).start(() => {
+              setFly(null);
+              setLandedSlot(w.step);
+              playStrikeHaptic("light");
+              setTimeout(() => setLandedSlot(null), 500);
+              setTimeout(() => advance(w, after), LAND_BEAT_MS);
+            });
+          });
+        });
+      });
+    } else {
+      setTimeout(() => advance(w, after), LAND_BEAT_MS);
+    }
+  };
+
+  const replaceSlot = (hand: AbilityId[], i: number, id: AbilityId): AbilityId[] => {
+    const next = [...hand];
+    next[i] = id;
+    return next;
+  };
+
+  const jumpToSlot = (i: number, edit: boolean): void => {
+    playSound("uiTap");
+    setWizard({ step: i, cat: catOfSlot(picks, i), edit });
+  };
+
+  // ── Run it back ───────────────────────────────────────────────────────────
+  const ribYes = (saved: SavedLoadout): void => {
+    unlockAudio();
+    const final: Picks = { weapon: saved.weapon, hand: [...saved.abilities] };
+    commit(final);
+    setRib(null);
+    armedNow(final);
+  };
+  const ribChange = (saved: SavedLoadout): void => {
+    unlockAudio();
+    playSound("uiTap");
+    commit({ weapon: saved.weapon, hand: [...saved.abilities] });
+    setRib(null);
+    setWizard({ step: 0, cat: null, edit: false });
+  };
+
   if (!welcome) return null;
 
   const players = client.roomState?.players ?? [];
   const myTeam = welcome.team;
-  const mine = players.filter((p) => p.team === myTeam);
-  const theirs = players.filter((p) => p.team !== myTeam);
   const me = players.find((p) => p.id === welcome.playerId);
+  const meArmed = me?.armed ?? allComplete(picks);
 
-  const everyoneHere = players.length >= 2 && players.every((p) => p.connected);
-  const canStart = client.isHost && phase === "lobby" && everyoneHere;
-  const myWeapon = client.myWeapon;
-  const myAbilities = client.myAbilities;
-  const myComplete = myWeapon !== null && myAbilities.length === LOADOUT_ABILITY_COUNT;
-  const myLocked = me?.locked ?? false;
-  const slotsInert = !(phase === "lobby" || (drafting && !myLocked));
-
-  // Round state (timer, last match) from the snapshot stream.
-  const view = client.buffer.sample(performance.now());
-  const round = view?.round;
-  const timerLeft = Math.max(0, Math.ceil(round?.timer ?? 0));
-  const timerTotal = phase === "pick" ? PICK_PHASE_SECONDS : REVEAL_ADJUST_SECONDS;
-  const lastMatch =
-    phase === "lobby" && round && round.lastWinner !== 0
-      ? `last match: ${round.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...round.wins)}–${Math.min(...round.wins)}`
-      : null;
-
-  const lockIn = (): void => {
-    playStrikeHaptic("heavy"); // TODO real lock-in SFX via Asset Forge
-    client.lockIn();
-  };
+  // Host force-start: someone's sat unarmed past the grace while the rest are
+  // ready. Client-side gate only — the sim re-checks everything.
+  const unarmed = players.filter((p) => !p.armed);
+  const graceCond =
+    client.isHost && meArmed && players.length >= 2 && unarmed.length > 0 && players.every((p) => p.connected);
+  const graceKey = graceCond ? unarmed.map((p) => p.id).join(",") : "";
+  if (graceSince.current.key !== graceKey) graceSince.current = { key: graceKey, atMs: performance.now() };
+  const showForceStart =
+    graceCond && performance.now() - graceSince.current.atMs > FORCE_START_GRACE_SECONDS * 1000;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.roomName}>{welcome.roomName}</Text>
-          <Text style={styles.phaseLine}>
-            {phase === "lobby"
-              ? `room ${welcome.roomCode} — tell a friend`
-              : phase === "pick"
-                ? "PHASE I — BLIND PICK"
-                : "PHASE II — COUNTERPICK"}
-          </Text>
-        </View>
-        {drafting ? <TimerRing left={timerLeft} total={timerTotal} /> : null}
-      </View>
+    // The root carries NO padding: overlays (veil/splash/rib/fly) are its
+    // absolute children, and Yoga offsets absolute children by parent padding
+    // (unlike CSS) — padded, the splash was off-centre and the fly missed.
+    <View ref={rootRef} collapsable={false} style={styles.root}>
+      <View style={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 8 }]}>
+        <RosterTicker players={players} myId={welcome.playerId} myTeam={myTeam} />
 
-      <View style={styles.teams}>
-        <TeamHeader label="YOUR TEAM" color="#d94141" />
-        {mine.map((p) => (
-          <PlayerRow key={p.id} p={p} isMe={p.id === welcome.playerId} hostId={client.hostId} own />
-        ))}
-        <TeamHeader label="ENEMY TEAM" color="#4da3d9" />
-        {theirs.map((p) => (
-          <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} revealing={phase !== "lobby" && phase !== "pick"} />
-        ))}
-        {theirs.length === 0 ? <Text style={styles.waitingSeat}>waiting for an opponent…</Text> : null}
-        {phase === "pick" ? (
-          <Text style={styles.intelNote}>enemy picks stay hidden until the reveal</Text>
-        ) : phase === "reveal" ? (
-          <Text style={styles.intelNote}>their picks as revealed — counterpick changes stay hidden</Text>
-        ) : null}
-      </View>
-
-      <Text style={styles.slotLabel}>YOUR LOADOUT</Text>
-      <View style={styles.slots}>
-        <Pressable
-          onPress={() => !slotsInert && setSheetMode("weapon")}
-          style={[styles.slot, styles.slotWeapon, myWeapon !== null && styles.slotFilled, slotsInert && styles.slotInert]}
-        >
-          <Text style={styles.slotKind}>WEAPON</Text>
-          {myWeapon !== null ? (
-            <>
-              <LoadoutIcon id={myWeapon} size={30} color={C_GOLD} />
-              <Text style={styles.slotName}>{WEAPONS[myWeapon].name.toUpperCase()}</Text>
-            </>
-          ) : (
-            <Text style={styles.slotEmpty}>+</Text>
-          )}
-          <Text style={styles.slotHint}>{myLocked ? "LOCKED" : myWeapon !== null ? "TAP TO CHANGE" : "TAP TO CHOOSE"}</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => !slotsInert && setSheetMode("ability")}
-          style={[
-            styles.slot,
-            styles.slotAbility,
-            myAbilities.length === LOADOUT_ABILITY_COUNT && styles.slotFilled,
-            myAbilities.length > 0 && myAbilities.length < LOADOUT_ABILITY_COUNT && styles.slotPartial,
-            slotsInert && styles.slotInert,
-          ]}
-        >
-          <Text style={styles.slotKind}>ABILITIES</Text>
-          <View style={styles.miniRow}>
-            {Array.from({ length: LOADOUT_ABILITY_COUNT }, (_, i) => {
-              const id = myAbilities[i];
-              return id ? (
-                <LoadoutIcon key={i} id={id} size={26} color={CATEGORY_META[categoryOf(id)].color} />
-              ) : (
-                <View key={i} style={styles.miniGhost}>
-                  <Text style={styles.miniGhostText}>+</Text>
-                </View>
-              );
-            })}
-          </View>
-          <Text style={styles.slotHint}>
-            {myLocked
-              ? "LOCKED"
-              : myAbilities.length === 0
-                ? "TAP TO CHOOSE"
-                : myAbilities.length < LOADOUT_ABILITY_COUNT
-                  ? `${myAbilities.length}/${LOADOUT_ABILITY_COUNT} · TAP TO FINISH`
-                  : "TAP TO CHANGE"}
-          </Text>
-        </Pressable>
-      </View>
-
-      {lastMatch ? <Text style={styles.lastMatch}>{lastMatch}</Text> : null}
-
-      {phase === "lobby" ? (
-        client.isHost ? (
-          <Pressable
-            onPress={() => canStart && client.startMatch()}
-            style={[styles.mainButton, styles.hostButton, !canStart && styles.buttonDisabled]}
-          >
-            <Text style={styles.mainButtonText}>{canStart ? "START DRAFT" : "NEED 2 PLAYERS"}</Text>
-          </Pressable>
-        ) : (
-          <Text style={styles.waitingText}>waiting for the host to start the draft…</Text>
-        )
-      ) : myLocked ? (
-        <View style={[styles.mainButton, styles.lockedButton]}>
-          <Text style={styles.lockedButtonText}>✓ LOCKED IN — WAITING…</Text>
-        </View>
+      {wizard !== null ? (
+        <>
+          <SocketStrip
+            picks={picks}
+            current={wizard.step}
+            landed={landedSlot}
+            refs={socketRefs}
+            onTap={(i) => {
+              if (slotComplete(picks, i) || i === wizard.step) jumpToSlot(i, wizard.edit);
+            }}
+          />
+          {timer > 0 ? (
+            <Text style={styles.wizardCountdown}>{`MATCH STARTS IN ${timerCeil} — picks stay live`}</Text>
+          ) : null}
+          <WizardStep
+            key={`${wizard.step}:${wizard.cat ?? "-"}`}
+            wizard={wizard}
+            picks={picks}
+            screenW={screenW}
+            focusedIconRef={focusedIconRef}
+            onGate={(cat) => {
+              unlockAudio();
+              playSound("uiTap");
+              playStrikeHaptic("soft");
+              setWizard({ ...wizard, cat });
+            }}
+            onBackToGates={() => {
+              playSound("uiBack");
+              setWizard({ ...wizard, cat: null });
+            }}
+            onChoose={(id) => choose(wizard, id)}
+          />
+        </>
       ) : (
-        <Pressable
-          onPress={() => myComplete && lockIn()}
-          style={[styles.mainButton, styles.lockButton, !myComplete && styles.buttonDisabled]}
-        >
-          <Text style={[styles.mainButtonText, myComplete && styles.lockButtonText]}>
-            {myComplete ? "LOCK IN" : "PICK YOUR LOADOUT"}
-          </Text>
-        </Pressable>
-      )}
-      {drafting && !myLocked ? (
-        <Text style={styles.timeoutHint}>timer hits zero → empty picks get random fills</Text>
-      ) : null}
-
-      <Pressable onPress={onLeave} style={styles.leave} hitSlop={8}>
-        <Text style={styles.leaveText}>LEAVE ROOM</Text>
-      </Pressable>
-
-      {sheetMode !== null && !slotsInert ? (
-        <LoadoutSheet
-          mode={sheetMode}
-          weapon={myWeapon}
-          abilities={myAbilities}
-          onPickWeapon={(w) => client.setWeapon(w)}
-          onPickAbilities={(a) => client.setAbilities(a)}
-          onClose={() => setSheetMode(null)}
+        <LobbyView
+          client={client}
+          players={players}
+          myId={welcome.playerId}
+          myTeam={myTeam}
+          picks={picks}
+          roomName={welcome.roomName}
+          roomCode={welcome.roomCode}
+          socketRefs={socketRefs}
+          showForceStart={showForceStart}
+          unarmedCount={unarmed.length}
+          onEditSlot={(i) => jumpToSlot(i, true)}
+          lastWinner={view?.round.lastWinner ?? 0}
+          wins={view?.round.wins ?? [0, 0]}
         />
+      )}
+
+        <Pressable onPress={onLeave} style={styles.leave} hitSlop={8}>
+          <Text style={styles.leaveText}>LEAVE ROOM</Text>
+        </Pressable>
+      </View>
+
+      {timer > 0 && wizard === null && !splash ? <CountdownVeil left={timer} /> : null}
+
+      {rib !== null && wizard !== null && !splash ? (
+        <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={() => ribChange(rib)} />
       ) : null}
 
-      {splash ? <RevealSplash enemies={theirs} onDismiss={() => setSplash(false)} /> : null}
+      {splash ? <ArmedSplash picks={picks} onDone={() => setSplash(false)} /> : null}
+
+      {fly !== null ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: fly.from.x,
+            top: fly.from.y,
+            transform: [
+              {
+                translateX: flyT.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, fly.to.x + fly.to.size / 2 - (fly.from.x + fly.from.size / 2)],
+                }),
+              },
+              {
+                translateY: flyT.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, fly.to.y + fly.to.size / 2 - (fly.from.y + fly.from.size / 2)],
+                }),
+              },
+              { scale: flyT.interpolate({ inputRange: [0, 1], outputRange: [1, fly.to.size / fly.from.size] }) },
+            ],
+          }}
+        >
+          <LoadoutIcon id={fly.icon} size={fly.from.size} />
+        </Animated.View>
+      ) : null}
     </View>
   );
 };
 
-// ── Pieces ─────────────────────────────────────────────────────────────────
+// ── Roster ticker ────────────────────────────────────────────────────────────
+
+const RosterTicker = ({ players, myId, myTeam }: { players: RoomStatePlayer[]; myId: number; myTeam: number }) => {
+  const ordered = [...players].sort((a, b) => (a.team === myTeam ? 0 : 1) - (b.team === myTeam ? 0 : 1));
+  return (
+    <View style={styles.ticker}>
+      {ordered.map((p) => (
+        <View
+          key={p.id}
+          style={[
+            styles.tickerChip,
+            p.id === myId && styles.tickerMe,
+            p.team !== myTeam && styles.tickerEnemy,
+            p.armed && styles.tickerArmed,
+          ]}
+        >
+          <View style={[styles.tickerDot, p.armed && styles.tickerDotArmed]} />
+          <Text style={[styles.tickerName, (p.armed || p.id === myId) && styles.tickerNameLit]}>
+            {p.name.toUpperCase()}
+            {p.connected ? "" : " ⌁"}
+          </Text>
+        </View>
+      ))}
+      {players.length < 2 ? (
+        <View style={[styles.tickerChip, styles.tickerEnemy]}>
+          <Text style={styles.tickerName}>WAITING…</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+};
+
+// ── Socket strip ─────────────────────────────────────────────────────────────
+
+interface SocketStripProps {
+  picks: Picks;
+  current: number | null;
+  landed: number | null;
+  refs: React.MutableRefObject<(View | null)[]>;
+  onTap: (i: number) => void;
+}
+
+const SocketStrip = ({ picks, current, landed, refs, onTap }: SocketStripProps) => (
+  <View style={styles.sockets}>
+    {[0, 1, 2, 3].map((i) => {
+      const id: IconId | null = i === 0 ? picks.weapon : (picks.hand[i - 1] ?? null);
+      return (
+        <Pressable key={i} onPress={() => onTap(i)}>
+          <View
+            ref={(el) => {
+              refs.current[i] = el;
+            }}
+            style={[
+              styles.socket,
+              id !== null && styles.socketFull,
+              i === current && id === null && styles.socketNow,
+              i === landed && styles.socketLanded,
+            ]}
+          >
+            <Text style={[styles.socketN, id !== null && styles.socketNFull]}>{SOCKET_LABELS[i]}</Text>
+            {id !== null ? <LoadoutIcon id={id} size={40} /> : null}
+          </View>
+        </Pressable>
+      );
+    })}
+  </View>
+);
+
+// ── Wizard step (gates or carousel) ─────────────────────────────────────────
+
+interface WizardStepProps {
+  wizard: WizardState;
+  picks: Picks;
+  screenW: number;
+  focusedIconRef: React.MutableRefObject<View | null>;
+  onGate: (cat: AbilityCategory) => void;
+  onBackToGates: () => void;
+  onChoose: (id: IconId) => void;
+}
+
+const WizardStep = (props: WizardStepProps) => {
+  const { wizard, picks, screenW, focusedIconRef, onGate, onBackToGates, onChoose } = props;
+  const gates = wizard.step > 0 && wizard.cat === null;
+
+  // Slide the pane in on step/category changes (the component is keyed on both).
+  const slide = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(slide, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [slide]);
+
+  /** Abilities still free for this step within a category. */
+  const freeIn = (cat: AbilityCategory): AbilityId[] =>
+    abilitiesByCategory(cat).filter((a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1]);
+
+  const options: IconId[] = wizard.step === 0 ? sortedWeaponIds() : wizard.cat !== null ? freeIn(wizard.cat) : [];
+
+  return (
+    <Animated.View
+      style={[
+        styles.pane,
+        {
+          opacity: slide,
+          transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }],
+        },
+      ]}
+    >
+      <View style={styles.stepHead}>
+        <View style={styles.stepHeadText}>
+          <Text style={styles.stepEyebrow}>
+            {`STEP ${ROMAN[wizard.step]} OF IV${wizard.step > 0 ? ` · ABILITY ${wizard.step}` : ""}`}
+          </Text>
+          <Text style={styles.stepTitle}>{STEP_TITLES[wizard.step]}</Text>
+        </View>
+        {wizard.step > 0 ? <ButtonColumnHint slot={wizard.step - 1} picks={picks} /> : null}
+      </View>
+
+      {gates ? (
+        <View style={styles.gates}>
+          {(["offensive", "defensive", "support"] as AbilityCategory[]).map((cat) => {
+            const free = freeIn(cat);
+            const meta = CATEGORY_META[cat];
+            return (
+              <Pressable
+                key={cat}
+                onPress={() => free.length > 0 && onGate(cat)}
+                style={[styles.gate, free.length === 0 && styles.gateEmpty]}
+              >
+                <View style={styles.gateText}>
+                  <Text style={[styles.gateLabel, { color: meta.color }]}>{meta.label}</Text>
+                  <Text style={styles.gateDesc}>{CATEGORY_DESC[cat]}</Text>
+                </View>
+                <View style={styles.gateIcons}>
+                  {free.slice(0, 4).map((a) => (
+                    <LoadoutIcon key={a} id={a} size={28} />
+                  ))}
+                </View>
+                <Text style={styles.gateChev}>›</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : (
+        <PickCarousel
+          key={options.join(",")}
+          options={options}
+          isWeapon={wizard.step === 0}
+          initial={wizard.step === 0 ? picks.weapon : (picks.hand[wizard.step - 1] ?? null)}
+          screenW={screenW}
+          category={wizard.cat}
+          focusedIconRef={focusedIconRef}
+          onBackToGates={wizard.step > 0 ? onBackToGates : null}
+          onChoose={onChoose}
+        />
+      )}
+    </Animated.View>
+  );
+};
+
+/** The in-game button column, with the slot being filled glowing — the wizard
+ * teaches the controls: pick order IS button order. */
+const ButtonColumnHint = ({ slot, picks }: { slot: number; picks: Picks }) => (
+  <View style={styles.btnCol}>
+    {[0, 1, 2].map((i) => (
+      <View
+        key={i}
+        style={[styles.btnColSlot, i === slot && styles.btnColLit, i !== slot && picks.hand[i] !== undefined && styles.btnColDone]}
+      />
+    ))}
+  </View>
+);
+
+// ── Carousel ────────────────────────────────────────────────────────────────
+
+interface PickCarouselProps {
+  options: IconId[];
+  isWeapon: boolean;
+  initial: IconId | null;
+  screenW: number;
+  category: AbilityCategory | null;
+  focusedIconRef: React.MutableRefObject<View | null>;
+  onBackToGates: (() => void) | null;
+  onChoose: (id: IconId) => void;
+}
+
+const PickCarousel = (props: PickCarouselProps) => {
+  const { options, isWeapon, initial, screenW, category, focusedIconRef, onBackToGates, onChoose } = props;
+  const snap = CARD_W + CARD_GAP;
+  const sidePad = (screenW - CARD_W) / 2;
+  const initialIdx = Math.max(0, initial !== null ? options.indexOf(initial) : 0);
+  const [focusIdx, setFocusIdx] = useState(initialIdx);
+  const scrollX = useRef(new Animated.Value(initialIdx * snap)).current;
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  const onScroll = Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+    useNativeDriver: true,
+    listener: (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const i = Math.max(0, Math.min(options.length - 1, Math.round(e.nativeEvent.contentOffset.x / snap)));
+      setFocusIdx((prev) => {
+        if (prev !== i) {
+          playSound("uiTap");
+          playStrikeHaptic("soft");
+        }
+        return i;
+      });
+    },
+  });
+
+  const focused = options[focusIdx]!;
+  const keeping = initial !== null && focused === initial;
+  const meta = category !== null ? CATEGORY_META[category] : null;
+
+  return (
+    <View style={styles.carouselWrap}>
+      {onBackToGates !== null && meta !== null ? (
+        <Pressable onPress={onBackToGates} style={styles.catBack} hitSlop={8}>
+          <Text style={styles.catBackText}>
+            {"‹ ALL CATEGORIES · "}
+            <Text style={{ color: meta.color }}>{meta.label}</Text>
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <Animated.ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={snap}
+        decelerationRate="fast"
+        contentOffset={{ x: initialIdx * snap, y: 0 }}
+        contentContainerStyle={{ paddingHorizontal: sidePad, alignItems: "center", gap: CARD_GAP }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        style={styles.carousel}
+      >
+        {options.map((id, i) => {
+          const inputRange = [(i - 1) * snap, i * snap, (i + 1) * snap];
+          const scale = scrollX.interpolate({ inputRange, outputRange: [0.88, 1, 0.88], extrapolate: "clamp" });
+          const opacity = scrollX.interpolate({ inputRange, outputRange: [0.42, 1, 0.42], extrapolate: "clamp" });
+          return (
+            <Animated.View key={id} style={[styles.card, { transform: [{ scale }], opacity }]}>
+              <Pressable
+                onPress={() => {
+                  if (i !== focusIdx) scrollRef.current?.scrollTo({ x: i * snap, animated: true });
+                }}
+                style={styles.cardInner}
+              >
+                <View
+                  ref={(el) => {
+                    if (i === focusIdx) focusedIconRef.current = el;
+                  }}
+                  collapsable={false}
+                >
+                  <LoadoutIcon id={id} size={116} />
+                </View>
+                {isWeapon ? (
+                  <WeaponCardBody id={id as WeaponId} />
+                ) : (
+                  <AbilityCardBody id={id as AbilityId} />
+                )}
+              </Pressable>
+            </Animated.View>
+          );
+        })}
+      </Animated.ScrollView>
+
+      <View style={styles.dots}>
+        {options.map((id, i) => (
+          <View key={id} style={[styles.dot, i === focusIdx && styles.dotOn]} />
+        ))}
+      </View>
+
+      <Pressable onPress={() => onChoose(focused)} style={[styles.cta, keeping && styles.ctaGhost]}>
+        <Text style={[styles.ctaText, keeping && styles.ctaGhostText]}>
+          {keeping
+            ? `KEEP ${nameOf(focused)}`
+            : initial !== null
+              ? `SWAP TO ${nameOf(focused)}`
+              : `CHOOSE ${nameOf(focused)}`}
+        </Text>
+      </Pressable>
+    </View>
+  );
+};
+
+const nameOf = (id: IconId): string =>
+  (id in WEAPONS ? WEAPONS[id as WeaponId].name : ABILITIES[id as AbilityId].name).toUpperCase();
+
+const WeaponCardBody = ({ id }: { id: WeaponId }) => (
+  <>
+    <Text style={styles.cardName}>{WEAPONS[id].name.toUpperCase()}</Text>
+    <Text style={styles.cardQuote}>{`“${WEAPON_CODEX[id].quote}”`}</Text>
+    <Text style={styles.cardHint}>{WEAPON_CODEX[id].hint}</Text>
+    <View style={styles.bars}>
+      {weaponBars(id).map((bar) => (
+        <View key={bar.label} style={styles.bar}>
+          <Text style={styles.barLabel}>{bar.label}</Text>
+          <View style={styles.barTrack}>
+            <View style={[styles.barFill, { width: `${Math.round(bar.frac * 100)}%` }]} />
+          </View>
+          <Text style={styles.barValue}>{bar.display}</Text>
+        </View>
+      ))}
+    </View>
+  </>
+);
+
+const AbilityCardBody = ({ id }: { id: AbilityId }) => {
+  const meta = CATEGORY_META[categoryOf(id)];
+  return (
+    <>
+      <Text style={styles.cardName}>{ABILITIES[id].name.toUpperCase()}</Text>
+      <Text style={[styles.cardCat, { color: meta.color, borderColor: meta.color }]}>
+        {`${meta.label} · CD ${ABILITIES[id].cooldown}S`}
+      </Text>
+      <Text style={styles.cardQuote}>{`“${ABILITY_CODEX[id].quote}”`}</Text>
+      <Text style={styles.cardHint}>{ABILITY_CODEX[id].hint}</Text>
+      <View style={styles.chips}>
+        {ABILITY_CODEX[id].chips.slice(0, 3).map((chip) => (
+          <View key={chip.label} style={styles.chip}>
+            <Text style={styles.chipLabel}>{chip.label}</Text>
+            <Text style={styles.chipValue}>{chip.value}</Text>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+};
+
+// ── Armed splash ────────────────────────────────────────────────────────────
+
+const ArmedSplash = ({ picks, onDone }: { picks: Picks; onDone: () => void }) => {
+  const anims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
+  const foot = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.stagger(140, [
+      ...anims.map((a) =>
+        Animated.timing(a, { toValue: 1, duration: 430, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }),
+      ),
+      Animated.timing(foot, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+    const id = setTimeout(onDone, SPLASH_MS);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- play once on mount
+  }, []);
+
+  const rise = (a: Animated.Value) => ({
+    opacity: a,
+    transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
+  });
+
+  return (
+    <Pressable style={styles.splash} onPress={onDone}>
+      <Text style={styles.splashEyebrow}>THE ARMING IS COMPLETE</Text>
+      <Text style={styles.splashTitle}>YOU ARE ARMED</Text>
+      <View style={styles.splashRule} />
+      <Animated.View style={rise(anims[0]!)}>
+        {picks.weapon !== null ? <LoadoutIcon id={picks.weapon} size={110} /> : null}
+      </Animated.View>
+      <View style={styles.splashHand}>
+        {picks.hand.map((id, i) => (
+          <Animated.View key={id} style={[styles.splashAbility, rise(anims[i + 1]!)]}>
+            <LoadoutIcon id={id} size={64} />
+            <Text style={styles.splashAbilityN}>{i + 1}</Text>
+          </Animated.View>
+        ))}
+      </View>
+      <Animated.Text style={[styles.splashFoot, { opacity: foot }]}>to the sand, gladiator</Animated.Text>
+    </Pressable>
+  );
+};
+
+// ── Run it back ─────────────────────────────────────────────────────────────
+
+const RunItBack = ({ saved, onYes, onChange }: { saved: SavedLoadout; onYes: () => void; onChange: () => void }) => (
+  <View style={styles.rib}>
+    <Text style={styles.splashEyebrow}>WELCOME BACK, GLADIATOR</Text>
+    <Text style={styles.ribTitle}>RUN IT BACK?</Text>
+    <View style={styles.ribRow}>
+      <LoadoutIcon id={saved.weapon} size={44} />
+      <View style={styles.ribSep} />
+      {saved.abilities.map((a) => (
+        <LoadoutIcon key={a} id={a} size={38} />
+      ))}
+    </View>
+    <View style={styles.ribButtons}>
+      <Pressable onPress={onYes} style={styles.cta}>
+        <Text style={styles.ctaText}>RUN IT BACK ✓</Text>
+      </Pressable>
+      <Pressable onPress={onChange} style={[styles.cta, styles.ctaGhost]}>
+        <Text style={[styles.ctaText, styles.ctaGhostText]}>CHANGE MY ARSENAL</Text>
+      </Pressable>
+    </View>
+  </View>
+);
+
+// ── Lobby (armed) ───────────────────────────────────────────────────────────
+
+interface LobbyViewProps {
+  client: LobbyClient;
+  players: RoomStatePlayer[];
+  myId: number;
+  myTeam: number;
+  picks: Picks;
+  roomName: string;
+  roomCode: string;
+  socketRefs: React.MutableRefObject<(View | null)[]>;
+  showForceStart: boolean;
+  unarmedCount: number;
+  onEditSlot: (i: number) => void;
+  lastWinner: number;
+  wins: [number, number] | number[];
+}
+
+const LobbyView = (props: LobbyViewProps) => {
+  const { client, players, myId, myTeam, picks, roomName, roomCode } = props;
+  const mine = players.filter((p) => p.team === myTeam);
+  const theirs = players.filter((p) => p.team !== myTeam);
+  const lastMatch =
+    props.lastWinner !== 0
+      ? `last match: ${props.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...props.wins)}–${Math.min(...props.wins)}`
+      : null;
+
+  return (
+    <View style={styles.lobby}>
+      <View style={styles.lobbyHead}>
+        <Text style={styles.roomName}>{roomName}</Text>
+        <Text style={styles.roomCode}>{`ROOM ${roomCode}`}</Text>
+      </View>
+
+      <TeamHeader label="YOUR TEAM" color="#d94141" />
+      {mine.map((p) => (
+        <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={client.hostId} own />
+      ))}
+      <TeamHeader label="ENEMY TEAM" color="#4da3d9" />
+      {theirs.map((p) => (
+        <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} />
+      ))}
+      {theirs.length === 0 ? <Text style={styles.waitingSeat}>waiting for an opponent…</Text> : null}
+
+      <TeamHeader label="YOUR ARSENAL" color={C_MUTED} />
+      <SocketStrip picks={picks} current={null} landed={null} refs={props.socketRefs} onTap={props.onEditSlot} />
+      <Text style={styles.arsenalHint}>tap a socket to change that pick</Text>
+
+      {lastMatch ? <Text style={styles.lastMatch}>{lastMatch}</Text> : null}
+
+      <View style={styles.lobbyFoot}>
+        {props.showForceStart ? (
+          <Pressable
+            onPress={() => {
+              playSound("uiConfirm");
+              client.forceStart();
+            }}
+            style={styles.forceStart}
+          >
+            <Text style={styles.forceStartText}>
+              {`⚑ START NOW — AUTO-ARM ${props.unarmedCount} GLADIATOR${props.unarmedCount === 1 ? "" : "S"}`}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.waitingText}>
+            {players.length < 2 ? "the match starts itself once everyone is armed" : "waiting for every gladiator to arm…"}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+};
 
 const TeamHeader = ({ label, color }: { label: string; color: string }) => (
   <View style={styles.teamHead}>
@@ -247,223 +887,208 @@ const TeamHeader = ({ label, color }: { label: string; color: string }) => (
   </View>
 );
 
-/** Weapon + 3 ability mini-icons in a row (gold · sep · category colours). */
-const PickIcons = ({ weapon, abilities }: { weapon: WeaponId | null; abilities: AbilityId[] | null }) => (
-  <View style={styles.pickIcons}>
-    {weapon !== null ? <LoadoutIcon id={weapon} size={17} color={C_GOLD} /> : null}
-    {weapon !== null && abilities && abilities.length > 0 ? <View style={styles.pickSep} /> : null}
-    {(abilities ?? []).map((id) => (
-      <LoadoutIcon key={id} id={id} size={17} color={CATEGORY_META[categoryOf(id)].color} />
-    ))}
+const PlayerRow = ({ p, isMe, hostId, own }: { p: RoomStatePlayer; isMe: boolean; hostId: number | null; own: boolean }) => (
+  <View style={[styles.playerRow, !p.connected && styles.playerGone]}>
+    <Text style={styles.playerName}>
+      {p.id === hostId ? "♛ " : ""}
+      {p.name}
+      {isMe ? " (you)" : ""}
+      {p.connected ? "" : " — reconnecting…"}
+    </Text>
+    <View style={styles.playerRight}>
+      {own && p.weapon !== null ? (
+        <View style={styles.pickIcons}>
+          <LoadoutIcon id={p.weapon} size={19} />
+          {(p.abilities ?? []).length > 0 ? <View style={styles.pickSep} /> : null}
+          {(p.abilities ?? []).map((id) => (
+            <LoadoutIcon key={id} id={id} size={19} />
+          ))}
+        </View>
+      ) : p.armed ? (
+        <Text style={styles.playerArmed}>⚔ ARMED</Text>
+      ) : (
+        <Text style={styles.playerStatus}>choosing…</Text>
+      )}
+    </View>
   </View>
 );
 
-interface PlayerRowProps {
-  p: RoomStatePlayer;
-  isMe: boolean;
-  hostId: number | null;
-  own: boolean;
-  /** Enemy rows only: show their phase-1 reveal instead of lock-state text. */
-  revealing?: boolean;
-}
+// ── Countdown veil ──────────────────────────────────────────────────────────
 
-const PlayerRow = ({ p, isMe, hostId, own, revealing = false }: PlayerRowProps) => {
-  const hasLivePicks = own && (p.weapon !== null || (p.abilities?.length ?? 0) > 0);
-  const hasReveal = !own && revealing && p.revealed !== null;
-  return (
-    <View style={[styles.playerRow, !p.connected && styles.playerGone]}>
-      <Text style={styles.playerName}>
-        {p.id === hostId ? "♛ " : ""}
-        {p.name}
-        {isMe ? " (you)" : ""}
-        {p.connected ? "" : " — reconnecting…"}
-      </Text>
-      <View style={styles.playerRight}>
-        {hasLivePicks ? (
-          <PickIcons weapon={p.weapon} abilities={p.abilities} />
-        ) : hasReveal ? (
-          <PickIcons weapon={p.revealed} abilities={p.revealedAbilities} />
-        ) : (
-          <Text style={styles.playerStatus}>{p.locked ? "locked in" : "choosing…"}</Text>
-        )}
-        <View style={[styles.lockMark, p.locked && styles.lockMarkOn]}>
-          <Text style={[styles.lockMarkText, p.locked && styles.lockMarkTextOn]}>✓</Text>
-        </View>
-      </View>
-    </View>
-  );
-};
-
-/** Depleting radial countdown — gold, red inside the last 10 seconds. */
-const TimerRing = ({ left, total }: { left: number; total: number }) => {
-  const frac = Math.max(0, Math.min(1, left / total));
-  const color = left <= 10 ? "#d94141" : C_GOLD;
+const CountdownVeil = ({ left }: { left: number }) => {
+  const n = Math.ceil(left);
+  const frac = Math.max(0, Math.min(1, left / LOBBY_COUNTDOWN_SECONDS));
+  const color = n <= 3 ? "#d94141" : C_GOLD;
   const track = Skia.Path.Make();
-  track.addCircle(22, 22, 17);
+  track.addCircle(70, 70, 62);
   const arc = Skia.Path.Make();
-  arc.addArc({ x: 5, y: 5, width: 34, height: 34 }, -90, 360 * frac);
+  arc.addArc({ x: 8, y: 8, width: 124, height: 124 }, -90, 360 * frac);
   return (
-    <View style={styles.timer}>
-      <Canvas style={styles.timerCanvas}>
-        <Path path={track} style="stroke" strokeWidth={3.5} color="#221e19" />
-        <Path path={arc} style="stroke" strokeWidth={3.5} color={color} strokeCap="round" />
-      </Canvas>
-      <Text style={[styles.timerNum, left <= 10 && styles.timerNumLow]}>{left}</Text>
+    <View style={styles.veil} pointerEvents="none">
+      <Text style={styles.veilEyebrow}>ALL GLADIATORS ARMED</Text>
+      <View style={styles.veilRing}>
+        <Canvas style={styles.veilCanvas}>
+          <Path path={track} style="stroke" strokeWidth={5} color="#221e19" />
+          <Path path={arc} style="stroke" strokeWidth={5} color={color} strokeCap="round" />
+        </Canvas>
+        <Text style={[styles.veilNum, n <= 3 && { color: "#d94141" }]}>{n}</Text>
+      </View>
+      <Text style={styles.veilSub}>the match starts itself — no one presses anything</Text>
     </View>
   );
 };
 
-/** The reveal moment: enemy loadouts flip up one by one over a dark takeover. */
-const RevealSplash = ({ enemies, onDismiss }: { enemies: RoomStatePlayer[]; onDismiss: () => void }) => {
-  const anims = useRef(enemies.map(() => new Animated.Value(0))).current;
-  const foot = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.stagger(500, [
-      ...anims.map((a) => Animated.timing(a, { toValue: 1, duration: 420, useNativeDriver: true })),
-      Animated.timing(foot, { toValue: 1, duration: 450, useNativeDriver: true }),
-    ]).start();
-  }, [anims, foot]);
-
-  return (
-    <Pressable style={styles.splash} onPress={onDismiss}>
-      <Text style={styles.splashEyebrow}>PICKS ARE LOCKED</Text>
-      <Text style={styles.splashTitle}>THE REVEAL</Text>
-      <View style={styles.splashCards}>
-        {enemies.map((p, i) => (
-          <Animated.View
-            key={p.id}
-            style={[
-              styles.splashCard,
-              {
-                opacity: anims[i]!,
-                transform: [{ translateY: anims[i]!.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
-              },
-            ]}
-          >
-            <Text style={styles.splashName}>{p.name}</Text>
-            <View style={styles.splashPicks}>
-              {p.revealed !== null ? <LoadoutIcon id={p.revealed} size={24} color={C_GOLD} /> : null}
-              <View style={styles.pickSepTall} />
-              {(p.revealedAbilities ?? []).map((id) => (
-                <LoadoutIcon key={id} id={id} size={24} color={CATEGORY_META[categoryOf(id)].color} />
-              ))}
-            </View>
-          </Animated.View>
-        ))}
-      </View>
-      <Animated.Text style={[styles.splashFoot, { opacity: foot }]}>
-        they see your team's picks too —{"\n"}counterpick is open, and those changes stay hidden
-      </Animated.Text>
-    </Pressable>
-  );
-};
-
-// ── Styles ─────────────────────────────────────────────────────────────────
+// ── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 22 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerText: { flexShrink: 1, gap: 5 },
-  roomName: { color: C_BONE, fontSize: 22, fontWeight: "900", letterSpacing: 1 },
-  phaseLine: { color: C_GOLD, fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
+  root: { flex: 1, backgroundColor: "#141210" },
+  content: { flex: 1 },
 
-  timer: { width: 44, height: 44 },
-  timerCanvas: { width: 44, height: 44 },
-  timerNum: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    textAlign: "center",
-    textAlignVertical: "center",
-    lineHeight: 44,
-    color: C_BONE,
-    fontSize: 13,
+  ticker: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "center", paddingHorizontal: 14 },
+  tickerChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderWidth: 1,
+    borderColor: "#2e2820",
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  tickerMe: { borderColor: "#4a4034" },
+  tickerEnemy: { borderStyle: "dashed" },
+  tickerArmed: { borderColor: "#4a4034" },
+  tickerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#3a332a" },
+  tickerDotArmed: { backgroundColor: C_GOLD },
+  tickerName: { color: C_MUTED, fontSize: 9, fontWeight: "800", letterSpacing: 1.2 },
+  tickerNameLit: { color: "#c9bfae" },
+
+  sockets: { flexDirection: "row", gap: 10, paddingHorizontal: 22, marginTop: 14 },
+  socket: {
+    flex: 0,
+    width: 72,
+    height: 72,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#3a332a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socketFull: { borderStyle: "solid", borderColor: "#6a5636", backgroundColor: "#26201a" },
+  socketNow: { borderColor: C_GOLD },
+  socketLanded: { borderColor: C_GOLD, transform: [{ scale: 1.06 }] },
+  socketN: { position: "absolute", top: 4, left: 7, fontSize: 9, fontWeight: "900", color: "#4a4238", letterSpacing: 1 },
+  socketNFull: { color: C_GOLD },
+
+  wizardCountdown: {
+    color: C_GOLD,
+    fontSize: 10,
     fontWeight: "900",
+    letterSpacing: 2,
+    textAlign: "center",
+    marginTop: 10,
     fontVariant: ["tabular-nums"],
   },
-  timerNumLow: { color: "#d94141" },
 
-  teams: { marginTop: 14, gap: 3 },
-  teamHead: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 3 },
-  teamLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
-  teamRule: { flex: 1, height: 1, backgroundColor: "#2e2820" },
-  playerRow: { flexDirection: "row", alignItems: "center", paddingVertical: 5 },
-  playerGone: { opacity: 0.45 },
-  playerName: { color: C_BONE, fontSize: 13.5, fontWeight: "700", flexShrink: 1 },
-  playerRight: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: "auto" },
-  playerStatus: { color: C_MUTED, fontSize: 12, fontStyle: "italic" },
-  pickIcons: { flexDirection: "row", alignItems: "center", gap: 5 },
-  pickSep: { width: 1, height: 13, backgroundColor: "#3a332a", marginHorizontal: 3 },
-  pickSepTall: { width: 1, height: 18, backgroundColor: "#3a332a", marginHorizontal: 4 },
-  lockMark: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+  pane: { flex: 1, minHeight: 0 },
+  stepHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24, paddingTop: 16, gap: 14 },
+  stepHeadText: { flex: 1, gap: 5 },
+  stepEyebrow: { color: C_GOLD, fontSize: 9, fontWeight: "800", letterSpacing: 4 },
+  stepTitle: { color: C_BONE, fontSize: 21, fontWeight: "900", letterSpacing: 2 },
+  btnCol: { gap: 4 },
+  btnColSlot: { width: 17, height: 17, borderRadius: 5, borderWidth: 1.5, borderColor: "#3a332a" },
+  btnColLit: { borderColor: C_GOLD, backgroundColor: "rgba(217,154,65,0.22)" },
+  btnColDone: { backgroundColor: "#2e2820", borderColor: "#2e2820" },
+
+  gates: { flex: 1, justifyContent: "center", gap: 12, paddingHorizontal: 24 },
+  gate: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 13,
+    backgroundColor: "#1d1915",
     borderWidth: 1.5,
     borderColor: "#2e2820",
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: 16,
+    paddingVertical: 15,
+    paddingHorizontal: 17,
   },
-  lockMarkOn: { backgroundColor: "#5fc75f", borderColor: "#5fc75f" },
-  lockMarkText: { color: "#4a4238", fontSize: 9, fontWeight: "900" },
-  lockMarkTextOn: { color: "#0f130f" },
-  waitingSeat: { color: "#6b6257", fontSize: 13, fontStyle: "italic", paddingVertical: 5 },
-  intelNote: { color: "#6b6257", fontSize: 10, fontStyle: "italic", marginTop: 4 },
+  gateEmpty: { opacity: 0.35 },
+  gateText: { flex: 1, gap: 4 },
+  gateLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 2.5 },
+  gateDesc: { color: C_MUTED, fontSize: 10.5, fontStyle: "italic" },
+  gateIcons: { flexDirection: "row", gap: 4 },
+  gateChev: { color: "#4a4238", fontSize: 16, fontWeight: "700" },
 
-  slotLabel: { color: C_MUTED, fontSize: 11, fontWeight: "900", letterSpacing: 3, marginTop: 18, marginBottom: 8 },
-  slots: { flexDirection: "row", gap: 10 },
-  slot: {
+  carouselWrap: { flex: 1, minHeight: 0 },
+  catBack: { paddingHorizontal: 24, paddingTop: 8 },
+  catBackText: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 2 },
+  carousel: { flexGrow: 1 },
+  card: { width: CARD_W },
+  cardInner: {
     backgroundColor: "#1d1915",
-    borderRadius: 12,
     borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: "#3a332a",
-    minHeight: 104,
+    borderColor: "#2e2820",
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
   },
-  slotWeapon: { flex: 2 },
-  slotAbility: { flex: 3 },
-  slotFilled: { borderStyle: "solid", borderColor: C_GOLD, backgroundColor: "#26201a" },
-  slotPartial: { borderStyle: "solid", borderColor: "#5a4c34", backgroundColor: "#26201a" },
-  slotInert: { opacity: 0.45 },
-  slotKind: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
-  slotEmpty: { color: "#4a4238", fontSize: 26, fontWeight: "300", lineHeight: 30 },
-  slotName: { color: C_BONE, fontSize: 13, fontWeight: "800", letterSpacing: 1 },
-  slotHint: { color: C_MUTED, fontSize: 9.5, letterSpacing: 1 },
-  miniRow: { flexDirection: "row", gap: 10, alignItems: "center" },
-  miniGhost: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
+  cardName: { color: C_BONE, fontSize: 16, fontWeight: "900", letterSpacing: 2.5, marginTop: 4 },
+  cardCat: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 2,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  cardQuote: {
+    color: "#c9bfae",
+    fontSize: 11.5,
+    lineHeight: 16,
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 8,
+    minHeight: 32,
+  },
+  cardHint: { color: C_MUTED, fontSize: 10, textAlign: "center", marginTop: 4 },
+  bars: { alignSelf: "stretch", marginTop: 10, gap: 5 },
+  bar: { flexDirection: "row", alignItems: "center", gap: 8 },
+  barLabel: { width: 46, color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1.2 },
+  barTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "#16130f", overflow: "hidden" },
+  barFill: { height: "100%", borderRadius: 3, backgroundColor: C_GOLD },
+  barValue: { width: 52, textAlign: "right", color: C_BONE, fontSize: 9, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, justifyContent: "center", marginTop: 10 },
+  chip: {
+    flexDirection: "row",
+    gap: 4,
+    borderWidth: 1,
     borderColor: "#3a332a",
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  miniGhostText: { color: "#4a4238", fontSize: 14, fontWeight: "300" },
+  chipLabel: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1 },
+  chipValue: { color: C_BONE, fontSize: 9, fontWeight: "700" },
 
-  lastMatch: { color: C_MUTED, fontSize: 13, marginTop: 16, textAlign: "center" },
+  dots: { flexDirection: "row", gap: 6, justifyContent: "center", paddingVertical: 8 },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#3a332a" },
+  dotOn: { backgroundColor: C_GOLD, transform: [{ scale: 1.3 }] },
 
-  mainButton: { borderRadius: 10, marginTop: "auto", paddingVertical: 15, alignItems: "center" },
-  hostButton: { backgroundColor: "#3a5a3a" },
-  lockButton: { backgroundColor: C_GOLD },
-  lockButtonText: { color: "#241a0c" },
-  lockedButton: { backgroundColor: "#26201a", borderWidth: 1.5, borderColor: "#5fc75f" },
-  lockedButtonText: { color: "#5fc75f", fontSize: 14, fontWeight: "900", letterSpacing: 2 },
-  buttonDisabled: { backgroundColor: "#221e19" },
-  mainButtonText: { color: "#f5ede0", fontSize: 14, fontWeight: "900", letterSpacing: 2 },
-  waitingText: { color: C_MUTED, fontSize: 14, marginTop: "auto", textAlign: "center", paddingVertical: 15 },
-  timeoutHint: { color: "#6b6257", fontSize: 10.5, textAlign: "center", marginTop: 8 },
-
-  leave: { alignSelf: "center", marginTop: 14, marginBottom: 34 },
-  leaveText: { color: C_MUTED, fontWeight: "700", letterSpacing: 1, fontSize: 12 },
+  cta: {
+    marginHorizontal: 22,
+    borderRadius: 13,
+    paddingVertical: 15,
+    alignItems: "center",
+    backgroundColor: C_GOLD,
+  },
+  ctaText: { color: "#241a0c", fontSize: 13, fontWeight: "900", letterSpacing: 2.5 },
+  ctaGhost: { backgroundColor: "transparent", borderWidth: 1.5, borderColor: "#3a332a" },
+  ctaGhostText: { color: C_MUTED },
 
   splash: {
     position: "absolute",
@@ -476,27 +1101,119 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 28,
   },
-  splashEyebrow: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 4 },
-  splashTitle: { color: "#d94141", fontSize: 30, fontWeight: "900", letterSpacing: 4, marginTop: 6, marginBottom: 22 },
-  splashCards: { alignSelf: "stretch", gap: 10 },
-  splashCard: {
-    backgroundColor: "#1d1915",
-    borderWidth: 1,
-    borderColor: "#33231d",
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  // letterSpacing adds a trailing space after the LAST glyph, so tracked text
+  // centres visually left — the negative marginRight trims it back out.
+  splashEyebrow: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 4, marginRight: -4, textAlign: "center" },
+  splashTitle: {
+    color: C_GOLD,
+    fontSize: 32,
+    fontWeight: "900",
+    letterSpacing: 5,
+    marginRight: -5,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  splashRule: { width: 200, height: 1, backgroundColor: "#4a4034", marginVertical: 20 },
+  splashHand: { flexDirection: "row", gap: 18, marginTop: 16, alignItems: "flex-end" },
+  splashAbility: { alignItems: "center", gap: 6 },
+  splashAbilityN: { color: "#4a4238", fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  splashFoot: { color: C_MUTED, fontSize: 13, fontStyle: "italic", marginTop: 34 },
+
+  rib: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(10,8,6,0.96)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 28,
+  },
+  ribTitle: {
+    color: C_BONE,
+    fontSize: 24,
+    fontWeight: "900",
+    letterSpacing: 3,
+    marginRight: -3,
+    textAlign: "center",
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  ribRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+    backgroundColor: "#1d1915",
+    borderWidth: 1,
+    borderColor: "#3a332a",
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 22,
   },
-  splashName: { color: C_BONE, fontSize: 15, fontWeight: "800", letterSpacing: 1 },
-  splashPicks: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: "auto" },
-  splashFoot: {
-    color: C_MUTED,
-    fontSize: 11,
-    fontStyle: "italic",
+  ribSep: { width: 1, height: 30, backgroundColor: "#3a332a" },
+  ribButtons: { alignSelf: "stretch", gap: 10, marginTop: 26 },
+
+  lobby: { flex: 1, paddingHorizontal: 22, paddingTop: 12 },
+  lobbyHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 6 },
+  roomName: { color: C_BONE, fontSize: 22, fontWeight: "900", letterSpacing: 1 },
+  roomCode: { color: C_GOLD, fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
+  teamHead: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 4 },
+  teamLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
+  teamRule: { flex: 1, height: 1, backgroundColor: "#2e2820" },
+  playerRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
+  playerGone: { opacity: 0.45 },
+  playerName: { color: C_BONE, fontSize: 13.5, fontWeight: "700", flexShrink: 1 },
+  playerRight: { marginLeft: "auto" },
+  pickIcons: { flexDirection: "row", alignItems: "center", gap: 5 },
+  pickSep: { width: 1, height: 14, backgroundColor: "#3a332a", marginHorizontal: 3 },
+  playerArmed: { color: "#b39763", fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
+  playerStatus: { color: C_MUTED, fontSize: 12, fontStyle: "italic" },
+  waitingSeat: { color: "#6b6257", fontSize: 13, fontStyle: "italic", paddingVertical: 5 },
+  arsenalHint: { color: "#6b6257", fontSize: 10, fontStyle: "italic", marginTop: 8, marginLeft: 2 },
+  lastMatch: { color: C_MUTED, fontSize: 13, marginTop: 18, textAlign: "center" },
+  lobbyFoot: { marginTop: "auto", paddingBottom: 6 },
+  waitingText: { color: C_MUTED, fontSize: 13, textAlign: "center", paddingVertical: 14, fontStyle: "italic" },
+  forceStart: {
+    borderWidth: 1.5,
+    borderColor: "#d94141",
+    backgroundColor: "rgba(110,21,14,0.16)",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  forceStartText: { color: "#d94141", fontSize: 11.5, fontWeight: "900", letterSpacing: 1.5 },
+
+  veil: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(8,6,5,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 18,
+  },
+  veilEyebrow: { color: C_GOLD, fontSize: 11, fontWeight: "900", letterSpacing: 4, marginRight: -4, textAlign: "center" },
+  veilRing: { width: 140, height: 140 },
+  veilCanvas: { width: 140, height: 140 },
+  veilNum: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     textAlign: "center",
-    lineHeight: 17,
-    marginTop: 24,
+    textAlignVertical: "center",
+    lineHeight: 140,
+    color: C_BONE,
+    fontSize: 52,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
   },
+  veilSub: { color: C_MUTED, fontSize: 12, fontStyle: "italic" },
+
+  leave: { alignSelf: "center", marginTop: 10, marginBottom: 6 },
+  leaveText: { color: C_MUTED, fontWeight: "700", letterSpacing: 1, fontSize: 12 },
 });

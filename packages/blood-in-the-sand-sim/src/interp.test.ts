@@ -23,7 +23,8 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   dashing: false,
   slowLeft: 0,
   bleedLeft: 0,
-  dashCd: 0,
+  abilities: [],
+  reeling: null,
   lastSeq: 0,
   ...over,
 });
@@ -33,7 +34,7 @@ const shot = (id: number, over: Partial<ProjectileSnapshot> = {}): ProjectileSna
   x: 0,
   y: 0,
   angle: 0,
-  weapon: "bow",
+  kind: "bow",
   ...over,
 });
 
@@ -48,6 +49,7 @@ const snap = (
   round: { phase: "active", timer: 0, roundNumber: 1, wins: [0, 0], lastWinner: 0 },
   players,
   projectiles,
+  deployables: [],
   events,
 });
 

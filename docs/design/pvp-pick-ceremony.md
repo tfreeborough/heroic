@@ -1,8 +1,16 @@
 # Blood in the Sand — Pick Ceremony (lock-in → reveal → adjust)
 
-Status: **agreed + built 2026-07-12 (protocol v6)** ·
+Status: **SUPERSEDED 2026-07-14** by [pvp-loadout-flow](./pvp-loadout-flow.md) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-12
+Last decided: 2026-07-12 (built, protocol v6)
+
+> **Superseded (Tom, 2026-07-14):** casual testers bounced off the
+> lock-in / reveal / counterpick loop — it was designed for a competitive
+> player type we don't yet know exists. The default lobby is now a guided
+> pick wizard with server auto-start; enemy picks stay hidden with no reveal
+> at all. This doc is kept because the yomi layer is *deferred, not dead*
+> (ranked/veteran mode candidate) and its per-team filtered `roomState`
+> transport lives on unchanged.
 
 > Grew out of the counterpick discussion (2026-07-12): weapon picks are a strategic layer,
 > so they need pick-visibility rules. Decision: one honest reveal, then hidden adjustments —

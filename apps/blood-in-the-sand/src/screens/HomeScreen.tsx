@@ -1,12 +1,20 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { playSound, unlockAudio, type BitsSoundEvent } from "../audio";
 
 export interface HomeScreenProps {
   onPlay: () => void;
   onPractice: () => void;
   onSettings: () => void;
 }
+
+/** Wrap a nav handler so the tap unlocks audio (first gesture) and sounds. */
+const withTap = (event: BitsSoundEvent, fn: () => void) => (): void => {
+  unlockAudio();
+  playSound(event);
+  fn();
+};
 
 /**
  * The front door: title + the three ways in. Play goes online (rooms),
@@ -19,13 +27,13 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings }: HomeScreenProps) 
     <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
     <Text style={styles.logo}>BLOOD{"\n"}IN THE SAND</Text>
     <View style={styles.buttons}>
-      <Pressable onPress={onPlay} style={[styles.button, styles.play]}>
+      <Pressable onPress={withTap("uiConfirm", onPlay)} style={[styles.button, styles.play]}>
         <Text style={styles.buttonText}>PLAY</Text>
       </Pressable>
-      <Pressable onPress={onPractice} style={[styles.button, styles.practice]}>
+      <Pressable onPress={withTap("uiConfirm", onPractice)} style={[styles.button, styles.practice]}>
         <Text style={styles.buttonText}>PRACTICE</Text>
       </Pressable>
-      <Pressable onPress={onSettings} style={[styles.button, styles.settings]}>
+      <Pressable onPress={withTap("uiTap", onSettings)} style={[styles.button, styles.settings]}>
         <Text style={styles.buttonText}>SETTINGS</Text>
       </Pressable>
     </View>

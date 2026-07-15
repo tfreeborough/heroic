@@ -5,7 +5,7 @@ export * from "./bot";
 export * from "./config";
 export * from "./state";
 export * from "./events";
-export * from "./dash";
+export * from "./abilities";
 export * from "./sim";
 export * from "./zone";
 export * from "./rooms";
