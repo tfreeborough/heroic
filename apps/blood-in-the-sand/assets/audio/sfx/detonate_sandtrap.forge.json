@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a buried powder charge blowing up — a sharp cracking blast with a sand-and-gravel spray",
+  "prompt": "Close-mic'd explosive crack: a sun-baked powder charge detonates, sharp high-frequency snap into a low rattling boom, instant sand-and-gravel spray spitting and collapsing, gritty airborne grit, two-stage hit — a 0.8s sharp crack then 1.2s settling rumble.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.4,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "detonate_sandtrap_1.mp3"
+  ],
+  "created": "2026-07-16T13:51:57.456Z",
+  "updated": "2026-07-16T13:51:57.456Z"
+}

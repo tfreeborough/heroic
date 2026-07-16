@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a gladiator hurling a barbed chain — a hard grunt with a metallic chain rattle winding up",
+  "prompt": "Close-mic'd grunt and guttural exhale, weighty shoulder torque, barbed chain whoosh and interlocking metallic rattle spiraling outward, sharp barbs rasp; hits peak mid-flight with abrasive clanks, then a dusty tail of settling links — a short, brutal burst.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_harpoon_1.mp3"
+  ],
+  "created": "2026-07-16T13:38:27.948Z",
+  "updated": "2026-07-16T13:38:27.948Z"
+}

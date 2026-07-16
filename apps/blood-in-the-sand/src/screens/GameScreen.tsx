@@ -31,9 +31,19 @@ import { loadLefty } from "../settings";
 
 const NUMBER_TTL = 750;
 const RING_TTL = 380;
+const DETONATE_TTL = 1150; // the sandtrap boom lingers well past a hit ping
 const FIGHT_BANNER_TTL = 900;
 /** How long a First Blood / multi-kill call stays on screen. */
 const ANNOUNCE_TTL = 1900;
+/** Proximity attenuation: a positional sound plays full within SOUND_NEAR px of
+ * your fighter, fading to SOUND_FLOOR by SOUND_FAR px — a floor, not silence, so
+ * distant fights still read faintly as info. Global cues (round/match stings,
+ * UI, announcer) ignore this and always play full. Grounded to the arena, which
+ * is 1600×1600px (25 tiles × 64px): NEAR ≈ your immediate scrap, FAR ≈ half the
+ * map, so the far half fades to the floor. Tune to taste. */
+const SOUND_NEAR = 250;
+const SOUND_FAR = 850;
+const SOUND_FLOOR = 0.22;
 /** Booming-voice announcement text per multi-kill tier. */
 const MULTI_KILL_TEXT: Record<MultiKillTier, string> = {
   double: "DOUBLE KILL",
@@ -86,11 +96,12 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   // Forge icon art for the cast flash (decodes async; flashes skip until ready).
   const abilityIcons = useAbilityIconImages();
   const picture = useSharedValue(EMPTY_ARENA_PICTURE);
-  // One face per ability slot (fixed count — pick order = button order).
+  // One face per ability slot (pick order = button order). Discrete shared
+  // values because hooks can't live in a loop — keep as many as
+  // LOADOUT_ABILITY_COUNT (2).
   const overlay0 = useSharedValue(EMPTY_BUTTON_PICTURE);
   const overlay1 = useSharedValue(EMPTY_BUTTON_PICTURE);
-  const overlay2 = useSharedValue(EMPTY_BUTTON_PICTURE);
-  const overlays = [overlay0, overlay1, overlay2];
+  const overlays = [overlay0, overlay1];
   const layoutRef = useRef({ w: 0, h: 0 });
   const fxRef = useRef<AgedFx[]>([]);
   // Blood persists across rounds (the arena remembers); a new match remounts
@@ -148,6 +159,19 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       const now = performance.now();
       const myId = client.welcome?.playerId ?? null;
       const myTeam = client.welcome?.team ?? 1;
+      // The listener for proximity attenuation is your own fighter (your corpse
+      // while spectating your death). Sampled once per batch — events share a tick.
+      const view = client.buffer.sample(now);
+      const listener = myId != null ? view?.players.find((p) => p.id === myId) : undefined;
+      /** Volume factor for a sound at world (x, y): 1 near you → SOUND_FLOOR far.
+       *  No listener (pure spectator) → unattenuated. */
+      const gainAt = (x: number, y: number): number => {
+        if (!listener) return 1;
+        const d = Math.hypot(x - listener.x, y - listener.y);
+        if (d <= SOUND_NEAR) return 1;
+        if (d >= SOUND_FAR) return SOUND_FLOOR;
+        return 1 - ((d - SOUND_NEAR) / (SOUND_FAR - SOUND_NEAR)) * (1 - SOUND_FLOOR);
+      };
       for (const e of events) {
         if (e.type === "hit") {
           // Straw men don't bleed — deployable-target hits skip the decals.
@@ -156,7 +180,6 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             // The kill spray fires out of the victim's BACK — away from the
             // killer. The victim auto-faces their attacker, so if the killer's
             // position isn't in the view (seat gone), -facing is the same line.
-            const view = client.buffer.sample(now);
             const victim = view?.players.find((p) => p.id === e.targetId);
             const attacker = view?.players.find((p) => p.id === e.attackerId);
             const dx = attacker ? e.x - attacker.x : victim ? -Math.cos(victim.facing) : 1;
@@ -195,24 +218,32 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           } else if (!e.bleed && e.targetId === myId) {
             playStrikeHaptic("medium");
           }
-          // SFX: your own pain reads apart from the impacts around you; the
-          // strike is qualified by the attacker's weapon (null/hidden → the
-          // generic thud). Bleed ticks are ambient — silent, like their haptics.
+          // SFX: your own pained grunt is reserved for CRITS — a normal hit on
+          // you just thuds like any other (you still get the medium haptic).
+          // Everyone else's impacts play the attacker's weapon strike (null/
+          // hidden weapon → the generic thud). Bleed ticks stay silent.
+          // The impact thud, for every weapon incl. ranged — distinct from the
+          // ranged release (the `shoot` event below). Your own pained grunt is
+          // crit-only; getting hit otherwise just thuds.
           if (!e.bleed && !isDeployableId(e.targetId)) {
             if (e.targetId === myId) {
-              playSound("hitTaken");
+              if (e.crit) playSound("hitTaken"); // your own pain — always full, it's you
             } else {
-              const weapon =
-                client.buffer.sample(now)?.players.find((p) => p.id === e.attackerId)?.weapon;
-              playSound("weaponStrike", weapon ?? undefined);
+              const weapon = view?.players.find((p) => p.id === e.attackerId)?.weapon;
+              playSound("weaponStrike", weapon ?? undefined, undefined, gainAt(e.x, e.y));
             }
           }
+        } else if (e.type === "shoot") {
+          // the bow twang / staff whoosh, on release
+          playSound("weaponFire", e.weapon, undefined, gainAt(e.x, e.y));
         } else if (e.type === "death") {
-          playSound("death");
+          const dp = view?.players.find((p) => p.id === e.playerId);
+          playSound("death", undefined, undefined, dp ? gainAt(dp.x, dp.y) : 1);
         } else if (e.type === "cast") {
           if (e.playerId === myId) playStrikeHaptic("soft"); // tactile confirm of the cast
-          playSound("abilityCast", e.ability); // every cast is audible — the tell is information
-          const caster = client.buffer.sample(now)?.players.find((p) => p.id === e.playerId);
+          const caster = view?.players.find((p) => p.id === e.playerId);
+          // every cast is audible — the tell is information — but fades with distance
+          playSound("abilityCast", e.ability, undefined, caster ? gainAt(caster.x, caster.y) : 1);
           if (caster) {
             // The cast flash: the ability's icon pops above the caster —
             // "they just pressed this button". The ONLY way enemy kits show
@@ -232,22 +263,23 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             bornMs: now,
             ttlMs: 260,
           });
-          playSound("harpoonWhip");
+          playSound("harpoonWhip", undefined, undefined, gainAt(e.fromX, e.fromY));
         } else if (e.type === "detonate") {
           fxRef.current.push({
             item: { kind: "ring", x: e.x, y: e.y, life: 1, big: true },
             bornMs: now,
-            ttlMs: RING_TTL * 1.6,
+            ttlMs: DETONATE_TTL,
           });
-          playStrikeHaptic("medium"); // a mine going off is felt by everyone
-          playSound("abilityDetonate", "sandtrap"); // the only thing that detonates (for now)
+          playStrikeHaptic("heavy"); // a mine going off is a proper thump
+          // the only thing that detonates (for now)
+          playSound("abilityDetonate", "sandtrap", undefined, gainAt(e.x, e.y));
         } else if (e.type === "heal") {
           fxRef.current.push({
             item: { kind: "number", x: e.x, y: e.y, life: 1, text: `+${e.amount}`, heal: true },
             bornMs: now,
             ttlMs: NUMBER_TTL,
           });
-          playSound("heal");
+          playSound("heal", undefined, undefined, gainAt(e.x, e.y));
         } else if (e.type === "roundStart") {
           playSound("roundStart");
         } else if (e.type === "fightStart") {
@@ -299,6 +331,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             myId: client.welcome.playerId,
             screenW: w,
             screenH: h,
+            insetTop: insets.top,
+            insetBottom: insets.bottom,
             fx: fx.map((f) => f.item),
             blood: blood.decals,
             cracks: cracks.decals,
@@ -341,8 +375,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         const myTeam = client.welcome?.team ?? 1;
         const round = view?.round;
         const phase = round?.phase ?? "countdown";
-        const enemyGone =
-          client.roomState?.players.some((p) => p.id !== client.welcome?.playerId && !p.connected) ?? false;
+        // The whole enemy TEAM must be gone — one teammate-of-theirs dropping
+        // out of a 3v3 is not "finish them".
+        const enemies = client.roomState?.players.filter((p) => p.team !== myTeam) ?? [];
+        const enemyGone = enemies.length > 0 && enemies.every((p) => !p.connected);
         let banner: string | null = null;
         let countdown: number | null = null;
         if (client.status === "closed") banner = "connection lost";
@@ -351,7 +387,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           banner = round.lastWinner === 0 ? "nobody survives" : round.lastWinner === myTeam ? "round to you" : "round to them";
         else if (round && phase === "matchEnd") banner = round.lastWinner === myTeam ? "VICTORY" : "DEFEAT";
         else if (phase === "active" && now < fightBannerUntil.current) banner = "FIGHT";
-        else if (phase === "active" && enemyGone) banner = "opponent disconnected — finish them";
+        else if (phase === "active" && enemyGone)
+          banner = enemies.length === 1 ? "opponent disconnected — finish them" : "enemies disconnected — finish them";
 
         // A soft tick on each new pre-round digit (roundStart already boomed).
         if (countdown !== null && countdown !== lastCountdown.current) playSound("countdownTick");
@@ -517,8 +554,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   controlsLefty: { flexDirection: "row" }, // mirrored: movement on the left
-  // A column with room for the power buttons to come (grows upward).
-  buttonsCol: { justifyContent: "flex-end", paddingBottom: 48, paddingHorizontal: 12, gap: 14 },
+  // The ability buttons hug the bottom corner opposite the stick, out of the
+  // play space (2026-07-16) — flex-end anchors them to the band's floor (which
+  // already sits insets.bottom + 24 above the tray) and they grow upward.
+  buttonsCol: { justifyContent: "flex-end", paddingBottom: 0, paddingHorizontal: 12, gap: 14 },
   quitChip: {
     position: "absolute",
     top: 54,

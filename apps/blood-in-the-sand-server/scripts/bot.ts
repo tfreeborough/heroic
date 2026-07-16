@@ -16,6 +16,7 @@ import {
   ABILITY_IDS,
   botThink,
   createBotMemory,
+  nearestEnemy,
   DEFAULT_PORT,
   LOADOUT_ABILITY_COUNT,
   PROTOCOL_VERSION,
@@ -43,6 +44,8 @@ const host = arg("--host", "localhost");
 const port = Number(arg("--port", String(DEFAULT_PORT)));
 const matchLimit = Number(arg("--matches", "1"));
 const create = has("--create");
+/** With --create: the room's team size (1v1–4v4). */
+const teamSize = Number(arg("--size", "1"));
 /** Never arm — the straggler bot, for testing the host's force-start. */
 const noArm = has("--noarm");
 const roomCode = arg("--room", "");
@@ -78,7 +81,7 @@ const send = (msg: ClientMsg): void => {
 };
 
 ws.onopen = () => {
-  if (create) send({ t: "createRoom", v: PROTOCOL_VERSION, playerName: name, roomName: `${name}'s room`, ...(pass ? { pass } : {}) });
+  if (create) send({ t: "createRoom", v: PROTOCOL_VERSION, playerName: name, roomName: `${name}'s room`, teamSize, ...(pass ? { pass } : {}) });
   else if (roomCode) send({ t: "joinRoom", v: PROTOCOL_VERSION, code: roomCode, playerName: name, ...(pass ? { pass } : {}) });
   else send({ t: "listRooms" });
 };
@@ -160,8 +163,7 @@ const memory = createBotMemory();
 const think = (): { sx: number; sy: number; dash: boolean } => {
   if (myId === null || latest === null) return { sx: 0, sy: 0, dash: false };
   const me = latest.players.find((p) => p.id === myId);
-  const enemy = latest.players.find((p) => p.id !== myId && p.alive);
-  return botThink(memory, strategy, me, enemy);
+  return botThink(memory, strategy, me, nearestEnemy(me, latest.players));
 };
 
 setInterval(() => {

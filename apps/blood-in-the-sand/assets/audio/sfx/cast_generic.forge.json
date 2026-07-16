@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a short ability activation whoosh — dry, physical, a quick surge of intent",
+  "prompt": "Close-mic'd sunbaked whoosh: gritty sand-swept breath, leather strap snap, quick chest-thrum; sharp intake builds into a focused two-thirds-second gust impact, peaking with a brittle bone-tap resonance, then dust-settling micro-hiss fading into dry silence.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.4,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_generic_1.mp3"
+  ],
+  "created": "2026-07-16T13:52:56.645Z",
+  "updated": "2026-07-16T13:52:56.645Z"
+}

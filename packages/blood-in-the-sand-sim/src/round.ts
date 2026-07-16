@@ -3,10 +3,10 @@
  * the whole match — countdowns, benches, lobby returns — is one deterministic,
  * headless-testable simulation; the server stays pure transport.
  *
- *   lobby ─(all armed → 10s arming countdown)─▶ countdown ─▶ active ─(team wiped)─▶ roundEnd
- *     ▲    (joins/leaves cancel it; the host's                              │
- *     │     force-start fills stragglers)       countdown ◀─(wins < 3)──────┤
- *     └───────(timer)─── matchEnd ◀────────────────────────(wins = 3)───────┘
+ *   lobby ─(room full & all armed → 10s arming countdown)─▶ countdown ─▶ active ─(team wiped)─▶ roundEnd
+ *     ▲    (joins/leaves cancel it; the host's force-start                               │
+ *     │     fills stragglers and passes the gate on a partial room) countdown ◀─(wins < 3)┤
+ *     └───────(timer)─── matchEnd ◀─────────────────────────────────────────(wins = 3)───┘
  *
  * Nobody presses START (pvp-loadout-flow.md): the machine watches the lobby
  * and starts the match itself once every seat is armed — an AFK host can't
@@ -28,18 +28,25 @@ import {
   WINS_TO_TAKE_MATCH,
 } from "./config";
 import type { ArenaEvent } from "./events";
-import { setPlayerAbilities, setPlayerWeapon, spawnFacing, type ArenaSim } from "./sim";
+import {
+  setPlayerAbilities,
+  setPlayerWeapon,
+  spawnFacing,
+  spawnSlotPos,
+  teamSlotOf,
+  type ArenaSim,
+} from "./sim";
 import { createAbilitySlots, loadoutComplete, seatedPlayers, type Team } from "./state";
 
 /** Respawn everyone at their team spawn with a clean slate and start the countdown. */
 export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
-  const { state, zone } = sim;
+  const { state } = sim;
   // Shots and placed things don't cross rounds (ids stay monotonic — the
   // client keys both by id).
   state.projectiles.length = 0;
   state.deployables.length = 0;
   for (const p of seatedPlayers(state)) {
-    const spawn = zone.spawns[p.team - 1]!;
+    const spawn = spawnSlotPos(sim, p.team, teamSlotOf(state, p));
     p.mover.pos.x = spawn.x;
     p.mover.pos.y = spawn.y;
     p.mover.vel.x = 0;
@@ -54,6 +61,7 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.dots.length = 0;
     p.slowLeft = 0;
     p.slowFactor = 1;
+    p.respawnLeft = 0; // a dummy mid-respawn is simply alive again
     p.alive = true;
   }
   state.round.phase = "countdown";
@@ -73,14 +81,16 @@ const beginMatch = (sim: ArenaSim, events: ArenaEvent[]): void => {
   sim.state.round.wins = [0, 0];
   sim.state.round.roundNumber = 0;
   sim.state.round.lastWinner = 0;
+  sim.state.round.forced = false; // the override did its job — spent
   resetForRound(sim, events);
 };
 
 /**
- * The arming gate (pvp-loadout-flow.md): at least two seats, everyone
- * connected, every loadout complete. While this holds in the lobby the round
- * machine runs the arming countdown; the moment it stops holding (a join or
- * leave — picks replace and never clear, so nothing else can break it) the
+ * The arming gate (pvp-loadout-flow.md): a FULL room (or the host's force-
+ * start override on a partial one), everyone connected, every loadout
+ * complete. While this holds in the lobby the round machine runs the arming
+ * countdown; the moment it stops holding (a join or leave — picks replace and
+ * never clear, so nothing else can break it; both also clear `forced`) the
  * countdown cancels.
  */
 export const armingComplete = (sim: ArenaSim): boolean => {
@@ -88,21 +98,27 @@ export const armingComplete = (sim: ArenaSim): boolean => {
   return (
     sim.state.round.phase === "lobby" &&
     seated.length >= 2 &&
+    (seated.length === sim.state.players.length || sim.state.round.forced) &&
     seated.every((p) => p.connected && loadoutComplete(p))
   );
 };
 
 /**
- * The host's AFK backstop: random-fill every incomplete loadout from the sim
- * rng (deterministic). The arming gate then passes on its own and the SAME
+ * The host's start-early control, two jobs in one button: random-fill every
+ * incomplete loadout from the sim rng (deterministic — the AFK backstop) AND
+ * set the `forced` override so the arming gate passes with empty seats (the
+ * partial-room launcher; empty seats simply don't spawn). Either way the SAME
  * 10s countdown runs — a force-start is never instant (Tom 2026-07-14), so
- * the auto-armed straggler gets a beat to see what they were dealt.
+ * the auto-armed straggler gets a beat to see what they were dealt. Needs a
+ * body on each team: lobby leave-churn can strand everyone on one side, and
+ * forcing that match would be an instant walkover.
  */
 export const forceStartMatch = (sim: ArenaSim): boolean => {
   const seated = seatedPlayers(sim.state);
   if (sim.state.round.phase !== "lobby" || seated.length < 2) return false;
   if (!seated.every((p) => p.connected)) return false;
-  if (armingComplete(sim)) return false; // nothing to fill — it's already counting
+  if (!seated.some((p) => p.team === 1) || !seated.some((p) => p.team === 2)) return false;
+  if (armingComplete(sim)) return false; // nothing to do — it's already counting
   for (const p of seated) {
     if (p.weapon === null) {
       setPlayerWeapon(sim, p.id, WEAPON_IDS[Math.floor(sim.rng.next() * WEAPON_IDS.length)]!);
@@ -114,6 +130,7 @@ export const forceStartMatch = (sim: ArenaSim): boolean => {
     }
     setPlayerAbilities(sim, p.id, hand);
   }
+  sim.state.round.forced = true;
   return true;
 };
 
@@ -208,6 +225,9 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
 export const checkRoundOver = (sim: ArenaSim, events: ArenaEvent[]): void => {
   const round = sim.state.round;
   if (round.phase !== "active") return;
+  // Training (the target-dummy range): the round runs until the player leaves —
+  // a wiped dummy line is respawnDummies' business, never a round win.
+  if (sim.state.training) return;
   const seated = seatedPlayers(sim.state);
   const alive1 = seated.some((p) => p.team === 1 && p.alive);
   const alive2 = seated.some((p) => p.team === 2 && p.alive);

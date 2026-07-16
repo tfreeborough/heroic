@@ -1,15 +1,17 @@
 /**
- * Practice mode — a full match against a bot, no server, no network. The sim
+ * Practice mode — a full match against bots, no server, no network. The sim
  * package is pure and already bundled in the app, so this "connection" steps
  * stepSim in-process, and each tick's snapshot goes through the same
- * SnapshotBuffer the renderer already samples. The bot is the shared
+ * SnapshotBuffer the renderer already samples. The bots are the shared
  * sim-package brain (botThink) — the same opponent the server's headless bot
- * script runs.
+ * script runs. At the chosen team size, bots fill BOTH teams (you get bot
+ * allies): the human takes seat 0, and team assignment runs the exact
+ * production addPlayer path — random-balanced, so you can land RED or BLUE.
  *
  * Practice runs the SAME arming flow as real rooms (pvp-loadout-flow.md):
- * you arm through the wizard on RoomScreen, the bot arms itself moments after
- * sitting down, and the sim's own 10s arming countdown starts the match —
- * nobody presses START. After matchEnd the sim disarms everyone and returns
+ * you arm through the wizard on RoomScreen, each bot arms itself moments
+ * after sitting down, and the sim's own 10s arming countdown starts the match
+ * — nobody presses START. After matchEnd the sim disarms everyone and returns
  * to the lobby, so the wizard reopens (run-it-back is one tap) — the offline
  * loop matches the online one exactly. This is the no-second-player test bed
  * for the whole flow.
@@ -21,6 +23,7 @@
  */
 import {
   ABILITY_IDS,
+  addDummy,
   addPlayer,
   ARENA_00,
   BOT_STRATEGIES,
@@ -30,6 +33,7 @@ import {
   forceStartMatch,
   LOADOUT_ABILITY_COUNT,
   makeClientConfig,
+  nearestEnemy,
   setPlayerAbilities,
   setPlayerWeapon,
   SnapshotBuffer,
@@ -50,7 +54,27 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
 
-const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus"];
+const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus", "Spartacus", "Agron", "Duro"];
+
+/** What practice puts across the sand: live bots, or the dev menu's firing
+ * range — a line of inert target dummies that respawn as they fall. */
+export type PracticeMode = "bot" | "dummies";
+
+const DUMMY_NAMES = ["Dummy I", "Dummy II", "Dummy III", "Dummy IV", "Dummy V"];
+
+/** Dev nicety: the range clamps the 10s arming ceremony to a quick beat. */
+const RANGE_ARM_SECONDS = 2;
+
+/** Per-bot brain state — one entry per bot seat (every id except the human's 0). */
+interface BotSeat {
+  memory: BotMemory;
+  strategy: BotStrategy;
+  /** ms after entering the lobby at which this bot arms itself — staggered
+   * beats, so the roster ticker flips one by one while you're mid-wizard. */
+  armAtMs: number;
+}
+
+const randomArmBeat = (): number => 1200 + Math.random() * 1800;
 
 const randomWeapon = (): WeaponId => WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!;
 
@@ -77,34 +101,59 @@ export class PracticeClient implements LobbyClient {
   onChange: (() => void) | null = null;
   onEvents: ((events: ArenaEvent[]) => void) | null = null;
 
+  /** Bots or the firing range — App routes a range LEAVE to the title screen
+   * (the range has no front-door screen of its own). */
+  readonly mode: PracticeMode;
+
   private readonly sim: ArenaSim;
-  private readonly botMemory: BotMemory = createBotMemory();
-  private readonly botStrategy: BotStrategy;
-  /** ms after entering the lobby at which the bot arms itself — a beat, not a
-   * wait, so the roster ticker visibly flips while you're mid-wizard. */
-  private botArmAtMs: number;
+  /** Brain state per bot seat, keyed by player id (every id except 0). */
+  private readonly bots = new Map<number, BotSeat>();
   private lobbyEnteredMs: number;
   private lobbyTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnap: SnapshotMsg;
   private seq = 0;
 
-  constructor(playerName: string) {
+  constructor(playerName: string, teamSize: number = 1, mode: PracticeMode = "bot") {
+    this.mode = mode;
     // Practice needn't be replayable — wall-clock seeding is fine here.
-    this.sim = createSim(ARENA_00, Date.now() >>> 0);
-    this.botStrategy = BOT_STRATEGIES[Math.floor(Math.random() * BOT_STRATEGIES.length)]!;
-    const botName = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]!;
+    this.sim = createSim(ARENA_00, Date.now() >>> 0, teamSize, mode === "dummies");
 
-    addPlayer(this.sim, playerName);
-    addPlayer(this.sim, botName);
+    // The human takes seat 0. In bot mode, bots fill every other seat, BOTH
+    // teams — assignment is the production addPlayer path (random-balanced),
+    // so you can land RED or BLUE, exactly like a real room. On the range the
+    // line-up is fixed instead: you on team 1, armed-on-arrival dummies
+    // filling team 2 (an empty `bots` map — nothing thinks, nothing arms).
+    const me =
+      mode === "dummies" ? addPlayer(this.sim, playerName, 1)! : addPlayer(this.sim, playerName)!;
+    if (mode === "dummies") {
+      for (let i = 0; i < teamSize * 2 - 1; i++) {
+        addDummy(this.sim, DUMMY_NAMES[i % DUMMY_NAMES.length]!);
+      }
+    } else {
+      const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < teamSize * 2 - 1; i++) {
+        const bot = addPlayer(this.sim, names[i % names.length]!)!;
+        this.bots.set(bot.id, {
+          memory: createBotMemory(),
+          strategy: BOT_STRATEGIES[Math.floor(Math.random() * BOT_STRATEGIES.length)]!,
+          armAtMs: randomArmBeat(),
+        });
+      }
+    }
     this.phase = this.sim.state.round.phase; // "lobby" — the wizard opens here
     this.lobbyEnteredMs = performance.now();
-    this.botArmAtMs = 1200 + Math.random() * 1800;
 
     this.welcome = {
-      playerId: 0,
-      team: 1,
+      playerId: me.id,
+      team: me.team,
+      teamSize,
       roomCode: "BOT",
-      roomName: `practice vs ${botName}`,
+      roomName:
+        mode === "dummies"
+          ? "target practice"
+          : teamSize === 1
+            ? `practice vs ${this.sim.state.players[1]!.name}`
+            : `practice ${teamSize}v${teamSize}`,
       hostId: 0,
       zoneId: ARENA_00.id,
       config: makeClientConfig(),
@@ -161,20 +210,35 @@ export class PracticeClient implements LobbyClient {
   private startLobbyClock(): void {
     if (this.lobbyTimer !== null) return;
     this.lobbyEnteredMs = performance.now();
-    this.botArmAtMs = 1200 + Math.random() * 1800;
+    for (const bot of this.bots.values()) bot.armAtMs = randomArmBeat();
     this.lobbyTimer = setInterval(() => this.lobbyTick(), 1000 / TICK_RATE);
   }
 
-  /** One 30Hz lobby tick: arm the bot on its beat, let the arming countdown
+  /** One 30Hz lobby tick: arm each bot on its beat, let the arming countdown
    * run, and hand the clock to GameScreen the moment the countdown phase
    * begins. */
   private lobbyTick(): void {
-    const bot = this.sim.state.players[1];
-    if (bot && bot.weapon === null && performance.now() - this.lobbyEnteredMs >= this.botArmAtMs) {
-      setPlayerWeapon(this.sim, 1, randomWeapon());
-      setPlayerAbilities(this.sim, 1, randomHand());
+    const sinceMs = performance.now() - this.lobbyEnteredMs;
+    let armed = false;
+    for (const [id, seat] of this.bots) {
+      const bot = this.sim.state.players[id];
+      if (bot && bot.weapon === null && sinceMs >= seat.armAtMs) {
+        setPlayerWeapon(this.sim, id, randomWeapon());
+        setPlayerAbilities(this.sim, id, randomHand());
+        armed = true;
+      }
+    }
+    if (armed) {
       this.refreshRoomState();
       this.onChange?.();
+    }
+
+    // The range skips the arming ceremony: the dummies armed on arrival, so
+    // the moment YOU arm, the countdown would sit at the full 10s — clamp it
+    // to a beat. In-process dev shortcut, offline only; real rooms never do this.
+    const { round } = this.sim.state;
+    if (this.mode === "dummies" && round.phase === "lobby" && round.timer > RANGE_ARM_SECONDS) {
+      round.timer = RANGE_ARM_SECONDS;
     }
 
     this.step(new Map()); // nobody moves pre-countdown; the clock still runs
@@ -187,20 +251,16 @@ export class PracticeClient implements LobbyClient {
   /** GameScreen's fixed 30Hz input send IS the sim tick from the countdown on. */
   sendInput(sx: number, sy: number, casts: boolean[]): void {
     if (this.lobbyTimer !== null) return; // the lobby still owns the clock
-    const bot = botThink(
-      this.botMemory,
-      this.botStrategy,
-      this.lastSnap.players.find((p) => p.id === 1),
-      this.lastSnap.players.find((p) => p.id === 0),
-    );
-    // The brain's dash flag lands on whichever slot holds dash in the bot's hand.
-    const botCasts = (this.sim.state.players[1]?.slots ?? []).map((s) => bot.dash && s.id === "dash");
-    this.step(
-      new Map([
-        [0, { seq: this.seq++, sx, sy, casts }],
-        [1, { seq: 0, sx: bot.sx, sy: bot.sy, casts: botCasts }],
-      ]),
-    );
+    const inputs = new Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>();
+    inputs.set(0, { seq: this.seq++, sx, sy, casts });
+    for (const [id, seat] of this.bots) {
+      const snap = this.lastSnap.players.find((p) => p.id === id);
+      const decision = botThink(seat.memory, seat.strategy, snap, nearestEnemy(snap, this.lastSnap.players));
+      // The brain's dash flag lands on whichever slot holds dash in this bot's hand.
+      const botCasts = (this.sim.state.players[id]?.slots ?? []).map((s) => decision.dash && s.id === "dash");
+      inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: botCasts });
+    }
+    this.step(inputs);
   }
 
   private step(inputs: Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>): void {
@@ -219,7 +279,7 @@ export class PracticeClient implements LobbyClient {
   }
 
   private refreshRoomState(): void {
-    this.roomState = { players: toRoomStatePlayers(this.sim.state, 1), hostId: 0 };
+    this.roomState = { players: toRoomStatePlayers(this.sim.state, this.welcome!.team), hostId: 0 };
   }
 
   close(): void {

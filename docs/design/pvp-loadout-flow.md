@@ -91,10 +91,15 @@ loadout — no empty picks, no random fills in the happy path, no lobby-holding.
   staggered flip-up (recycle the RevealSplash animation DNA) + a real SFX.
   This replaces the reveal as the ceremony's emotional peak: it celebrates
   *your* choices instead of asking you to decode the enemy's.
-- **Repeat players — "run it back":** the wizard opens with your last loadout
-  pre-socketed and a single RUN IT BACK ✓ / CHANGE choice — one tap for
-  veterans, full guidance for newcomers. Last loadout persists locally
-  (no server change).
+- **Repeat players — "SAME ARMS" (renamed from "run it back", Tom
+  2026-07-16):** the wizard opens on "TAKE UP THE SAME ARMS?" showing your
+  last loadout — SAME ARMS ✓ / CHOOSE ANEW. One tap for veterans, full
+  guidance for newcomers. Last loadout persists locally (no server change).
+  **CHOOSE ANEW starts from scratch, never pre-socketed (Tom, 2026-07-16):**
+  pre-filling would commit the old loadout, which ARMS you — and with the
+  rest of the party ready, the countdown starts while you're still browsing
+  (~10s to "change"). Staying unarmed holds the match open until you finish
+  the wizard again; only SAME ARMS commits instantly.
 
 ### The lobby after arming
 
@@ -106,12 +111,12 @@ Roster as today (team-split, host crown, connection state), plus:
 - Your loadout renders as the socket strip; tapping a socket re-enters the
   wizard at that step.
 
-### Start logic (Tom, 2026-07-14)
+### Start logic (Tom, 2026-07-14; full-room gate 2026-07-16)
 
-- **Auto-start, server-initiated.** The moment every seat is armed (≥2
-  players, all connected), the **server** starts a **10-second countdown** and
-  broadcasts it — every client shows the same "ALL ARMED — MATCH STARTS IN
-  10…" banner over the lobby roster. At zero: straight into the existing match
+- **Auto-start, server-initiated.** The moment the room is **full** and every
+  seat is armed (all connected), the **server** starts a **10-second
+  countdown** and broadcasts it — every client shows the same "ALL ARMED —
+  MATCH STARTS IN 10…" banner over the lobby roster. At zero: straight into the existing match
   countdown → fight. Nobody needs to know they're the host for a match to
   start — and an AFK *host* can no longer block one either (which
   `startByHost` could never handle).
@@ -127,13 +132,18 @@ Roster as today (team-split, host crown, connection state), plus:
     "matches never pause" rule doesn't apply yet; no dragging a disconnected
     friend into a match that hasn't started. (From the *match* countdown on,
     existing rules take over: the body idles in.)
-- **Host force-start — the AFK backstop.** The host's *only* start control: a
-  secondary "START NOW — auto-arm N players" action that appears once someone
-  has sat unarmed for a grace period (~30s) while the rest are ready. It
-  random-fills the stragglers (sim RNG, deterministic — today's auto-select)
-  and then **feeds into the same 10s countdown, never instant** (Tom
-  2026-07-14): everyone gets the same start moment, and the auto-armed player
-  gets a beat to see what they were dealt.
+- **Host force-start — the AFK backstop AND the partial-room launcher
+  (2026-07-16).** The host's *only* start control: a secondary "START NOW"
+  action that appears once someone has sat unarmed for a grace period (~30s)
+  while the rest are ready, **or** when the room has empty seats but everyone
+  present is armed. It random-fills any stragglers (sim RNG, deterministic —
+  today's auto-select), sets the sim's `forced` override (which lets the
+  full-room gate pass with empty seats — cleared by any join/leave, so it can
+  never go stale), and then **feeds into the same 10s countdown, never
+  instant** (Tom 2026-07-14): everyone gets the same start moment, and the
+  auto-armed player gets a beat to see what they were dealt. Uneven teams are
+  the host's call; empty seats simply don't spawn. It requires at least one
+  player on each team.
 
 ## Information rules
 

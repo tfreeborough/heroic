@@ -45,8 +45,8 @@ const makeSim = (seed = 0xb100d): ArenaSim => {
   addPlayer(sim, "bob");
   setPlayerWeapon(sim, 0, "blade");
   setPlayerWeapon(sim, 1, "blade");
-  setPlayerAbilities(sim, 0, ["dash", "tremor", "sandstorm"]);
-  setPlayerAbilities(sim, 1, ["dash", "tremor", "sandstorm"]);
+  setPlayerAbilities(sim, 0, ["dash", "tremor"]);
+  setPlayerAbilities(sim, 1, ["dash", "tremor"]);
   return sim;
 };
 

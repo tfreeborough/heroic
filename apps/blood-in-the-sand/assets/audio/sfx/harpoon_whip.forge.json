@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a barbed chain snapping taut across the arena — a fast metallic whip-crack and rattle",
+  "prompt": "Close-mic'd barbed iron chain snapping taut: sharp metallic whip-crack, immediate high-frequency bite, brief metallic ring and chaotic clinking as links rattle, gritty sand hiss under impact; fast one-shot, 0.6–0.8s, ends with dusty decay.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.7,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "harpoon_whip_1.mp3"
+  ],
+  "created": "2026-07-16T13:53:33.622Z",
+  "updated": "2026-07-16T13:53:33.622Z"
+}

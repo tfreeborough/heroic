@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "the thumping of iron on the ground",
+  "prompt": "Three-second, close-mic'd iron boot impacts on packed, sun-baked sand: heavy metallic thumps with gritty sand crunch, each strike starting sharp, peaking in hollow, low-frequency ring, then settling into dusty decay; layered slight reverberant cage resonance.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_ironhide_1.mp3"
+  ],
+  "created": "2026-07-16T13:40:57.395Z",
+  "updated": "2026-07-16T13:40:57.395Z"
+}

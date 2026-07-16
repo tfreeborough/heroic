@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a soft UI back/cancel — a low muted wooden knock, a step backwards",
+  "prompt": "Close-mic'd low wooden knock: dull sun-baked palm strike on aged oak, muted grainy impact, immediate soft hollow tap followed by a brief dusty scrape and tiny backward footstep thud; short, weighted one-shot, ~0.6 seconds, grounded, sand-dry.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "ui_back_1.mp3"
+  ],
+  "created": "2026-07-16T21:13:27.632Z",
+  "updated": "2026-07-16T21:13:27.632Z"
+}

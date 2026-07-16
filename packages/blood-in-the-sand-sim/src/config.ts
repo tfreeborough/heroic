@@ -14,6 +14,13 @@ export const SNAPSHOT_DIVISOR = 1;
 
 // ── Players ────────────────────────────────────────────────────────────────
 export const PLAYER_RADIUS = 18;
+
+/** Host-picked at room creation: 1v1 / 2v2 / 3v3 / 4v4 → 2×N seats. */
+export type TeamSize = 1 | 2 | 3 | 4;
+export const MAX_TEAM_SIZE = 4;
+/** Gap between teammate spawn slots in the formation line — > 2×radius so
+ * nobody starts overlapped (stepCrowd would shove them apart, ugly). */
+export const SPAWN_SPACING = PLAYER_RADIUS * 2.5;
 export const PLAYER_MAX_SPEED = 280; // px/s
 export const PLAYER_ACCEL = 3000; // px/s²
 export const PLAYER_DECEL = 2800; // px/s²
@@ -292,8 +299,10 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
 
-/** Abilities per loadout; pick order = button order in the match. */
-export const LOADOUT_ABILITY_COUNT = 3;
+/** Abilities per loadout; pick order = button order in the match. Two, not
+ * three: rounds are short and one-life, so a third button read as chaos in
+ * testing (2026-07-16) — fewer slots make each pick a real choice. */
+export const LOADOUT_ABILITY_COUNT = 2;
 
 /** Deployable ids live above the seat range so they can share the target-id
  * space with players (a straw man is a valid auto-target). Room for 5v5. */
@@ -323,3 +332,9 @@ export const COUNTDOWN_SECONDS = 3;
 export const ROUND_END_SECONDS = 2.5;
 export const MATCH_END_SECONDS = 8; // then a fresh match with the same players
 export const WINS_TO_TAKE_MATCH = 3;
+
+// ── Training (the dev menu's target-dummy range) ───────────────────────────
+/** Beat between a dummy's death and its replacement standing back up — long
+ * enough to read the kill (blood burst, death sound), short enough that the
+ * firing range never feels empty. */
+export const DUMMY_RESPAWN_SECONDS = 2;

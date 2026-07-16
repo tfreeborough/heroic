@@ -68,6 +68,10 @@ export interface AbilityRuntime {
   /** Harpoon: seconds of reel remaining; 0 = no chain attached. While > 0 the
    * victim is hauled toward the (rooted) caster each tick. */
   reelLeft: number;
+  /** Harpoon: a Mirror Guard reflect flips the reel — the slot OWNER is the one
+   * hauled, toward `targetId` (the guard, who stays free), instead of the owner
+   * rooting and dragging the target in. Same slow speed, opposite direction. */
+  reelReversed: boolean;
 }
 
 export const createAbilityRuntime = (id: AbilityId): AbilityRuntime => ({
@@ -79,6 +83,7 @@ export const createAbilityRuntime = (id: AbilityId): AbilityRuntime => ({
   invulnLeft: 0,
   targetId: null,
   reelLeft: 0,
+  reelReversed: false,
 });
 
 /** Fresh slots for a drafted hand — every cooldown clean (each round resets). */
@@ -94,7 +99,7 @@ export const abilityActive = (p: ArenaPlayer, id: AbilityId): boolean =>
   p.slots.some((s) => s.id === id && s.ability.phase === "active");
 
 export interface ArenaPlayer {
-  /** Slot index (0 | 1 in M1), stable for the whole match. */
+  /** Seat index, stable for the whole match. */
   id: number;
   name: string;
   team: Team;
@@ -130,6 +135,12 @@ export interface ArenaPlayer {
   slots: AbilityRuntime[];
   /** Last input seq applied — echoed in snapshots. */
   lastSeq: number;
+  /** A training-mode target dummy (the dev menu's firing range): never targets,
+   * never swings, and the training pass respawns it after death. Real players
+   * are never dummies — only addDummy sets this. */
+  dummy: boolean;
+  /** Training only: seconds until a dead dummy is replaced; 0 = none pending. */
+  respawnLeft: number;
 }
 
 export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
@@ -139,10 +150,9 @@ export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchE
 export const loadoutComplete = (p: ArenaPlayer): boolean =>
   p.weapon !== null && p.abilities.length === LOADOUT_ABILITY_COUNT;
 
-/** A room seat: a player, or empty. Seat index = player id = team − 1. */
+/** A room seat: a player, or empty. Seat index = player id (stable across the
+ * match); team is stored on the player — addPlayer assigns it random-balanced. */
 export type Seat = ArenaPlayer | null;
-
-export const SEAT_COUNT = 2;
 
 export interface RoundState {
   phase: RoundPhase;
@@ -155,6 +165,10 @@ export interface RoundState {
   wins: [number, number];
   /** 0 until a round has been won (also the draw sentinel). */
   lastWinner: Team | 0;
+  /** The host's force-start override: lets the arming gate pass with empty
+   * seats. Cleared by any join/leave (the party changed — the override is
+   * stale) and at match start, so it can never linger. */
+  forced: boolean;
 }
 
 /** What a live shot came out of — a weapon's attack cycle. (The harpoon left
@@ -204,6 +218,9 @@ export const isDeployableId = (id: number): boolean => id >= DEPLOYABLE_ID_BASE;
 
 export interface ArenaState {
   tick: number;
+  /** Training mode (the dev menu's target-dummy range): rounds never end —
+   * checkRoundOver stands down and dead dummies respawn in place instead. */
+  training: boolean;
   /** RNG identity: the seed plus how many draws have happened. The live Rng sits
    * in ArenaSim; restoreRng(seed, rngDraws) rebuilds it from these two numbers. */
   seed: number;
@@ -219,12 +236,13 @@ export interface ArenaState {
   nextDeployableId: number;
 }
 
-export const createArenaState = (seed: number): ArenaState => ({
+export const createArenaState = (seed: number, seatCount: number, training = false): ArenaState => ({
   tick: 0,
+  training,
   seed,
   rngDraws: 0,
-  players: Array.from({ length: SEAT_COUNT }, () => null),
-  round: { phase: "lobby", timer: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0 },
+  players: Array.from({ length: seatCount }, () => null),
+  round: { phase: "lobby", timer: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0, forced: false },
   projectiles: [],
   nextProjectileId: 0,
   deployables: [],
@@ -234,6 +252,19 @@ export const createArenaState = (seed: number): ArenaState => ({
 /** The occupied seats, in id order. */
 export const seatedPlayers = (state: ArenaState): ArenaPlayer[] =>
   state.players.filter((p): p is ArenaPlayer => p !== null);
+
+/** Seated head-count per team, indexed team − 1. */
+export const teamCounts = (state: ArenaState): [number, number] => {
+  const counts: [number, number] = [0, 0];
+  for (const p of seatedPlayers(state)) {
+    if (p.team === 1) counts[0] += 1;
+    else counts[1] += 1;
+  }
+  return counts;
+};
+
+/** Players per side (seats are always 2×N by construction). */
+export const teamSizeOf = (state: ArenaState): number => state.players.length / 2;
 
 export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, facing: number): ArenaPlayer => ({
   id,
@@ -255,6 +286,8 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   lockedFacing: facing,
   slots: [],
   lastSeq: 0,
+  dummy: false,
+  respawnLeft: 0,
 });
 
 /** Defensive input scrubbing — the sim never trusts the wire. */

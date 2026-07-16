@@ -1,6 +1,6 @@
 /**
  * The Arming (docs/design/pvp-loadout-flow.md, mock-approved 2026-07-15): a
- * guided wizard — weapon → ability 1 → 2 → 3, one decision per screen — then
+ * guided wizard — weapon → one screen per ability, one decision each — then
  * the lobby, where the server's own 10s countdown starts the match once every
  * seat is armed. Nobody presses START; the host's only control is the
  * force-start backstop for AFK stragglers.
@@ -9,7 +9,7 @@
  * picked) · socket strip (◆①②③, tap to revisit) · snap carousel with codex
  * content (ability steps open on a category gate) · CHOOSE → stamp + the icon
  * flies into its socket → auto-advance → "YOU ARE ARMED" splash → lobby.
- * Returning players get RUN IT BACK (last loadout, one tap).
+ * Returning players get SAME ARMS (last loadout, one tap; CHOOSE ANEW clears).
  *
  * The wizard owns its picks LOCALLY and sends the full state on every choose
  * (idempotent messages) — roomState round-trips never race a fast picker.
@@ -55,9 +55,21 @@ export interface RoomScreenProps {
   onLeave: () => void;
 }
 
-const STEP_TITLES = ["CHOOSE YOUR WEAPON", "YOUR TOP BUTTON", "YOUR MIDDLE BUTTON", "YOUR BOTTOM BUTTON"];
-const ROMAN = ["I", "II", "III", "IV"];
-const SOCKET_LABELS = ["◆", "①", "②", "③"];
+// The wizard walks one slot per screen: slot 0 = the weapon, then one per
+// ability. Everything below derives from LOADOUT_ABILITY_COUNT so the flow
+// tracks the loadout size (two abilities as of 2026-07-16).
+const SLOT_COUNT = LOADOUT_ABILITY_COUNT + 1; // weapon + abilities
+const SLOT_INDICES = Array.from({ length: SLOT_COUNT }, (_, i) => i);
+const ABILITY_INDICES = Array.from({ length: LOADOUT_ABILITY_COUNT }, (_, i) => i);
+const ROMAN = ["I", "II", "III", "IV", "V"];
+const OF_TOTAL = ROMAN[SLOT_COUNT - 1]!; // "III" at two abilities (weapon + 2)
+const SOCKET_LABELS = ["◆", "①", "②", "③", "④"];
+// Button names run top→bottom down the in-game column, teaching the layout.
+const BUTTON_POSITIONS =
+  LOADOUT_ABILITY_COUNT <= 1
+    ? ["ONLY"]
+    : ["TOP", ...Array.from({ length: LOADOUT_ABILITY_COUNT - 2 }, () => "MIDDLE"), "BOTTOM"];
+const STEP_TITLES = ["CHOOSE YOUR WEAPON", ...BUTTON_POSITIONS.map((p) => `YOUR ${p} BUTTON`)];
 const CATEGORY_DESC: Record<AbilityCategory, string> = {
   offensive: "pressure, damage, and drags",
   defensive: "escapes, armour, misdirection",
@@ -76,7 +88,7 @@ interface Picks {
 }
 
 interface WizardState {
-  step: number; // 0 = weapon, 1..3 = abilities
+  step: number; // 0 = weapon, 1..LOADOUT_ABILITY_COUNT = abilities
   cat: AbilityCategory | null; // ability steps: null = the category gate
   /** true = a single-slot edit from the lobby (returns straight there). */
   edit: boolean;
@@ -124,10 +136,10 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   const [fly, setFly] = useState<FlyState | null>(null);
   const flyT = useRef(new Animated.Value(0)).current;
   const [landedSlot, setLandedSlot] = useState<number | null>(null);
-  const socketRefs = useRef<(View | null)[]>([null, null, null, null]);
+  const socketRefs = useRef<(View | null)[]>(SLOT_INDICES.map(() => null));
   const focusedIconRef = useRef<View | null>(null);
 
-  // The RUN IT BACK offer — once, on entering an unarmed lobby.
+  // The SAME ARMS offer — once, on entering an unarmed lobby.
   const startedUnarmed = useRef(wizard !== null);
   useEffect(() => {
     if (!startedUnarmed.current) return;
@@ -186,24 +198,17 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
         setWizard(null); // single-slot edit: straight back to the lobby
         return;
       }
-      const nextEmpty = [0, 1, 2, 3].find((i) => !slotComplete(after, i));
+      // The walk always fills in order (run-it-back CHANGE starts from
+      // scratch, so there is no prefilled walk): next empty slot, or armed.
+      const nextEmpty = SLOT_INDICES.find((i) => !slotComplete(after, i));
       if (nextEmpty !== undefined) {
         setWizard({ step: nextEmpty, cat: null, edit: false });
-      } else if (w.step < 3 && !allWalked.current) {
-        // Prefilled walk (run-it-back CHANGE): step through every slot once.
-        setWizard({ step: w.step + 1, cat: catOfSlot(after, w.step + 1), edit: false });
       } else {
         armedNow(after);
       }
     },
     [armedNow],
   );
-  /** Once the walk has visited slot 3, any advance completes the arming. */
-  const allWalked = useRef(false);
-  useEffect(() => {
-    if (wizard?.step === 3) allWalked.current = true;
-    if (wizard === null) allWalked.current = false;
-  }, [wizard]);
 
   const catOfSlot = (p: Picks, step: number): AbilityCategory | null => {
     const id = step > 0 ? p.hand[step - 1] : undefined;
@@ -284,10 +289,14 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     setRib(null);
     armedNow(final);
   };
-  const ribChange = (saved: SavedLoadout): void => {
+  // CHANGE starts from scratch (Tom 2026-07-16): committing the old loadout
+  // here would ARM you server-side — with everyone else ready, the countdown
+  // would start while you're still browsing, giving you ~10s to "change".
+  // Staying unarmed holds the match until the wizard is walked again.
+  const ribChange = (): void => {
     unlockAudio();
     playSound("uiTap");
-    commit({ weapon: saved.weapon, hand: [...saved.abilities] });
+    setPicks({ weapon: null, hand: [] });
     setRib(null);
     setWizard({ step: 0, cat: null, edit: false });
   };
@@ -296,15 +305,25 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
 
   const players = client.roomState?.players ?? [];
   const myTeam = welcome.team;
+  const capacity = welcome.teamSize * 2;
   const me = players.find((p) => p.id === welcome.playerId);
   const meArmed = me?.armed ?? allComplete(picks);
 
   // Host force-start: someone's sat unarmed past the grace while the rest are
-  // ready. Client-side gate only — the sim re-checks everything.
+  // ready, OR the room has empty seats but everyone present is armed (the
+  // partial-room launcher). Client-side gate only — the sim re-checks
+  // everything, including a body on each team.
   const unarmed = players.filter((p) => !p.armed);
   const graceCond =
-    client.isHost && meArmed && players.length >= 2 && unarmed.length > 0 && players.every((p) => p.connected);
-  const graceKey = graceCond ? unarmed.map((p) => p.id).join(",") : "";
+    client.isHost &&
+    meArmed &&
+    players.length >= 2 &&
+    players.some((p) => p.team !== myTeam) &&
+    (unarmed.length > 0 || players.length < capacity) &&
+    players.every((p) => p.connected);
+  // Keyed on the roster AND who's unarmed: any join/leave or arming restarts
+  // the grace clock (the sim clears `forced` on membership changes too).
+  const graceKey = graceCond ? `${players.length}:${unarmed.map((p) => p.id).join(",")}` : "";
   if (graceSince.current.key !== graceKey) graceSince.current = { key: graceKey, atMs: performance.now() };
   const showForceStart =
     graceCond && performance.now() - graceSince.current.atMs > FORCE_START_GRACE_SECONDS * 1000;
@@ -315,7 +334,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     // (unlike CSS) — padded, the splash was off-centre and the fly missed.
     <View ref={rootRef} collapsable={false} style={styles.root}>
       <View style={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 8 }]}>
-        <RosterTicker players={players} myId={welcome.playerId} myTeam={myTeam} />
+        <RosterTicker players={players} myId={welcome.playerId} myTeam={myTeam} capacity={capacity} />
 
       {wizard !== null ? (
         <>
@@ -356,6 +375,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
           players={players}
           myId={welcome.playerId}
           myTeam={myTeam}
+          capacity={capacity}
           picks={picks}
           roomName={welcome.roomName}
           roomCode={welcome.roomCode}
@@ -376,7 +396,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
       {timer > 0 && wizard === null && !splash ? <CountdownVeil left={timer} /> : null}
 
       {rib !== null && wizard !== null && !splash ? (
-        <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={() => ribChange(rib)} />
+        <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={ribChange} />
       ) : null}
 
       {splash ? <ArmedSplash picks={picks} onDone={() => setSplash(false)} /> : null}
@@ -414,7 +434,17 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
 
 // ── Roster ticker ────────────────────────────────────────────────────────────
 
-const RosterTicker = ({ players, myId, myTeam }: { players: RoomStatePlayer[]; myId: number; myTeam: number }) => {
+const RosterTicker = ({
+  players,
+  myId,
+  myTeam,
+  capacity,
+}: {
+  players: RoomStatePlayer[];
+  myId: number;
+  myTeam: number;
+  capacity: number;
+}) => {
   const ordered = [...players].sort((a, b) => (a.team === myTeam ? 0 : 1) - (b.team === myTeam ? 0 : 1));
   return (
     <View style={styles.ticker}>
@@ -435,9 +465,9 @@ const RosterTicker = ({ players, myId, myTeam }: { players: RoomStatePlayer[]; m
           </Text>
         </View>
       ))}
-      {players.length < 2 ? (
+      {players.length < capacity ? (
         <View style={[styles.tickerChip, styles.tickerEnemy]}>
-          <Text style={styles.tickerName}>WAITING…</Text>
+          <Text style={styles.tickerName}>{`${players.length}/${capacity}…`}</Text>
         </View>
       ) : null}
     </View>
@@ -456,7 +486,7 @@ interface SocketStripProps {
 
 const SocketStrip = ({ picks, current, landed, refs, onTap }: SocketStripProps) => (
   <View style={styles.sockets}>
-    {[0, 1, 2, 3].map((i) => {
+    {SLOT_INDICES.map((i) => {
       const id: IconId | null = i === 0 ? picks.weapon : (picks.hand[i - 1] ?? null);
       return (
         <Pressable key={i} onPress={() => onTap(i)}>
@@ -521,7 +551,7 @@ const WizardStep = (props: WizardStepProps) => {
       <View style={styles.stepHead}>
         <View style={styles.stepHeadText}>
           <Text style={styles.stepEyebrow}>
-            {`STEP ${ROMAN[wizard.step]} OF IV${wizard.step > 0 ? ` · ABILITY ${wizard.step}` : ""}`}
+            {`STEP ${ROMAN[wizard.step]} OF ${OF_TOTAL}${wizard.step > 0 ? ` · ABILITY ${wizard.step}` : ""}`}
           </Text>
           <Text style={styles.stepTitle}>{STEP_TITLES[wizard.step]}</Text>
         </View>
@@ -574,7 +604,7 @@ const WizardStep = (props: WizardStepProps) => {
  * teaches the controls: pick order IS button order. */
 const ButtonColumnHint = ({ slot, picks }: { slot: number; picks: Picks }) => (
   <View style={styles.btnCol}>
-    {[0, 1, 2].map((i) => (
+    {ABILITY_INDICES.map((i) => (
       <View
         key={i}
         style={[styles.btnColSlot, i === slot && styles.btnColLit, i !== slot && picks.hand[i] !== undefined && styles.btnColDone]}
@@ -743,7 +773,7 @@ const AbilityCardBody = ({ id }: { id: AbilityId }) => {
 // ── Armed splash ────────────────────────────────────────────────────────────
 
 const ArmedSplash = ({ picks, onDone }: { picks: Picks; onDone: () => void }) => {
-  const anims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
+  const anims = useRef(SLOT_INDICES.map(() => new Animated.Value(0))).current;
   const foot = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.stagger(140, [
@@ -788,7 +818,7 @@ const ArmedSplash = ({ picks, onDone }: { picks: Picks; onDone: () => void }) =>
 const RunItBack = ({ saved, onYes, onChange }: { saved: SavedLoadout; onYes: () => void; onChange: () => void }) => (
   <View style={styles.rib}>
     <Text style={styles.splashEyebrow}>WELCOME BACK, GLADIATOR</Text>
-    <Text style={styles.ribTitle}>RUN IT BACK?</Text>
+    <Text style={styles.ribTitle}>TAKE UP THE SAME ARMS?</Text>
     <View style={styles.ribRow}>
       <LoadoutIcon id={saved.weapon} size={44} />
       <View style={styles.ribSep} />
@@ -798,10 +828,10 @@ const RunItBack = ({ saved, onYes, onChange }: { saved: SavedLoadout; onYes: () 
     </View>
     <View style={styles.ribButtons}>
       <Pressable onPress={onYes} style={styles.cta}>
-        <Text style={styles.ctaText}>RUN IT BACK ✓</Text>
+        <Text style={styles.ctaText}>SAME ARMS ✓</Text>
       </Pressable>
       <Pressable onPress={onChange} style={[styles.cta, styles.ctaGhost]}>
-        <Text style={[styles.ctaText, styles.ctaGhostText]}>CHANGE MY ARSENAL</Text>
+        <Text style={[styles.ctaText, styles.ctaGhostText]}>CHOOSE ANEW</Text>
       </Pressable>
     </View>
   </View>
@@ -814,6 +844,8 @@ interface LobbyViewProps {
   players: RoomStatePlayer[];
   myId: number;
   myTeam: number;
+  /** Total seats (2 × teamSize) — empty-seat rows pad each side to half this. */
+  capacity: number;
   picks: Picks;
   roomName: string;
   roomCode: string;
@@ -826,9 +858,11 @@ interface LobbyViewProps {
 }
 
 const LobbyView = (props: LobbyViewProps) => {
-  const { client, players, myId, myTeam, picks, roomName, roomCode } = props;
+  const { client, players, myId, myTeam, capacity, picks, roomName, roomCode } = props;
+  const teamCap = capacity / 2;
   const mine = players.filter((p) => p.team === myTeam);
   const theirs = players.filter((p) => p.team !== myTeam);
+  const emptySeats = capacity - players.length;
   const lastMatch =
     props.lastWinner !== 0
       ? `last match: ${props.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...props.wins)}–${Math.min(...props.wins)}`
@@ -845,11 +879,12 @@ const LobbyView = (props: LobbyViewProps) => {
       {mine.map((p) => (
         <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={client.hostId} own />
       ))}
+      <OpenSeats count={teamCap - mine.length} />
       <TeamHeader label="ENEMY TEAM" color="#4da3d9" />
       {theirs.map((p) => (
         <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} />
       ))}
-      {theirs.length === 0 ? <Text style={styles.waitingSeat}>waiting for an opponent…</Text> : null}
+      <OpenSeats count={teamCap - theirs.length} />
 
       <TeamHeader label="YOUR ARSENAL" color={C_MUTED} />
       <SocketStrip picks={picks} current={null} landed={null} refs={props.socketRefs} onTap={props.onEditSlot} />
@@ -867,18 +902,34 @@ const LobbyView = (props: LobbyViewProps) => {
             style={styles.forceStart}
           >
             <Text style={styles.forceStartText}>
-              {`⚑ START NOW — AUTO-ARM ${props.unarmedCount} GLADIATOR${props.unarmedCount === 1 ? "" : "S"}`}
+              {props.unarmedCount > 0
+                ? `⚑ START NOW — AUTO-ARM ${props.unarmedCount} GLADIATOR${props.unarmedCount === 1 ? "" : "S"}`
+                : `⚑ START NOW — ${emptySeats} SEAT${emptySeats === 1 ? "" : "S"} EMPTY`}
             </Text>
           </Pressable>
         ) : (
           <Text style={styles.waitingText}>
-            {players.length < 2 ? "the match starts itself once everyone is armed" : "waiting for every gladiator to arm…"}
+            {emptySeats > 0
+              ? `share the room code — the match starts once all ${capacity} gladiators are armed`
+              : "waiting for every gladiator to arm…"}
           </Text>
         )}
       </View>
     </View>
   );
 };
+
+/** Dashed placeholder rows padding a team list to its capacity. Random team
+ * assignment means a joiner can land on either side — both lists pad. */
+const OpenSeats = ({ count }: { count: number }) => (
+  <>
+    {Array.from({ length: Math.max(0, count) }, (_, i) => (
+      <View key={i} style={styles.openSeat}>
+        <Text style={styles.openSeatText}>open seat…</Text>
+      </View>
+    ))}
+  </>
+);
 
 const TeamHeader = ({ label, color }: { label: string; color: string }) => (
   <View style={styles.teamHead}>
@@ -1169,7 +1220,16 @@ const styles = StyleSheet.create({
   pickSep: { width: 1, height: 14, backgroundColor: "#3a332a", marginHorizontal: 3 },
   playerArmed: { color: "#b39763", fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
   playerStatus: { color: C_MUTED, fontSize: 12, fontStyle: "italic" },
-  waitingSeat: { color: "#6b6257", fontSize: 13, fontStyle: "italic", paddingVertical: 5 },
+  openSeat: {
+    borderColor: "#2e2820",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginVertical: 2,
+  },
+  openSeatText: { color: "#6b6257", fontSize: 13, fontStyle: "italic" },
   arsenalHint: { color: "#6b6257", fontSize: 10, fontStyle: "italic", marginTop: 8, marginLeft: 2 },
   lastMatch: { color: C_MUTED, fontSize: 13, marginTop: 18, textAlign: "center" },
   lobbyFoot: { marginTop: "auto", paddingBottom: 6 },

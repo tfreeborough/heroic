@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a short defeat sting — a low falling brass note with a disappointed crowd murmur",
+  "prompt": "A short arabian tune to signify defeat in battle",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 3,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "round_loss_1.mp3"
+  ],
+  "created": "2026-07-16T21:02:51.690Z",
+  "updated": "2026-07-16T21:02:51.690Z"
+}

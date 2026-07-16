@@ -36,8 +36,11 @@ export type AudioManifest = Record<string, AudioSource>;
 const DEFAULT_CROSSFADE = 2;
 /** Below this gain a faded-out deck is paused so it stops decoding silence. */
 const SILENT_EPSILON = 0.001;
-/** Hard cap on simultaneous native SFX players (plus the two music decks). */
-const SFX_VOICES = 8;
+/** Default cap on simultaneous native SFX players (plus the two music decks).
+ * Doubles as how many distinct clips can stay resident (loaded) at once — a game
+ * with more clips than voices reloads the evicted ones cold, which reads as
+ * trigger latency, so a clip-heavy game can raise this (see `sfxVoices`). */
+const DEFAULT_SFX_VOICES = 8;
 /**
  * A voice counts as busy this soon after firing even if `playing` hasn't
  * flipped yet — `play()` reports asynchronously, so two same-frame one-shots
@@ -94,7 +97,19 @@ export interface AudioDirector {
   dispose(): void;
 }
 
-export const createAudioDirector = (manifest: AudioManifest): AudioDirector => {
+export interface AudioDirectorOptions {
+  /** Max concurrent SFX voices AND how many clips stay resident before cold
+   * reloads begin. Default {@link DEFAULT_SFX_VOICES}. Raise it past the count of
+   * frequently-triggered clips to keep them all warm (bounded, so still safe on
+   * Android's session limit — this is a fixed pool, not per-play allocation). */
+  sfxVoices?: number;
+}
+
+export const createAudioDirector = (
+  manifest: AudioManifest,
+  options?: AudioDirectorOptions,
+): AudioDirector => {
+  const sfxVoices = options?.sfxVoices ?? DEFAULT_SFX_VOICES;
   const makeDeck = (): Deck => {
     const player = createAudioPlayer(null);
     player.loop = true;
@@ -213,7 +228,7 @@ export const createAudioDirector = (manifest: AudioManifest): AudioDirector => {
       } else if ((voice = voices.find(free))) {
         voice.player.replace(source);
         voice.clip = name;
-      } else if (voices.length < SFX_VOICES) {
+      } else if (voices.length < sfxVoices) {
         voice = { player: createAudioPlayer(source), clip: name, firedAt: 0 };
         voices.push(voice);
       } else {

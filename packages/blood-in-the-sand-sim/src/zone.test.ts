@@ -57,10 +57,15 @@ describe("arena-00", () => {
 
   test("a sim boots on the real zone and seats two players at the authored spawns", () => {
     const sim = createSim(ARENA_00, 1);
-    expect(addPlayer(sim, "a")).not.toBeNull();
-    expect(addPlayer(sim, "b")).not.toBeNull();
+    const a = addPlayer(sim, "a");
+    const b = addPlayer(sim, "b");
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
     expect(addPlayer(sim, "c")).toBeNull(); // room full
-    expect(sim.state.players[0]!.mover.pos).toEqual(authoredSpawn(1));
-    expect(sim.state.players[1]!.mover.pos).toEqual(authoredSpawn(2));
+    // Teams are randomly assigned now — each player stands on their OWN
+    // team's authored anchor (1v1 formation offset is zero).
+    expect(b!.team).not.toBe(a!.team); // first two joiners always oppose
+    expect(a!.mover.pos).toEqual(authoredSpawn(a!.team));
+    expect(b!.mover.pos).toEqual(authoredSpawn(b!.team));
   });
 });

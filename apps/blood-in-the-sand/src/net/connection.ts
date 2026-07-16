@@ -54,6 +54,8 @@ export const resolveServerUrl = (input: string): string => {
 export interface WelcomeInfo {
   playerId: number;
   team: Team;
+  /** Players per side — capacity (2×N) and empty-seat rows derive from this. */
+  teamSize: number;
   roomCode: string;
   roomName: string;
   hostId: number;
@@ -162,6 +164,7 @@ export class ArenaClient {
         this.welcome = {
           playerId: msg.playerId,
           team: msg.team,
+          teamSize: msg.teamSize,
           roomCode: msg.roomCode,
           roomName: msg.roomName,
           hostId: msg.hostId,
@@ -217,13 +220,14 @@ export class ArenaClient {
     }
   }
 
-  createRoom(playerName: string, roomName: string, pass: string): void {
+  createRoom(playerName: string, roomName: string, pass: string, teamSize: number): void {
     this.lastError = null;
     this.send({
       t: "createRoom",
       v: PROTOCOL_VERSION,
       playerName,
       roomName,
+      teamSize,
       ...(pass.trim() ? { pass: pass.trim() } : {}),
     });
   }

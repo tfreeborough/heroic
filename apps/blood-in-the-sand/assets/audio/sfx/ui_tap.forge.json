@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a soft dry UI tap — a quick muted wooden or leather tick, understated",
+  "prompt": "a soft dry UI tap — a quick muted wooden or leather tick, understated",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 0.6,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "ui_tap_1.mp3"
+  ],
+  "created": "2026-07-16T21:12:00.752Z",
+  "updated": "2026-07-16T21:50:40.044Z"
+}

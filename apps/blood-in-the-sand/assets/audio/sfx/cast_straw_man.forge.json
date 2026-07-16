@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a wooden poll twanging as its put into the ground, with a somebody comedically saying \"na na\"",
+  "prompt": "Close-mic’d sunbaked timber twang as a heavy wooden pole slams into grit and roots — low hollow snap, vibrating grain, a short resonant two-second decay, dust rattle underfoot, dry breathy exhale tail, visceral, grounded.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 3,
+    "promptInfluence": 0.6,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_straw_man_1.mp3"
+  ],
+  "created": "2026-07-16T13:42:55.829Z",
+  "updated": "2026-07-16T13:42:55.829Z"
+}

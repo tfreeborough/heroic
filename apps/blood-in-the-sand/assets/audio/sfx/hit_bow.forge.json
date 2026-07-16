@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "an arrow thumping hard into a body — a taut string release snap then a deep meaty thwack",
+  "prompt": "Close-mic'd bowstring snap, brief high-tension crack; immediate heavy, wet meaty thwack as arrow pierces muscle and sand-soaked hide; low, resonant bone-vibration underlayer; two-part hit: quick snap then a one-second guttural impact decay.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_bow_1.mp3"
+  ],
+  "created": "2026-07-16T13:32:33.754Z",
+  "updated": "2026-07-16T13:32:33.754Z"
+}

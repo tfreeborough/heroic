@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a somber match-lost motif — a low mournful horn fading under a dying crowd",
+  "prompt": "An short Arabian song to signify a great defeat, mournful, sad, drums, flute, sitar, no voice",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 5,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "match_loss_1.mp3"
+  ],
+  "created": "2026-07-16T21:11:19.745Z",
+  "updated": "2026-07-16T21:11:19.745Z"
+}

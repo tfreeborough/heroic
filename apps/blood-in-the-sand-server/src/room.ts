@@ -71,10 +71,10 @@ export class Room {
   private eventBuffer: ArenaEvent[] = [];
   private lastRoomStateKey = "";
 
-  constructor(server: Server<ClientData>, meta: RoomMeta, seed: number, nowMs: number) {
+  constructor(server: Server<ClientData>, meta: RoomMeta, seed: number, teamSize: number, nowMs: number) {
     this.server = server;
     this.meta = meta;
-    this.sim = createSim(ARENA_00, seed);
+    this.sim = createSim(ARENA_00, seed, teamSize);
     this.emptySinceMs = nowMs; // occupied the moment the creator is seated
   }
 
@@ -135,6 +135,7 @@ export class Room {
       v: PROTOCOL_VERSION,
       playerId,
       team: player.team,
+      teamSize: this.sim.state.players.length / 2,
       roomCode: this.meta.code,
       roomName: this.meta.name,
       hostId: this.meta.hostId,
@@ -203,13 +204,14 @@ export class Room {
     this.syncRoomState(nowMs);
   }
 
-  /** The host's AFK backstop: fills every unarmed seat, then the sim's own
-   * 10s arming countdown runs (the machine notices the gate passing — the
-   * server never starts a match; pvp-loadout-flow.md). */
+  /** The host's start-early control: fills every unarmed seat AND overrides
+   * the full-room gate on a partial lobby, then the sim's own 10s arming
+   * countdown runs (the machine notices the gate passing — the server never
+   * starts a match; pvp-loadout-flow.md). */
   forceStart(playerId: number, nowMs: number): void {
     if (playerId !== this.meta.hostId) return;
     if (forceStartMatch(this.sim)) {
-      console.log(`[${this.meta.code}] host force-started — stragglers auto-armed`);
+      console.log(`[${this.meta.code}] host force-started — stragglers auto-armed, empty seats waived`);
       this.syncRoomState(nowMs);
     }
   }

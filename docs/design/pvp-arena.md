@@ -38,7 +38,12 @@ account-level unlocks are a later monetisation question, not v1.)
 
 ## Match structure (v1 rules)
 
-- **Teams:** up to 5v5; any size down to 1v1 works (1v1 is the first playtest target).
+- **Teams:** the host picks **1v1 / 2v2 / 3v3 / 4v4** at room creation (built
+  2026-07-16, protocol v11) → 2×N open seats; joiners are **randomly placed
+  onto teams**, balanced (join the smaller team, coin-flip on ties, from the
+  sim rng — deterministic). The arming countdown waits for a full room; the
+  host's force-start launches early with empty seats. 5v5 remains the design
+  ceiling if playtests want it.
 - **Round:** both teams spawn at their arena's team spawn points → fight → last team standing
   wins the round. **One life** — the fallen spectate their team until the round ends.
 - **Match:** first to **3 round wins** *(placeholder — tune)*.
@@ -229,7 +234,7 @@ In dependency order — 1 dominates:
 | --- | --- | --- | --- |
 | M0 | ~~Pure `step()` extraction from Gauntlet~~ → **superseded**: the arena sim was written fresh in `packages/blood-in-the-sand-sim`, composing core primitives; Gauntlet untouched (Tom's constraint 2026-07-08) | zero regression risk to the shipping game | done |
 | M1 | **LAN 1v1** — two phones, Bun server on the Mac, one arena, fixed loadout (sword + dash) | the netcode end-to-end (the wife test) | **built 2026-07-08** — full bot matches + Expo Go client verified vs live server; two-phone playtest pending |
-| M2 | Rounds + bench/spectate + loadout picker + 2v2 | the actual game loop is fun | **partial 2026-07-10**: rooms, passcodes, host-run lobbies, names, watchRoom, weapon picker (4 weapons, protocol v3); remaining: powers picker, 2v2, in-match bench view |
+| M2 | Rounds + bench/spectate + loadout picker + 2v2 | the actual game loop is fun | **partial 2026-07-10**: rooms, passcodes, host-run lobbies, names, watchRoom, weapon picker (4 weapons, protocol v3); **team sizes 1v1–4v4 built 2026-07-16** (protocol v11, host-picked, random-balanced assignment, incl. practice vs bot teams); remaining: in-match bench view |
 | M3 | 5v5, skill catalogue to 12, stall rules tuned | the full pitch | — |
 | M4 | Internet play (prediction, hosted server) | *separate decision — not scheduled* | — |
 

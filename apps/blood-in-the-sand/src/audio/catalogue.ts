@@ -28,7 +28,8 @@ import type { AbilityId, WeaponId } from "@heroic/blood-in-the-sand-sim";
  */
 export type BitsSoundEvent =
   // ── Combat ────────────────────────────────────────────────────────────────
-  | "weaponStrike" //   an attack connects            (qualifier: WeaponId)
+  | "weaponFire" //     a ranged weapon looses         (qualifier: WeaponId)
+  | "weaponStrike" //   an attack connects             (qualifier: WeaponId)
   | "hitTaken" //       the LOCAL player is struck
   | "death" //          a combatant falls
   // ── Abilities ─────────────────────────────────────────────────────────────
@@ -51,12 +52,22 @@ export type BitsSoundEvent =
   | "uiBack" //         cancel / back
   | "uiError"; //       a rejected action
 
-/** Per-weapon impact banks. Base `clips` cover anything with no bespoke sound. */
+/** Per-weapon IMPACT banks (the thwack into a body). Base `clips` cover a hit
+ * from an unseen weapon. Ranged weapons connect here too — distinct from their
+ * release (weaponFire) — so a landed shot gets its own "it hit" confirmation. */
 const STRIKE_VARIANTS: Record<WeaponId, SoundBank> = {
   blade: { clips: ["hit_blade_1"] },
   bow: { clips: ["hit_bow_1"] },
   staff: { clips: ["hit_staff_1"] },
   hammer: { clips: ["hit_hammer_1"] },
+};
+
+/** Per-weapon RELEASE banks (the bow twang / staff cast whoosh), played on the
+ * `shoot` event — only ranged weapons loose a projectile, so melee has no entry
+ * (keyed by weapon id as a string; an unknown qualifier just finds nothing). */
+const FIRE_VARIANTS: Record<string, SoundBank> = {
+  bow: { clips: ["fire_bow_1"] },
+  staff: { clips: ["fire_staff_1"] },
 };
 
 /** Per-ability cast banks. A missing entry falls back to the base `cast_*` bank. */
@@ -75,6 +86,9 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
 
 export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // ── Combat ──────────────────────────────────────────────────────────────
+  // A ranged weapon loosing a projectile — the release, on every shot (hit or
+  // miss). No base bank: only bow/staff fire, so an unknown weapon is silent.
+  weaponFire: { variants: FIRE_VARIANTS, pitchVariance: 0.06 },
   // Every hit thuds. Qualified by the attacker's weapon (resolved from the
   // snapshot); the generic bank covers hits from an unseen weapon. Slight pitch
   // variance so trading blows doesn't sound machine-stamped.
@@ -83,8 +97,8 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
     pitchVariance: 0.08,
     variants: STRIKE_VARIANTS,
   },
-  // You, specifically, getting hit — a distinct "oof" so your own pain reads
-  // apart from the impacts around you. Kept a touch quieter than the strike.
+  // Your own pained grunt — reserved for CRITS taken (a normal hit on you just
+  // thuds; the crit is what earns the "oof"). See GameScreen's hit handler.
   hitTaken: { clips: ["player_hurt_1"], volume: 0.9, pitchVariance: 0.06 },
   // A combatant dies (player kill; straw men don't route here).
   death: { clips: ["death_1"], pitchVariance: 0.05 },

@@ -8,6 +8,7 @@ import {
   generateRoomCode,
   sanitizePasscode,
   sanitizeRoomName,
+  sanitizeTeamSize,
   shouldCollect,
 } from "./rooms";
 
@@ -44,6 +45,16 @@ describe("name/passcode hygiene", () => {
     expect(sanitizePasscode("  ")).toBeNull();
     expect(sanitizePasscode(undefined)).toBeNull();
     expect(sanitizePasscode(" hunter2 ")).toBe("hunter2");
+  });
+
+  test("team sizes clamp to the 1v1–4v4 menu, defaulting to 1v1", () => {
+    expect(sanitizeTeamSize(1)).toBe(1);
+    expect(sanitizeTeamSize(4)).toBe(4);
+    expect(sanitizeTeamSize(0)).toBe(1);
+    expect(sanitizeTeamSize(5)).toBe(1);
+    expect(sanitizeTeamSize(2.5)).toBe(1);
+    expect(sanitizeTeamSize("3")).toBe(1);
+    expect(sanitizeTeamSize(undefined)).toBe(1);
   });
 });
 

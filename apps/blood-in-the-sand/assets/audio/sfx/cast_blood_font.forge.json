@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a loud overflowing magical chalice with a magical healing quality",
+  "prompt": "Close-mic'd heavy bronze chalice overflows: thick, viscous liquid sloshes and spills onto sun-baked stone, wet metallic ring follows, warm shimmering hum undercurrent; two-second swell peaking at pour impact, trailing dusty, reverberant drip and soft healing chime.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.4,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_blood_font_1.mp3"
+  ],
+  "created": "2026-07-16T13:50:31.007Z",
+  "updated": "2026-07-16T13:50:31.007Z"
+}

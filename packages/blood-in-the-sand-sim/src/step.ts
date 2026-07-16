@@ -13,6 +13,7 @@ import {
   angleTo,
   applyDot,
   approachVelocity,
+  ATTACK_CYCLE_READY,
   distance,
   distanceToAabb,
   hitsInArc,
@@ -34,6 +35,7 @@ import {
 } from "@heroic/core";
 import {
   CROWD_PUSH,
+  DUMMY_RESPAWN_SECONDS,
   MIRROR_GUARD,
   PLAYER_ACCEL,
   PLAYER_DECEL,
@@ -61,6 +63,7 @@ import {
 import type { ArenaEvent } from "./events";
 import { checkRoundOver, tickRoundMachine } from "./round";
 import {
+  createAbilitySlots,
   IDLE_INPUT,
   isDeployableId,
   sanitizeInput,
@@ -69,7 +72,7 @@ import {
   type ArenaProjectile,
   type PlayerInput,
 } from "./state";
-import type { ArenaSim } from "./sim";
+import { spawnFacing, spawnSlotPos, teamSlotOf, type ArenaSim } from "./sim";
 
 const moverScratch: Mover[] = [];
 const candidateScratch: TargetCandidate[] = [];
@@ -149,7 +152,7 @@ export const stepSim = (
     // The cloud blinds BOTH ways (Tom, 2026-07-15): stand in it and you
     // can't take aim either — no hiding inside while shooting out.
     for (const p of players) {
-      if (!p.alive) continue;
+      if (!p.alive || p.dummy) continue; // a dummy never takes aim
       candidateScratch.length = 0;
       if (inSandstorm(state, p.mover.pos)) {
         p.targetId = null;
@@ -189,7 +192,7 @@ export const stepSim = (
     // ── Attack cycles, in id order (deterministic; the alive-check means a
     // player killed earlier this tick never gets their swing) ───────────────
     for (const p of players) {
-      if (!p.alive) continue;
+      if (!p.alive || p.dummy) continue; // a dummy never swings
       const weapon = weaponOf(p);
 
       const target = targetView(state, p.targetId);
@@ -236,6 +239,10 @@ export const stepSim = (
               targetId: weapon.projectile!.homingTurnRate ? aim.id : null,
             };
             state.projectiles.push(shot);
+            // The release — a shot went out (the client's fire SFX; plays on
+            // every loose, hit or miss). `p.weapon` is set here (it's what
+            // routed us into the projectile branch).
+            events.push({ type: "shoot", ownerId: p.id, weapon: p.weapon!, x: p.mover.pos.x, y: p.mover.pos.y });
           }
         } else {
           hurtScratch.length = 0;
@@ -320,7 +327,8 @@ export const stepSim = (
     stepProjectiles(sim, players, events, dt);
     stepDeployables(state, players, events, dt);
     stepBleeds(players, events, dt);
-    checkRoundOver(sim, events);
+    if (state.training) respawnDummies(sim, players, dt);
+    checkRoundOver(sim, events); // stands down in training — rounds never end
   }
 
   state.tick += 1;
@@ -437,6 +445,40 @@ const stepProjectiles = (
     if (!expired) state.projectiles[write++] = shot;
   }
   state.projectiles.length = write;
+};
+
+/**
+ * Training mode: a dead dummy stands back up after DUMMY_RESPAWN_SECONDS —
+ * full hp, statuses dropped, back on its spawn slot ("another one spawns in
+ * its place"), so the firing range never empties. No rng draws, no events:
+ * the client just sees the player flip back to alive.
+ */
+const respawnDummies = (sim: ArenaSim, players: readonly ArenaPlayer[], dt: number): void => {
+  for (const p of players) {
+    if (!p.dummy || p.alive) continue;
+    if (p.respawnLeft === 0) {
+      p.respawnLeft = DUMMY_RESPAWN_SECONDS; // just died — start the beat
+      continue;
+    }
+    p.respawnLeft = Math.max(0, p.respawnLeft - dt);
+    if (p.respawnLeft > 0) continue;
+    const spawn = spawnSlotPos(sim, p.team, teamSlotOf(sim.state, p));
+    p.mover.pos.x = spawn.x;
+    p.mover.pos.y = spawn.y;
+    p.mover.vel.x = 0;
+    p.mover.vel.y = 0;
+    p.facing = spawnFacing(sim, spawn);
+    p.combatant.hp = p.combatant.stats.maxHp;
+    p.attack = ATTACK_CYCLE_READY;
+    p.targetId = null;
+    p.lockedTargetId = null;
+    p.lockedFacing = p.facing;
+    p.slots = createAbilitySlots(p.abilities);
+    p.dots.length = 0;
+    p.slowLeft = 0;
+    p.slowFactor = 1;
+    p.alive = true;
+  }
 };
 
 /**

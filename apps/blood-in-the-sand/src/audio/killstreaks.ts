@@ -25,7 +25,8 @@ export interface KillAnnouncement {
   tier: MultiKillTier | null;
 }
 
-/** Max gap between two kills for the chain to keep escalating. */
+/** Max gap between two kills for the chain to keep escalating — measured from the
+ * LAST kill, so it's a rolling window (each kill resets the clock). */
 export const STREAK_WINDOW_MS = 4500;
 
 const tierFor = (count: number): MultiKillTier | null =>

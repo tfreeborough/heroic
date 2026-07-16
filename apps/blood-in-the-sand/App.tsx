@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ABILITY_IDS,
   LOADOUT_ABILITY_COUNT,
@@ -31,6 +32,12 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  */
 const SERVER = process.env.EXPO_PUBLIC_AUTO_HOST ?? DEFAULT_SERVER;
 
+/** The same stored "playing as" the rooms + practice screens use. */
+const KEY_NAME = "bits.name";
+
+/** Dummies on the dev menu's firing range (they share the enemy team's seats). */
+const RANGE_TEAM_SIZE = 2; // 2×2 seats − you = 3 dummies
+
 /** AUTO_START's random hand — dev convenience only, mirrors the bot script. */
 const randomAutoHand = (): AbilityId[] => {
   const pool = [...ABILITY_IDS];
@@ -52,9 +59,19 @@ export default function App() {
   const [, force] = useReducer((x: number) => x + 1, 0);
 
   const endPractice = useCallback(() => {
-    setPractice((p) => {
-      p?.close();
-      return null; // back to the practice lobby (the route stays "practice")
+    // Bot practice returns to its lobby screen (the route stays "practice");
+    // the dev firing range has no front door of its own — leaving lands home.
+    if (practice?.mode === "dummies") setRoute("home");
+    practice?.close();
+    setPractice(null);
+  }, [practice]);
+
+  // The dev menu's firing range: offline sim, you vs a line of respawning
+  // target dummies, reusing the whole practice flow (wizard → GameScreen).
+  const startTargetDummies = useCallback(() => {
+    void AsyncStorage.getItem(KEY_NAME).then((stored) => {
+      setPractice(new PracticeClient(stored?.trim() || "gladiator", RANGE_TEAM_SIZE, "dummies"));
+      setRoute("practice");
     });
   }, []);
 
@@ -143,6 +160,7 @@ export default function App() {
         onPlay={() => setRoute("play")}
         onPractice={() => setRoute("practice")}
         onSettings={() => setRoute("settings")}
+        onTargetDummies={startTargetDummies}
       />
     );
   } else if (route === "settings") {
@@ -150,7 +168,10 @@ export default function App() {
   } else if (route === "practice") {
     // Practice runs the SAME arming wizard as real rooms before the match.
     screen = !practice ? (
-      <PracticeScreen onBack={() => setRoute("home")} onStart={(name) => setPractice(new PracticeClient(name))} />
+      <PracticeScreen
+        onBack={() => setRoute("home")}
+        onStart={(name, teamSize) => setPractice(new PracticeClient(name, teamSize))}
+      />
     ) : practice.phase === "lobby" ? (
       <RoomScreen client={practice} onLeave={endPractice} />
     ) : (

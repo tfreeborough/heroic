@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "loosing an arrow from a bow — a taut bowstring release SNAP and a quick arrow whoosh, dry and punchy, no impact",
+  "prompt": "fleshy impact from an arrow",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 0.5,
+    "promptInfluence": 0.85,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_bow_1_1.mp3"
+  ],
+  "created": "2026-07-16T22:39:25.844Z",
+  "updated": "2026-07-16T22:39:25.844Z"
+}

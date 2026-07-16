@@ -18,11 +18,23 @@ import {
   type VisionSegment,
   type ZoneFile,
 } from "@heroic/core";
-import { ABILITIES, LOADOUT_ABILITY_COUNT, PLAYER_STATS, WEAPONS, type AbilityId, type WeaponId } from "./config";
+import {
+  ABILITIES,
+  ABILITY_IDS,
+  LOADOUT_ABILITY_COUNT,
+  PLAYER_STATS,
+  SPAWN_SPACING,
+  WEAPONS,
+  type AbilityId,
+  type WeaponId,
+} from "./config";
 import {
   createAbilitySlots,
   createArenaState,
   createPlayer,
+  seatedPlayers,
+  teamCounts,
+  teamSizeOf,
   type ArenaPlayer,
   type ArenaState,
   type Team,
@@ -82,9 +94,9 @@ export const deriveArenaZone = (file: ZoneFile): ArenaZone => {
   };
 };
 
-export const createSim = (zoneFile: ZoneFile, seed: number): ArenaSim => {
+export const createSim = (zoneFile: ZoneFile, seed: number, teamSize: number = 1, training = false): ArenaSim => {
   const zone = deriveArenaZone(zoneFile);
-  const state = createArenaState(seed);
+  const state = createArenaState(seed, teamSize * 2, training);
   return {
     state,
     zone,
@@ -98,22 +110,68 @@ export const spawnFacing = (sim: ArenaSim, spawn: Vec2): number =>
   angleTo(spawn, { x: sim.zone.size.x / 2, y: sim.zone.size.y / 2 });
 
 /**
+ * This player's slot within their team: same-team seated players with a lower
+ * id come first. Stable mid-match (seats never move); lobby churn re-ranking
+ * only reshuffles spawn slots, which is cosmetic.
+ */
+export const teamSlotOf = (state: ArenaState, player: ArenaPlayer): number =>
+  seatedPlayers(state).filter((p) => p.team === player.team && p.id < player.id).length;
+
+/**
+ * Where teammate `slot` of `team` stands: a line formation centred on the
+ * team's authored anchor, perpendicular to the anchor→arena-centre direction —
+ * shoulder to shoulder, facing the enemy, on any map, with zero map edits.
+ */
+export const spawnSlotPos = (sim: ArenaSim, team: Team, slot: number): Vec2 => {
+  const anchor = sim.zone.spawns[team - 1]!;
+  const teamSize = teamSizeOf(sim.state);
+  const perp = spawnFacing(sim, anchor) + Math.PI / 2;
+  const offset = (slot - (teamSize - 1) / 2) * SPAWN_SPACING;
+  return { x: anchor.x + Math.cos(perp) * offset, y: anchor.y + Math.sin(perp) * offset };
+};
+
+/**
  * Seat a new player in the first free seat (lobby only — mid-match the seats
  * are the match roster). Returns null when no seat is free or a match is on.
- * Seat index = id = team − 1, stable until the seat is freed.
+ * The team is RANDOM but balanced: join the smaller side, coin-flip a tie
+ * (from the sim rng — the draw bumps rngDraws, so seed + join order is still
+ * fully deterministic). With 2×N seats this can never overfill a side, and
+ * the first two joiners always land on opposite teams. `forcedTeam` skips all
+ * of that (no rng draw) — dev tooling that must control the line-up (training
+ * mode seats the human on 1 and its dummies on 2).
  */
-export const addPlayer = (sim: ArenaSim, name: string): ArenaPlayer | null => {
+export const addPlayer = (sim: ArenaSim, name: string, forcedTeam?: Team): ArenaPlayer | null => {
   if (sim.state.round.phase !== "lobby") return null;
   const id = sim.state.players.indexOf(null);
   if (id === -1) return null;
-  const team = (id + 1) as Team;
-  const spawn = sim.zone.spawns[id]!;
+  const [n1, n2] = teamCounts(sim.state);
+  const team: Team = forcedTeam ?? (n1 < n2 ? 1 : n2 < n1 ? 2 : sim.rng.next() < 0.5 ? 1 : 2);
+  // Lobby slot = "next on my side"; resetForRound re-derives slots by id order.
+  const spawn = spawnSlotPos(sim, team, team === 1 ? n1 : n2);
   const player = createPlayer(id, name, team, spawn, spawnFacing(sim, spawn));
   sim.state.players[id] = player;
   // A join cancels a running arming countdown — the newcomer needs to arm
   // (pvp-loadout-flow.md); it restarts fresh once every seat is armed again.
+  // It also voids a host force-start: the party changed under the override.
   sim.state.round.timer = 0;
+  sim.state.round.forced = false;
   return player;
+};
+
+/**
+ * Seat a target dummy (training mode — the dev menu's firing range): team 2,
+ * armed on the spot so the arming gate treats it like any ready player. What
+ * makes it a DUMMY is the flag: step.ts skips its targeting and attack cycle
+ * (it never moves either — no one feeds it input), and the training pass
+ * respawns it on its spawn slot after death. The loadout is cosmetic.
+ */
+export const addDummy = (sim: ArenaSim, name: string): ArenaPlayer | null => {
+  const dummy = addPlayer(sim, name, 2);
+  if (!dummy) return null;
+  dummy.dummy = true;
+  setPlayerWeapon(sim, dummy.id, "blade");
+  setPlayerAbilities(sim, dummy.id, ABILITY_IDS.slice(0, LOADOUT_ABILITY_COUNT));
+  return dummy;
 };
 
 /**
@@ -155,7 +213,9 @@ export const removePlayer = (sim: ArenaSim, id: number): boolean => {
   sim.state.players[id] = null;
   // A leaver cancels a running arming countdown, same as a join — the party
   // changed; the countdown restarts fresh if everyone left is still armed.
+  // A pending host force-start is likewise voided.
   sim.state.round.timer = 0;
+  sim.state.round.forced = false;
   return true;
 };
 

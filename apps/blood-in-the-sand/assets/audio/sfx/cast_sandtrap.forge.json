@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "burying and arming a spiked powder charge in sand — a muffled shuffle then a metal click-latch",
+  "prompt": "Close, muffled sand-sweep and gritty hands dragging—dry, sun-baked grains shifting; a brief hollow scoop into compacted sand; then a tense, tactile metallic click-latch and short resonant spike ratchet—short, weighty, grounded, 1.2–1.6s.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_sandtrap_1.mp3"
+  ],
+  "created": "2026-07-16T13:37:01.649Z",
+  "updated": "2026-07-16T13:37:01.649Z"
+}

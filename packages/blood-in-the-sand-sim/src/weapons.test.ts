@@ -34,8 +34,8 @@ const makeFight = (w0: WeaponId, w1: WeaponId, seed = 0xb100d): ArenaSim => {
   setPlayerWeapon(sim, 0, w0);
   setPlayerWeapon(sim, 1, w1);
   // Dash in slot 0 so the i-frame forcings below have a slot to poke.
-  setPlayerAbilities(sim, 0, ["dash", "tremor", "sandstorm"]);
-  setPlayerAbilities(sim, 1, ["dash", "tremor", "sandstorm"]);
+  setPlayerAbilities(sim, 0, ["dash", "tremor"]);
+  setPlayerAbilities(sim, 1, ["dash", "tremor"]);
   sim.state.round.phase = "active";
   return sim;
 };

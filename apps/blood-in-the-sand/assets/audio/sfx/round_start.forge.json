@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a round beginning in the arena — a short low horn or gong swell with a dusty air",
+  "prompt": "Close-mic'd low bronze horn/gong swell with dusty air: a sun-baked metallic rumble rising from a tight whisper to a weighty, gritty peak at 0.6s, then a dusty, sand-laden decay into a 1s hollow thud.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "round_start_1.mp3"
+  ],
+  "created": "2026-07-16T13:56:56.584Z",
+  "updated": "2026-07-16T13:56:56.584Z"
+}

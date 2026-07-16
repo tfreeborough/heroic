@@ -31,7 +31,7 @@ const makeZone = (): ZoneFile => ({
   ],
 });
 
-const HAND: AbilityId[] = ["dash", "tremor", "war-drums"];
+const HAND: AbilityId[] = ["dash", "tremor"];
 
 /** Alice (armed, team 1) + Bob (UNARMED, team 2), in the lobby. */
 const makeLobby = (): ArenaSim => {
@@ -45,7 +45,7 @@ const makeLobby = (): ArenaSim => {
 
 const armBob = (sim: ArenaSim): void => {
   setPlayerWeapon(sim, 1, "hammer");
-  setPlayerAbilities(sim, 1, ["ironhide", "harpoon", "sandstorm"]);
+  setPlayerAbilities(sim, 1, ["ironhide", "harpoon"]);
 };
 
 const run = (sim: ArenaSim, ticks: number) => {
@@ -115,7 +115,7 @@ describe("the arming countdown", () => {
     run(sim, seconds(3));
     const before = sim.state.round.timer;
     setPlayerWeapon(sim, 0, "bow"); // last-second swap
-    setPlayerAbilities(sim, 0, ["dash", "sandtrap", "blood-font"]);
+    setPlayerAbilities(sim, 0, ["dash", "sandtrap"]);
     run(sim, 2);
     expect(sim.state.round.timer).toBeLessThan(before); // still counting
     run(sim, seconds(LOBBY_COUNTDOWN_SECONDS));
@@ -146,6 +146,80 @@ describe("force-start", () => {
     const solo = createSim(makeZone(), 1);
     addPlayer(solo, "alone");
     expect(forceStartMatch(solo)).toBe(false);
+  });
+});
+
+describe("team sizes (the full-room gate)", () => {
+  const WEAPONS_BY_SEAT = ["blade", "hammer", "bow", "staff"] as const;
+  const HANDS_BY_SEAT: AbilityId[][] = [
+    ["dash", "tremor"],
+    ["ironhide", "harpoon"],
+    ["dash", "sandtrap"],
+    ["war-drums", "blood-font"],
+  ];
+  const arm = (sim: ArenaSim, id: number): void => {
+    setPlayerWeapon(sim, id, WEAPONS_BY_SEAT[id % 4]!);
+    setPlayerAbilities(sim, id, HANDS_BY_SEAT[id % 4]!);
+  };
+
+  /** A 2v2 lobby with `count` seated players, everyone armed. */
+  const make2v2 = (count: number): ArenaSim => {
+    const sim = createSim(makeZone(), 0xb100d, 2);
+    for (let i = 0; i < count; i++) {
+      addPlayer(sim, `p${i}`);
+      arm(sim, i);
+    }
+    return sim;
+  };
+
+  test("an armed-but-partial room never counts down", () => {
+    const sim = make2v2(3);
+    expect(armingComplete(sim)).toBe(false);
+    run(sim, seconds(LOBBY_COUNTDOWN_SECONDS + 5));
+    expect(phaseOf(sim)).toBe("lobby");
+    expect(sim.state.round.timer).toBe(0);
+
+    addPlayer(sim, "p3"); // the last seat fills…
+    arm(sim, 3); // …and arms
+    run(sim, 2);
+    expect(sim.state.round.timer).toBeGreaterThan(0);
+    run(sim, seconds(LOBBY_COUNTDOWN_SECONDS));
+    expect(phaseOf(sim)).toBe("countdown");
+  });
+
+  test("force-start launches a partial room through the same countdown", () => {
+    const sim = make2v2(3);
+    expect(forceStartMatch(sim)).toBe(true);
+    expect(sim.state.round.forced).toBe(true);
+    expect(phaseOf(sim)).toBe("lobby"); // never instant
+    run(sim, 2);
+    expect(sim.state.round.timer).toBeGreaterThan(0);
+    run(sim, seconds(LOBBY_COUNTDOWN_SECONDS));
+    expect(phaseOf(sim)).toBe("countdown");
+    expect(sim.state.round.forced).toBe(false); // spent at match start
+  });
+
+  test("a join mid-forced-countdown voids the override", () => {
+    const sim = make2v2(3);
+    forceStartMatch(sim);
+    run(sim, seconds(3)); // mid-countdown
+    expect(sim.state.round.timer).toBeGreaterThan(0);
+    addPlayer(sim, "late"); // the party changed — override stale
+    expect(sim.state.round.forced).toBe(false);
+    expect(sim.state.round.timer).toBe(0);
+    run(sim, seconds(LOBBY_COUNTDOWN_SECONDS + 2));
+    expect(phaseOf(sim)).toBe("lobby"); // the newcomer still has to arm
+  });
+
+  test("force-start is rejected when every body is on one team", () => {
+    const sim = make2v2(4); // full: always 2 per team
+    // Countdown is running (full + armed); strip team 2 entirely.
+    for (const p of [...sim.state.players]) {
+      if (p && p.team === 2) removePlayer(sim, p.id);
+    }
+    expect(forceStartMatch(sim)).toBe(false); // an instant walkover is no match
+    run(sim, seconds(LOBBY_COUNTDOWN_SECONDS + 2));
+    expect(phaseOf(sim)).toBe("lobby");
   });
 });
 

@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a polished shield snapping up to guard — a bright metallic ring shimmer, defensive",
+  "prompt": "Close-mic'd beaten steel shield slammed upward: heavy wooden core impact, bright metallic ring shimmer, quick resonant shimmer peak, short gritty sustained vibration, sand-dusted scrape tail fading in 0.8–1.2s — weighty, sun-baked defensive snap",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_mirror_guard_1.mp3"
+  ],
+  "created": "2026-07-16T13:39:13.072Z",
+  "updated": "2026-07-16T13:39:13.072Z"
+}

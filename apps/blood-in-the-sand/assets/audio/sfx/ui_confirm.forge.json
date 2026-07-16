@@ -1,0 +1,19 @@
+{
+  "type": "sfx-bits",
+  "subject": "a confident UI confirm — a firm metallic clack-thunk with a short bright ring, committing",
+  "prompt": "Close-mic'd metallic clack-thunk of sun-baked iron meeting brushed bronze, short bright ring layered with dusty impact tail; starts sharp, peaks at 0.15s, quick 0.45s decay into gritty sand-scrape — total ~0.6s, weighty, resolute.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 0.6,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "ui_confirm_1.mp3",
+    "ui_confirm_2.mp3"
+  ],
+  "created": "2026-07-16T21:12:41.985Z",
+  "updated": "2026-07-16T21:55:29.522Z"
+}

@@ -21,6 +21,7 @@ import {
   generateRoomCode,
   sanitizePasscode,
   sanitizeRoomName,
+  sanitizeTeamSize,
   shouldCollect,
   type ClientMsg,
   type RoomListing,
@@ -148,6 +149,7 @@ export class RoomManager {
     }
     const playerName = sanitizeName(msg.playerName);
     const code = generateRoomCode(new Set(this.rooms.keys()), Math.random);
+    const teamSize = sanitizeTeamSize(msg.teamSize);
     const room = new Room(
       this.server!,
       {
@@ -157,11 +159,14 @@ export class RoomManager {
         hostId: 0, // the creator takes seat 0 below
       },
       Date.now() >>> 0,
+      teamSize,
       performance.now(),
     );
     this.rooms.set(code, room);
     room.seat(ws, playerName, performance.now());
-    console.log(`⚔ room ${code} "${room.meta.name}" created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`);
+    console.log(
+      `⚔ room ${code} "${room.meta.name}" (${teamSize}v${teamSize}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
+    );
   }
 
   private onJoin(ws: Socket, msg: Extract<ClientMsg, { t: "joinRoom" }>): void {

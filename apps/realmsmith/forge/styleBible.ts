@@ -100,9 +100,11 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   // ── Combat ────────────────────────────────────────────────────────────────
   hit_generic: "a short, meaty melee impact — a weapon connecting with a body, dull thud with a wet edge",
   hit_blade: "a fast blade slash biting into flesh — a sharp shnk with a wet cut and a spatter tail",
-  hit_bow: "an arrow thumping hard into a body — a taut string release snap then a deep meaty thwack",
-  hit_staff: "a magic orb bursting on impact — a dry arcane crackle-thump with a brief low pressure whump",
+  hit_bow: "an arrow thudding hard into a body — a deep meaty thwack with a short flesh impact, no bowstring",
+  hit_staff: "a magic orb bursting on a body — a dry arcane crackle-thump with a brief low pressure whump",
   hit_hammer: "a massive warhammer slam into a body — a huge blunt crunch with a bassy shockwave",
+  fire_bow: "loosing an arrow from a bow — a taut bowstring release SNAP and a quick arrow whoosh, dry and punchy, no impact",
+  fire_staff: "casting a magic orb from a staff — a short arcane whoosh-swell with a soft energy hum as it launches, no impact",
   player_hurt: "a single grunt of pain from a gladiator taking a blow — short, breathy, no words",
   death: "a gladiator's final choked gasp collapsing into the sand — a short wet fall, no scream",
   // ── Abilities ─────────────────────────────────────────────────────────────

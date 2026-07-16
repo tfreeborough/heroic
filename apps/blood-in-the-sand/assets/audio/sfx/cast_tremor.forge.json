@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a heavy stomp shattering the ground — a deep bassy boom with cracking earth and a dust rumble",
+  "prompt": "Close-mic'd colossal stomp: bone-deep bass boom, immediate sharp stone-crack snare, rolling dust rumble and gritty sand hiss, metallic rock fragments clinking, two-second impact — hard peak at 0.3s then gritty decay into low distant aftershock.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_tremor_1.mp3"
+  ],
+  "created": "2026-07-16T13:37:42.943Z",
+  "updated": "2026-07-16T13:37:42.943Z"
+}

@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a neutral round-over sting — a flat gong tap with an ambiguous crowd hum",
+  "prompt": "A short arabian tune to signify mystery and a state of non resolvement",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 3,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "round_draw_1.mp3"
+  ],
+  "created": "2026-07-16T21:03:31.484Z",
+  "updated": "2026-07-16T21:03:31.484Z"
+}

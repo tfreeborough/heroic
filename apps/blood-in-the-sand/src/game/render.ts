@@ -243,6 +243,11 @@ export interface ArenaRenderInput {
   myId: number | null;
   screenW: number;
   screenH: number;
+  /** Safe-area padding: the OS notch (top) and home-indicator / system tray
+   *  (bottom). The camera aims at the band between them so the followed player
+   *  never sits under the tray; the canvas still fills edge to edge. */
+  insetTop?: number;
+  insetBottom?: number;
   fx: readonly FxItem[];
   /** Blood decals (birth-ordered), faded per-frame via decalAlpha. */
   blood: readonly BloodDecal[];
@@ -495,13 +500,41 @@ const drawFx = (
         fill,
       );
       fill.setAlphaf(1);
+    } else if (f.kind === "ring" && f.big) {
+      // The sandtrap detonation: a bombastic powder blast sized to read its
+      // full kill radius (the trigger ring is small; the blast is 2× wider, so
+      // the boom has to SHOW that). Four layers, all fading with life so the
+      // whole thing lingers then settles rather than snapping off:
+      const edge = SANDTRAP.blastRadius;
+      // 1) Settling dust — a dim warm disc out at the blast edge, the slow tail
+      //    that hangs after the flash is gone.
+      fill.setColor(C_MINE_GLINT);
+      fill.setAlphaf(0.18 * f.life);
+      canvas.drawCircle(f.x, f.y, 30 + (1 - f.life) * (edge - 30), fill);
+      // 2) Core flash — a white bloom that pops big and dies in the first half.
+      const flash = Math.max(0, (f.life - 0.5) / 0.5);
+      fill.setColor(C_FX_NUM);
+      fill.setAlphaf(0.55 * flash);
+      canvas.drawCircle(f.x, f.y, 26 + (1 - flash) * 80, fill);
+      // 3) Shockwave — a hard bright ring shoved out to the exact blast rim
+      //    (ease-out so it snaps then settles on the edge).
+      const wave = 1 - f.life * f.life * f.life;
+      stroke.setColor(C_FX_NUM);
+      stroke.setAlphaf(0.9 * f.life);
+      stroke.setStrokeWidth(3 + 6 * f.life);
+      canvas.drawCircle(f.x, f.y, 30 + wave * (edge - 30), stroke);
+      // 4) Echo — a warmer second front chasing the shockwave out.
+      const echo = 1 - f.life * f.life;
+      stroke.setColor(C_MINE_GLINT);
+      stroke.setAlphaf(0.7 * f.life);
+      stroke.setStrokeWidth(2 + 4 * f.life);
+      canvas.drawCircle(f.x, f.y, 20 + echo * (edge - 20), stroke);
+      stroke.setAlphaf(1);
+      fill.setAlphaf(1);
     } else if (f.kind === "ring") {
       stroke.setColor(C_DASH_RING);
       stroke.setStrokeWidth(2 + 2 * f.life);
-      // Big = the sandtrap detonation: the ring expands out to the blast edge.
-      const base = f.big ? 30 : 20;
-      const grow = f.big ? SANDTRAP.blastRadius - base : 26;
-      canvas.drawCircle(f.x, f.y, base + (1 - f.life) * grow, stroke);
+      canvas.drawCircle(f.x, f.y, 20 + (1 - f.life) * 26, stroke);
     } else if (f.kind === "line" && f.x2 !== undefined && f.y2 !== undefined) {
       // The harpoon chain flash: one taut line, a hook at the far end, chain
       // dots along it — gone in a blink, like the throw itself.
@@ -829,6 +862,19 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
   createPicture((canvas) => {
     const { view, config, myId, screenW, screenH } = r;
 
+    // The camera aims at the SAFE viewport — the band between the top notch and
+    // the bottom system tray — not the raw canvas. Baking against this rect
+    // keeps the followed player in the visible middle and stops the world's
+    // bottom edge at the tray, never under it (2026-07-16). The canvas still
+    // fills edge to edge; the strip behind the tray is just C_VOID (= the app
+    // background), so no seam shows.
+    const padTop = r.insetTop ?? 0;
+    const padBottom = r.insetBottom ?? 0;
+    const viewW = screenW;
+    const viewH = Math.max(1, screenH - padTop - padBottom);
+    const vcx = viewW / 2;
+    const vcy = padTop + viewH / 2;
+
     // Camera: follow our player; spectators get the whole arena fitted.
     let zoom: number;
     let cx: number;
@@ -836,15 +882,15 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     const me = myId === null ? undefined : view.players.find((p) => p.id === myId);
     if (me) {
       zoom = FOLLOW_ZOOM;
-      const halfW = screenW / 2 / zoom;
-      const halfH = screenH / 2 / zoom;
+      const halfW = viewW / 2 / zoom;
+      const halfH = viewH / 2 / zoom;
       cx = Math.min(Math.max(me.x, halfW), WORLD_W - halfW);
       cy = Math.min(Math.max(me.y, halfH), WORLD_H - halfH);
       // A viewport axis larger than the world: just centre it.
       if (halfW * 2 >= WORLD_W) cx = WORLD_W / 2;
       if (halfH * 2 >= WORLD_H) cy = WORLD_H / 2;
     } else {
-      zoom = Math.min(screenW / WORLD_W, screenH / WORLD_H);
+      zoom = Math.min(viewW / WORLD_W, viewH / WORLD_H);
       cx = WORLD_W / 2;
       cy = WORLD_H / 2;
     }
@@ -853,7 +899,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     canvas.drawRect(Skia.XYWHRect(0, 0, screenW, screenH), fill);
 
     canvas.save();
-    canvas.translate(screenW / 2 - cx * zoom, screenH / 2 - cy * zoom);
+    canvas.translate(vcx - cx * zoom, vcy - cy * zoom);
     canvas.scale(zoom, zoom);
 
     // Floor: the baked world image when the atlas is ready, else the flat sand
@@ -871,10 +917,14 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     }
 
     // Ground scars: cracks first, then blood — fresh pools cover old fractures.
-    const halfW = screenW / 2 / zoom;
-    const halfH = screenH / 2 / zoom;
-    drawCracks(canvas, r.cracks, r.nowMs, cx - halfW, cy - halfH, cx + halfW, cy + halfH);
-    drawBlood(canvas, r.blood, r.nowMs, cx - halfW, cy - halfH, cx + halfW, cy + halfH);
+    // Cull to the FULL canvas rect (the camera anchor is off-centre now, so the
+    // visible span isn't symmetric about cx/cy — derive both edges from it).
+    const cullMinX = cx - vcx / zoom;
+    const cullMaxX = cx + (screenW - vcx) / zoom;
+    const cullMinY = cy - vcy / zoom;
+    const cullMaxY = cy + (screenH - vcy) / zoom;
+    drawCracks(canvas, r.cracks, r.nowMs, cullMinX, cullMinY, cullMaxX, cullMaxY);
+    drawBlood(canvas, r.blood, r.nowMs, cullMinX, cullMinY, cullMaxX, cullMaxY);
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:

@@ -6,7 +6,7 @@
  * events — they derive from snapshot fields (round.timer, attack phase +
  * lockedFacing).
  */
-import type { AbilityId } from "./config";
+import type { AbilityId, WeaponId } from "./config";
 import type { Team } from "./state";
 
 export type ArenaEvent =
@@ -24,6 +24,9 @@ export type ArenaEvent =
       y: number;
     }
   | { type: "death"; playerId: number }
+  /** A ranged weapon loosed a projectile — the release sound (bow twang / staff
+   * whoosh), fired on every shot whether or not it ever connects. */
+  | { type: "shoot"; ownerId: number; weapon: WeaponId; x: number; y: number }
   /** An ability slot fired — drives per-ability cast SFX/haptics. */
   | { type: "cast"; playerId: number; ability: AbilityId }
   /** The harpoon's chain snapped out — endpoints for the line flash (drawn

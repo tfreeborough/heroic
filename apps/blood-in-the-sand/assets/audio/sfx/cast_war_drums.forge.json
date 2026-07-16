@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "war drums starting a driving rhythm — deep taut drum hits with a rallying swell",
+  "prompt": "Close-mic'd sunbaked war drums: deep taut leather hits, sand-grit thumps and low chesty resonance, rolling into a two-second driving rhythm crescendo with a short gritty swell, then a firm dust-settling cut — weighty, brutal, rallying.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 4,
+    "promptInfluence": 0.4,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_war_drums_1.mp3"
+  ],
+  "created": "2026-07-16T13:43:24.885Z",
+  "updated": "2026-07-16T13:43:24.885Z"
+}

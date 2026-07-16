@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a fast blade slash biting into flesh — a sharp shnk with a wet cut and a spatter tail",
+  "prompt": "Close, metallic blade bite into soft flesh: bright steel rasp then instant wet flesh tear, sharp shnk impact, short ragged meat-slice whoosh, immediate juicy wet spray and gritty sand-spatter tail; tight close-mic'd, brief — ~0.5–0.8s.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_blade_1.mp3"
+  ],
+  "created": "2026-07-16T13:31:18.906Z",
+  "updated": "2026-07-16T13:31:18.906Z"
+}

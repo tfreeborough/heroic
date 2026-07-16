@@ -85,6 +85,11 @@ export const buildSoundSet = (): SoundSetEntry[] => {
   const weaponHits = WEAPON_IDS.map((id) =>
     entry(`hit_${id}`, `${WEAPONS[id].name} — impact`, "combat"),
   );
+  // Ranged weapons (those that loose a projectile) also get a RELEASE bank —
+  // the bow twang / staff whoosh, distinct from the impact thud.
+  const weaponFires = WEAPON_IDS.filter((id) => WEAPONS[id].projectile).map((id) =>
+    entry(`fire_${id}`, `${WEAPONS[id].name} — release`, "combat"),
+  );
   const casts = ABILITY_IDS.map((id) =>
     entry(`cast_${snake(id)}`, `${ABILITIES[id].name} — cast`, "ability"),
   );
@@ -93,7 +98,7 @@ export const buildSoundSet = (): SoundSetEntry[] => {
   );
   const statics = STATIC.map((s) => entry(s.id, s.label, s.category));
   // Interleave so combat rows (weapon hits + static combat) sit together, etc.
-  const all = [...weaponHits, ...casts, ...detonates, ...statics];
+  const all = [...weaponHits, ...weaponFires, ...casts, ...detonates, ...statics];
   const order: SoundCategory[] = ["combat", "ability", "flow", "ui"];
   return order.flatMap((cat) => all.filter((e) => e.category === cat));
 };

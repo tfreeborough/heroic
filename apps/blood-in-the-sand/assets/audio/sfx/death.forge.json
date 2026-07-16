@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a low deep funeral bell",
+  "prompt": "low, cavernous bronze bell struck by heavy mallet, thick metallic impact with long dusty resonance; start: slow heavy strike, peak: booming mid-low harmonic clatter, decay: gritty sand-laden tail folding into muted subterranean rumble, three- to five-second sustained toll.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "death_1.mp3"
+  ],
+  "created": "2026-07-16T13:36:25.500Z",
+  "updated": "2026-07-16T13:36:25.500Z"
+}

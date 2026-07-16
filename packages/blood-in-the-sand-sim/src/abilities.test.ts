@@ -54,8 +54,8 @@ const makeFight = (opts: FightOpts = {}): ArenaSim => {
   addPlayer(sim, "bob");
   setPlayerWeapon(sim, 0, opts.w0 ?? "blade");
   setPlayerWeapon(sim, 1, opts.w1 ?? "blade");
-  setPlayerAbilities(sim, 0, opts.a0 ?? ["dash", "tremor", "sandstorm"]);
-  setPlayerAbilities(sim, 1, opts.a1 ?? ["dash", "tremor", "sandstorm"]);
+  setPlayerAbilities(sim, 0, opts.a0 ?? ["dash", "tremor"]);
+  setPlayerAbilities(sim, 1, opts.a1 ?? ["dash", "tremor"]);
   sim.state.round.phase = "active";
   return sim;
 };
@@ -129,7 +129,7 @@ describe("tremor", () => {
 
 describe("sandtrap", () => {
   test("arms over 2s, then detonates on the first enemy in trigger range", () => {
-    const sim = makeFight({ a0: ["sandtrap", "dash", "tremor"] });
+    const sim = makeFight({ a0: ["sandtrap", "dash"] });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 150, y: 400 };
@@ -157,7 +157,7 @@ describe("sandtrap", () => {
   });
 
   test("one live mine per player — replanting fizzles the old", () => {
-    const sim = makeFight({ a0: ["sandtrap", "dash", "tremor"] });
+    const sim = makeFight({ a0: ["sandtrap", "dash"] });
     sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
     sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
     run(sim, 1, () => press(sim, 0, "sandtrap"));
@@ -173,7 +173,7 @@ describe("sandtrap", () => {
 
 describe("harpoon", () => {
   test("no mark in chain range, no cast — the press is ignored, cooldown keeps", () => {
-    const sim = makeFight({ a0: ["harpoon", "dash", "tremor"] });
+    const sim = makeFight({ a0: ["harpoon", "dash"] });
     // Corner to corner: ~611px apart — past even the harpoon's own 550 reach.
     sim.state.players[0]!.mover.pos = { x: 40, y: 40 };
     sim.state.players[1]!.mover.pos = { x: 472, y: 472 };
@@ -183,7 +183,7 @@ describe("harpoon", () => {
   });
 
   test("acquires its OWN mark past the weapon's lock-on distance", () => {
-    const sim = makeFight({ a0: ["harpoon", "dash", "tremor"] }); // blade: 250 engagement
+    const sim = makeFight({ a0: ["harpoon", "dash"] }); // blade: 250 engagement
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 60, y: 400 };
@@ -197,7 +197,7 @@ describe("harpoon", () => {
   });
 
   test("lands instantly, then REELS the mark in while the caster stands rooted", () => {
-    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash"] });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 100, y: 400 };
@@ -233,7 +233,7 @@ describe("harpoon", () => {
   });
 
   test("the victim's dash mid-reel snaps the chain", () => {
-    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash"] });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 60, y: 400 };
@@ -252,7 +252,7 @@ describe("harpoon", () => {
   });
 
   test("dash i-frames at the landing moment dodge it (the chain still whips)", () => {
-    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash"] });
     const bob = sim.state.players[1]!;
     sim.state.players[0]!.mover.pos = { x: 100, y: 400 };
     bob.mover.pos = { x: 300, y: 400 };
@@ -265,7 +265,7 @@ describe("harpoon", () => {
   });
 
   test("Ironhide blocks the pull (and blunts the sting)", () => {
-    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash", "tremor"], a1: ["ironhide", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", w1: "bow", a0: ["harpoon", "dash"], a1: ["ironhide", "dash"] });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 100, y: 400 };
@@ -280,11 +280,11 @@ describe("harpoon", () => {
     expect(bob.mover.pos.x).toBeCloseTo(300, 0); // never moved
   });
 
-  test("Mirror Guard reflects the chain — the CASTER eats the barb and the drag", () => {
+  test("Mirror Guard reflects the chain — the CASTER eats the barb and is reeled in (gradually)", () => {
     const sim = makeFight({
       w0: "bow", w1: "bow",
-      a0: ["harpoon", "dash", "tremor"],
-      a1: ["mirror-guard", "dash", "tremor"],
+      a0: ["harpoon", "dash"],
+      a1: ["mirror-guard", "dash"],
     });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
@@ -298,15 +298,25 @@ describe("harpoon", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0]!.event.attackerId).toBe(1); // the guard gets the credit
     expect(hits[0]!.event.targetId).toBe(0);
+
+    // The reflect is a slow haul, not a teleport: a few ticks in, the caster has
+    // started sliding toward the guard but is nowhere near planted yet.
     expect(bob.mover.pos.x).toBeCloseTo(300, 0); // the guard never moves…
-    const gap = Math.hypot(alice.mover.pos.x - bob.mover.pos.x, alice.mover.pos.y - bob.mover.pos.y);
-    expect(gap).toBeLessThan(HARPOON.pullGap + 15); // …the caster gets yanked in
+    expect(alice.mover.pos.x).toBeGreaterThan(105); // …the caster has begun moving…
+    const gapMid = Math.hypot(alice.mover.pos.x - bob.mover.pos.x, alice.mover.pos.y - bob.mover.pos.y);
+    expect(gapMid).toBeGreaterThan(HARPOON.pullGap + 30); // …but is still in transit, not snapped in
+
+    // Let the reel run its course — the caster is hauled all the way to the guard.
+    run(sim, 20);
+    expect(bob.mover.pos.x).toBeCloseTo(300, 0); // guard stayed free but idle → still put
+    const gapEnd = Math.hypot(alice.mover.pos.x - bob.mover.pos.x, alice.mover.pos.y - bob.mover.pos.y);
+    expect(gapEnd).toBeLessThan(HARPOON.pullGap + 15); // planted in the guard's face
   });
 });
 
 describe("mirror guard", () => {
   test("a shot that hits the guard flips ownership and returns to its shooter", () => {
-    const sim = makeFight({ w0: "bow", w1: "bow" , a1: ["mirror-guard", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", w1: "bow" , a1: ["mirror-guard", "dash"] });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 100, y: 400 };
@@ -345,7 +355,7 @@ describe("mirror guard", () => {
 describe("ironhide", () => {
   test("cuts melee damage on the exact same rng roll", () => {
     const setup = (iron: boolean): number => {
-      const sim = makeFight({ a1: iron ? ["ironhide", "dash", "tremor"] : undefined });
+      const sim = makeFight({ a1: iron ? ["ironhide", "dash"] : undefined });
       sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
       sim.state.players[1]!.mover.pos = { x: 260, y: 256 };
       slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999; // one-sided
@@ -364,7 +374,7 @@ describe("ironhide", () => {
   });
 
   test("immune to the hammer's slow; self-slowed while it lasts", () => {
-    const sim = makeFight({ w0: "hammer", a1: ["ironhide", "dash", "tremor"] });
+    const sim = makeFight({ w0: "hammer", a1: ["ironhide", "dash"] });
     const bob = sim.state.players[1]!;
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
     bob.mover.pos = { x: 300, y: 256 };
@@ -388,7 +398,7 @@ describe("ironhide", () => {
   });
 
   test("shrugs off tremor's knockback (but still takes reduced damage)", () => {
-    const sim = makeFight({ a1: ["ironhide", "dash", "tremor"] });
+    const sim = makeFight({ a1: ["ironhide", "dash"] });
     const bob = sim.state.players[1]!;
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
     bob.mover.pos = { x: 280, y: 256 };
@@ -401,7 +411,7 @@ describe("ironhide", () => {
 
 describe("straw man", () => {
   test("the decoy joins the target pool, soaks hits, and breaks", () => {
-    const sim = makeFight({ a1: ["straw-man", "dash", "tremor"] });
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
     const alice = sim.state.players[0]!;
     const bob = sim.state.players[1]!;
     alice.mover.pos = { x: 200, y: 400 };
@@ -422,7 +432,7 @@ describe("straw man", () => {
   });
 
   test("an unmolested dummy times out on its own", () => {
-    const sim = makeFight({ a1: ["straw-man", "dash", "tremor"] });
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
     sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
     sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
     run(sim, 1, () => press(sim, 1, "straw-man"));
@@ -434,7 +444,7 @@ describe("straw man", () => {
 
 describe("war drums", () => {
   test("the beat raises the drummer's own speed cap while it plays", () => {
-    const sim = makeFight({ a0: ["war-drums", "dash", "tremor"] });
+    const sim = makeFight({ a0: ["war-drums", "dash"] });
     const alice = sim.state.players[0]!;
     alice.mover.pos = { x: 96, y: 400 };
     sim.state.players[1]!.mover.pos = { x: 416, y: 96 };
@@ -448,7 +458,7 @@ describe("war drums", () => {
 
 describe("blood font", () => {
   test("heals allies standing in the circle on the fixed tick, capped at max", () => {
-    const sim = makeFight({ a0: ["blood-font", "dash", "tremor"] });
+    const sim = makeFight({ a0: ["blood-font", "dash"] });
     const alice = sim.state.players[0]!;
     alice.mover.pos = { x: 96, y: 400 };
     sim.state.players[1]!.mover.pos = { x: 416, y: 96 }; // enemy far away
@@ -464,7 +474,7 @@ describe("blood font", () => {
   });
 
   test("never overheals — the last tick tops up exactly to max", () => {
-    const sim = makeFight({ a0: ["blood-font", "dash", "tremor"] });
+    const sim = makeFight({ a0: ["blood-font", "dash"] });
     const alice = sim.state.players[0]!;
     alice.mover.pos = { x: 96, y: 400 };
     sim.state.players[1]!.mover.pos = { x: 416, y: 96 };
@@ -480,7 +490,7 @@ describe("blood font", () => {
 
 describe("sandstorm", () => {
   test("the cloud blinds BOTH ways: no locks on anyone inside, none FROM inside", () => {
-    const sim = makeFight({ w0: "bow", w1: "bow", a1: ["sandstorm", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", w1: "bow", a1: ["sandstorm", "dash"] });
     sim.state.players[0]!.mover.pos = { x: 100, y: 400 };
     sim.state.players[1]!.mover.pos = { x: 350, y: 400 }; // inside bow engagement
     run(sim, 2); // both acquire first
@@ -492,7 +502,7 @@ describe("sandstorm", () => {
   });
 
   test("a mid-windup lock on a smoked mark breaks", () => {
-    const sim = makeFight({ w0: "bow", a1: ["sandstorm", "dash", "tremor"] });
+    const sim = makeFight({ w0: "bow", a1: ["sandstorm", "dash"] });
     const alice = sim.state.players[0]!;
     alice.mover.pos = { x: 100, y: 400 };
     sim.state.players[1]!.mover.pos = { x: 350, y: 400 };
@@ -533,7 +543,7 @@ describe("slots and rounds", () => {
   });
 
   test("state with deployables and slots survives a JSON round-trip", () => {
-    const sim = makeFight({ a0: ["sandtrap", "blood-font", "sandstorm"] });
+    const sim = makeFight({ a0: ["sandtrap", "blood-font"] });
     sim.state.players[0]!.mover.pos = { x: 96, y: 400 };
     sim.state.players[1]!.mover.pos = { x: 416, y: 96 };
     run(sim, 1, () => press(sim, 0, "sandtrap"));

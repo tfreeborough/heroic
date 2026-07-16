@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a short, meaty melee impact — a weapon connecting with a body",
+  "prompt": "Close-mic'd meat-on-meat impact: heavy iron blade crashing into sun-baked ribcage, wet bone crack layered with gritty sand slap and low guttural grunt; quick one-second hit — sharp initial bite, brief resonant thud, dusty decay.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_generic_1.mp3"
+  ],
+  "created": "2026-07-16T13:34:56.022Z",
+  "updated": "2026-07-16T13:34:56.022Z"
+}

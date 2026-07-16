@@ -37,6 +37,31 @@ export interface BotDecision {
 
 const IDLE: BotDecision = { sx: 0, sy: 0, dash: false };
 
+/**
+ * Target selection for the single-duel brain below: the nearest living
+ * opponent. Kept OUT of botThink (which stays a pure 1-target duellist) so
+ * every caller — practice mode, the headless server bot — shares one rule.
+ * Nearest-enemy means team bots dogpile rather than coordinate; good enough
+ * for practice v1.
+ */
+export const nearestEnemy = (
+  me: PlayerSnapshot | undefined,
+  players: PlayerSnapshot[],
+): PlayerSnapshot | undefined => {
+  if (!me) return undefined;
+  let best: PlayerSnapshot | undefined;
+  let bestDist = Infinity;
+  for (const p of players) {
+    if (p.team === me.team || !p.alive) continue;
+    const dist = Math.hypot(p.x - me.x, p.y - me.y);
+    if (dist < bestDist) {
+      best = p;
+      bestDist = dist;
+    }
+  }
+  return best;
+};
+
 /** Is the bot's dash drafted, off cooldown, and still budgeted? */
 const dashReady = (me: PlayerSnapshot): boolean =>
   me.abilities.some((s) => s.id === "dash" && s.cd === 0 && s.charges > 0);

@@ -1,0 +1,20 @@
+{
+  "type": "sfx-bits",
+  "subject": "a triumphant match-won fanfare — a full brass flourish and a roaring victorious crowd",
+  "prompt": "A short arabian victory tune to signify a great victory, sitar, flute, drums, chanting, celebration",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 5,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "match_win_1.mp3",
+    "match_win_2.mp3",
+    "match_win_3.mp3"
+  ],
+  "created": "2026-07-16T21:04:29.582Z",
+  "updated": "2026-07-16T21:08:17.645Z"
+}

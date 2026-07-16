@@ -5,6 +5,7 @@
  * decide. Rooms live purely in server memory by design — a room is exactly as
  * ephemeral as the match inside it (decided 2026-07-09, no DB).
  */
+import { MAX_TEAM_SIZE, type TeamSize } from "./config";
 
 /** Unambiguous room-code alphabet: no I/O/0/1 lookalikes. */
 export const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -44,6 +45,12 @@ export const sanitizePasscode = (pass: unknown): string | null => {
   const t = (typeof pass === "string" ? pass : "").trim().slice(0, MAX_PASSCODE);
   return t || null;
 };
+
+/** Host's room-size pick; anything off the menu falls back to 1v1. */
+export const sanitizeTeamSize = (v: unknown): TeamSize =>
+  typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_TEAM_SIZE
+    ? (v as TeamSize)
+    : 1;
 
 export type JoinVerdict = "ok" | "wrong passcode" | "room full";
 

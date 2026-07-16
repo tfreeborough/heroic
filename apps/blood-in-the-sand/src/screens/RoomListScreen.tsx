@@ -27,6 +27,7 @@ export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
   const [creating, setCreating] = useState(false);
   const [roomName, setRoomName] = useState("");
   const [createPass, setCreatePass] = useState("");
+  const [teamSize, setTeamSize] = useState(1);
   const [passFor, setPassFor] = useState<string | null>(null); // room code awaiting a passcode
   const [joinPass, setJoinPass] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -67,7 +68,7 @@ export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
 
   const create = (): void => {
     const n = requireName();
-    if (n) client.createRoom(n, roomName.trim() || `${n}'s room`, createPass);
+    if (n) client.createRoom(n, roomName.trim() || `${n}'s room`, createPass, teamSize);
   };
 
   const renderRoom = ({ item }: { item: RoomListing }) => (
@@ -156,6 +157,17 @@ export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
             autoCorrect={false}
             maxLength={16}
           />
+          <View style={styles.sizeRow}>
+            {[1, 2, 3, 4].map((n) => (
+              <Pressable
+                key={n}
+                onPress={() => setTeamSize(n)}
+                style={[styles.sizeOption, teamSize === n && styles.sizeOptionOn]}
+              >
+                <Text style={[styles.sizeText, teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
+              </Pressable>
+            ))}
+          </View>
           <View style={styles.createButtons}>
             <Pressable onPress={() => setCreating(false)} style={[styles.smallButton, styles.ghost]}>
               <Text style={styles.smallButtonText}>CANCEL</Text>
@@ -227,6 +239,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   createButtons: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
+  sizeRow: { flexDirection: "row", gap: 8 },
+  sizeOption: {
+    flex: 1,
+    backgroundColor: "#221e19",
+    borderColor: "#3a332a",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  sizeOptionOn: { backgroundColor: "#8c2f2f", borderColor: "#8c2f2f" },
+  sizeText: { color: "#8a7f70", fontWeight: "800", fontSize: 13, letterSpacing: 1 },
+  sizeTextOn: { color: "#f5ede0" },
   codeRow: { flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" },
   codeInput: { flex: 1 },
   input: {

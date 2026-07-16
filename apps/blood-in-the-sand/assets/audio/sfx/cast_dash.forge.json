@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a fast dodging dash across sand — a sharp cloth-and-sand whoosh with a grit scuff",
+  "prompt": "Close-mic'd rapid dash: cloth rubbing leather wraps and sun-baked sand shearing, sharp airy whoosh peak, abrasive grit scuff underfoot, short 0.5–0.8s attack, immediate transient, dusty tailing slap as sand settles, weighty, visceral, desert arena.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": null,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_dash_1.mp3"
+  ],
+  "created": "2026-07-16T13:38:51.763Z",
+  "updated": "2026-07-16T13:38:51.763Z"
+}

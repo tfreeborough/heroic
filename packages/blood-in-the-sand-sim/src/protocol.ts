@@ -56,13 +56,32 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * countdown rides `round.timer` while the phase is "lobby" (0 = not running);
  * the `armingComplete` event cues the banner. Snapshots scrub picks in the
  * lobby only.
+ * v10 (2026-07-16): loadouts drop from three abilities to two
+ * (LOADOUT_ABILITY_COUNT). The wire shape is unchanged (casts[] and the slot
+ * list were always variable-length), but the count is a compatibility
+ * contract — a two-ability client can't share a match with a three-ability
+ * server — so the version gates it.
+ * v11 (2026-07-16): events gain `shoot` — a ranged weapon loosing a projectile,
+ * so the bow/staff SFX fires on release (every shot) instead of only on impact.
+ * Purely additive (older clients would ignore an unknown event), but bumped per
+ * convention so client and server agree on the event vocabulary.
+ * v12 (2026-07-16): host-selectable team sizes (1v1–4v4). `createRoom` gains
+ * `teamSize` (1–4 → 2×N seats, sanitized server-side); `welcome` gains
+ * `teamSize` (the client renders capacity/empty seats from it). Team
+ * assignment is random-balanced server-side (join the smaller side, sim-rng
+ * coin-flip on ties). The arming countdown now gates on a FULL room, with the
+ * host's forceStart doubling as the partial-room launcher (a `forced` sim
+ * override, cleared by any join/leave). The break is behavioural (full-room
+ * gating + variable seat counts), so the version gates it.
  */
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 12;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
 export type ClientMsg =
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string }
+  /** `teamSize` 1–4 (the host's 1v1/2v2/3v3/4v4 pick) → 2×N seats; absent or
+   * off-menu falls back to 1v1 (sanitizeTeamSize). */
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number }
   | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
@@ -217,6 +236,9 @@ export type ServerMsg =
       v: number;
       playerId: number;
       team: Team;
+      /** Players per side — the client renders capacity (2×N) and empty-seat
+       * rows from this. Per-room, like zoneId, so NOT in ArenaClientConfig. */
+      teamSize: number;
       roomCode: string;
       roomName: string;
       hostId: number;

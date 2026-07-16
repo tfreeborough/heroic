@@ -61,7 +61,8 @@ drives blood + haptics) now also calls `playSound` per `ArenaEvent`:
 
 | Event | Sound | Qualifier |
 | --- | --- | --- |
-| `hit` (non-bleed) | `weaponStrike` / `hitTaken` if it's you | attacker's weapon |
+| `shoot` (ranged release) | `weaponFire`¹ | weapon (bow/staff) |
+| `hit` (non-bleed) | `weaponStrike` / `hitTaken` if it's you & crit | attacker's weapon |
 | `death` | `death` | — |
 | `cast` | `abilityCast` | ability id |
 | `detonate` | `abilityDetonate` | `sandtrap` |
@@ -69,6 +70,32 @@ drives blood + haptics) now also calls `playSound` per `ArenaEvent`:
 | `heal` | `heal` | — |
 | `roundStart`/`fightStart` | `roundStart`/`fightStart` | — |
 | `roundEnd`/`matchEnd` | those | `win`/`loss`/`draw` vs my team |
+
+¹ Ranged weapons get **two distinct sounds**: a **release** (`weaponFire` →
+`fire_bow`/`fire_staff`, the twang/whoosh) on every shot hit-or-miss, AND an
+**impact** (`weaponStrike` → `hit_bow`/`hit_staff`, the thwack) when it connects —
+the release is the satisfying feedback, the impact is the "it landed"
+confirmation. Melee has only the impact (no projectile to loose). All `hit_*`
+banks are impacts; `fire_*` banks are releases.
+
+**Proximity (2026-07-16).** Positional sounds attenuate with distance from your
+fighter (the listener; your corpse while spectating your own death). `playSound`
+gained a `gain` (0..1) multiplier; GameScreen computes it per event as
+`gainAt(x, y)` — full within `SOUND_NEAR` (250px), fading linearly to
+`SOUND_FLOOR` (0.22) by `SOUND_FAR` (850px). Grounded to the 1600×1600px arena
+(25 tiles × 64px): NEAR ≈ your immediate scrap, FAR ≈ half the map. A **floor,
+not silence**, so distant
+fights still read faintly as info (this is a competitive arena). Attenuated:
+weapon fire/strike, ability cast (looked up by caster pos), detonate, harpoon,
+heal, **death** (looked up by the dead player's pos). Always full: your own
+`hitTaken` grunt, and all global cues — round/match stings, `countdownTick`, UI,
+and the announcer (First Blood / multi-kills). No stereo panning — volume only
+(expo-audio has no cheap pan). Constants at the top of GameScreen are the tuning
+knobs; raise `SOUND_FLOOR` if distant deaths/casts should stay louder.
+
+The **death** sound already fires on *every* death from *every* source (the sim
+emits a `death` event from `killPlayer` for all kills incl. bleed; the client
+plays it unconditionally) — now distance-scaled like other combat.
 
 Bleed ticks stay silent (ambient, like their haptics). The 3·2·1 `countdownTick`
 derives from the HUD countdown digit (not an event). UI sounds (`uiTap`,
@@ -89,7 +116,8 @@ networked announcement.
 - **First Blood** — the match's first kill (once per match; the tracker lives as
   long as the GameScreen, which remounts per match).
 - **Multi-kill** — a *continuous* chain by one attacker: each kill within
-  `STREAK_WINDOW_MS` (4.5s) of the last, broken the instant that attacker dies.
+  `STREAK_WINDOW_MS` (4.5s) of the *last* kill (a rolling window — each kill resets
+  the clock), broken the instant that attacker dies.
   Tiers: 2 = Double, 3 = Multi, 4 = Mega, 5 = Ultra, 6+ = Monster Kill. A
   self-kill (your own sandtrap) breaks the chain and never announces.
 
@@ -98,11 +126,46 @@ gold centre-top banner (`FIRST BLOOD`, `DOUBLE KILL`, …) for ~1.9s.
 
 **The voice clips are user-supplied VO, NOT Forge-generated** (Tom records them):
 intelligible speech needs text-to-speech, which the Forge's sound-effects model
-can't do. Drop the mp3s into `assets/audio/sfx/` and add a manifest line like any
-other clip. Expected names: `announce_first_blood_1`, `announce_double_kill_1`,
-`announce_multi_kill_1`, `announce_mega_kill_1`, `announce_ultra_kill_1`,
-`announce_monster_kill_1`. (If we ever want to generate them, that's a TTS path
-in the Forge — deferred.)
+can't do. (If we ever want to generate them, that's a TTS path in the Forge —
+deferred.)
+
+**Announcer packs (monetisation, 2026-07-16).** The announcer is meant to be
+**sold as swappable packs** — a free `default`, premium voices/personas later —
+so it's modelled as data in `src/audio/announcer.ts`, separate from the base SFX:
+each pack is a folder `assets/audio/sfx/announcer/<pack>/` and an entry in
+`ANNOUNCER_PACKS` mapping the six stable clip names to that pack's files. The
+manifest just spreads in the **active** pack (`ACTIVE_ANNOUNCER`, hard-wired to
+`default` for now). Because gameplay only references the stable clip names,
+**selling or switching a pack is a change in `announcer.ts` alone** — never the
+catalogue, scheduler, or GameScreen. Not built: pack *selection* (comes from
+settings + entitlements when the store lands — see
+[monetisation.md](./monetisation.md)); per-clip fallback to `default` for a
+partial pack is a later option. Clip names: `announce_first_blood_1`,
+`announce_double_kill_1`, `announce_multi_kill_1`, `announce_mega_kill_1`,
+`announce_ultra_kill_1`, `announce_monster_kill_1`.
+
+## Trigger latency — preloading (2026-07-16)
+
+Symptom: some sounds played a beat late. Diagnosis: **not the files** (measured —
+every clip's audio starts within ~30ms of t=0; the Forge's silence-trim already
+handled them), but the **cold-load path**. The AudioDirector's SFX voice pool
+loads a clip's source with `player.replace()` right before `play()`, and in
+`expo-audio` that load is async — so the first trigger of any not-yet-resident
+clip waits on it, and in dev the asset is even fetched from Metro over HTTP on
+first play. With 8 voices cycling 39 clips, most triggers hit that path.
+
+Two fixes:
+- **Preload** every clip once at audio init (`preloadClips` → `Asset.loadAsync`,
+  expo-asset) so the files are local before anything plays — kills the dev-mode
+  HTTP-fetch delay outright.
+- **Bigger voice pool for BITS** — `createAudioDirector` took an `sfxVoices`
+  option (default 8, unchanged for the gauntlet); BITS passes 16 so the ~20
+  frequently-triggered clips stay resident instead of being evicted and reloaded
+  cold. Bounded, so still Android-session-safe.
+
+If latency ever persists in a *production* build (local files, no fetch), the
+next lever is a resident player per clip (zero per-play decode) — deferred, since
+preload + a warm pool should cover it.
 
 ## Forge authoring path
 
