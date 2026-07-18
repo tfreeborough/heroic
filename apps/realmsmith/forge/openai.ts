@@ -10,12 +10,21 @@ const IMAGE_ENDPOINT = "https://api.openai.com/v1/images/generations";
 
 export const IMAGE_MODEL_ID = "gpt-image-1";
 
+/** Canvas shapes gpt-image-1 accepts that we use: square (icons) and portrait
+ * (full-figure sprites — a standing human fits a portrait frame natively, so
+ * the model stops cropping to fill a square). */
+export type ImageSize = "1024x1024" | "1024x1536";
+
 /**
- * One 1024×1024 transparent PNG from gpt-image-1. Transparency matters: icons
- * land on dark cards, roster rows AND the reveal overlay — never on a fixed
- * ground. Callers run several of these in parallel for a candidate spread.
+ * One transparent PNG from gpt-image-1. Transparency matters: icons land on
+ * dark cards, roster rows AND the reveal overlay — never on a fixed ground.
+ * Callers run several of these in parallel for a candidate spread.
  */
-export const generateImage = async (apiKey: string, prompt: string): Promise<Buffer> => {
+export const generateImage = async (
+  apiKey: string,
+  prompt: string,
+  size: ImageSize = "1024x1024",
+): Promise<Buffer> => {
   const res = await fetch(IMAGE_ENDPOINT, {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
@@ -23,7 +32,7 @@ export const generateImage = async (apiKey: string, prompt: string): Promise<Buf
       model: IMAGE_MODEL_ID,
       prompt,
       n: 1,
-      size: "1024x1024",
+      size,
       quality: "medium",
       background: "transparent",
       output_format: "png",

@@ -110,7 +110,9 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   // ── Abilities ─────────────────────────────────────────────────────────────
   cast_generic: "a short ability activation whoosh — dry, physical, a quick surge of intent",
   cast_sandtrap: "burying and arming a spiked powder charge in sand — a muffled shuffle then a metal click-latch",
-  cast_tremor: "a heavy stomp shattering the ground — a deep bassy boom with cracking earth and a dust rumble",
+  cast_tremor: "a heavy stomp splitting the ground open — a sharp rock-crack transient over a deep bassy boom, short and punchy",
+  cast_warding_shout: "a gladiator's massive warding bellow — a huge chesty war-shout with a bassy air-punch whoosh, no words",
+  quake_rumble: "a rolling earthquake shaking an arena for four seconds — loud cracking rock and grinding gravel up front (it must read on a small phone speaker), a deep bass rumble underneath, a dusty settling tail",
   cast_harpoon: "a gladiator hurling a barbed chain — a hard grunt with a metallic chain rattle winding up",
   cast_dash: "a fast dodging dash across sand — a sharp cloth-and-sand whoosh with a grit scuff",
   cast_mirror_guard: "a polished shield snapping up to guard — a bright metallic ring shimmer, defensive",
@@ -179,6 +181,7 @@ export const ICON_SUBJECTS: Record<string, string> = {
   "mirror-guard": "a polished round shield with an arrow ricocheting off it at a sharp angle",
   ironhide: "a flexing forearm and fist turned to cracked dark iron",
   "straw-man": "a straw training dummy on a wooden post with a painted target on its chest",
+  "warding-shout": "a helmeted gladiator head mid-roar in profile, concentric shout rings bursting from the open mouth",
   "war-drums": "a rope-bound war drum with radiating rhythm rings rising from its skin",
   "blood-font": "a bronze chalice overflowing with deep red droplets",
   sandstorm: "a swirling spiral of sand with a single closed eye barely visible inside it",
@@ -192,8 +195,12 @@ export interface IconSpec {
   candidates: number;
   /** Saved size (game renders at ≤52px; 512 keeps the bundle light). */
   savedSize: number;
+  /** Generation canvas — icons are square emblems, square canvas fits. */
+  size: "1024x1024";
   /** Repo-relative destination folder. */
   destination: string;
+  /** Prefix of the require() path handed back after save (consumer-module relative). */
+  manifestDir: string;
   template: (subject: string, category: IconCategory) => string;
 }
 
@@ -205,7 +212,9 @@ export const ICON: IconSpec = {
   // Largest in-app render is the codex hero at 52pt → 156px on a 3× screen;
   // 256 covers that with margin. Bump only if a bigger surface appears.
   savedSize: 256,
+  size: "1024x1024",
   destination: "apps/blood-in-the-sand/assets/icons",
+  manifestDir: "../../assets/icons",
   // Dark-fantasy direction (Tom, 2026-07-14 — replaced the flat-vector v1):
   // hand-inked, grim, Darkest-Dungeon-adjacent. Described by attributes, not
   // by naming the game — attribute language steers the model more reliably.
@@ -239,6 +248,104 @@ export const ICON: IconSpec = {
       "cut line is transparent. No text."
     );
   },
+};
+
+// ── Blood in the Sand sprites ──────────────────────────────────────────────
+// Full-figure scene art (title screen first; splashes later) — the same
+// woodcut world as the icons, but FIGURE language instead of emblem language:
+// whole body in frame, a baked facing direction, lit for the sunlit High Sun
+// scene. Two deliberate differences from the icon template: no die-cut bone
+// outline (sprites sit ON painted scenes, not near-black UI cards), and no
+// ground/cast shadow (the scene draws its own contact shadows, so the figure
+// must arrive clean to place).
+
+/**
+ * Art subjects per sprite id. The `title-<weaponId>` ids derive from the
+ * sim's WEAPONS table at panel runtime (src/forge/spriteSet.ts — the iconSet
+ * pattern: a new weapon appears as a flagged row until its subject line is
+ * written here); ids outside that convention are static extras. ALL title
+ * fighters are generated FACING RIGHT on purpose — the home screen mirrors
+ * whoever takes the right-hand slot, so one sprite covers both sides of the
+ * duel. Subjects share one structural skeleton (profile, stance, gear list)
+ * so the four generations come out as siblings, not strangers.
+ */
+export const SPRITE_SUBJECTS: Record<string, string> = {
+  "title-blade":
+    "a lean fast gladiator in full side profile facing right, coiled low in a duelling " +
+    "crouch, a short gladius sword held ready at hip height with the blade angled up, a " +
+    "small round buckler on the rear arm, light cracked-leather armor, crested open-face " +
+    "galea helmet, studded leather pteruges skirt, wrapped shins — built for speed",
+  "title-bow":
+    "an archer gladiator in full side profile facing right, leaning into a full draw with " +
+    "the weight settled on the back foot, a recurve war bow drawn with a nocked arrow aimed " +
+    "level ahead, a quiver of arrows on the hip, a leather bracer on the draw arm, " +
+    "leather-and-bronze armor, light open helmet, studded pteruges skirt",
+  "title-staff":
+    "a war-mage gladiator in full side profile facing right, braced in a casting stance, a " +
+    "gnarled wooden staff crowned with a faintly glowing violet orb thrust forward in both " +
+    "hands, tattered layered robes over bronze-trimmed leather, a ridged helm, studded " +
+    "pteruges skirt, trailing cloth wrappings",
+  "title-hammer":
+    "a hulking heavyweight gladiator in full side profile facing right, a massive " +
+    "square-headed warhammer hefted across the shoulder in both hands, heavy " +
+    "hammered-bronze armor with thick pauldrons, a full-face crested galea helmet, studded " +
+    "pteruges skirt, broad bronze greaves, planted wide in an immovable stance",
+};
+
+export interface SpriteSpec {
+  id: "sprite-bits";
+  label: string;
+  provider: "openai-image";
+  candidates: number;
+  /** Saved size — title figures render ~180px on a 3× screen; 512 leaves reuse headroom. */
+  savedSize: number;
+  /** Generation canvas: PORTRAIT — a standing figure fits it natively, where a
+   * square canvas pressured the model into edge-to-edge crops (the bow/hammer
+   * first-generation lesson). Saves still letterbox into a square PNG. */
+  size: "1024x1536";
+  destination: string;
+  /** Prefix of the require() path handed back after save (consumer-module relative). */
+  manifestDir: string;
+  template: (subject: string) => string;
+}
+
+export const SPRITE: SpriteSpec = {
+  id: "sprite-bits",
+  label: "Sprite (Blood in the Sand)",
+  provider: "openai-image",
+  candidates: 2,
+  savedSize: 512,
+  size: "1024x1536",
+  destination: "apps/blood-in-the-sand/assets/sprites",
+  manifestDir: "../../assets/sprites",
+  // Same brand language as the icon template (attributes, not the game's
+  // name), same isolation lesson (state what surrounds the subject — the
+  // model paints grounds if merely allowed alpha). Differences are scene-fit:
+  // full figure with margin, high-sun rim light, no die-cut, no shadow.
+  // v2 (Tom, first generations): figures came out polished-bronze-statue —
+  // the value structure must be ANCHORED IN BLACK like the icons ("reads as
+  // dark inked woodcut, never a bronze statue"); and the ground smudge
+  // survived the "no cast shadow" negation — isolation now borrows the
+  // die-cut CUT-OUT framing (cut line = the silhouette, transparent starts
+  // at the soles) without asking for the icons' visible pale outline.
+  template: (subject) =>
+    `${subject}. A full-figure character sprite for a grim dark-fantasy gladiator arena game ` +
+    "set in a scorched desert. Hand-inked woodcut illustration: heavy black ink linework, " +
+    "rough expressive hatching, and deep pooled black shadows anchor the form — the figure " +
+    "reads as dark inked woodcut, never a polished bronze statue. Sun-bleached bone " +
+    "(#f0e8d8) highlights carve the shape out of the dark; scorched sand-ochre (#b39763) " +
+    "midtones like heat-baked dust settled on every surface. Gladiatorial desert materials: " +
+    "hammered bronze trim, cracked leather wraps, sun-split wood, rust and dried blood. Lit " +
+    "by a harsh high desert sun — a warm rim light burns along the helmet crest and upper " +
+    "shoulders. The ENTIRE figure stands about 80% of the frame tall, centered, with empty " +
+    "transparent margin visible on all four sides — above the helmet crest, below the feet, " +
+    "and past every weapon tip; nothing touches or crosses the frame edge. Grim, weighty, " +
+    "battle-scarred — never cute, never " +
+    "photorealistic, never a clean flat vector. The figure is a clean die-cut cut-out: the " +
+    "cut line follows the figure's own silhouette exactly, and every pixel outside it is " +
+    "fully transparent — including directly beneath the boots, where bare transparent pixels " +
+    "begin at the soles. The figure touches nothing and stands on nothing: no ground, no " +
+    "cast shadow, no dust at the feet, no backdrop, no glow. No text.",
 };
 
 /**

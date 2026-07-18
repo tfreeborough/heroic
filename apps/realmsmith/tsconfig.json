@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -11,8 +15,15 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "@heroic/core": ["../../packages/core/src/index.ts"]
+      "@heroic/core": [
+        "../../packages/core/src/index.ts"
+      ]
     }
   },
-  "include": ["src", "forge", "vite.config.ts"]
+  "include": [
+    "src",
+    "forge",
+    "vite.config.ts"
+  ],
+  "extends": "expo/tsconfig.base"
 }

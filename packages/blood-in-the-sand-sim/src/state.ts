@@ -187,11 +187,11 @@ export interface ArenaProjectile extends ProjectileState {
   reflected?: boolean;
 }
 
-export type DeployableKind = "sandtrap" | "straw-man" | "blood-font" | "sandstorm";
+export type DeployableKind = "sandtrap" | "straw-man" | "blood-font" | "sandstorm" | "quake";
 
 /**
  * A placed thing (docs/design/pvp-abilities.md): one entity array carries the
- * mine, the decoy, the heal zone and the no-target zone. Shaped like
+ * mine, the decoy, the heal zone, the no-target zone and the quake. Shaped like
  * projectiles — monotonic ids (the client keys by id), stepped after them,
  * cleared each round. Clearly visible to BOTH teams, always (the readability
  * rule): deployables are area denial and target pollution, never ambushes.
@@ -210,7 +210,7 @@ export interface Deployable {
   lifeLeft: number;
   /** Straw man durability; 0 for kinds that can't be hit. */
   hp: number;
-  /** Blood font: seconds until the next heal tick fires. */
+  /** Blood font / quake: seconds until the next heal/damage tick fires. */
   tickLeft: number;
 }
 

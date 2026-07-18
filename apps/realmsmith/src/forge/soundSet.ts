@@ -63,6 +63,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "death", label: "Death", category: "combat" },
   { id: "cast_generic", label: "Cast — generic", category: "ability" },
   { id: "harpoon_whip", label: "Harpoon — chain whip", category: "ability" },
+  { id: "quake_rumble", label: "Tremor — quake rumble", category: "ability" },
   { id: "heal_tick", label: "Blood Font — heal tick", category: "ability" },
   // match flow
   { id: "countdown_tick", label: "Countdown tick", category: "flow" },

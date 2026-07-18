@@ -13,7 +13,7 @@ import { beginDash, dashVelocity, dashingSlot } from "./dash";
 import { castDeployable } from "./deployables";
 import { fireHarpoon } from "./harpoon";
 import { inSandstorm, targetView, type TargetView } from "./targets";
-import { castTremor } from "./tremor";
+import { castWardingShout } from "./wardingShout";
 
 export * from "./dash";
 export * from "./damage";
@@ -21,7 +21,7 @@ export * from "./deployables";
 export * from "./harpoon";
 export * from "./statuses";
 export * from "./targets";
-export * from "./tremor";
+export * from "./wardingShout";
 
 /**
  * Step every slot of one player's drafted hand: advance lifecycles from the
@@ -64,11 +64,16 @@ export const stepPlayerAbilities = (
           beginDash(slot, dir.x, dir.y);
           break;
         }
-        case "tremor":
-          castTremor(p, players, events);
+        case "warding-shout":
+          castWardingShout(p, players);
           break;
         case "harpoon":
           slot.targetId = mark!.id; // latched; the chain lands when the windup ends
+          break;
+        // Tremor spawns the quake ZONE — its id keeps the tremor name; the
+        // placed thing is a deployable like the font (kind ≠ ability id).
+        case "tremor":
+          castDeployable(sim.state, "quake", p);
           break;
         case "sandtrap":
         case "straw-man":

@@ -36,6 +36,7 @@ export type BitsSoundEvent =
   | "abilityCast" //    an ability fires              (qualifier: AbilityId)
   | "abilityDetonate" //a deployable goes off         (qualifier: AbilityId)
   | "harpoonWhip" //    the chain snaps out
+  | "quakeRumble" //    tremor's 4s earthquake bed (rolls under the cast stomp)
   | "heal" //           a blood-font tick lands
   // ── Announcer (booming VO — user-supplied clips, not Forge-generated) ──────
   | "firstBlood" //     the match's first kill
@@ -79,6 +80,9 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
   "mirror-guard": { clips: ["cast_mirror_guard_1"] },
   ironhide: { clips: ["cast_ironhide_1"] },
   "straw-man": { clips: ["cast_straw_man_1"] },
+  // Owed from the Forge — silent until cast_warding_shout_1 lands (the rule
+  // above: a missing manifest entry warns once, the slot lights up on forge).
+  "warding-shout": { clips: ["cast_warding_shout_1"] },
   "war-drums": { clips: ["cast_war_drums_1"] },
   "blood-font": { clips: ["cast_blood_font_1"] },
   sandstorm: { clips: ["cast_sandstorm_1"] },
@@ -112,6 +116,13 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // The harpoon chain whipping out (fires alongside its cast: cast = the throw
   // grunt, whip = the chain itself).
   harpoonWhip: { clips: ["harpoon_whip_1"] },
+  // The tremor's earthquake itself — a rolling bed fired alongside the cast
+  // (cast = the sharp stomp tell, this = the ground going). The shipped clip
+  // is re-mastered HOT (-12 LUFS vs the fleet's -16, +4dB high shelf at
+  // 1kHz): a sustained rumble at fleet loudness disappears on a phone
+  // speaker — equal-loudness + speaker bass rolloff — so it needs both the
+  // level and the midrange crackle to read. Keep any re-forge mastered hot.
+  quakeRumble: { clips: ["quake_rumble_1"] },
   // A blood-font heal tick. Ticks every 0.5s inside the circle — a soft drip,
   // the default throttle keeps overlapping fonts from stacking into a drone.
   heal: { clips: ["heal_tick_1"], volume: 0.8 },

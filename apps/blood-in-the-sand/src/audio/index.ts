@@ -14,15 +14,21 @@
 import { Asset } from "expo-asset";
 import { createAudioDirector, type AudioDirector } from "@heroic/engine";
 import { createSoundScheduler, type SoundConfig, type SoundScheduler } from "@heroic/core";
+import { devFlags } from "../dev";
 import { AUDIO_MANIFEST } from "./manifest";
 import { SOUND_CATALOGUE, type BitsSoundEvent } from "./catalogue";
 
 export type { BitsSoundEvent } from "./catalogue";
 
-/** Voices ≈ how many clips stay warm at once. BITS has ~39 clips but ~20 are
- * frequently triggered (hits, casts, UI); 16 keeps those resident so they don't
- * reload cold (which reads as trigger delay). Bounded, so Android-safe. */
-const SFX_VOICES = 16;
+/** Voices ≈ how many clips stay warm at once. Sized to hold the whole
+ * mid-combat set (~24 clips: every cast, hit, fire, death, hurt, the quake
+ * bed — see `warmCombatAudio`) on pinned voices with a few unpinned left
+ * over for UI/flow/announcer churn. A cold clip's first play is a native
+ * load — a visible frame hitch on weak devices — so combat clips must never
+ * be the ones reloading. Still a fixed pool, so Android-safe; if a low-end
+ * device ever objects to this many resident players, shrink the warm SET
+ * first. */
+const SFX_VOICES = 28;
 
 let director: AudioDirector | null = null;
 let scheduler: SoundScheduler<BitsSoundEvent> | null = null;
@@ -79,9 +85,54 @@ export const playSound = (
   overrides?: SoundConfig,
   gain = 1,
 ): void => {
+  // Dev A/B (not a mute): skip ALL per-play work incl. the native calls, so a
+  // choppy device can answer "is it the audio?" with one dev-menu toggle.
+  if (devFlags.disableSfx) return;
   const { director, scheduler } = ensure();
   const cmd = scheduler.play(event, qualifier, overrides);
   if (cmd) director.playSfx(cmd.clip, { volume: cmd.volume * gain, pitchVariance: cmd.pitchVariance });
+};
+
+/**
+ * The events that can fire MID-FIGHT — every clip they can resolve to must be
+ * warm before the first clash, because a cold clip's first play is a native
+ * player load on the exact frame the moment fires (the "screen freezes when an
+ * ability goes off" bug). Match-flow stings and UI stay cold: they play at
+ * calm phase boundaries where a one-off load can't stutter combat. Derived
+ * from the catalogue, so a newly forged weapon/ability clip warms itself.
+ */
+const COMBAT_EVENTS: BitsSoundEvent[] = [
+  "weaponFire",
+  "weaponStrike",
+  "hitTaken",
+  "death",
+  "abilityCast",
+  "abilityDetonate",
+  "harpoonWhip",
+  "quakeRumble",
+  "heal",
+];
+
+/**
+ * Pre-load the mid-combat clip set onto the director's pinned voices. Call
+ * from a calm pre-match moment — the room lobby / arming wizard — and call
+ * freely: it's idempotent, staggered (one native load per ~90ms), and skips
+ * anything already warm.
+ */
+export const warmCombatAudio = (): void => {
+  // Under the dev SFX kill, skip the warm too — otherwise the A/B still
+  // builds the whole native player pool and only silences the plays.
+  if (devFlags.disableSfx) return;
+  const names = new Set<string>();
+  for (const event of COMBAT_EVENTS) {
+    const def = SOUND_CATALOGUE[event];
+    if (!def) continue;
+    for (const clip of def.clips ?? []) names.add(clip);
+    for (const bank of Object.values(def.variants ?? {})) {
+      for (const clip of bank.clips) names.add(clip);
+    }
+  }
+  ensure().director.warm([...names]);
 };
 
 /**
@@ -90,6 +141,7 @@ export const playSound = (
  * it isn't up yet, so the gesture that unlocks is also what allocates.
  */
 export const unlockAudio = (): void => {
+  if (devFlags.disableSfx) return; // dev A/B: no director, no native session
   ensure().director.resume();
 };
 

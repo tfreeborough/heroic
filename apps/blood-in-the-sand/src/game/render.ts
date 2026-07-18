@@ -26,7 +26,9 @@ import {
   SANDSTORM,
   SANDTRAP,
   STRAW_MAN,
+  TREMOR,
   WAR_DRUMS,
+  WARDING_SHOUT,
   WEAPONS,
   type AbilityId,
   type ArenaClientConfig,
@@ -126,6 +128,8 @@ const C_STORM_STREAK = Skia.Color("#efe0b8");
 const C_DRUMS = Skia.Color("#f2c14e");
 const C_MINE = Skia.Color("#3a332b");
 const C_MINE_GLINT = Skia.Color("#d8b878");
+// The quake reads EARTH, not sand-in-the-air: darker and redder than the storm.
+const C_QUAKE = Skia.Color("#a8713f");
 const C_DUMMY = Skia.Color("#c9a86a");
 const C_DUMMY_DARK = Skia.Color("#6f5c3d");
 const C_HARPOON = Skia.Color("#d9d2c6");
@@ -204,9 +208,10 @@ const floorImage = (atlas: SkImage): SkImage | null => {
 const FLOOR_RECT = Skia.XYWHRect(0, 0, WORLD_W, WORLD_H);
 
 /** A transient visual: damage numbers, hit rings, the harpoon's chain flash,
- * the cast flash (an ability icon popping above its caster). */
+ * the cast flash (an ability icon popping above its caster), the warding
+ * shout's cone blast. */
 export interface FxItem {
-  kind: "number" | "ring" | "line" | "castFlash";
+  kind: "number" | "ring" | "line" | "castFlash" | "cone";
   x: number;
   y: number;
   /** 1 → 0 over the effect's life. */
@@ -224,6 +229,8 @@ export interface FxItem {
   y2?: number;
   /** castFlash: which icon pops. */
   ability?: AbilityId;
+  /** cone: the shout's direction (the caster's facing at cast), radians. */
+  angle?: number;
 }
 
 const C_FX_NUM = Skia.Color("#ffffff");
@@ -249,7 +256,7 @@ export interface ArenaRenderInput {
   insetTop?: number;
   insetBottom?: number;
   fx: readonly FxItem[];
-  /** Blood decals (birth-ordered), faded per-frame via decalAlpha. */
+  /** Blood decals (birth-ordered), drawn via the ~5Hz cached scar layer. */
   blood: readonly BloodDecal[];
   /** Tremor's cracked-earth decals — same client-derived floor-layer rule. */
   cracks: readonly CrackDecal[];
@@ -265,23 +272,15 @@ export interface ArenaRenderInput {
   abilityIcons: Partial<Record<AbilityId, SkImage>>;
 }
 
-/** Floor blood, culled to the camera rect (translucent overlaps darken into pools).
- * Round drops are circles; smear decals (dx/dy set) are round-capped streaks. */
-const drawBlood = (
-  canvas: SkCanvas,
-  blood: readonly BloodDecal[],
-  nowMs: number,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-): void => {
+/** Floor blood (translucent overlaps darken into pools). Round drops are
+ * circles; smear decals (dx/dy set) are round-capped streaks. Recorded into
+ * the cached scar picture, not per frame — no viewport cull here (the cache is
+ * camera-independent; raster quick-rejects offscreen ops by bounds). */
+const drawBlood = (canvas: SkCanvas, blood: readonly BloodDecal[], nowMs: number): void => {
   fill.setColor(C_BLOOD);
   stroke.setColor(C_BLOOD);
   stroke.setStrokeCap(StrokeCap.Round);
   for (const d of blood) {
-    const reach = d.r + Math.max(Math.abs(d.dx ?? 0), Math.abs(d.dy ?? 0));
-    if (d.x + reach < left || d.x - reach > right || d.y + reach < top || d.y - reach > bottom) continue;
     const a = decalAlpha(d, nowMs);
     if (a <= 0) continue;
     if (d.dx !== undefined && d.dy !== undefined) {
@@ -535,6 +534,25 @@ const drawFx = (
       stroke.setColor(C_DASH_RING);
       stroke.setStrokeWidth(2 + 2 * f.life);
       canvas.drawCircle(f.x, f.y, 20 + (1 - f.life) * 26, stroke);
+    } else if (f.kind === "cone" && f.angle !== undefined) {
+      // Warding Shout: the bellow made visible — a wedge blasting out to the
+      // shout's TRUE range (the honest-telegraph rule) then gone in a blink.
+      const reach = 30 + (1 - f.life * f.life) * (WARDING_SHOUT.range - 30);
+      const halfDeg = (WARDING_SHOUT.halfAngle * 180) / Math.PI;
+      const startDeg = (f.angle * 180) / Math.PI - halfDeg;
+      const wedge = Skia.Path.Make();
+      wedge.moveTo(f.x, f.y);
+      wedge.arcToOval(Skia.XYWHRect(f.x - reach, f.y - reach, reach * 2, reach * 2), startDeg, halfDeg * 2, false);
+      wedge.close();
+      fill.setColor(C_FX_NUM);
+      fill.setAlphaf(0.16 * f.life);
+      canvas.drawPath(wedge, fill);
+      stroke.setColor(C_FX_NUM);
+      stroke.setAlphaf(0.7 * f.life);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawPath(wedge, stroke);
+      fill.setAlphaf(1);
+      stroke.setAlphaf(1);
     } else if (f.kind === "line" && f.x2 !== undefined && f.y2 !== undefined) {
       // The harpoon chain flash: one taut line, a hook at the far end, chain
       // dots along it — gone in a blink, like the throw itself.
@@ -618,6 +636,23 @@ const drawDeployables = (
       stroke.setAlphaf(0.4 * a);
       stroke.setStrokeWidth(2);
       canvas.drawCircle(d.x, d.y, SANDSTORM.radius, stroke);
+    } else if (d.kind === "quake") {
+      // The earthquake: an honest boundary ring over a dim SHUDDERING
+      // interior — high-frequency, low-amplitude (the font breathes on a slow
+      // heartbeat; the quake shakes). The ground-giving-way story is told by
+      // the crack pops (GameScreen spawns them; they draw in the floor pass).
+      const shudder = 0.5 + 0.5 * Math.sin((nowMs / 90) * Math.PI * 2 + d.id);
+      fill.setColor(C_QUAKE);
+      fill.setAlphaf((0.05 + 0.04 * shudder) * a);
+      canvas.drawCircle(d.x, d.y, TREMOR.radius, fill);
+      stroke.setColor(C_QUAKE);
+      stroke.setAlphaf(0.5 * a);
+      stroke.setStrokeWidth(2 + shudder);
+      canvas.drawCircle(d.x, d.y, TREMOR.radius, stroke);
+      // A faint inner ring jittering against the rim sells motion cheaply.
+      stroke.setAlphaf(0.22 * a);
+      stroke.setStrokeWidth(1.5);
+      canvas.drawCircle(d.x, d.y, TREMOR.radius * (0.6 + 0.02 * shudder), stroke);
     } else if (d.kind === "sandtrap") {
       const arming = d.armLeft > 0;
       const mine = d.team === myTeam;
@@ -742,35 +777,49 @@ const drawSandstormOverlays = (
   stroke.setAlphaf(1);
 };
 
-/** Tremor's cracked earth, culled to the camera rect — floor-layer decals
- * under the blood (fresh blood pools over old fractures). */
-const drawCracks = (
-  canvas: SkCanvas,
-  cracks: readonly CrackDecal[],
-  nowMs: number,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-): void => {
+/** Tremor's cracked earth — floor-layer decals under the blood (fresh blood
+ * pools over old fractures). One prebuilt SkPath per crack (built at spawn in
+ * cracks.ts), one drawPath here — per-frame path construction was what made
+ * a quake's 128 live cracks cost ~10ms of record time. */
+const drawCracks = (canvas: SkCanvas, cracks: readonly CrackDecal[], nowMs: number): void => {
   stroke.setColor(C_CRACK);
   stroke.setStrokeCap(StrokeCap.Round);
   stroke.setStrokeJoin(StrokeJoin.Round);
+  stroke.setStrokeWidth(2.5);
   for (const c of cracks) {
-    const reach = 90; // generous bound — arms max out well under this
-    if (c.x + reach < left || c.x - reach > right || c.y + reach < top || c.y - reach > bottom) continue;
     const a = crackAlpha(c, nowMs);
     if (a <= 0) continue;
     stroke.setAlphaf(0.55 * a);
-    for (const path of c.paths) {
-      const line = Skia.Path.Make();
-      line.moveTo(path[0]!.x, path[0]!.y);
-      for (let i = 1; i < path.length; i++) line.lineTo(path[i]!.x, path[i]!.y);
-      stroke.setStrokeWidth(2.5);
-      canvas.drawPath(line, stroke);
-    }
+    canvas.drawPath(c.path, stroke);
   }
   stroke.setAlphaf(1);
+};
+
+/**
+ * The floor-scar layer — cracks then blood (fresh pools cover old fractures)
+ * — cached as ONE world-space SkPicture and rebuilt on a slow beat instead of
+ * per rendered frame. The scars fade over 20–100 SECONDS, so re-recording
+ * hundreds of decals at 60Hz bought nothing: stepping their alphas at ~5Hz is
+ * imperceptible, and a new decal appearing ≤200ms late lands behind the cast
+ * stomp / hit FX that mask it. Per-frame cost collapses to one drawPicture
+ * call; the camera transform applies at replay, so the cache never invalidates
+ * on camera movement.
+ */
+const SCAR_REBUILD_MS = 200;
+let scarPicture: SkPicture | null = null;
+let scarBuiltMs = -Infinity;
+const scarLayer = (
+  blood: readonly BloodDecal[],
+  cracks: readonly CrackDecal[],
+  nowMs: number,
+): SkPicture => {
+  if (scarPicture && nowMs - scarBuiltMs < SCAR_REBUILD_MS) return scarPicture;
+  scarBuiltMs = nowMs;
+  scarPicture = createPicture((canvas) => {
+    drawCracks(canvas, cracks, nowMs);
+    drawBlood(canvas, blood, nowMs);
+  }, FLOOR_RECT);
+  return scarPicture;
 };
 
 /** Live harpoon chains — taut from each rooted puller to whoever they're
@@ -916,15 +965,9 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
     }
 
-    // Ground scars: cracks first, then blood — fresh pools cover old fractures.
-    // Cull to the FULL canvas rect (the camera anchor is off-centre now, so the
-    // visible span isn't symmetric about cx/cy — derive both edges from it).
-    const cullMinX = cx - vcx / zoom;
-    const cullMaxX = cx + (screenW - vcx) / zoom;
-    const cullMinY = cy - vcy / zoom;
-    const cullMaxY = cy + (screenH - vcy) / zoom;
-    drawCracks(canvas, r.cracks, r.nowMs, cullMinX, cullMinY, cullMaxX, cullMaxY);
-    drawBlood(canvas, r.blood, r.nowMs, cullMinX, cullMinY, cullMaxX, cullMaxY);
+    // Ground scars: the cached world-space picture (cracks under blood),
+    // rebuilt at ~5Hz inside scarLayer — one replayed op per frame here.
+    canvas.drawPicture(scarLayer(r.blood, r.cracks, r.nowMs));
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:

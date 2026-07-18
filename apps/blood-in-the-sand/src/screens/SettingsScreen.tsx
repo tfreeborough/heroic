@@ -1,21 +1,26 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Switch, Text, View } from "react-native";
+import { StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadLefty, saveLefty } from "../settings";
 
 export interface SettingsScreenProps {
   onBack: () => void;
+  /** The stored gladiator name ("" if never claimed). */
+  playerName: string;
+  /** Commit a new non-empty name — persists and applies from the next match. */
+  onRename: (name: string) => void;
 }
 
 /**
- * Device settings, reached from the rooms screen's ⚙. One entry so far:
- * Lefty mode (mirrors the in-match control band). Saved on toggle — applies
- * from the next match.
+ * Device settings: Lefty mode (mirrors the in-match control band) and the
+ * gladiator name (first claimed on the way into PLAY — this is the only place
+ * to change it afterwards). Saved on toggle / end of editing.
  */
-export const SettingsScreen = ({ onBack }: SettingsScreenProps) => {
+export const SettingsScreen = ({ onBack, playerName, onRename }: SettingsScreenProps) => {
   const insets = useSafeAreaInsets();
   const [lefty, setLefty] = useState(false);
+  const [name, setName] = useState(playerName);
 
   useEffect(() => {
     void loadLefty().then(setLefty);
@@ -26,6 +31,14 @@ export const SettingsScreen = ({ onBack }: SettingsScreenProps) => {
     saveLefty(on);
   };
 
+  // An emptied field reverts rather than erasing the name (which would
+  // re-trigger the first-run prompt on PLAY).
+  const commitName = (): void => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== playerName) onRename(trimmed);
+    else setName(playerName);
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
@@ -33,6 +46,24 @@ export const SettingsScreen = ({ onBack }: SettingsScreenProps) => {
           <Text style={styles.backText}>‹ BACK</Text>
         </Pressable>
         <Text style={styles.title}>SETTINGS</Text>
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Gladiator name</Text>
+          <Text style={styles.rowHint}>how other players see you</Text>
+        </View>
+        <TextInput
+          style={styles.nameInput}
+          value={name}
+          onChangeText={setName}
+          onEndEditing={commitName}
+          placeholder="your name"
+          placeholderTextColor="#6b6257"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={16}
+        />
       </View>
 
       <View style={styles.row}>
@@ -67,6 +98,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   rowText: { gap: 3, flexShrink: 1 },
+  nameInput: {
+    backgroundColor: "#221e19",
+    borderColor: "#3a332a",
+    borderWidth: 1,
+    borderRadius: 8,
+    color: "#f0e8d8",
+    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 140,
+    textAlign: "center",
+  },
   rowTitle: { color: "#f0e8d8", fontSize: 16, fontWeight: "700" },
   rowHint: { color: "#8a7f70", fontSize: 12 },
 });

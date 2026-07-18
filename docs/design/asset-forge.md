@@ -1,6 +1,6 @@
 # Asset Forge — AI asset generation in Realmsmith
 
-Status: **SFX path built (v1); image path built (v1, 2026-07-14)** — the `icon-bits` type
+Status: **SFX path built (v1); image path built (v1, 2026-07-14; sprites 2026-07-17)** — the `icon-bits` type
 generates Blood in the Sand's weapon/ability icons (gpt-image-1, transparent 1024 → sharp
 downscale to 256 + libimagequant palette quantization: ~15KB per icon vs ~240KB lossless,
 alpha-dithered, verified visually indistinguishable on the game void), verified end-to-end ·
@@ -19,6 +19,27 @@ art). The panel gains a manifest picker with done-ticks ("3 of 14"), generates 2
 previews each **at 32px on the game's void colour** (the roster-row acceptance test), keeps
 exactly one, and saves `<id>.png` (+ sidecar; regenerating overwrites). Save hands back the
 `icons.tsx` require-map line for when the app switches off the placeholder Skia glyphs.
+
+Sprite path (2026-07-17): the `sprite-bits` type generates **full-figure scene art** (title-screen
+gladiators first) through the same gpt-image-1 pipeline, generalized server-side (`imageSpec` routes
+both image types through one generate/save path). Differences from icons, all deliberate: saved at
+**512px** (title figures render ~180px at 3×; headroom for reuse), and the template speaks **figure
+language, not emblem language** — whole body in frame with margin, high-sun rim light on crest and
+shoulders, **no die-cut bone outline** (sprites sit on painted scenes, not near-black UI) and **no
+ground/cast shadow** (the scene draws its own contact shadows). The panel previews candidates
+**on a sand gradient** — the High Sun acceptance test, mirroring the icons' on-void preview.
+
+Title fighters derive from the game (2026-07-17, Tom's call — "characters which use weapons from our
+actual game"): the sprite set's `title-<weaponId>` rows come from the sim's WEAPONS table at panel
+runtime (`src/forge/spriteSet.ts`, the iconSet pattern — a new weapon auto-appears flagged until its
+subject line is written in `SPRITE_SUBJECTS`); non-weapon ids are static extras. All title fighters
+are generated **facing right**; the app's HomeScreen picks **two distinct random fighters per mount**
+(`src/screens/titleSprites.ts` — a paste-the-require-line manifest like audio, with a per-sprite
+scale-nudge map) and mirrors whoever takes the right-hand slot, so one sprite covers both sides of
+the duel. Template v2 lesson (first generations): value structure must be **anchored in black ink**
+("reads as dark inked woodcut, never a polished bronze statue") and isolation stated as a **die-cut
+cut-out with transparency beginning at the soles** — the "no cast shadow" negation alone left a
+baked ground smudge.
 
 How we kit out the games with art and sound as a solo developer. The Forge is a panel in Realmsmith:
 type a short sentence, pick an **asset type**, and the tool builds a full on-brand prompt, calls the

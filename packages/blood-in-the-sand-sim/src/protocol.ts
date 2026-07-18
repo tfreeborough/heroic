@@ -52,7 +52,7 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * RoomStatePlayer (there is no reveal, ever — in-match, ability picks show
  * only through cast events, the cast flash). NEW: `armed` on RoomStatePlayer
  * (public: weapon + full hand picked), `forceStart` (host-only AFK backstop —
- * random-fills stragglers, then the same countdown runs). The 10s arming
+ * random-fills stragglers, then the same countdown runs). The 5s arming
  * countdown rides `round.timer` while the phase is "lobby" (0 = not running);
  * the `armingComplete` event cues the banner. Snapshots scrub picks in the
  * lobby only.
@@ -73,8 +73,16 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * host's forceStart doubling as the partial-room launcher (a `forced` sim
  * override, cleared by any join/leave). The break is behavioural (full-room
  * gating + variable seat counts), so the version gates it.
+ * v13 (2026-07-17): tremor REWORKED into an earthquake zone (pvp-abilities
+ * §2) — the cast now spawns a `quake` DeployableKind fixed at the caster's
+ * feet (chip ticks + a refreshed slow on enemies inside) instead of
+ * resolving an instant slam — and the slam's peel becomes the NEW
+ * `warding-shout` ability (§11), an instant no-damage knockback cone off the
+ * facing. The wire SHAPE is unchanged, but both vocabularies grow
+ * (deployable kinds, ability ids) and tremor's meaning flips, so the
+ * version gates it.
  */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
@@ -92,7 +100,7 @@ export type ClientMsg =
   /** The whole picked hand each change (idempotent) — same gate as setWeapon. */
   | { t: "setAbilities"; abilities: AbilityId[] }
   /** Host-only AFK backstop: random-fill every unarmed seat, then the normal
-   * 10s arming countdown runs (never instant). Ignored from non-hosts. */
+   * 5s arming countdown runs (never instant). Ignored from non-hosts. */
   | { t: "forceStart" }
   | { t: "input"; seq: number; sx: number; sy: number; casts: boolean[] };
 

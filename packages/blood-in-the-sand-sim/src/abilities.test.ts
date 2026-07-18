@@ -11,6 +11,7 @@ import {
   TICK_DT,
   TREMOR,
   WAR_DRUMS,
+  WARDING_SHOUT,
   type AbilityId,
   type WeaponId,
 } from "./config";
@@ -93,37 +94,117 @@ const forceActive = (p: ArenaPlayer, id: AbilityId, seconds: number): void => {
 
 const hp = (sim: ArenaSim, id: number): number => sim.state.players[id]!.combatant.hp;
 
-describe("tremor", () => {
-  test("slams every enemy in radius for fixed damage + a shove; spares the far", () => {
+describe("tremor (quake)", () => {
+  test("opens a fixed zone: first tick bites on cast, then every second until expiry", () => {
     const sim = makeFight();
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
-    sim.state.players[1]!.mover.pos = { x: 280, y: 256 }; // edge dist 62 < 110
+    // Inside the zone (edge dist 202 < 240) but past blade reach — the only
+    // hit events across the whole life are the quake's own ticks.
+    sim.state.players[1]!.mover.pos = { x: 420, y: 256 };
 
     const events = run(sim, 1, () => press(sim, 0, "tremor"));
+    const zone = sim.state.deployables.find((d) => d.kind === "quake")!;
+    expect(zone).toBeDefined();
+    expect(zone.pos).toEqual({ x: 200, y: 256 }); // fixed where the caster stood
     const hits = ofType(events, "hit");
-    expect(hits).toHaveLength(1);
-    expect(hits[0]!.event.damage).toBe(TREMOR.damage);
+    expect(hits).toHaveLength(1); // the ground bites the moment it opens
+    expect(hits[0]!.event.damage).toBe(TREMOR.damagePerTick);
     expect(hits[0]!.event.crit).toBe(false);
-    expect(hp(sim, 1)).toBe(100 - TREMOR.damage);
-    expect(sim.state.players[1]!.mover.vel.x).toBeGreaterThan(TREMOR.knockback * 0.8); // hurled east
+    // No hurl any more — the quake holds you in place, it doesn't launch you.
+    expect(Math.abs(sim.state.players[1]!.mover.vel.x)).toBeLessThan(1);
 
-    // Far enemy: same cast, nobody in radius.
+    // Ride out the rest of the life: 4 ticks total (0/1/2/3s), then gone.
+    const rest = run(sim, Math.ceil(TREMOR.duration / TICK_DT) + 2);
+    expect(ofType(rest, "hit")).toHaveLength(3);
+    expect(hp(sim, 1)).toBe(100 - 4 * TREMOR.damagePerTick);
+    expect(sim.state.deployables).toHaveLength(0);
+
+    // Far enemy: same cast, nobody in the circle — the ground shakes at air.
     const far = makeFight();
     far.state.players[0]!.mover.pos = { x: 96, y: 96 };
     far.state.players[1]!.mover.pos = { x: 416, y: 450 };
-    const quiet = run(far, 1, () => press(far, 0, "tremor"));
+    const farStart = far.state.tick;
+    const quiet = run(far, Math.ceil(TREMOR.duration / TICK_DT) + 2, (t) =>
+      t === farStart ? press(far, 0, "tremor") : new Map(),
+    );
     expect(ofType(quiet, "hit")).toHaveLength(0);
-    expect(ofType(quiet, "cast")).toHaveLength(1); // it still fired — just hit air
+    expect(ofType(quiet, "cast")).toHaveLength(1); // it still fired — just hit sand
   });
 
-  test("dash i-frames dodge the slam entirely", () => {
+  test("slows whoever stands in it; the slow lingers briefly, then clears", () => {
+    const sim = makeFight();
+    const bob = sim.state.players[1]!;
+    sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    bob.mover.pos = { x: 420, y: 256 };
+
+    const start = sim.state.tick;
+    run(sim, 2, (t) => (t === start ? press(sim, 0, "tremor") : new Map()));
+    expect(bob.slowLeft).toBeGreaterThan(0);
+    expect(bob.slowFactor).toBe(TREMOR.slowFactor);
+
+    // Sprint while inside: capped at the slowed speed, not full sprint.
+    run(sim, 12, () => new Map([[1, { seq: 0, sx: -1, sy: 0, casts: [] }]]));
+    const speed = Math.hypot(bob.mover.vel.x, bob.mover.vel.y);
+    expect(speed).toBeLessThan(PLAYER_MAX_SPEED * TREMOR.slowFactor + 5);
+
+    // After the zone expires, the linger runs out and the legs come back.
+    run(sim, Math.ceil((TREMOR.duration + TREMOR.slowLinger) / TICK_DT) + 2);
+    expect(sim.state.deployables).toHaveLength(0);
+    expect(bob.slowLeft).toBe(0);
+  });
+
+  test("dash i-frames dodge the ticks and the slow", () => {
     const sim = makeFight();
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
-    sim.state.players[1]!.mover.pos = { x: 280, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 420, y: 256 };
     slotOf(sim.state.players[1]!, "dash")!.invulnLeft = 999;
-    const events = run(sim, 1, () => press(sim, 0, "tremor"));
+    const start = sim.state.tick;
+    const events = run(sim, Math.ceil(TREMOR.duration / TICK_DT) + 2, (t) =>
+      t === start ? press(sim, 0, "tremor") : new Map(),
+    );
     expect(ofType(events, "hit")).toHaveLength(0);
     expect(hp(sim, 1)).toBe(100);
+    expect(sim.state.players[1]!.slowLeft).toBe(0);
+  });
+});
+
+describe("warding shout", () => {
+  test("hurls the enemy in the cone, damage-free; the flank is safe", () => {
+    const sim = makeFight({ a0: ["dash", "warding-shout"] });
+    const bob = sim.state.players[1]!;
+    sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    bob.mover.pos = { x: 320, y: 256 }; // dead ahead, well inside range
+    sim.state.players[0]!.facing = 0; // bellowing east (abilities step before facing re-tracks)
+
+    const events = run(sim, 1, () => press(sim, 0, "warding-shout"));
+    expect(ofType(events, "hit")).toHaveLength(0); // pure peel — no damage, ever
+    expect(hp(sim, 1)).toBe(100);
+    expect(bob.mover.vel.x).toBeGreaterThan(WARDING_SHOUT.knockback * 0.8); // hurled east
+
+    // Same spacing, shout aimed the other way: a shout has a direction.
+    const flank = makeFight({ a0: ["dash", "warding-shout"] });
+    flank.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    flank.state.players[1]!.mover.pos = { x: 320, y: 256 };
+    flank.state.players[0]!.facing = Math.PI; // bellowing west; bob stands east
+    run(flank, 1, () => press(flank, 0, "warding-shout"));
+    expect(Math.abs(flank.state.players[1]!.mover.vel.x)).toBeLessThan(1);
+  });
+
+  test("range-gated, and dash i-frames ride straight through it", () => {
+    const far = makeFight({ a0: ["dash", "warding-shout"] });
+    far.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    far.state.players[1]!.mover.pos = { x: 420, y: 256 }; // edge dist 306 > 170
+    far.state.players[0]!.facing = 0;
+    run(far, 1, () => press(far, 0, "warding-shout"));
+    expect(Math.abs(far.state.players[1]!.mover.vel.x)).toBeLessThan(1);
+
+    const sim = makeFight({ a0: ["dash", "warding-shout"] });
+    sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 300, y: 256 };
+    sim.state.players[0]!.facing = 0;
+    slotOf(sim.state.players[1]!, "dash")!.invulnLeft = 999;
+    run(sim, 1, () => press(sim, 0, "warding-shout"));
+    expect(Math.abs(sim.state.players[1]!.mover.vel.x)).toBeLessThan(1);
   });
 });
 
@@ -397,15 +478,27 @@ describe("ironhide", () => {
     expect(speed).toBeLessThan(PLAYER_MAX_SPEED * IRONHIDE.selfSlowFactor + 5);
   });
 
-  test("shrugs off tremor's knockback (but still takes reduced damage)", () => {
+  test("takes reduced quake ticks and shrugs off the quake's slow", () => {
     const sim = makeFight({ a1: ["ironhide", "dash"] });
     const bob = sim.state.players[1]!;
     sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
-    bob.mover.pos = { x: 280, y: 256 };
+    bob.mover.pos = { x: 420, y: 256 };
     forceActive(bob, "ironhide", 999);
     run(sim, 1, () => press(sim, 0, "tremor"));
-    expect(hp(sim, 1)).toBe(100 - Math.max(1, Math.round(TREMOR.damage * IRONHIDE.damageTakenFactor)));
-    expect(Math.abs(bob.mover.vel.x)).toBeLessThan(1); // never hurled
+    expect(hp(sim, 1)).toBe(100 - Math.max(1, Math.round(TREMOR.damagePerTick * IRONHIDE.damageTakenFactor)));
+    expect(bob.slowLeft).toBe(0); // the ground grabs at iron and finds no purchase
+  });
+
+  test("plants through Warding Shout's hurl (knockback immune)", () => {
+    const sim = makeFight({ a0: ["dash", "warding-shout"], a1: ["ironhide", "dash"] });
+    const bob = sim.state.players[1]!;
+    sim.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    bob.mover.pos = { x: 300, y: 256 };
+    sim.state.players[0]!.facing = 0;
+    forceActive(bob, "ironhide", 999);
+    run(sim, 1, () => press(sim, 0, "warding-shout"));
+    expect(Math.abs(bob.mover.vel.x)).toBeLessThan(1); // never budged
+    expect(hp(sim, 1)).toBe(100);
   });
 });
 

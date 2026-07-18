@@ -185,6 +185,7 @@ export type AbilityId =
   | "mirror-guard"
   | "ironhide"
   | "straw-man"
+  | "warding-shout"
   | "war-drums"
   | "blood-font"
   | "sandstorm";
@@ -229,9 +230,31 @@ export const SANDTRAP = {
   lifetime: 600,
 };
 
-/** Tremor: the anti-dogpile slam — instant, centred on the caster. Knockback
- * sized to genuinely HURL (Tom 2026-07-15: "really knock players back"). */
-export const TREMOR = { radius: 110, damage: 12, knockback: 1500 };
+/** Tremor: an earthquake ZONE (reworked from the instant slam, Tom
+ * 2026-07-17 — the slam's peel lives on as Warding Shout). Fixed at the
+ * caster's feet; enemies inside take chip ticks and a refreshed slow. Damage
+ * deliberately totals the old slam's 12 but sits UNDER a Blood Font's 8/s
+ * heal — a quake pressures a font, it doesn't negate one. */
+export const TREMOR = {
+  radius: 240,
+  duration: 4,
+  tickInterval: 1,
+  damagePerTick: 3,
+  /** Move-speed multiplier while inside (the hammer's slow plumbing). */
+  slowFactor: 0.75,
+  /** Refreshed every step in the zone, so this is also the step-out linger. */
+  slowLinger: 0.3,
+};
+
+/** Warding Shout: the old tremor slam promoted to a defensive peel — an
+ * instant no-damage cone off the facing that HURLS. Aimable, so whiffable:
+ * it comes out of the mouth, not the boots (Tom, 2026-07-17). */
+export const WARDING_SHOUT = {
+  range: 170,
+  /** Cone half-angle from the facing, radians (90° total). */
+  halfAngle: Math.PI / 4,
+  knockback: 2400,
+};
 
 /** Harpoon: an instant chain at the auto-target — one line, a hook on the
  * end, incredibly fast (reworked from a dodgeable projectile, Tom
@@ -289,6 +312,8 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
   },
   ironhide: { name: "Ironhide", category: "defensive", cooldown: 12, activeDuration: IRONHIDE.duration, charges: 3 },
   "straw-man": { name: "Straw Man", category: "defensive", cooldown: 14, activeDuration: 0, charges: 2 },
+  // Pure utility (no damage), so priced between dash's metronome and the moments.
+  "warding-shout": { name: "Warding Shout", category: "defensive", cooldown: 7, activeDuration: 0, charges: 3 },
   "war-drums": {
     name: "War Drums", category: "support", cooldown: 12, activeDuration: WAR_DRUMS.duration, charges: 3,
   },
@@ -323,7 +348,7 @@ export const STRAW_MAN_STATS: CombatStats = {
  * the round machine counts this down and starts the match ITSELF — no host
  * button. Joins/leaves cancel it; it restarts fresh. Rides round.timer while
  * the phase is still "lobby" (timer 0 = no countdown running). */
-export const LOBBY_COUNTDOWN_SECONDS = 10;
+export const LOBBY_COUNTDOWN_SECONDS = 5;
 /** How long a straggler may sit unarmed (while everyone else is ready) before
  * the host's force-start appears. Client-side gate only — the sim accepts a
  * force-start whenever someone is unarmed. */

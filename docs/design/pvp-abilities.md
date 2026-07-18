@@ -136,7 +136,7 @@ The host pressing START begins a four-beat draft, not the match:
 | # | Ability | Category | Shape | Cooldown | Charges/round |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Sandtrap | Offensive | deployable (explosive) | 10s | 2 |
-| 2 | Tremor | Offensive | instant self-AOE | 9s | 2 |
+| 2 | Tremor | Offensive | deployable (quake zone) | 9s | 2 |
 | 3 | Harpoon | Offensive | instant chain (own lock-on) | 12s | 2 |
 | 4 | Dash | Defensive | committed move + i-frames | 3s | 4 |
 | 5 | Mirror Guard | Defensive | self status | 12s | 3 |
@@ -145,6 +145,7 @@ The host pressing START begins a four-beat draft, not the match:
 | 8 | War Drums | Support | moving ally aura | 12s | 3 |
 | 9 | Blood Font | Support | deployable (heal zone) | 16s | 1 |
 | 10 | Sandstorm | Support | deployable (no-target zone) | 14s | 2 |
+| 11 | Warding Shout | Defensive | instant cone peel | 7s | 3 |
 
 Dash's 3s cooldown and four charges are deliberately the cheapest in the set:
 it's the metronome pick — small value, often (but no longer *constantly*).
@@ -188,22 +189,44 @@ Everything else is a moment — big value, once or twice a round.
 
 ### 2 · Tremor
 
-> *"Slam the ground and send everyone around you sprawling. Best served
-> surrounded."*
+> *"Split the earth beneath them. The ground gives way — and they are slow to
+> leave it."*
 
-- **Mechanics:** instant slam centred on yourself — the anti-dogpile button.
-  No windup (it's a panic tool; a telegraph would gut it).
-- **Numbers:** radius **110px** · damage **12 fixed** · radial knockback
-  impulse **1500 px/s** on every enemy in radius (Tom, 2026-07-15: it should
-  *really* hurl — was 700, which read as a shrug).
-- **Floor scar (Tom, 2026-07-15):** the slam leaves **cracked-earth decals**
-  where it landed — client-derived from the cast event, never networked,
-  fading over ~30s (the blood-trail rule exactly; `cracks.ts`, drawn in the
-  floor pass under the blood).
-- **Icon:** a boot with cracked-earth rings radiating outward.
-- **Cast SFX:** deep sub-bass thump, rock-crack transient, short rumble tail.
-- **Reuses:** resolve-on-cast against all enemies in radius (the arc resolve's
-  360° degenerate case) · existing knockback.
+- **REWORKED (Tom, 2026-07-17, thematic pass):** the instant slam is gone —
+  tremor is now an **earthquake zone**: cast instantly at your feet, it shakes
+  a wide circle of ground for its duration, chip-damaging and **slowing**
+  every enemy inside. Pure **zoning** — hold a choke, guard a Blood Font,
+  punish a dogpile by making the ground itself hostile. The old slam's peel
+  role moved whole to **Warding Shout** (#11).
+- **Mechanics:** the zone is **fixed where you stood** (it does not follow
+  you). Enemies inside take fixed chip damage on a 1s tick and are slowed
+  while they stand in it; the slow lingers ~0.3s past stepping out (a
+  per-step refresh of the hammer's slow plumbing — **strongest factor wins**
+  while a hammer slow overlaps). Dash i-frames dodge ticks and the slow
+  refresh; Ironhide takes reduced ticks and ignores the slow.
+- **Numbers:** radius **240px** (sized to genuinely zone — Sandtrap-blast
+  big; was 110 as a slam) · duration **4s** · damage **3 fixed per 1s tick**
+  (12 total — the old slam's burst, paid out over time, and deliberately
+  *under* a Blood Font's 8/s heal: a quake pressures a font, it doesn't
+  negate one) · slow **×0.75** move speed while inside.
+- **Floor + VFX:** the cast still fractures the sand at the epicentre
+  (cracked-earth decals, the blood-trail rule), and while the zone lives,
+  **big crack bursts pop at random points inside it every ~150ms** (~27 over
+  the life — enough to shatter most of the circle) — client-derived from the
+  zone's presence in snapshots. Every quake crack (epicentre + pops)
+  **persists past the zone and fades over ~20s** (Tom, 2026-07-17 second
+  pass; per-decal TTL on `cracks.ts`, decal cap raised to 128 — the draw
+  pass viewport-culls, so only the visible subset costs). An honest boundary
+  ring marks the true edge, with a fast low-amplitude shudder (the font
+  *breathes*; the quake *shakes*).
+- **Icon:** unchanged — the stomping boot with cracked-earth rings still fits.
+- **Cast SFX:** the existing sharp stomp stays as the cast tell. The quake
+  itself gets its **own clip** (Tom, 2026-07-17): `quake_rumble`, a ~4s
+  rolling earthquake bed fired alongside the cast (Forge, owed — silent
+  until it lands, the catalogue rule).
+- **Reuses:** the `Deployable` entity (a quake is Blood Font inverted: fixed
+  ticks, enemies-only, zone at the caster's feet) · the hammer's
+  `slowLeft`/`slowFactor` plumbing · `cracks.ts`.
 
 ### 3 · Harpoon
 
@@ -324,6 +347,37 @@ Everything else is a moment — big value, once or twice a round.
   snapping upright.
 - **Reuses:** `Deployable` entity · existing acquisition logic (widened) ·
   `resolveAttack` (a dummy is just a combatant that can't act).
+
+### 11 · Warding Shout
+
+> *"Fill your lungs and ROAR. The sand itself flees your voice — and so do
+> they."*
+
+- **NEW (Tom, 2026-07-17):** the old tremor slam's logic, promoted to its own
+  defensive pick and reshaped from a circle into a **shout cone** — it comes
+  out of your mouth, not your boots. Instant, no windup, **no damage**: every
+  enemy caught in the cone in front of you is **hurled** back massively. The
+  dedicated peel/panic button the roster lost when tremor became a zone — now
+  aimable, and therefore whiffable: a shout you point wrong moves nobody.
+- **Numbers:** range **170px** (a bellow carries further than the stomp's
+  110 did — the cone pays for the reach and the hurl) · cone **90°** centred
+  on facing · knockback impulse **2400 px/s** (the slam's 1500 "really hurl",
+  turned up — *massive* is the identity) · damage none · cooldown **7s** ·
+  **3 charges** (priced between dash's metronome and the big moments).
+- **Counterplay:** dash i-frames ride straight through it · Ironhide plants
+  (knockback immune, as everywhere) · standing **behind** the shouter is
+  safe — flank the loudmouth. An enemy standing dead-centre on the caster is
+  hurled along the facing (the slam's old rule).
+- **VFX:** a white wedge flash blasting out to the true range on the cast
+  event — client-derived, the honest-telegraph rule.
+- **Icon (Forge, owed):** a helmeted gladiator head mid-roar, concentric
+  shout rings bursting from the mouth. Tremor's boot stands in until forged.
+- **Cast SFX (Forge, owed):** a huge chesty war-bellow with a bassy air
+  punch. Authored as `cast_warding_shout` — silent until the clip lands (the
+  catalogue rule).
+- **Reuses:** the slam's radius resolve gated by a facing-dot-product cone ·
+  `applyImpulse` (Ironhide immunity included) · the cast event drives the
+  client cone flash, no new wire shape.
 
 ---
 

@@ -19,7 +19,7 @@ import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
 import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
-import { playSound, unlockAudio } from "../audio";
+import { playSound, unlockAudio, warmCombatAudio } from "../audio";
 import { KillStreaks, type MultiKillTier } from "../audio/killstreaks";
 import { AbilityButton, EMPTY_BUTTON_PICTURE, recordAbilityButton } from "../game/AbilityButton";
 import { useAbilityIconImages } from "../game/abilityIcons";
@@ -28,6 +28,7 @@ import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
 import { StatusPulses } from "../game/statusRings";
 import { loadLefty } from "../settings";
+import { devFlags } from "../dev";
 
 const NUMBER_TTL = 750;
 const RING_TTL = 380;
@@ -56,6 +57,17 @@ const MULTI_KILL_TEXT: Record<MultiKillTier, string> = {
  * caster's disc (above the name-tag/hp-bar clutter). */
 const CAST_FLASH_TTL = 950;
 const CAST_FLASH_RISE_FROM = 24;
+/** Warding Shout's cone blast — gone in a blink, like the bellow. */
+const SHOUT_CONE_TTL = 380;
+/** The quake's ground-giving-way pops: a small crack burst somewhere inside
+ * each live zone on this beat (client-derived from the zone's presence in
+ * snapshots — the blood-trail rule, never networked). */
+const QUAKE_POP_INTERVAL_MS = 150;
+const QUAKE_POP_RADIUS = 90; // burst arm scale — big bites, most of the circle
+/** Every quake crack — the epicentre AND the pops — persists past the zone
+ * and fades over this window (Tom, 2026-07-17 second pass: 20s, and dense
+ * enough that a spent quake leaves the whole circle visibly shattered). */
+const QUAKE_CRACK_TTL_MS = 20_000;
 
 interface AgedFx {
   item: FxItem;
@@ -113,6 +125,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const cracksRef = useRef<CrackField | null>(null);
   cracksRef.current ??= new CrackField();
   const cracks = cracksRef.current;
+  // Per-quake last-pop clocks (deployable id → ms) for the ground-giving-way
+  // crack bursts; cleared whenever no quake is live (ids never recycle).
+  const quakePopsRef = useRef<Map<number, number> | null>(null);
+  quakePopsRef.current ??= new Map();
+  const quakePops = quakePopsRef.current;
   const fightBannerUntil = useRef(0);
   // Last countdown digit sounded, so 3·2·1 ticks fire once each (null between rounds).
   const lastCountdown = useRef<number | null>(null);
@@ -136,6 +153,45 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   useEffect(() => {
     void loadLefty().then(setLefty);
   }, []);
+
+  // Backstop for paths that skip the lobby (mid-match rejoin routes straight
+  // here): idempotent, so the normal lobby-warmed case costs nothing.
+  useEffect(() => {
+    warmCombatAudio();
+  }, []);
+
+  // --- Frame profiler (dev menu toggle, session-only). Accumulate JS-thread
+  // time per frame — `sim` is everything behind sendInput (online: a WS send,
+  // ~0ms; practice: bots + stepSim + snapshot), `rec` is the scene re-record —
+  // then sample into state 2×/sec for the readout. Refs for the per-frame
+  // writes so they never render; when the toggle is off every branch below is
+  // skipped, so it costs nothing. The `×` figure is sim steps per frame: the
+  // fixed-step catch-up multiplier (sustained >1× = the loop is fighting to
+  // keep up; that catch-up is what the maxSteps clamp below caps).
+  const perfOn = devFlags.perfOverlay;
+  const perf = useRef({ simMs: 0, steps: 0, recMs: 0, frames: 0 });
+  const [perfText, setPerfText] = useState("");
+  useEffect(() => {
+    if (!perfOn) {
+      setPerfText("");
+      return;
+    }
+    const p = perf.current;
+    p.simMs = p.steps = p.recMs = p.frames = 0;
+    let last = performance.now();
+    const id = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - last) / 1000;
+      last = now;
+      const f = Math.max(1, p.frames);
+      const fps = elapsed > 0 ? p.frames / elapsed : 0;
+      setPerfText(
+        `JS ${fps.toFixed(0)}fps  sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms`,
+      );
+      p.simMs = p.steps = p.recMs = p.frames = 0;
+    }, 500);
+    return () => clearInterval(id);
+  }, [perfOn]);
 
   // First Blood + multi-kill announcements — client-derived from lethal hits
   // (fresh tracker per match, since this screen remounts per match). The banner
@@ -253,8 +309,22 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               bornMs: now,
               ttlMs: CAST_FLASH_TTL,
             });
-            // Tremor also fractures the sand where the caster stood.
-            if (e.ability === "tremor") cracks.add(caster.x, caster.y, TREMOR.radius, now);
+            // Tremor fractures the sand at the epicentre — slam-sized, not
+            // zone-sized (the ZONE reads via the ring + the pops) — and the
+            // 4s earthquake bed rolls in UNDER the cast stomp (its own clip;
+            // the cast stays the sharp tell).
+            if (e.ability === "tremor") {
+              cracks.add(caster.x, caster.y, 110, now, QUAKE_CRACK_TTL_MS);
+              playSound("quakeRumble", undefined, undefined, gainAt(caster.x, caster.y));
+            }
+            // Warding Shout: the bellow's wedge, out of the caster's facing.
+            if (e.ability === "warding-shout") {
+              fxRef.current.push({
+                item: { kind: "cone", x: caster.x, y: caster.y, angle: caster.facing, life: 1 },
+                bornMs: now,
+                ttlMs: SHOUT_CONE_TTL,
+              });
+            }
           }
         } else if (e.type === "harpoon") {
           // The chain flash: caster → hook point, gone in a blink.
@@ -303,13 +373,19 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         // One input per sim tick (30Hz): stick dir × magnitude + the cast taps
         // (consumed here; the server latches them so a between-tick press holds).
         const stick = stickRef.current;
+        const t0 = perfOn ? performance.now() : 0;
         client.sendInput(stick.dir.x * stick.magnitude, stick.dir.y * stick.magnitude, [
           ...castRequests.current,
         ]);
         castRequests.current.fill(false);
+        if (perfOn) {
+          perf.current.simMs += performance.now() - t0;
+          perf.current.steps += 1;
+        }
       },
       onRender: () => {
         const now = performance.now();
+        if (perfOn) perf.current.frames += 1;
         const view = client.buffer.sample(now);
         const { w, h } = layoutRef.current;
 
@@ -322,8 +398,28 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         }
 
         if (view && w > 0 && client.welcome) {
+          const recStart = perfOn ? performance.now() : 0;
           blood.update(view.players, now);
           cracks.update(now);
+          // Quake zones chew the ground while they live: pop a small,
+          // short-lived crack burst at a random spot inside each on a beat.
+          let liveQuakes = 0;
+          for (const d of view.deployables) {
+            if (d.kind !== "quake") continue;
+            liveQuakes++;
+            if (now - (quakePops.get(d.id) ?? 0) < QUAKE_POP_INTERVAL_MS) continue;
+            quakePops.set(d.id, now);
+            const popDist = TREMOR.radius * 0.85 * Math.sqrt(Math.random());
+            const popAng = Math.random() * Math.PI * 2;
+            cracks.add(
+              d.x + Math.cos(popAng) * popDist,
+              d.y + Math.sin(popAng) * popDist,
+              QUAKE_POP_RADIUS,
+              now,
+              QUAKE_CRACK_TTL_MS,
+            );
+          }
+          if (liveQuakes === 0 && quakePops.size > 0) quakePops.clear();
           pulses.update(view.players, now);
           picture.value = recordArena({
             view,
@@ -361,7 +457,12 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               continue;
             }
             const def = ABILITIES[slot.id];
-            const frac = Math.min(1, Math.max(0, slot.cd / def.cooldown));
+            // Quantised to 1% steps: the raw fraction moves every snapshot, so
+            // a running cooldown re-recorded its face (a fresh SkPicture + a
+            // canvas redraw) EVERY frame for its whole 10–20s — a steady tax
+            // that lands right after every cast. At 1% it re-records a few
+            // times a second; 3.6° of wedge per step is invisible.
+            const frac = Math.min(1, Math.max(0, Math.round((slot.cd / def.cooldown) * 100) / 100));
             const active = slot.active > 0;
             const key = `${slot.id}:${frac}:${active}:${slot.charges}`;
             if (key !== lastButtonKeys.current[i]) {
@@ -369,6 +470,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               overlays[i]!.value = recordAbilityButton(frac, active, slot.charges, def.charges);
             }
           }
+          if (perfOn) perf.current.recMs += performance.now() - recStart;
         }
 
         // HUD — cheap derive, setState only when something visible changed.
@@ -408,7 +510,15 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         }
       },
     },
-    { step: TICK_DT, maxStep: TICK_DT }, // pinned rate: no adaptive tiers on the client
+    // Pinned rate (no adaptive tiers), and catch-up capped at 2 steps/frame.
+    // The default cap (5) lets one long frame schedule a burst of make-up
+    // ticks; online those are free (a WS send), but in practice each one is a
+    // full stepSim + 7 bot brains, so the burst makes the NEXT frame longer —
+    // the fixed-timestep spiral, felt as stutter on weak devices. Capping at 2
+    // trades that for a moment of slow-motion (advanceFixed drops the excess
+    // time), which offline nobody can drift from; online the server never
+    // needed the extra input sends anyway (it latches the last one).
+    { step: TICK_DT, maxStep: TICK_DT, maxSteps: 2 },
   );
 
   const myTeam = client.welcome?.team ?? 1;
@@ -494,6 +604,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         </Pressable>
       ) : null}
 
+      {/* Frame profiler readout (dev menu toggle) — top-left, clear of the
+          centred score and the top-right quit chip. */}
+      {perfOn && perfText ? (
+        <Text style={[styles.perfReadout, { top: insets.top + 12 }]} pointerEvents="none">
+          {perfText}
+        </Text>
+      ) : null}
+
       {hud.lost ? (
         <View style={styles.leaveWrap}>
           <Pressable onPress={onLeave} style={styles.leave}>
@@ -558,6 +676,14 @@ const styles = StyleSheet.create({
   // play space (2026-07-16) — flex-end anchors them to the band's floor (which
   // already sits insets.bottom + 24 above the tray) and they grow upward.
   buttonsCol: { justifyContent: "flex-end", paddingBottom: 0, paddingHorizontal: 12, gap: 14 },
+  // Dev frame profiler: small mono readout pinned top-left.
+  perfReadout: {
+    position: "absolute",
+    left: 12,
+    color: "rgba(120, 255, 170, 0.9)",
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+  },
   quitChip: {
     position: "absolute",
     top: 54,

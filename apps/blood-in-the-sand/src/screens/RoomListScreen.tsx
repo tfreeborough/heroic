@@ -1,113 +1,130 @@
-import { useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
-import { Pressable } from "react-native-gesture-handler";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Animated,
+  Easing,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RoomListing } from "@heroic/blood-in-the-sand-sim";
+import { playSound, unlockAudio } from "../audio";
 import type { ArenaClient } from "../net/connection";
 
 const REFRESH_MS = 4000;
-const KEY_NAME = "bits.name";
 
 export interface RoomListScreenProps {
   client: ArenaClient;
+  /** Already claimed on the NameScreen gate — guaranteed non-empty. */
+  playerName: string;
   /** Back to the title screen. */
   onBack: () => void;
 }
 
+/** Which dialog is up: create a room, join by code, or a locked room's passcode. */
+type Sheet = { kind: "create" } | { kind: "code" } | { kind: "pass"; room: RoomListing };
+
 /**
- * The front door: pick a name, then browse → join, or create. Locked rooms
- * expand an inline passcode prompt on tap. The list re-polls every few
- * seconds while this screen is mounted.
+ * The front door to online play: browse → tap to join, or create. Everything
+ * that needs typing happens in a closable modal (create, join-by-code, locked
+ * room passcodes) — the list itself is just rooms. Rooms mid-match are hidden;
+ * the list re-polls every few seconds while this screen is mounted.
  */
-export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
+export const RoomListScreen = ({ client, playerName, onBack }: RoomListScreenProps) => {
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState("");
-  const [nameHint, setNameHint] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [sheet, setSheet] = useState<Sheet | null>(null);
   const [roomName, setRoomName] = useState("");
   const [createPass, setCreatePass] = useState("");
   const [teamSize, setTeamSize] = useState(1);
-  const [passFor, setPassFor] = useState<string | null>(null); // room code awaiting a passcode
-  const [joinPass, setJoinPass] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [joinPass, setJoinPass] = useState("");
+
+  // The create button breathes — a slow pulse on a halo layer behind it.
+  const glow = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(glow, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glow]);
 
   useEffect(() => {
-    void AsyncStorage.getItem(KEY_NAME).then((v) => v && setName(v));
     const timer = setInterval(() => client.listRooms(), REFRESH_MS);
     return () => clearInterval(timer);
   }, [client]);
 
-  /** Name is required at the point of action — nudge the field if it's empty. */
-  const requireName = (): string | null => {
-    const n = name.trim();
-    if (!n) {
-      setNameHint(true);
-      return null;
-    }
-    setNameHint(false);
-    void AsyncStorage.setItem(KEY_NAME, n);
-    return n;
+  const openSheet = (next: Sheet): void => {
+    unlockAudio();
+    playSound("uiTap");
+    client.lastError = null; // a stale failure doesn't belong in a fresh dialog
+    if (next.kind === "code") setJoinCode("");
+    if (next.kind !== "create") setJoinPass("");
+    setSheet(next);
+  };
+
+  const closeSheet = (): void => {
+    playSound("uiTap");
+    setSheet(null);
   };
 
   const join = (room: RoomListing): void => {
-    const n = requireName();
-    if (!n) return;
-    if (room.locked && passFor !== room.code) {
-      setPassFor(room.code);
-      setJoinPass("");
+    if (room.players >= room.capacity) return;
+    if (room.locked) {
+      openSheet({ kind: "pass", room });
       return;
     }
-    client.joinRoom(n, room.code, room.locked ? joinPass : "");
+    playSound("uiConfirm");
+    client.joinRoom(playerName, room.code, "");
+  };
+
+  const joinLocked = (room: RoomListing): void => {
+    playSound("uiConfirm");
+    client.joinRoom(playerName, room.code, joinPass);
   };
 
   const joinByCode = (): void => {
-    const n = requireName();
-    if (n && joinCode.length === 4) client.joinRoom(n, joinCode, joinPass);
+    if (joinCode.length !== 4) return;
+    playSound("uiConfirm");
+    client.joinRoom(playerName, joinCode, joinPass);
   };
 
   const create = (): void => {
-    const n = requireName();
-    if (n) client.createRoom(n, roomName.trim() || `${n}'s room`, createPass, teamSize);
+    playSound("uiConfirm");
+    client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize);
   };
 
+  // Mid-match rooms aren't joinable in any useful way — don't show them.
+  const openRooms = client.rooms.filter((r) => r.phase === "lobby");
+
+  const sheetError = client.lastError ? <Text style={styles.error}>{client.lastError}</Text> : null;
+
   const renderRoom = ({ item }: { item: RoomListing }) => (
-    <View style={styles.roomCard}>
-      <Pressable onPress={() => join(item)} style={styles.roomRow}>
-        <View style={styles.roomText}>
-          <Text style={styles.roomName}>
-            {item.locked ? "🔒 " : ""}
-            {item.name}
-          </Text>
-          <Text style={styles.roomMeta}>
-            {item.code} · {item.players}/{item.capacity} · {item.phase === "lobby" ? "in lobby" : "match running"}
-          </Text>
-        </View>
-        <Text style={styles.joinHint}>{item.players < item.capacity ? "JOIN ›" : "FULL"}</Text>
-      </Pressable>
-      {passFor === item.code ? (
-        <View style={styles.passRow}>
-          <TextInput
-            style={[styles.input, styles.passInput]}
-            value={joinPass}
-            onChangeText={setJoinPass}
-            placeholder="passcode"
-            placeholderTextColor="#6b6257"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            onSubmitEditing={() => join(item)}
-          />
-          <Pressable onPress={() => join(item)} style={styles.smallButton}>
-            <Text style={styles.smallButtonText}>GO</Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+    <Pressable onPress={() => join(item)} style={styles.roomCard}>
+      <View style={styles.roomText}>
+        <Text style={styles.roomName}>
+          {item.locked ? "🔒 " : ""}
+          {item.name}
+        </Text>
+        <Text style={styles.roomMeta}>
+          {item.code} · {item.players}/{item.capacity} gladiators
+        </Text>
+      </View>
+      <Text style={styles.joinHint}>{item.players < item.capacity ? "JOIN ›" : "FULL"}</Text>
+    </Pressable>
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 24 }]}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Pressable onPress={onBack} hitSlop={12}>
@@ -115,35 +132,47 @@ export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
           </Pressable>
           <Text style={styles.title}>ROOMS</Text>
         </View>
-        <View style={styles.nameWrap}>
-          <Text style={styles.nameLabel}>playing as</Text>
-          <TextInput
-            style={[styles.input, styles.nameInput, nameHint && styles.inputAttention]}
-            value={name}
-            onChangeText={(t) => {
-              setName(t);
-              if (t.trim()) setNameHint(false);
-            }}
-            placeholder="your name"
-            placeholderTextColor="#6b6257"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={16}
+        <Pressable onPress={() => openSheet({ kind: "code" })} style={styles.codeButton}>
+          <Text style={styles.codeButtonText}>JOIN BY CODE</Text>
+        </Pressable>
+      </View>
+
+      {client.lastError && sheet === null ? <Text style={styles.error}>{client.lastError}</Text> : null}
+
+      <FlatList
+        data={openRooms}
+        keyExtractor={(r) => r.code}
+        renderItem={renderRoom}
+        style={styles.list}
+        ListEmptyComponent={<Text style={styles.empty}>no rooms open — create one below</Text>}
+      />
+
+      {/* pinned create button, breathing */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+        <View>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.glow,
+              {
+                opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.45] }),
+                transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] }) }],
+              },
+            ]}
           />
+          <Pressable onPress={() => openSheet({ kind: "create" })} style={styles.createButton}>
+            <Text style={styles.createButtonText}>⚔ CREATE A ROOM</Text>
+          </Pressable>
         </View>
       </View>
-      {nameHint ? <Text style={styles.error}>pick a name first</Text> : null}
 
-      {client.lastError ? <Text style={styles.error}>{client.lastError}</Text> : null}
-
-      {/* create */}
-      {creating ? (
-        <View style={styles.createForm}>
+      {sheet?.kind === "create" ? (
+        <SheetModal title="CREATE A ROOM" onClose={closeSheet}>
           <TextInput
             style={styles.input}
             value={roomName}
             onChangeText={setRoomName}
-            placeholder={name.trim() ? `${name.trim()}'s room` : "room name"}
+            placeholder={`${playerName}'s room`}
             placeholderTextColor="#6b6257"
             maxLength={16}
           />
@@ -168,49 +197,93 @@ export const RoomListScreen = ({ client, onBack }: RoomListScreenProps) => {
               </Pressable>
             ))}
           </View>
-          <View style={styles.createButtons}>
-            <Pressable onPress={() => setCreating(false)} style={[styles.smallButton, styles.ghost]}>
-              <Text style={styles.smallButtonText}>CANCEL</Text>
-            </Pressable>
-            <Pressable onPress={create} style={styles.smallButton}>
-              <Text style={styles.smallButtonText}>CREATE</Text>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <Pressable onPress={() => setCreating(true)} style={styles.createButton}>
-          <Text style={styles.createButtonText}>+ CREATE A ROOM</Text>
-        </Pressable>
-      )}
+          {sheetError}
+          <Pressable onPress={create} style={styles.sheetButton}>
+            <Text style={styles.sheetButtonText}>CREATE</Text>
+          </Pressable>
+        </SheetModal>
+      ) : null}
 
-      {/* join by code */}
-      <View style={styles.codeRow}>
-        <TextInput
-          style={[styles.input, styles.codeInput]}
-          value={joinCode}
-          onChangeText={(t) => setJoinCode(t.toUpperCase())}
-          placeholder="have a code? e.g. KRVX"
-          placeholderTextColor="#6b6257"
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={4}
-          onSubmitEditing={joinByCode}
-        />
-        <Pressable onPress={joinByCode} style={styles.smallButton}>
-          <Text style={styles.smallButtonText}>JOIN</Text>
-        </Pressable>
-      </View>
+      {sheet?.kind === "code" ? (
+        <SheetModal title="JOIN BY CODE" onClose={closeSheet}>
+          <TextInput
+            style={styles.input}
+            value={joinCode}
+            onChangeText={(t) => setJoinCode(t.toUpperCase())}
+            placeholder="room code, e.g. KRVX"
+            placeholderTextColor="#6b6257"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            autoFocus
+            maxLength={4}
+            onSubmitEditing={joinByCode}
+          />
+          <TextInput
+            style={styles.input}
+            value={joinPass}
+            onChangeText={setJoinPass}
+            placeholder="passcode (locked rooms only)"
+            placeholderTextColor="#6b6257"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={16}
+          />
+          {sheetError}
+          <Pressable
+            onPress={joinByCode}
+            style={[styles.sheetButton, joinCode.length !== 4 && styles.sheetButtonDim]}
+          >
+            <Text style={styles.sheetButtonText}>JOIN</Text>
+          </Pressable>
+        </SheetModal>
+      ) : null}
 
-      <FlatList
-        data={client.rooms}
-        keyExtractor={(r) => r.code}
-        renderItem={renderRoom}
-        style={styles.list}
-        ListEmptyComponent={<Text style={styles.empty}>no rooms open — create one</Text>}
-      />
+      {sheet?.kind === "pass" ? (
+        <SheetModal title={`🔒 ${sheet.room.name}`} onClose={closeSheet}>
+          <TextInput
+            style={styles.input}
+            value={joinPass}
+            onChangeText={setJoinPass}
+            placeholder="passcode"
+            placeholderTextColor="#6b6257"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            maxLength={16}
+            onSubmitEditing={() => joinLocked(sheet.room)}
+          />
+          {sheetError}
+          <Pressable onPress={() => joinLocked(sheet.room)} style={styles.sheetButton}>
+            <Text style={styles.sheetButtonText}>JOIN</Text>
+          </Pressable>
+        </SheetModal>
+      ) : null}
     </View>
   );
 };
+
+/**
+ * A centred, closable dialog card. Gesture-handler Pressables inside a Modal
+ * need their own GestureHandlerRootView (Modals mount a fresh native tree).
+ */
+const SheetModal = ({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) => (
+  <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <GestureHandlerRootView style={styles.veilRoot}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.veil}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.sheetCard}>
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>{title}</Text>
+            <Pressable onPress={onClose} hitSlop={12}>
+              <Text style={styles.sheetClose}>✕</Text>
+            </Pressable>
+          </View>
+          {children}
+        </View>
+      </KeyboardAvoidingView>
+    </GestureHandlerRootView>
+  </Modal>
+);
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
@@ -218,27 +291,89 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { color: "#d94141", fontSize: 28, fontWeight: "900", letterSpacing: 3 },
   backText: { color: "#8a7f70", fontSize: 30, fontWeight: "800", marginTop: -3 },
-  nameWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-  nameLabel: { color: "#8a7f70", fontSize: 12 },
-  nameInput: { minWidth: 120 },
-  inputAttention: { borderColor: "#e0503c" },
-  error: { color: "#e0503c", fontSize: 14, marginTop: 10 },
-  createButton: {
-    backgroundColor: "#8c2f2f",
+  codeButton: {
+    borderColor: "#3a332a",
+    borderWidth: 1,
     borderRadius: 8,
-    marginTop: 16,
-    paddingVertical: 12,
-    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  createButtonText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1 },
-  createForm: {
+  codeButtonText: { color: "#d99a41", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
+  error: { color: "#e0503c", fontSize: 14, marginTop: 10 },
+  list: { marginTop: 18 },
+  empty: { color: "#6b6257", textAlign: "center", marginTop: 40 },
+  roomCard: {
     backgroundColor: "#1d1915",
     borderRadius: 8,
-    marginTop: 16,
-    padding: 12,
-    gap: 8,
+    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
   },
-  createButtons: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
+  roomText: { gap: 3 },
+  roomName: { color: "#f0e8d8", fontSize: 16, fontWeight: "700" },
+  roomMeta: { color: "#8a7f70", fontSize: 12 },
+  joinHint: { color: "#d99a41", fontWeight: "800", fontSize: 13 },
+  bottomBar: { paddingTop: 12 },
+  glow: {
+    position: "absolute",
+    top: -6,
+    bottom: -6,
+    left: -6,
+    right: -6,
+    borderRadius: 16,
+    backgroundColor: "#d94141",
+  },
+  createButton: {
+    backgroundColor: "#8c2f2f",
+    borderColor: "#e0503c",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  createButtonText: { color: "#f5ede0", fontWeight: "900", letterSpacing: 2, fontSize: 16 },
+  veilRoot: { flex: 1 },
+  veil: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  sheetCard: {
+    backgroundColor: "#1d1915",
+    borderColor: "#3a332a",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    gap: 10,
+    width: "100%",
+    maxWidth: 360,
+  },
+  sheetHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 2 },
+  sheetTitle: { color: "#f0e8d8", fontSize: 16, fontWeight: "900", letterSpacing: 1 },
+  sheetClose: { color: "#8a7f70", fontSize: 16, fontWeight: "800" },
+  sheetButton: {
+    backgroundColor: "#8c2f2f",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 2,
+  },
+  sheetButtonDim: { opacity: 0.4 },
+  sheetButtonText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1, fontSize: 14 },
+  input: {
+    backgroundColor: "#221e19",
+    borderColor: "#3a332a",
+    borderWidth: 1,
+    borderRadius: 8,
+    color: "#f0e8d8",
+    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
   sizeRow: { flexDirection: "row", gap: 8 },
   sizeOption: {
     flex: 1,
@@ -252,44 +387,4 @@ const styles = StyleSheet.create({
   sizeOptionOn: { backgroundColor: "#8c2f2f", borderColor: "#8c2f2f" },
   sizeText: { color: "#8a7f70", fontWeight: "800", fontSize: 13, letterSpacing: 1 },
   sizeTextOn: { color: "#f5ede0" },
-  codeRow: { flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" },
-  codeInput: { flex: 1 },
-  input: {
-    backgroundColor: "#221e19",
-    borderColor: "#3a332a",
-    borderWidth: 1,
-    borderRadius: 8,
-    color: "#f0e8d8",
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  smallButton: {
-    backgroundColor: "#8c2f2f",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  ghost: { backgroundColor: "#3a332a" },
-  smallButtonText: { color: "#f5ede0", fontWeight: "800", fontSize: 13 },
-  list: { marginTop: 18 },
-  roomCard: {
-    backgroundColor: "#1d1915",
-    borderRadius: 8,
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  roomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-  },
-  roomText: { gap: 3 },
-  roomName: { color: "#f0e8d8", fontSize: 16, fontWeight: "700" },
-  roomMeta: { color: "#8a7f70", fontSize: 12 },
-  joinHint: { color: "#d99a41", fontWeight: "800", fontSize: 13 },
-  passRow: { flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingBottom: 12, alignItems: "center" },
-  passInput: { flex: 1 },
-  empty: { color: "#6b6257", textAlign: "center", marginTop: 40 },
 });

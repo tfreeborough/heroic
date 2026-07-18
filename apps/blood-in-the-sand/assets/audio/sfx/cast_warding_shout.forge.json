@@ -1,0 +1,19 @@
+{
+  "type": "sfx-bits",
+  "subject": "a gladiator's massive warding bellow — a huge chesty war-shout with a bassy air-punch whoosh, no words, chants and drums",
+  "prompt": "a gladiator's massive warding bellow — a huge chesty war-shout with a bassy air-punch whoosh, no words, chants and drums. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.8,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_warding_shout_1.mp3",
+    "cast_warding_shout_2.mp3"
+  ],
+  "created": "2026-07-17T21:42:03.202Z",
+  "updated": "2026-07-17T21:45:35.444Z"
+}

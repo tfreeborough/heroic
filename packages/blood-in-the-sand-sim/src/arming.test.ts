@@ -1,6 +1,6 @@
 /**
  * The arming flow (pvp-loadout-flow.md): the sim starts the match ITSELF once
- * every seat is armed (10s countdown, joins/leaves cancel it), the host's
+ * every seat is armed (5s countdown, joins/leaves cancel it), the host's
  * force-start fills stragglers, and live picks stay team secrets on the wire —
  * with no reveal, ever.
  */
@@ -76,11 +76,12 @@ describe("the arming countdown", () => {
     expect(phaseOf(sim)).toBe("countdown");
   });
 
-  test("a mid-countdown leave cancels; re-arming restarts fresh at 10", () => {
+  test("a mid-countdown leave cancels; re-arming restarts fresh", () => {
     const sim = makeLobby();
     armBob(sim);
-    run(sim, seconds(5)); // halfway down
-    expect(sim.state.round.timer).toBeLessThan(LOBBY_COUNTDOWN_SECONDS - 4);
+    run(sim, seconds(LOBBY_COUNTDOWN_SECONDS / 2)); // halfway down
+    expect(sim.state.round.timer).toBeLessThan(LOBBY_COUNTDOWN_SECONDS / 2 + 1);
+    expect(sim.state.round.timer).toBeGreaterThan(0);
     removePlayer(sim, 1);
     expect(sim.state.round.timer).toBe(0);
     run(sim, seconds(LOBBY_COUNTDOWN_SECONDS + 2));

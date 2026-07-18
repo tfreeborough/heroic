@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a rolling earthquake shaking an arena for four seconds — sustained deep bass rumble with cracking earth, shifting gravel and a dusty settling tail",
+  "prompt": "a constant earthquake shaking an arena, sustained deep bass rumble with cracking earth, shifting gravel and a dusty settling tail. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 8,
+    "promptInfluence": 0.45,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "quake_rumble_1.mp3"
+  ],
+  "created": "2026-07-17T22:09:01.919Z",
+  "updated": "2026-07-17T22:09:01.919Z"
+}

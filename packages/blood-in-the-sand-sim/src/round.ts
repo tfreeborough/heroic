@@ -3,7 +3,7 @@
  * the whole match — countdowns, benches, lobby returns — is one deterministic,
  * headless-testable simulation; the server stays pure transport.
  *
- *   lobby ─(room full & all armed → 10s arming countdown)─▶ countdown ─▶ active ─(team wiped)─▶ roundEnd
+ *   lobby ─(room full & all armed → 5s arming countdown)─▶ countdown ─▶ active ─(team wiped)─▶ roundEnd
  *     ▲    (joins/leaves cancel it; the host's force-start                               │
  *     │     fills stragglers and passes the gate on a partial room) countdown ◀─(wins < 3)┤
  *     └───────(timer)─── matchEnd ◀─────────────────────────────────────────(wins = 3)───┘
@@ -108,7 +108,7 @@ export const armingComplete = (sim: ArenaSim): boolean => {
  * incomplete loadout from the sim rng (deterministic — the AFK backstop) AND
  * set the `forced` override so the arming gate passes with empty seats (the
  * partial-room launcher; empty seats simply don't spawn). Either way the SAME
- * 10s countdown runs — a force-start is never instant (Tom 2026-07-14), so
+ * 5s countdown runs — a force-start is never instant (Tom 2026-07-14), so
  * the auto-armed straggler gets a beat to see what they were dealt. Needs a
  * body on each team: lobby leave-churn can strand everyone on one side, and
  * forcing that match would be an instant walkover.
@@ -153,7 +153,7 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
   const round = sim.state.round;
   switch (round.phase) {
     case "lobby": {
-      // The arming countdown: nobody presses START. All armed → 10s, shown to
+      // The arming countdown: nobody presses START. All armed → 5s, shown to
       // every client (it rides round.timer through ordinary snapshots), then
       // the match starts itself. Joins/leaves cancel via addPlayer/removePlayer
       // zeroing the timer; picks can't un-arm anyone (replace, never clear).

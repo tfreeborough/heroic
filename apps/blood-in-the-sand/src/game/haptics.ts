@@ -7,6 +7,7 @@
  */
 import * as Haptics from "expo-haptics";
 import type { WeaponId } from "@heroic/blood-in-the-sand-sim";
+import { devFlags } from "../dev";
 
 export type HapticWeight = "soft" | "light" | "medium" | "heavy";
 
@@ -47,6 +48,9 @@ const fire = (style: Haptics.ImpactFeedbackStyle): void => {
  * crit stands out *because* the baseline is nothing.
  */
 export const playStrikeHaptic = (weight: HapticWeight | null, crit = false): void => {
+  // Dev A/B (mirrors disableSfx): skip ALL the native work so a choppy device
+  // can answer "is it the haptics?" with one dev-menu toggle.
+  if (devFlags.disableHaptics) return;
   if (weight === null && !crit) return;
   const now = Date.now();
   if (now - lastPlayed < MIN_GAP_MS) return;

@@ -22,6 +22,7 @@ import {
   STRAW_MAN,
   TREMOR,
   WAR_DRUMS,
+  WARDING_SHOUT,
   WEAPONS,
   WEAPON_IDS,
   type AbilityCategory,
@@ -144,14 +145,14 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     ],
   },
   tremor: {
-    hint: "instant slam — hurls everyone off you",
-    quote: "Slam the ground and send everyone around you sprawling. Best served surrounded.",
-    desc: "Instantly slams the ground: every enemy in the circle takes damage and is hurled away hard. The sand remembers the blow.",
+    hint: "quake a wide circle — chips and slows everyone inside",
+    quote: "Split the earth beneath them. The ground gives way — and they are slow to leave it.",
+    desc: "Shakes the ground where you stand: enemies inside the circle take steady chip damage and are slowed while they remain. The zone stays put — hold a choke, guard a font, punish a dogpile.",
     chips: [
       { label: "RADIUS", value: `${TREMOR.radius}px` },
-      { label: "DAMAGE", value: String(TREMOR.damage) },
-      { label: "KNOCKBACK", value: String(TREMOR.knockback) },
-      { label: "WINDUP", value: "none" },
+      { label: "DAMAGE", value: `${TREMOR.damagePerTick}/s` },
+      { label: "SLOW", value: `${Math.round((1 - TREMOR.slowFactor) * 100)}%` },
+      { label: "LASTS", value: `${TREMOR.duration}s` },
     ],
   },
   harpoon: {
@@ -201,6 +202,17 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
     chips: [
       { label: "DUMMY HP", value: String(STRAW_MAN.hp) },
       { label: "LIFETIME", value: `${STRAW_MAN.lifetime}s` },
+    ],
+  },
+  "warding-shout": {
+    hint: "bellow a cone — hurls them back, no damage",
+    quote: "Fill your lungs and ROAR. The sand itself flees your voice — and so do they.",
+    desc: "An instant bellow in the direction you face: every enemy caught in the cone is hurled away hard. No damage — pure space. A shout you point wrong moves nobody.",
+    chips: [
+      { label: "RANGE", value: `${WARDING_SHOUT.range}px` },
+      { label: "CONE", value: `${Math.round((WARDING_SHOUT.halfAngle * 2 * 180) / Math.PI)}°` },
+      { label: "KNOCKBACK", value: String(WARDING_SHOUT.knockback) },
+      { label: "WINDUP", value: "none" },
     ],
   },
   "war-drums": {

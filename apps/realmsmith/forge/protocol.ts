@@ -24,6 +24,9 @@ export interface ForgeStatus {
    * against the sound set it builds (src/forge/soundSet.ts): a bank is done when
    * any `<id>_<n>.mp3` exists. Same server-has-no-list pattern as iconFiles. */
   sfxFiles: string[];
+  /** PNGs already in the sprite destination folder — done-ticks for the sprite
+   * set (which is the checked-in SPRITE_SUBJECTS list, not a sim derivation). */
+  spriteFiles: string[];
 }
 
 export interface ExpandRequest {

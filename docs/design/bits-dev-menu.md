@@ -1,8 +1,8 @@
 # Blood in the Sand — Dev Menu & the Target-Dummy Range
 
-Status: **BUILT 2026-07-16** ·
+Status: **BUILT 2026-07-16** (perf overlay added 2026-07-17) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-16
+Last decided: 2026-07-17
 
 A hidden toolbox for on-device testing — things a developer needs mid-playtest
 that must never be visible (or reachable) in a normal session.
@@ -44,9 +44,56 @@ feel against things that hold still: **you vs a line of 3 target dummies**.
 - Leaving the range (LEAVE / quit) lands back on the **title screen** — the
   range has no front-door screen of its own.
 
+## Tool 2 — Perf overlay (frame profiler)
+
+A toggle (`PERF OVERLAY ◉/○`) that turns on a small green readout in matches
+— top-left of GameScreen, next match you enter (any match: online or
+practice):
+
+```
+JS 58fps  sim 4.2ms (1.1×)  rec 3.1ms
+```
+
+- **JS fps** — rAF frames per second on the JS thread (raster/GPU cost lives
+  on the UI thread; use RN's Perf Monitor for that half).
+- **sim** — ms/frame spent inside `sendInput`. Online that's a WebSocket send
+  (~0ms); in practice it's the whole in-process tick: 7 bot brains + `stepSim`
+  + snapshot. This split is exactly how you tell "practice sim is the cost"
+  from "drawing 8 fighters is the cost" on a weak device.
+- **(×)** — sim steps per rendered frame, the fixed-timestep catch-up
+  multiplier. At 30Hz sim / 60fps render, healthy is ~0.5×; sustained higher
+  means the loop is running make-up ticks (the stutter spiral — capped at 2
+  in GameScreen's loop config since 2026-07-17).
+- **rec** — ms/frame re-recording the Skia scene picture (decals, pulses,
+  `recordArena`, ability-button faces).
+
+Carried by `devFlags` (`src/dev.ts`), a plain session-only module object —
+readable from the game loop without React, reset on every launch like the
+menu itself. When off, every timing branch is skipped: zero cost.
+
+## Tool 3 — SFX kill-switch (perf A/B)
+
+`SFX ◉ ON / ○ KILLED` — flips `devFlags.disableSfx`, which makes `playSound`
+return before doing ANY work: no scheduler, no native `seekTo`/`play` calls.
+Not a mute (mute still drives the players at volume 0) — this is a perf
+experiment: if a device stutters in busy fights with SFX on and is smooth
+with SFX killed, the per-play native audio path is the cost and audio is
+where to optimise; if it's choppy either way, look at render/raster instead.
+Added 2026-07-17 chasing an iPhone-only chop that survived voice warming.
+
+## Tool 4 — Haptics kill-switch (perf A/B)
+
+`HAPTICS ◉ ON / ○ KILLED` — flips `devFlags.disableHaptics`, which makes
+`playStrikeHaptic` return before any native work. The same experiment as the
+SFX switch for the other per-moment native cost: iOS allocates a fresh
+`UIImpactFeedbackGenerator` per pulse (Android's vibrator call is cheap), and
+strikes/casts fire one on the exact frame the moment lands. Killed-and-smooth
+means haptics need batching/pre-armed generators; choppy either way clears
+them. Added 2026-07-18 on the same iPhone stutter hunt.
+
 ## Adding future tools
 
 `HomeScreen`'s dev panel is just a column — add a `Pressable` per tool and a
-handler prop wired in `App.tsx`. Candidates mentioned so far: none yet beyond
-the range; keep each tool offline/in-process where possible so nothing dev
-ever touches the server.
+handler prop wired in `App.tsx` (or, for loop/screen switches, a flag on
+`devFlags` in `src/dev.ts`). Keep each tool offline/in-process where possible
+so nothing dev ever touches the server.

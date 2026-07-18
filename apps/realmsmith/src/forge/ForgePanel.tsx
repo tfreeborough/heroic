@@ -7,11 +7,12 @@ import type {
   GenerateResponse,
   SaveResponse,
 } from "../../forge/protocol";
-import { ICON } from "../../forge/styleBible";
+import { ICON, SPRITE } from "../../forge/styleBible";
 import { buildIconSet, type IconSetEntry } from "./iconSet";
 import { buildSoundSet, type SoundCategory, type SoundSetEntry } from "./soundSet";
+import { buildSpriteSet, type SpriteSetEntry } from "./spriteSet";
 
-type ForgeType = "sfx-bits" | "icon-bits" | "sfx";
+type ForgeType = "sfx-bits" | "icon-bits" | "sprite-bits" | "sfx";
 
 /**
  * The Asset Forge panel (docs/design/asset-forge.md): sentence → (optional LLM
@@ -73,6 +74,7 @@ export const ForgePanel = ({ onClose }: Props) => {
   const [type, setType] = useState<ForgeType>("sfx-bits");
   const [iconId, setIconId] = useState<string | null>(null);
   const [soundId, setSoundId] = useState<string | null>(null);
+  const [spriteId, setSpriteId] = useState<string | null>(null);
 
   const [subject, setSubject] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -97,12 +99,20 @@ export const ForgePanel = ({ onClose }: Props) => {
   useEffect(loadStatus, [loadStatus]);
 
   const isIcon = type === "icon-bits";
+  const isSprite = type === "sprite-bits";
+  /** Both gpt-image-1 flows: one candidate kept, saved as `<id>.png`. */
+  const isImage = isIcon || isSprite;
   const isBits = type === "sfx-bits"; // the SFX type with a done-tick sound manifest
   // The set comes from the game's own tables; the server only says which files exist.
   const icons = useMemo(buildIconSet, []);
   const iconDone = (id: string): boolean => (status?.iconFiles ?? []).includes(`${id}.png`);
   const iconEntry = icons.find((e) => e.id === iconId) ?? null;
   const doneCount = icons.filter((e) => iconDone(e.id)).length;
+
+  // The sprite set — a static checked-in list (spriteSet.ts), done when the PNG exists.
+  const sprites = useMemo(buildSpriteSet, []);
+  const spriteDone = (id: string): boolean => (status?.spriteFiles ?? []).includes(`${id}.png`);
+  const spriteDoneCount = sprites.filter((e) => spriteDone(e.id)).length;
 
   // The sound set — same derive-from-the-sim pattern; a bank is done when any
   // `<id>_<n>.mp3` exists in the destination.
@@ -111,11 +121,17 @@ export const ForgePanel = ({ onClose }: Props) => {
     (status?.sfxFiles ?? []).some((f) => new RegExp(`^${id}_\\d+\\.mp3$`).test(f));
   const soundDoneCount = sounds.filter((e) => soundDone(e.id)).length;
 
-  const baseName = isIcon ? (iconId ?? "") : nameEdited ? name : slug(subject);
+  const baseName = isIcon
+    ? (iconId ?? "")
+    : isSprite
+      ? (spriteId ?? "")
+      : nameEdited
+        ? name
+        : slug(subject);
   const kept = takes.filter((t) => t.keep);
   const sfxReady = status?.keys.elevenlabs === true;
   const openaiReady = status?.keys.openai === true;
-  const generateReady = isIcon ? openaiReady : sfxReady;
+  const generateReady = isImage ? openaiReady : sfxReady;
   const durationSeconds = duration ? Number(duration) : undefined;
 
   const resetWork = (): void => {
@@ -131,6 +147,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     setSubject("");
     setIconId(null);
     setSoundId(null);
+    setSpriteId(null);
     setName("");
     setNameEdited(false);
     resetWork();
@@ -138,6 +155,12 @@ export const ForgePanel = ({ onClose }: Props) => {
 
   const pickIcon = (entry: IconSetEntry): void => {
     setIconId(entry.id);
+    setSubject(entry.subject);
+    resetWork();
+  };
+
+  const pickSprite = (entry: SpriteSetEntry): void => {
+    setSpriteId(entry.id);
     setSubject(entry.subject);
     resetWork();
   };
@@ -175,15 +198,17 @@ export const ForgePanel = ({ onClose }: Props) => {
     setSaved(null);
     setCopied(false);
     try {
-      // Icons: the panel owns the prompt build (set + accent live client-side).
+      // Images: the panel owns the prompt build (sets + accents live client-side).
       const builtPrompt = isIcon
         ? prompt.trim() || ICON.template(subject.trim(), iconEntry?.category ?? "weapon")
-        : prompt.trim() || undefined;
+        : isSprite
+          ? prompt.trim() || SPRITE.template(subject.trim())
+          : prompt.trim() || undefined;
       const data = await post<GenerateResponse>("/forge/generate", {
         type,
         subject: subject.trim(),
         prompt: builtPrompt,
-        ...(isIcon ? {} : { durationSeconds, promptInfluence: influence }),
+        ...(isImage ? {} : { durationSeconds, promptInfluence: influence }),
       });
       // Refill the box with what was actually sent (fills in the template on a
       // blank box) so the next round starts from editable ground truth.
@@ -194,7 +219,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     } finally {
       setBusy(null);
     }
-  }, [type, isIcon, iconId, subject, prompt, durationSeconds, influence]);
+  }, [type, isIcon, isSprite, isImage, iconId, subject, prompt, durationSeconds, influence]);
 
   const save = useCallback(async () => {
     setBusy("save");
@@ -206,20 +231,20 @@ export const ForgePanel = ({ onClose }: Props) => {
         baseName,
         subject: subject.trim(),
         prompt: prompt.trim(),
-        ...(isIcon ? {} : { durationSeconds, promptInfluence: influence }),
+        ...(isImage ? {} : { durationSeconds, promptInfluence: influence }),
         takes: kept.map((t) => t.b64),
       });
       setSaved(data);
       // Un-keep what was just saved; leftover SFX takes can still join the bank
       // later (the server continues numbering from disk).
       setTakes((ts) => ts.map((t) => ({ ...t, keep: false })));
-      if (isIcon || isBits) loadStatus(); // refresh the done ticks
+      if (isImage || isBits) loadStatus(); // refresh the done ticks
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
-  }, [type, isIcon, baseName, subject, prompt, durationSeconds, influence, kept, loadStatus]);
+  }, [type, isImage, isBits, baseName, subject, prompt, durationSeconds, influence, kept, loadStatus]);
 
   const copyLines = useCallback(() => {
     if (!saved) return;
@@ -243,13 +268,13 @@ export const ForgePanel = ({ onClose }: Props) => {
       </div>
 
       {statusError && <div className="errbox">{statusError}</div>}
-      {status && !sfxReady && !isIcon && (
+      {status && !sfxReady && !isImage && (
         <div className="warnbox">
           No ElevenLabs key. Copy <code>apps/realmsmith/.env.example</code> to{" "}
           <code>.env.local</code>, add <code>ELEVENLABS_API_KEY</code>, and restart the dev server.
         </div>
       )}
-      {status && !openaiReady && isIcon && (
+      {status && !openaiReady && isImage && (
         <div className="warnbox">
           No OpenAI key. Add <code>OPENAI_API_KEY</code> to{" "}
           <code>apps/realmsmith/.env.local</code> and restart the dev server.
@@ -325,27 +350,56 @@ export const ForgePanel = ({ onClose }: Props) => {
         </div>
       )}
 
+      {isSprite && (
+        <div className="icon-manifest">
+          <div className="icon-manifest-head">
+            The sprites — {spriteDoneCount} of {sprites.length} done
+          </div>
+          <div className="icon-cat-row">
+            <span className="icon-cat icon-cat-sprite">figure</span>
+            <div className="icon-chips">
+              {sprites.map((e) => (
+                <button
+                  key={e.id}
+                  className={`icon-chip${e.id === spriteId ? " active" : ""}${spriteDone(e.id) ? " done" : ""}`}
+                  onClick={() => pickSprite(e)}
+                  title={e.missingSubject ? "no art subject yet — add one to SPRITE_SUBJECTS in forge/styleBible.ts" : e.subject}
+                >
+                  {spriteDone(e.id) ? "✓ " : ""}
+                  {e.name}
+                  {e.missingSubject ? " ⚠" : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <label>
         {isIcon
           ? "Icon subject (from the manifest — edit freely)"
-          : isBits
-            ? "Sound brief (from the manifest — edit freely)"
-            : "Describe the sound"}
+          : isSprite
+            ? "Sprite subject (from the manifest — edit freely)"
+            : isBits
+              ? "Sound brief (from the manifest — edit freely)"
+              : "Describe the sound"}
         <textarea
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           placeholder={
             isIcon
               ? "pick an icon above, or describe one"
-              : isBits
-                ? "pick a sound above, or describe one"
-                : "a heavy sword striking a wooden shield"
+              : isSprite
+                ? "pick a sprite above, or describe one"
+                : isBits
+                  ? "pick a sound above, or describe one"
+                  : "a heavy sword striking a wooden shield"
           }
           rows={2}
         />
       </label>
 
-      {!isIcon && (
+      {!isImage && (
         <button
           onClick={expand}
           disabled={busy !== null || !subject.trim() || !openaiReady}
@@ -360,20 +414,20 @@ export const ForgePanel = ({ onClose }: Props) => {
       )}
 
       <label>
-        Prompt (sent verbatim; blank = built from the {isIcon ? "subject + style bible" : "sentence"})
+        Prompt (sent verbatim; blank = built from the {isImage ? "subject + style bible" : "sentence"})
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={
-            isIcon
-              ? "leave blank — the style bible's icon template carries the brand language"
+            isImage
+              ? `leave blank — the style bible's ${isSprite ? "sprite" : "icon"} template carries the brand language`
               : "dozens of chitinous spider legs skittering over stone as a nest collapses…"
           }
           rows={4}
         />
       </label>
 
-      {!isIcon && (
+      {!isImage && (
         <>
           <label>
             Prompt influence: {influence.toFixed(2)} — higher follows the text more literally
@@ -405,18 +459,18 @@ export const ForgePanel = ({ onClose }: Props) => {
       <button
         className="primary"
         onClick={generate}
-        disabled={busy !== null || !(subject.trim() || (isIcon && iconEntry)) || !generateReady}
+        disabled={busy !== null || !subject.trim() || !generateReady}
       >
         {busy === "generate"
-          ? isIcon
+          ? isImage
             ? "Generating… (30–90s per image)"
             : "Generating… (a few seconds per take)"
-          : isIcon
+          : isImage
             ? "Generate 2 candidates"
             : "Generate 3 takes"}
       </button>
 
-      {takes.length > 0 && !isIcon && (
+      {takes.length > 0 && !isImage && (
         <>
           <div className="takes">
             {takes.map((t) => (
@@ -457,15 +511,23 @@ export const ForgePanel = ({ onClose }: Props) => {
         </>
       )}
 
-      {takes.length > 0 && isIcon && (
+      {takes.length > 0 && isImage && (
         <>
           <div className="icon-candidates">
             {takes.map((t) => (
-              <button key={t.id} className={`icon-candidate${t.keep ? " keep" : ""}`} onClick={() => keepOne(t.id)}>
+              <button
+                key={t.id}
+                className={`icon-candidate${isSprite ? " sprite" : ""}${t.keep ? " keep" : ""}`}
+                onClick={() => keepOne(t.id)}
+              >
                 <img className="icon-full" src={`data:${t.mime};base64,${t.b64}`} alt={`candidate ${t.id + 1}`} />
                 <div className="icon-small-row">
-                  <img className="icon-small" src={`data:${t.mime};base64,${t.b64}`} alt="" />
-                  <span>32px — still readable?</span>
+                  <img
+                    className={isSprite ? "sprite-small" : "icon-small"}
+                    src={`data:${t.mime};base64,${t.b64}`}
+                    alt=""
+                  />
+                  <span>{isSprite ? "~title-screen size, on sand — reads well?" : "32px — still readable?"}</span>
                 </div>
               </button>
             ))}
@@ -475,7 +537,7 @@ export const ForgePanel = ({ onClose }: Props) => {
             className="primary"
             onClick={save}
             disabled={busy !== null || kept.length !== 1 || !baseName}
-            title={iconId ? `saves as ${iconId}.png` : "pick a manifest icon to name the file"}
+            title={baseName ? `saves as ${baseName}.png` : `pick a manifest ${isSprite ? "sprite" : "icon"} to name the file`}
           >
             {busy === "save"
               ? "Processing & saving…"
@@ -490,14 +552,18 @@ export const ForgePanel = ({ onClose }: Props) => {
         <div className="okbox">
           <div>
             Saved <strong>{saved.files.join(", ")}</strong>
-            {isIcon ? " (512px, transparent)." : " (trimmed + loudness-normalized)."}
+            {isImage
+              ? ` (${isSprite ? SPRITE.savedSize : ICON.savedSize}px, transparent).`
+              : " (trimmed + loudness-normalized)."}
           </div>
           <div>
             {isIcon
               ? "Paste into src/loadout/icons.tsx when switching to image icons:"
-              : isBits
-                ? "Paste into src/audio/manifest.ts:"
-                : "Paste into src/game/audio/manifest.ts:"}
+              : isSprite
+                ? "Require-map line for the consuming screen (title screen, when built):"
+                : isBits
+                  ? "Paste into src/audio/manifest.ts:"
+                  : "Paste into src/game/audio/manifest.ts:"}
           </div>
           <pre>{saved.manifestLines.join("\n")}</pre>
           <button onClick={copyLines}>{copied ? "Copied ✓" : "Copy manifest lines"}</button>

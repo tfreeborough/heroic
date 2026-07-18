@@ -205,7 +205,7 @@ export class Room {
   }
 
   /** The host's start-early control: fills every unarmed seat AND overrides
-   * the full-room gate on a partial lobby, then the sim's own 10s arming
+   * the full-room gate on a partial lobby, then the sim's own 5s arming
    * countdown runs (the machine notices the gate passing — the server never
    * starts a match; pvp-loadout-flow.md). */
   forceStart(playerId: number, nowMs: number): void {

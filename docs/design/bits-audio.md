@@ -167,6 +167,86 @@ If latency ever persists in a *production* build (local files, no fetch), the
 next lever is a resident player per clip (zero per-play decode) — deferred, since
 preload + a warm pool should cover it.
 
+## Frame freezes on first plays — voice warming (2026-07-17)
+
+Symptom (low-end device): the whole screen froze for a beat whenever an
+ability fired — own casts, enemy casts, and worst at a 4v4's opening scrum.
+Diagnosis: the 2026-07-16 preload warmed the **files** (into the asset cache),
+but no **player** holds a clip until its first `playSfx` — which pays
+`createAudioPlayer(source)` (native player instantiation) or
+`player.replace(source)` (native source load) on the exact frame the game
+moment fires. Every distinct clip's first play in a session = one mid-combat
+hitch; a first teamfight fires many novel clips in one frame.
+
+Fix: **`AudioDirector.warm(names)`** — pre-loads clips onto *pinned* voices,
+staggered one native load per ~90ms so warming itself never hitches. Pinned
+voices are softly held: ordinary churn (UI taps, stingers) loads onto unpinned
+voices first, so the warm set stays resident; a pinned voice is evicted (and
+unpinned) only when every unpinned voice is busy. The app calls
+`warmCombatAudio()` on RoomScreen mount (the lobby is the calm before the
+fight; GameScreen mounts it too as a rejoin backstop) with the **mid-combat
+set** (~22 clips) derived from the catalogue's combat events — every cast,
+strike, fire, death, hurt, whip, heal, detonate — so a newly forged clip warms
+itself. `SFX_VOICES` 16 → 26: the warm set plus unpinned churn headroom.
+
+Deliberately left cold: match-flow stings and UI (play at calm phase
+boundaries) and the **announcer** (first blood / multi-kill tiers, 6 clips —
+these DO fire mid-combat, so if a first-blood hitch shows up on device, add
+them to the warm set and raise the pool to ~32). Why not warm all ~42 clips:
+the constraint isn't only memory — Android caps native audio sessions/tracks
+per process (the original reason the voice pool exists), so the pool stays
+bounded and the warm set is chosen, not universal.
+
+## iOS per-play cost — re-arm + start budget (2026-07-17)
+
+Warming fixed Android but an iPhone SE 3 dev build stayed choppy in busy
+fights; the dev menu's SFX kill-switch A/B (Tool 3) confirmed the audio path
+as the cost. On iOS, even a warm fire is a batch of native AVPlayer calls
+that dispatch through the main thread — `seekTo(0)`, `setPlaybackRate`,
+volume, `play()` — and busy fights fire sounds near-continuously. Two
+director changes:
+
+- **Re-arm on finish**: each voice carries a persistent finish listener that
+  seeks back to 0 while the voice is *idle* (guarded against rewinding a
+  just-refired or stolen voice), so a warm fire skips `seekTo` — the
+  costliest call — entirely. Falls back to the hot-path seek if the finish
+  event never came; short clips (< the 250ms voice-hold) also keep the
+  fallback.
+- **Per-frame start budget**: at most 3 native play-starts per 16ms window;
+  surplus burst sounds are dropped before any native work (perceptually
+  masked by the ones that played).
+
+Still choppy after those two — because the sneakiest cost wasn't the *calls*,
+it was the *reads*: voice selection scanned `player.playing` across the pool
+per play, and expo-audio property getters are synchronous JSI hops into
+native (main-thread on iOS). A warm 26-voice pool × fight-rate plays =
+hundreds of sync native reads a second — and warming made it WORSE (bigger
+pool to scan). Third pass, the **JS mirror**: each voice mirrors `busy` /
+`loaded` / `atStart` in plain JS, maintained by its status listener and the
+fire path, so voice selection touches zero native properties. A `MAX_BUSY_MS`
+escape hatch in `free` keeps a lost status event from leaking a voice.
+
+**Correctness scare (2026-07-18, lessons baked into director.ts comments):**
+the first mirror version over-reached and broke playback (late / doubled /
+missing sounds). Two rules survived the fix:
+- Only `didJustFinish` may free a voice, and REGARDLESS of fire recency —
+  most combat clips are shorter than the 250ms voice-hold, so their finish
+  lands inside it; a "stale event" guard there locks every short clip's
+  voice until the escape hatch.
+- The listener never touches the playhead. Re-arming idle voices to 0 (to
+  skip the hot-path `seekTo`) triggered on transient `!playing` states and
+  rewound live sounds — heard as double-fires. The seek stays at fire time;
+  `atStart` only skips it for a freshly loaded item. Same class of caution:
+  don't skip "unchanged" volume/rate pushes — whether `replace()` resets
+  native state is expo-audio-internal.
+
+If iOS *still* stutters with selection reads gone, expo-audio (AVPlayer
+one-shots) is the wrong tool for game SFX and the ladder's last rung is
+swapping SFX playback to `react-native-audio-api` (Web Audio: decoded
+buffers, native-engine playback, per-play cost ≈ nothing) — music decks
+would stay on expo-audio. Native dep + dev-client rebuilds; needs Tom's
+buy-in.
+
 ## Forge authoring path
 
 `sfx-bits` is its own asset type (symmetry with `icon-bits` being separate from

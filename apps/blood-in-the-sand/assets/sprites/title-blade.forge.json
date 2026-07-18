@@ -1,0 +1,18 @@
+{
+  "type": "sprite-bits",
+  "subject": "a lean fast gladiator in full side profile facing right, coiled low in a duelling crouch, a short gladius sword held ready at hip height with the blade angled up, a small round buckler on the rear arm, light cracked-leather armor, crested open-face galea helmet, studded leather pteruges skirt, wrapped shins — built for speed",
+  "prompt": "a lean fast gladiator in full side profile facing right, coiled low in a duelling crouch, a short gladius sword held ready at hip height with the blade angled up, a small round buckler on the rear arm, light cracked-leather armor, crested open-face galea helmet, studded leather pteruges skirt, wrapped shins — built for speed. A full-figure character sprite for a grim dark-fantasy gladiator arena game set in a scorched desert. Hand-inked woodcut illustration: heavy black ink linework, rough expressive hatching, and deep pooled black shadows anchor the form — the figure reads as dark inked woodcut, never a polished bronze statue. Sun-bleached bone (#f0e8d8) highlights carve the shape out of the dark; scorched sand-ochre (#b39763) midtones like heat-baked dust settled on every surface. Gladiatorial desert materials: hammered bronze trim, cracked leather wraps, sun-split wood, rust and dried blood. Lit by a harsh high desert sun — a warm rim light burns along the helmet crest and upper shoulders. The ENTIRE figure stands about 80% of the frame tall, centered, with empty transparent margin visible on all four sides — above the helmet crest, below the feet, and past every weapon tip; nothing touches or crosses the frame edge. Grim, weighty, battle-scarred — never cute, never photorealistic, never a clean flat vector. The figure is a clean die-cut cut-out: the cut line follows the figure's own silhouette exactly, and every pixel outside it is fully transparent — including directly beneath the boots, where bare transparent pixels begin at the soles. The figure touches nothing and stands on nothing: no ground, no cast shadow, no dust at the feet, no backdrop, no glow. No text.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1536",
+    "quality": "medium",
+    "background": "transparent",
+    "savedSize": 512
+  },
+  "files": [
+    "title-blade.png"
+  ],
+  "created": "2026-07-17T22:24:58.610Z",
+  "updated": "2026-07-17T22:39:36.971Z"
+}

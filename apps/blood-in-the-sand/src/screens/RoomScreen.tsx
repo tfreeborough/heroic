@@ -1,24 +1,36 @@
 /**
  * The Arming (docs/design/pvp-loadout-flow.md, mock-approved 2026-07-15): a
  * guided wizard — weapon → one screen per ability, one decision each — then
- * the lobby, where the server's own 10s countdown starts the match once every
+ * the lobby, where the server's own 5s countdown starts the match once every
  * seat is armed. Nobody presses START; the host's only control is the
  * force-start backstop for AFK stragglers.
  *
  * Layout per approved mock: roster ticker (who's armed — never WHAT they
  * picked) · socket strip (◆①②③, tap to revisit) · snap carousel with codex
  * content (ability steps open on a category gate) · CHOOSE → stamp + the icon
- * flies into its socket → auto-advance → "YOU ARE ARMED" splash → lobby.
+ * flies into its socket → auto-advance → lobby (the full-screen "YOU ARE
+ * ARMED" splash was cut 2026-07-17 — pure ceremony by the tenth arming).
  * Returning players get SAME ARMS (last loadout, one tap; CHOOSE ANEW clears).
  *
  * The wizard owns its picks LOCALLY and sends the full state on every choose
  * (idempotent messages) — roomState round-trips never race a fast picker.
  * Works identically for ArenaClient and PracticeClient via LobbyClient.
  */
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Animated, Easing, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Fragment, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  Animated,
+  Easing,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Clipboard from "expo-clipboard";
 import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import {
   ABILITIES,
@@ -33,7 +45,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import type { LobbyClient } from "../net/connection";
 import { playStrikeHaptic } from "../game/haptics";
-import { playSound, unlockAudio } from "../audio";
+import { playSound, unlockAudio, warmCombatAudio } from "../audio";
 import { LoadoutIcon, type IconId } from "../loadout/icons";
 import {
   ABILITY_CODEX,
@@ -77,7 +89,10 @@ const CATEGORY_DESC: Record<AbilityCategory, string> = {
 };
 const CARD_W = 250;
 const CARD_GAP = 14;
-const SPLASH_MS = 3600;
+/** Below this window height (iPhone SE = 667pt) the lobby renders COMPACT:
+ * tighter rows/headers, a smaller socket strip, and multiple open seats
+ * collapsed into one row — a full 4v4 roster otherwise overflows. */
+const COMPACT_LOBBY_HEIGHT = 700;
 const FLY_MS = 460;
 const LAND_BEAT_MS = 320;
 
@@ -119,6 +134,12 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     return () => clearInterval(id);
   }, []);
 
+  // The lobby is the calm before the fight — pre-load every mid-combat clip
+  // now so no ability cast or first clash pays a native audio load mid-frame.
+  useEffect(() => {
+    warmCombatAudio();
+  }, []);
+
   // ── Wizard state (local picks are the source of truth while arming) ──────
   // Seed from the client so a remount mid-lobby (already armed) lands in the
   // lobby view, not a fresh wizard.
@@ -131,13 +152,33 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
       ? null
       : { step: 0, cat: null, edit: false },
   );
-  const [splash, setSplash] = useState(false);
   const [rib, setRib] = useState<SavedLoadout | null>(null);
+  // Bumped each time the player BECOMES armed — the lobby's arsenal box glints
+  // once per bump: the slim successor to the deleted full-screen armed splash.
+  const [armedStamp, setArmedStamp] = useState(0);
+  // Leaving always confirms (Tom 2026-07-17): a mistap doesn't just exit YOU —
+  // removePlayer cancels the whole room's arming countdown and frees the seat.
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const [fly, setFly] = useState<FlyState | null>(null);
   const flyT = useRef(new Animated.Value(0)).current;
   const [landedSlot, setLandedSlot] = useState<number | null>(null);
   const socketRefs = useRef<(View | null)[]>(SLOT_INDICES.map(() => null));
   const focusedIconRef = useRef<View | null>(null);
+
+  // The card picker is a full-screen TAKEOVER above the ticker/sockets (Tom
+  // 2026-07-17 — in-flow cards squished small screens). On CHOOSE it fades
+  // out so the flying icon lands on a VISIBLE socket; a fresh carousel
+  // (step/category change) resets the fade.
+  const pickerOpen = wizard !== null && (wizard.step === 0 || wizard.cat !== null);
+  const pickerFade = useRef(new Animated.Value(1)).current;
+  const [pickerFading, setPickerFading] = useState(false);
+  useEffect(() => {
+    if (pickerOpen) {
+      pickerFade.setValue(1);
+      setPickerFading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the picker identity
+  }, [wizard?.step, wizard?.cat]);
 
   // The SAME ARMS offer — once, on entering an unarmed lobby.
   const startedUnarmed = useRef(wizard !== null);
@@ -162,6 +203,16 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   const view = client.buffer.sample(performance.now());
   const timer = client.phase === "lobby" ? (view?.round.timer ?? 0) : 0;
   const timerCeil = Math.ceil(timer);
+  // While the countdown runs, the 250ms roster tick is too coarse — digits
+  // land up to a quarter-second late and the tick sound drifts off the true
+  // second boundaries (why the lobby count felt slower than the in-game 3·2·1,
+  // which samples per frame). Re-render at snapshot rate for the short count.
+  const counting = timer > 0;
+  useEffect(() => {
+    if (!counting) return;
+    const id = setInterval(force, 1000 / 30);
+    return () => clearInterval(id);
+  }, [counting]);
   const lastTick = useRef(0);
   useEffect(() => {
     if (timer > 0 && timerCeil !== lastTick.current) {
@@ -186,7 +237,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
       playStrikeHaptic("heavy");
       playSound("uiConfirm"); // TODO a real "you are armed" fanfare via Asset Forge
       setWizard(null);
-      setSplash(true);
+      setArmedStamp((s) => s + 1);
     },
     [],
   );
@@ -215,6 +266,18 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     return id ? categoryOf(id) : null;
   };
 
+  // Choosing an ability plays its actual cast sound (harpoon brings its chain
+  // whip along, as in-game) — the pick doubles as an ear-training moment, so
+  // the tell is already familiar the first time an enemy fires it for real.
+  const playChooseSound = (w: WizardState, id: IconId): void => {
+    if (w.step === 0) {
+      playSound("uiConfirm");
+      return;
+    }
+    playSound("abilityCast", id);
+    if (id === "harpoon") playSound("harpoonWhip");
+  };
+
   const choose = (w: WizardState, id: IconId): void => {
     unlockAudio();
     const after: Picks =
@@ -224,12 +287,17 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     const kept = w.step === 0 ? picks.weapon === id : picks.hand[w.step - 1] === id;
     commit(after);
     if (kept) {
-      playSound("uiTap");
+      if (w.step === 0) playSound("uiTap");
+      else playChooseSound(w, id);
       advance(w, after);
       return;
     }
     playStrikeHaptic("heavy");
-    playSound("uiConfirm");
+    playChooseSound(w, id);
+    // The picker takeover fades out NOW so the flying icon lands on a visible
+    // socket (the overlay covers the strip while browsing).
+    setPickerFading(true);
+    Animated.timing(pickerFade, { toValue: 0, duration: 160, useNativeDriver: true }).start();
     // The moment: the chosen icon flies from the card into its socket. All
     // THREE rects (root, icon, socket) are measured the same way — on-screen
     // window coords — and the root's origin is subtracted, so the fly's
@@ -281,6 +349,28 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     setWizard({ step: i, cat: catOfSlot(picks, i), edit });
   };
 
+  const askLeave = useCallback((): void => {
+    playSound("uiTap");
+    setConfirmLeave(true);
+  }, []);
+
+  // Consume-once: the glint fires on the FIRST lobby render after an arming
+  // and never on later remounts (closing a socket edit re-mounts LobbyView —
+  // replaying the shine there would read as a glitch, not a moment).
+  const glintShown = useRef(0);
+  const glintKey = wizard === null && armedStamp !== glintShown.current ? armedStamp : 0;
+  useEffect(() => {
+    if (glintKey !== 0) glintShown.current = glintKey;
+  });
+
+  // The wizard's ✕ closes the WIZARD, never the room (Tom 2026-07-17): mid-
+  // arming, "✕" means "put the cards down", and the lobby behind it has its
+  // own leave. Picks already committed stay committed — resume via a socket.
+  const closeWizard = useCallback((): void => {
+    playSound("uiBack");
+    setWizard(null);
+  }, []);
+
   // ── Run it back ───────────────────────────────────────────────────────────
   const ribYes = (saved: SavedLoadout): void => {
     unlockAudio();
@@ -291,7 +381,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   };
   // CHANGE starts from scratch (Tom 2026-07-16): committing the old loadout
   // here would ARM you server-side — with everyone else ready, the countdown
-  // would start while you're still browsing, giving you ~10s to "change".
+  // would start while you're still browsing, giving you ~5s to "change".
   // Staying unarmed holds the match until the wizard is walked again.
   const ribChange = (): void => {
     unlockAudio();
@@ -329,12 +419,20 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     graceCond && performance.now() - graceSince.current.atMs > FORCE_START_GRACE_SECONDS * 1000;
 
   return (
-    // The root carries NO padding: overlays (veil/splash/rib/fly) are its
-    // absolute children, and Yoga offsets absolute children by parent padding
-    // (unlike CSS) — padded, the splash was off-centre and the fly missed.
+    // The root carries NO padding: overlays (veil/rib/fly) are its absolute
+    // children, and Yoga offsets absolute children by parent padding (unlike
+    // CSS) — padded, overlays sat off-centre and the fly missed.
     <View ref={rootRef} collapsable={false} style={styles.root}>
       <View style={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 8 }]}>
-        <RosterTicker players={players} myId={welcome.playerId} myTeam={myTeam} capacity={capacity} />
+        {/* The room-leave ✕ rides the roster row, clear of everything below.
+            Wizard mode hides it — there the stepHead ✕ (close wizard) is the
+            only ✕ on screen, so the two never sit stacked. */}
+        <View style={styles.tickerRow}>
+          <View style={styles.tickerFill}>
+            <RosterTicker players={players} myId={welcome.playerId} myTeam={myTeam} capacity={capacity} />
+          </View>
+          {wizard === null ? <LeaveX onPress={askLeave} /> : null}
+        </View>
 
       {wizard !== null ? (
         <>
@@ -350,24 +448,29 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
           {timer > 0 ? (
             <Text style={styles.wizardCountdown}>{`MATCH STARTS IN ${timerCeil} — picks stay live`}</Text>
           ) : null}
-          <WizardStep
-            key={`${wizard.step}:${wizard.cat ?? "-"}`}
-            wizard={wizard}
-            picks={picks}
-            screenW={screenW}
-            focusedIconRef={focusedIconRef}
-            onGate={(cat) => {
-              unlockAudio();
-              playSound("uiTap");
-              playStrikeHaptic("soft");
-              setWizard({ ...wizard, cat });
-            }}
-            onBackToGates={() => {
-              playSound("uiBack");
-              setWizard({ ...wizard, cat: null });
-            }}
-            onChoose={(id) => choose(wizard, id)}
-          />
+          {!pickerOpen ? (
+            // The category gates render in-flow, under the socket strip; the
+            // card carousel itself is the full-screen takeover further down.
+            <WizardStep
+              key={`${wizard.step}:${wizard.cat ?? "-"}`}
+              wizard={wizard}
+              picks={picks}
+              screenW={screenW}
+              focusedIconRef={focusedIconRef}
+              onGate={(cat) => {
+                unlockAudio();
+                playSound("uiTap");
+                playStrikeHaptic("soft");
+                setWizard({ ...wizard, cat });
+              }}
+              onBackToGates={() => {
+                playSound("uiBack");
+                setWizard({ ...wizard, cat: null });
+              }}
+              onChoose={(id) => choose(wizard, id)}
+              onClose={closeWizard}
+            />
+          ) : null}
         </>
       ) : (
         <LobbyView
@@ -382,24 +485,67 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
           socketRefs={socketRefs}
           showForceStart={showForceStart}
           unarmedCount={unarmed.length}
-          onEditSlot={(i) => jumpToSlot(i, true)}
+          // Armed: a socket tap is a one-slot edit (straight back to the
+          // lobby). Holes left (the wizard's ✕ can dismiss mid-walk): resume
+          // the walk — advance keeps going until the arming completes.
+          onEditSlot={(i) => jumpToSlot(i, allComplete(picks))}
           lastWinner={view?.round.lastWinner ?? 0}
           wins={view?.round.wins ?? [0, 0]}
+          glintKey={glintKey}
         />
       )}
-
-        <Pressable onPress={onLeave} style={styles.leave} hitSlop={8}>
-          <Text style={styles.leaveText}>LEAVE ROOM</Text>
-        </Pressable>
       </View>
 
-      {timer > 0 && wizard === null && !splash ? <CountdownVeil left={timer} /> : null}
-
-      {rib !== null && wizard !== null && !splash ? (
-        <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={ribChange} />
+      {/* The card picker: a full-screen takeover above the ticker/sockets so
+          the cards get the whole viewport (in-flow they squished small
+          screens). Fades out on CHOOSE while the icon flies to its socket;
+          rib/fly render later, so they stay above it. */}
+      {wizard !== null && pickerOpen ? (
+        <Animated.View
+          pointerEvents={pickerFading ? "none" : "auto"}
+          style={[
+            styles.pickerOverlay,
+            { opacity: pickerFade, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 8 },
+          ]}
+        >
+          {timer > 0 ? (
+            <Text style={styles.wizardCountdown}>{`MATCH STARTS IN ${timerCeil} — picks stay live`}</Text>
+          ) : null}
+          <WizardStep
+            key={`${wizard.step}:${wizard.cat ?? "-"}`}
+            wizard={wizard}
+            picks={picks}
+            screenW={screenW}
+            focusedIconRef={focusedIconRef}
+            onGate={() => {}}
+            onBackToGates={() => {
+              playSound("uiBack");
+              setWizard({ ...wizard, cat: null });
+            }}
+            onChoose={(id) => choose(wizard, id)}
+            onClose={closeWizard}
+          />
+        </Animated.View>
       ) : null}
 
-      {splash ? <ArmedSplash picks={picks} onDone={() => setSplash(false)} /> : null}
+      {timer > 0 && wizard === null ? <CountdownVeil left={timer} onLeave={askLeave} /> : null}
+
+      {rib !== null && wizard !== null ? (
+        <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={ribChange} onLeave={askLeave} />
+      ) : null}
+
+      {confirmLeave ? (
+        <ConfirmLeave
+          onStay={() => {
+            playSound("uiBack");
+            setConfirmLeave(false);
+          }}
+          onLeave={() => {
+            playSound("uiBack");
+            onLeave();
+          }}
+        />
+      ) : null}
 
       {fly !== null ? (
         <Animated.View
@@ -482,33 +628,96 @@ interface SocketStripProps {
   landed: number | null;
   refs: React.MutableRefObject<(View | null)[]>;
   onTap: (i: number) => void;
+  /** Socket edge in pt — the lobby passes a smaller one on short screens. */
+  size?: number;
+  /** The lobby's armed "YOUR ARSENAL" reading: the rib-row treatment (padded
+   * bordered box, weapon walled off from the abilities by a divider). The
+   * wizard strip stays bare — mid-arming the sockets ARE the progress bar. */
+  separated?: boolean;
+  /** Non-zero (and changing) = play the one-shot glint: a gold border flash +
+   * light sweep. The slim successor to the deleted armed splash. */
+  glintKey?: number;
 }
 
-const SocketStrip = ({ picks, current, landed, refs, onTap }: SocketStripProps) => (
-  <View style={styles.sockets}>
+const SocketStrip = ({ picks, current, landed, refs, onTap, size = 72, separated = false, glintKey = 0 }: SocketStripProps) => {
+  // Two drivers: the sweep band rides the native driver; borderColor can't, so
+  // it gets its own JS-driven value. Both idle at 0 = invisible/normal border.
+  const glintT = useRef(new Animated.Value(0)).current;
+  const borderT = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!glintKey) return;
+    glintT.setValue(0);
+    borderT.setValue(1);
+    Animated.parallel([
+      Animated.timing(glintT, {
+        toValue: 1,
+        duration: 800,
+        delay: 120,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(borderT, { toValue: 0, duration: 1100, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+    ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot per arming stamp
+  }, [glintKey]);
+
+  return (
+  <Animated.View
+    style={[
+      styles.sockets,
+      separated && styles.socketsArsenal,
+      separated && {
+        borderColor: borderT.interpolate({ inputRange: [0, 1], outputRange: ["#3a332a", C_GOLD] }),
+      },
+    ]}
+  >
     {SLOT_INDICES.map((i) => {
       const id: IconId | null = i === 0 ? picks.weapon : (picks.hand[i - 1] ?? null);
       return (
-        <Pressable key={i} onPress={() => onTap(i)}>
-          <View
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            style={[
-              styles.socket,
-              id !== null && styles.socketFull,
-              i === current && id === null && styles.socketNow,
-              i === landed && styles.socketLanded,
-            ]}
-          >
-            <Text style={[styles.socketN, id !== null && styles.socketNFull]}>{SOCKET_LABELS[i]}</Text>
-            {id !== null ? <LoadoutIcon id={id} size={40} /> : null}
-          </View>
-        </Pressable>
+        <Fragment key={i}>
+          {separated && i === 1 ? <View style={styles.socketSep} /> : null}
+          <Pressable onPress={() => onTap(i)}>
+            <View
+              ref={(el) => {
+                refs.current[i] = el;
+              }}
+              style={[
+                styles.socket,
+                { width: size, height: size },
+                id !== null && styles.socketFull,
+                i === current && id === null && styles.socketNow,
+                i === landed && styles.socketLanded,
+              ]}
+            >
+              <Text style={[styles.socketN, id !== null && styles.socketNFull]}>{SOCKET_LABELS[i]}</Text>
+              {id !== null ? <LoadoutIcon id={id} size={Math.round(size * (40 / 72))} /> : null}
+            </View>
+          </Pressable>
+        </Fragment>
       );
     })}
-  </View>
-);
+    {separated ? (
+      // The glint: a soft bone-light band sweeping the box once. Clipped to
+      // the rounded rect; overshoots the widest (non-compact) box so the exit
+      // is always off-edge. Invisible whenever glintT rests at 0 or 1.
+      <View pointerEvents="none" style={styles.glintClip}>
+        <Animated.View
+          style={[
+            styles.glintBand,
+            {
+              opacity: glintT.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 0.3, 0.3, 0] }),
+              transform: [
+                { translateX: glintT.interpolate({ inputRange: [0, 1], outputRange: [-90, 360] }) },
+                { rotate: "18deg" },
+              ],
+            },
+          ]}
+        />
+      </View>
+    ) : null}
+  </Animated.View>
+  );
+};
 
 // ── Wizard step (gates or carousel) ─────────────────────────────────────────
 
@@ -520,10 +729,13 @@ interface WizardStepProps {
   onGate: (cat: AbilityCategory) => void;
   onBackToGates: () => void;
   onChoose: (id: IconId) => void;
+  /** The step ✕: dismisses the wizard back to the lobby — leaving the ROOM
+   * lives on the lobby/rib/veil ✕, behind the confirm. */
+  onClose: () => void;
 }
 
 const WizardStep = (props: WizardStepProps) => {
-  const { wizard, picks, screenW, focusedIconRef, onGate, onBackToGates, onChoose } = props;
+  const { wizard, picks, screenW, focusedIconRef, onGate, onBackToGates, onChoose, onClose } = props;
   const gates = wizard.step > 0 && wizard.cat === null;
 
   // Slide the pane in on step/category changes (the component is keyed on both).
@@ -556,6 +768,7 @@ const WizardStep = (props: WizardStepProps) => {
           <Text style={styles.stepTitle}>{STEP_TITLES[wizard.step]}</Text>
         </View>
         {wizard.step > 0 ? <ButtonColumnHint slot={wizard.step - 1} picks={picks} /> : null}
+        <LeaveX onPress={onClose} />
       </View>
 
       {gates ? (
@@ -770,53 +983,52 @@ const AbilityCardBody = ({ id }: { id: AbilityId }) => {
   );
 };
 
-// ── Armed splash ────────────────────────────────────────────────────────────
+// ── Leave (✕ + confirm) ─────────────────────────────────────────────────────
 
-const ArmedSplash = ({ picks, onDone }: { picks: Picks; onDone: () => void }) => {
-  const anims = useRef(SLOT_INDICES.map(() => new Animated.Value(0))).current;
-  const foot = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.stagger(140, [
-      ...anims.map((a) =>
-        Animated.timing(a, { toValue: 1, duration: 430, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }),
-      ),
-      Animated.timing(foot, { toValue: 1, duration: 400, useNativeDriver: true }),
-    ]).start();
-    const id = setTimeout(onDone, SPLASH_MS);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- play once on mount
-  }, []);
+/** The exit control: a ✕ tucked in the top-right header, deliberately out of
+ * the bottom action zone — the old bottom-centre "LEAVE ROOM" text sat right
+ * under CHOOSE/force-start and a mistap cancelled the whole room's countdown.
+ * `style` lets full-screen overlays (rib, countdown veil) float their own copy
+ * top-right: whatever covers the screen, an exit stays reachable. */
+const LeaveX = ({ onPress, style }: { onPress: () => void; style?: StyleProp<ViewStyle> }) => (
+  <Pressable onPress={onPress} hitSlop={10} style={[styles.leaveX, style]}>
+    <Text style={styles.leaveXGlyph}>✕</Text>
+  </Pressable>
+);
 
-  const rise = (a: Animated.Value) => ({
-    opacity: a,
-    transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [22, 0] }) }],
-  });
-
-  return (
-    <Pressable style={styles.splash} onPress={onDone}>
-      <Text style={styles.splashEyebrow}>THE ARMING IS COMPLETE</Text>
-      <Text style={styles.splashTitle}>YOU ARE ARMED</Text>
-      <View style={styles.splashRule} />
-      <Animated.View style={rise(anims[0]!)}>
-        {picks.weapon !== null ? <LoadoutIcon id={picks.weapon} size={110} /> : null}
-      </Animated.View>
-      <View style={styles.splashHand}>
-        {picks.hand.map((id, i) => (
-          <Animated.View key={id} style={[styles.splashAbility, rise(anims[i + 1]!)]}>
-            <LoadoutIcon id={id} size={64} />
-            <Text style={styles.splashAbilityN}>{i + 1}</Text>
-          </Animated.View>
-        ))}
-      </View>
-      <Animated.Text style={[styles.splashFoot, { opacity: foot }]}>to the sand, gladiator</Animated.Text>
-    </Pressable>
-  );
-};
+const ConfirmLeave = ({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) => (
+  <View style={styles.rib}>
+    <Text style={styles.splashEyebrow}>LEAVE THE ROOM</Text>
+    <Text style={styles.ribTitle}>QUIT THE SAND?</Text>
+    <Text style={styles.leaveSub}>your seat is given up — any start countdown stops</Text>
+    <View style={styles.ribButtons}>
+      <Pressable onPress={onStay} style={styles.cta}>
+        <Text style={styles.ctaText}>STAY</Text>
+      </Pressable>
+      <Pressable onPress={onLeave} style={[styles.cta, styles.ctaGhost]}>
+        <Text style={[styles.ctaText, styles.leaveConfirmText]}>LEAVE ROOM</Text>
+      </Pressable>
+    </View>
+  </View>
+);
 
 // ── Run it back ─────────────────────────────────────────────────────────────
 
-const RunItBack = ({ saved, onYes, onChange }: { saved: SavedLoadout; onYes: () => void; onChange: () => void }) => (
+const RunItBack = ({
+  saved,
+  onYes,
+  onChange,
+  onLeave,
+}: {
+  saved: SavedLoadout;
+  onYes: () => void;
+  onChange: () => void;
+  onLeave: () => void;
+}) => {
+  const insets = useSafeAreaInsets();
+  return (
   <View style={styles.rib}>
+    <LeaveX onPress={onLeave} style={[styles.leaveXFloat, { top: insets.top + 18 }]} />
     <Text style={styles.splashEyebrow}>WELCOME BACK, GLADIATOR</Text>
     <Text style={styles.ribTitle}>TAKE UP THE SAME ARMS?</Text>
     <View style={styles.ribRow}>
@@ -835,7 +1047,8 @@ const RunItBack = ({ saved, onYes, onChange }: { saved: SavedLoadout; onYes: () 
       </Pressable>
     </View>
   </View>
-);
+  );
+};
 
 // ── Lobby (armed) ───────────────────────────────────────────────────────────
 
@@ -855,10 +1068,33 @@ interface LobbyViewProps {
   onEditSlot: (i: number) => void;
   lastWinner: number;
   wins: [number, number] | number[];
+  /** Non-zero on the first lobby render after an arming — the arsenal box
+   * glints once, then RoomScreen marks the stamp shown and passes 0. */
+  glintKey: number;
 }
 
 const LobbyView = (props: LobbyViewProps) => {
   const { client, players, myId, myTeam, capacity, picks, roomName, roomCode } = props;
+  // Short screens (iPhone SE) can't fit a 4v4 roster at full size — tighten
+  // everything and collapse the open-seat padding into single rows.
+  const compact = useWindowDimensions().height < COMPACT_LOBBY_HEIGHT;
+
+  // The code IS the share artifact: tapping it copies, the label confirms.
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+  const copyCode = (): void => {
+    playSound("uiTap");
+    void Clipboard.setStringAsync(roomCode);
+    setCodeCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCodeCopied(false), 1400);
+  };
   const teamCap = capacity / 2;
   const mine = players.filter((p) => p.team === myTeam);
   const theirs = players.filter((p) => p.team !== myTeam);
@@ -870,27 +1106,38 @@ const LobbyView = (props: LobbyViewProps) => {
 
   return (
     <View style={styles.lobby}>
-      <View style={styles.lobbyHead}>
-        <Text style={styles.roomName}>{roomName}</Text>
-        <Text style={styles.roomCode}>{`ROOM ${roomCode}`}</Text>
+      <View style={[styles.lobbyHead, compact && tight.lobbyHead]}>
+        <Text style={[styles.roomName, compact && tight.roomName]}>{roomName}</Text>
+        <Pressable onPress={copyCode} hitSlop={10}>
+          <Text style={styles.roomCode}>{codeCopied ? "COPIED ✓" : roomCode}</Text>
+        </Pressable>
       </View>
 
-      <TeamHeader label="YOUR TEAM" color="#d94141" />
+      <TeamHeader label="YOUR TEAM" color="#d94141" compact={compact} />
       {mine.map((p) => (
-        <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={client.hostId} own />
+        <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={client.hostId} own compact={compact} />
       ))}
-      <OpenSeats count={teamCap - mine.length} />
-      <TeamHeader label="ENEMY TEAM" color="#4da3d9" />
+      <OpenSeats count={teamCap - mine.length} compact={compact} />
+      <TeamHeader label="ENEMY TEAM" color="#4da3d9" compact={compact} />
       {theirs.map((p) => (
-        <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} />
+        <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} compact={compact} />
       ))}
-      <OpenSeats count={teamCap - theirs.length} />
+      <OpenSeats count={teamCap - theirs.length} compact={compact} />
 
-      <TeamHeader label="YOUR ARSENAL" color={C_MUTED} />
-      <SocketStrip picks={picks} current={null} landed={null} refs={props.socketRefs} onTap={props.onEditSlot} />
-      <Text style={styles.arsenalHint}>tap a socket to change that pick</Text>
+      <TeamHeader label="YOUR ARSENAL" color={C_MUTED} compact={compact} />
+      <SocketStrip
+        picks={picks}
+        current={null}
+        landed={null}
+        refs={props.socketRefs}
+        onTap={props.onEditSlot}
+        size={compact ? 54 : 72}
+        separated
+        glintKey={props.glintKey}
+      />
+      <Text style={[styles.arsenalHint, compact && tight.arsenalHint]}>tap a socket to change that pick</Text>
 
-      {lastMatch ? <Text style={styles.lastMatch}>{lastMatch}</Text> : null}
+      {lastMatch ? <Text style={[styles.lastMatch, compact && tight.lastMatch]}>{lastMatch}</Text> : null}
 
       <View style={styles.lobbyFoot}>
         {props.showForceStart ? (
@@ -908,10 +1155,8 @@ const LobbyView = (props: LobbyViewProps) => {
             </Text>
           </Pressable>
         ) : (
-          <Text style={styles.waitingText}>
-            {emptySeats > 0
-              ? `share the room code — the match starts once all ${capacity} gladiators are armed`
-              : "waiting for every gladiator to arm…"}
+          <Text style={[styles.waitingText, compact && tight.waitingText]}>
+            waiting for every gladiator to arm…
           </Text>
         )}
       </View>
@@ -920,27 +1165,50 @@ const LobbyView = (props: LobbyViewProps) => {
 };
 
 /** Dashed placeholder rows padding a team list to its capacity. Random team
- * assignment means a joiner can land on either side — both lists pad. */
-const OpenSeats = ({ count }: { count: number }) => (
-  <>
-    {Array.from({ length: Math.max(0, count) }, (_, i) => (
-      <View key={i} style={styles.openSeat}>
-        <Text style={styles.openSeatText}>open seat…</Text>
+ * assignment means a joiner can land on either side — both lists pad. On
+ * compact screens several empties collapse into one "N open seats" row. */
+const OpenSeats = ({ count, compact }: { count: number; compact: boolean }) => {
+  if (count <= 0) return null;
+  if (compact && count > 1) {
+    return (
+      <View style={[styles.openSeat, tight.openSeat]}>
+        <Text style={styles.openSeatText}>{`${count} open seats…`}</Text>
       </View>
-    ))}
-  </>
-);
+    );
+  }
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <View key={i} style={[styles.openSeat, compact && tight.openSeat]}>
+          <Text style={styles.openSeatText}>open seat…</Text>
+        </View>
+      ))}
+    </>
+  );
+};
 
-const TeamHeader = ({ label, color }: { label: string; color: string }) => (
-  <View style={styles.teamHead}>
+const TeamHeader = ({ label, color, compact }: { label: string; color: string; compact?: boolean }) => (
+  <View style={[styles.teamHead, compact && tight.teamHead]}>
     <Text style={[styles.teamLabel, { color }]}>{label}</Text>
     <View style={styles.teamRule} />
   </View>
 );
 
-const PlayerRow = ({ p, isMe, hostId, own }: { p: RoomStatePlayer; isMe: boolean; hostId: number | null; own: boolean }) => (
-  <View style={[styles.playerRow, !p.connected && styles.playerGone]}>
-    <Text style={styles.playerName}>
+const PlayerRow = ({
+  p,
+  isMe,
+  hostId,
+  own,
+  compact,
+}: {
+  p: RoomStatePlayer;
+  isMe: boolean;
+  hostId: number | null;
+  own: boolean;
+  compact?: boolean;
+}) => (
+  <View style={[styles.playerRow, compact && tight.playerRow, !p.connected && styles.playerGone]}>
+    <Text style={[styles.playerName, compact && tight.playerName]}>
       {p.id === hostId ? "♛ " : ""}
       {p.name}
       {isMe ? " (you)" : ""}
@@ -949,10 +1217,10 @@ const PlayerRow = ({ p, isMe, hostId, own }: { p: RoomStatePlayer; isMe: boolean
     <View style={styles.playerRight}>
       {own && p.weapon !== null ? (
         <View style={styles.pickIcons}>
-          <LoadoutIcon id={p.weapon} size={19} />
+          <LoadoutIcon id={p.weapon} size={compact ? 17 : 19} />
           {(p.abilities ?? []).length > 0 ? <View style={styles.pickSep} /> : null}
           {(p.abilities ?? []).map((id) => (
-            <LoadoutIcon key={id} id={id} size={19} />
+            <LoadoutIcon key={id} id={id} size={compact ? 17 : 19} />
           ))}
         </View>
       ) : p.armed ? (
@@ -966,7 +1234,8 @@ const PlayerRow = ({ p, isMe, hostId, own }: { p: RoomStatePlayer; isMe: boolean
 
 // ── Countdown veil ──────────────────────────────────────────────────────────
 
-const CountdownVeil = ({ left }: { left: number }) => {
+const CountdownVeil = ({ left, onLeave }: { left: number; onLeave: () => void }) => {
+  const insets = useSafeAreaInsets();
   const n = Math.ceil(left);
   const frac = Math.max(0, Math.min(1, left / LOBBY_COUNTDOWN_SECONDS));
   const color = n <= 3 ? "#d94141" : C_GOLD;
@@ -975,14 +1244,19 @@ const CountdownVeil = ({ left }: { left: number }) => {
   const arc = Skia.Path.Make();
   arc.addArc({ x: 8, y: 8, width: 124, height: 124 }, -90, 360 * frac);
   return (
-    <View style={styles.veil} pointerEvents="none">
+    // box-none, not none: the ✕ must stay pressable while everything else
+    // passes touches through.
+    <View style={styles.veil} pointerEvents="box-none">
+      <LeaveX onPress={onLeave} style={[styles.leaveXFloat, { top: insets.top + 18 }]} />
       <Text style={styles.veilEyebrow}>ALL GLADIATORS ARMED</Text>
       <View style={styles.veilRing}>
         <Canvas style={styles.veilCanvas}>
           <Path path={track} style="stroke" strokeWidth={5} color="#221e19" />
           <Path path={arc} style="stroke" strokeWidth={5} color={color} strokeCap="round" />
         </Canvas>
-        <Text style={[styles.veilNum, n <= 3 && { color: "#d94141" }]}>{n}</Text>
+        <View style={styles.veilNumWrap}>
+          <Text style={[styles.veilNum, n <= 3 && { color: "#d94141" }]}>{n}</Text>
+        </View>
       </View>
       <Text style={styles.veilSub}>the match starts itself — no one presses anything</Text>
     </View>
@@ -994,8 +1268,23 @@ const CountdownVeil = ({ left }: { left: number }) => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210" },
   content: { flex: 1 },
+  /** The card-picker takeover. Near-opaque so the chrome reads as "behind a
+   * layer", not gone; its own safe-area padding (the root stays unpadded —
+   * the Yoga absolute-child rule). */
+  pickerOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(16,13,11,0.97)",
+  },
 
-  ticker: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "center", paddingHorizontal: 14 },
+  tickerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 14 },
+  tickerFill: { flex: 1 },
+  // Left-aligned, not centred: the leave ✕ anchors the row's right edge, and
+  // centred chips floated oddly beside it (Tom 2026-07-17).
+  ticker: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-start", paddingHorizontal: 14 },
   tickerChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -1015,6 +1304,30 @@ const styles = StyleSheet.create({
   tickerNameLit: { color: "#c9bfae" },
 
   sockets: { flexDirection: "row", gap: 10, paddingHorizontal: 22, marginTop: 14 },
+  /** The rib-row treatment for the lobby arsenal (mirrors `ribRow`): the box
+   * hugs its content and the divider walls the weapon off from the hand. */
+  socketsArsenal: {
+    alignSelf: "flex-start",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#1d1915",
+    borderWidth: 1,
+    borderColor: "#3a332a",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  socketSep: { width: 1, alignSelf: "stretch", marginVertical: 8, backgroundColor: "#3a332a" },
+  glintClip: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  glintBand: { position: "absolute", top: -24, bottom: -24, width: 54, backgroundColor: C_BONE },
   socket: {
     flex: 0,
     width: 72,
@@ -1141,34 +1454,11 @@ const styles = StyleSheet.create({
   ctaGhost: { backgroundColor: "transparent", borderWidth: 1.5, borderColor: "#3a332a" },
   ctaGhostText: { color: C_MUTED },
 
-  splash: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(10,7,6,0.97)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 28,
-  },
   // letterSpacing adds a trailing space after the LAST glyph, so tracked text
   // centres visually left — the negative marginRight trims it back out.
+  // (Named for the armed splash it once headlined; the rib + leave-confirm
+  // overlays still set their eyebrows in it.)
   splashEyebrow: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 4, marginRight: -4, textAlign: "center" },
-  splashTitle: {
-    color: C_GOLD,
-    fontSize: 32,
-    fontWeight: "900",
-    letterSpacing: 5,
-    marginRight: -5,
-    textAlign: "center",
-    marginTop: 8,
-  },
-  splashRule: { width: 200, height: 1, backgroundColor: "#4a4034", marginVertical: 20 },
-  splashHand: { flexDirection: "row", gap: 18, marginTop: 16, alignItems: "flex-end" },
-  splashAbility: { alignItems: "center", gap: 6 },
-  splashAbilityN: { color: "#4a4238", fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  splashFoot: { color: C_MUTED, fontSize: 13, fontStyle: "italic", marginTop: 34 },
 
   rib: {
     position: "absolute",
@@ -1258,15 +1548,20 @@ const styles = StyleSheet.create({
   veilEyebrow: { color: C_GOLD, fontSize: 11, fontWeight: "900", letterSpacing: 4, marginRight: -4, textAlign: "center" },
   veilRing: { width: 140, height: 140 },
   veilCanvas: { width: 140, height: 140 },
-  veilNum: {
+  /** Flex-centred wrapper, not a lineHeight hack: iOS ignores
+   * textAlignVertical and sat the digit low in the 140pt line box. */
+  veilNumWrap: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  veilNum: {
     textAlign: "center",
-    textAlignVertical: "center",
-    lineHeight: 140,
+    includeFontPadding: false, // Android: extra ascent padding would off-centre the flex centring
     color: C_BONE,
     fontSize: 52,
     fontWeight: "900",
@@ -1274,6 +1569,32 @@ const styles = StyleSheet.create({
   },
   veilSub: { color: C_MUTED, fontSize: 12, fontStyle: "italic" },
 
-  leave: { alignSelf: "center", marginTop: 10, marginBottom: 6 },
-  leaveText: { color: C_MUTED, fontWeight: "700", letterSpacing: 1, fontSize: 12 },
+  leaveX: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: "#3a332a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leaveXGlyph: { color: C_MUTED, fontSize: 12, fontWeight: "900", includeFontPadding: false },
+  /** Overlay placement (rib/veil): float top-right; `top` comes from insets. */
+  leaveXFloat: { position: "absolute", right: 22 },
+  leaveSub: { color: C_MUTED, fontSize: 12, fontStyle: "italic", textAlign: "center" },
+  leaveConfirmText: { color: "#d94141" },
+});
+
+/** Compact-lobby overrides, layered over `styles` when the window is shorter
+ * than COMPACT_LOBBY_HEIGHT — same design, tighter vertical rhythm. */
+const tight = StyleSheet.create({
+  lobbyHead: { marginTop: 2 },
+  roomName: { fontSize: 17 },
+  teamHead: { marginTop: 9, marginBottom: 2 },
+  playerRow: { paddingVertical: 3 },
+  playerName: { fontSize: 12.5 },
+  openSeat: { paddingVertical: 4, marginVertical: 1 },
+  arsenalHint: { marginTop: 4 },
+  lastMatch: { marginTop: 8, fontSize: 12 },
+  waitingText: { paddingVertical: 8, fontSize: 12 },
 });

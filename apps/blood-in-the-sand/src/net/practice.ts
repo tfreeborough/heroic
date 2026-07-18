@@ -10,7 +10,7 @@
  *
  * Practice runs the SAME arming flow as real rooms (pvp-loadout-flow.md):
  * you arm through the wizard on RoomScreen, each bot arms itself moments
- * after sitting down, and the sim's own 10s arming countdown starts the match
+ * after sitting down, and the sim's own 5s arming countdown starts the match
  * — nobody presses START. After matchEnd the sim disarms everyone and returns
  * to the lobby, so the wizard reopens (run-it-back is one tap) — the offline
  * loop matches the online one exactly. This is the no-second-player test bed
@@ -62,7 +62,7 @@ export type PracticeMode = "bot" | "dummies";
 
 const DUMMY_NAMES = ["Dummy I", "Dummy II", "Dummy III", "Dummy IV", "Dummy V"];
 
-/** Dev nicety: the range clamps the 10s arming ceremony to a quick beat. */
+/** Dev nicety: the range clamps the 5s arming ceremony to a quick beat. */
 const RANGE_ARM_SECONDS = 2;
 
 /** Per-bot brain state — one entry per bot seat (every id except the human's 0). */
@@ -234,7 +234,7 @@ export class PracticeClient implements LobbyClient {
     }
 
     // The range skips the arming ceremony: the dummies armed on arrival, so
-    // the moment YOU arm, the countdown would sit at the full 10s — clamp it
+    // the moment YOU arm, the countdown would sit at the full 5s — clamp it
     // to a beat. In-process dev shortcut, offline only; real rooms never do this.
     const { round } = this.sim.state;
     if (this.mode === "dummies" && round.phase === "lobby" && round.timer > RANGE_ARM_SECONDS) {

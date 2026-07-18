@@ -25,6 +25,8 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "mirror-guard": require("../../assets/icons/mirror-guard.png"),
   "ironhide": require("../../assets/icons/ironhide.png"),
   "straw-man": require("../../assets/icons/straw-man.png"),
+  // Forge art owed — a copy of tremor's boot stands in until the shout lands.
+  "warding-shout": require("../../assets/icons/warding-shout.png"),
   "war-drums": require("../../assets/icons/war-drums.png"),
   "blood-font": require("../../assets/icons/blood-font.png"),
   "sandstorm": require("../../assets/icons/sandstorm.png"),

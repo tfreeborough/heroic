@@ -1,0 +1,18 @@
+{
+  "type": "sprite-bits",
+  "subject": "a murmillo gladiator in full side profile facing left, a tall curved rectangular scutum tower shield planted forward, gladius short sword raised high behind the shoulder in a wound-up backswing, crested galea helmet with a face grille, studded leather pteruges skirt, one bronze greave on the leading leg, heavy legs braced wide in the sand",
+  "prompt": "a murmillo gladiator in full side profile facing left, a tall curved rectangular scutum tower shield planted forward, gladius short sword raised high behind the shoulder in a wound-up backswing, crested galea helmet with a face grille, studded leather pteruges skirt, one bronze greave on the leading leg, heavy legs braced wide in the sand. A full-figure character sprite for a grim dark-fantasy gladiator arena game set in a scorched desert. Hand-inked woodcut illustration with painted depth: heavy black ink linework, rough expressive hatching, sun-bleached bone (#f0e8d8) highlights, scorched sand-ochre (#b39763) midtones like heat-baked dust settled on every surface. Gladiatorial desert materials: hammered bronze, cracked leather wraps, sun-split wood, rust and dried blood. Lit by a harsh high desert sun — a warm rim light burns along the helmet crest and upper shoulders. The ENTIRE figure fits inside the frame head to feet with clear margin on every side — nothing cropped. Grim, weighty, battle-scarred — never cute, never photorealistic, never a clean flat vector. The figure floats alone on a fully transparent background — no ground plane, no cast shadow, no backdrop, no glow, no vignette; every pixel around the figure is transparent. No text.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1024",
+    "quality": "medium",
+    "background": "transparent",
+    "savedSize": 512
+  },
+  "files": [
+    "title-murmillo.png"
+  ],
+  "created": "2026-07-17T22:00:44.029Z",
+  "updated": "2026-07-17T22:00:44.029Z"
+}

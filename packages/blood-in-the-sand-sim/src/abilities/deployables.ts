@@ -6,11 +6,12 @@
  * rng-free except dummy hits, which route through resolveAttack elsewhere.
  */
 import { distance, normalize, resolveAttack, sub, type AttackResult, type Rng } from "@heroic/core";
-import { BLOOD_FONT, PLAYER_RADIUS, SANDSTORM, SANDTRAP, STRAW_MAN, STRAW_MAN_STATS } from "../config";
+import { BLOOD_FONT, PLAYER_RADIUS, SANDSTORM, SANDTRAP, STRAW_MAN, STRAW_MAN_STATS, TREMOR } from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaPlayer, ArenaState, Deployable, DeployableKind } from "../state";
 import { dashInvulnerable } from "./dash";
 import { applyFixedHit, applyImpulse, killPlayer } from "./damage";
+import { ironhideActive } from "./statuses";
 
 /** Place a deployable at the caster's feet. Sandtrap enforces its one-live-
  * mine rule here: planting a new one fizzles (removes) the old, silently. */
@@ -33,8 +34,13 @@ export const castDeployable = (state: ArenaState, kind: DeployableKind, caster: 
           ? STRAW_MAN.lifetime
           : kind === "blood-font"
             ? BLOOD_FONT.duration
-            : SANDSTORM.duration,
+            : kind === "quake"
+              ? TREMOR.duration
+              : SANDSTORM.duration,
     hp: kind === "straw-man" ? STRAW_MAN.hp : 0,
+    // The quake's 0 means its FIRST tick fires on the next step — the ground
+    // bites the moment it opens, and all 4 ticks (0/1/2/3s) land safely
+    // inside the 4s life (a tick riding exactly on expiry would be dropped).
     tickLeft: kind === "blood-font" ? BLOOD_FONT.tickInterval : 0,
   });
 };
@@ -134,6 +140,38 @@ export const stepDeployables = (
           events.push({ type: "heal", targetId: p.id, amount, x: p.mover.pos.x, y: p.mover.pos.y });
         }
         d.tickLeft += BLOOD_FONT.tickInterval;
+      }
+    } else if (d.kind === "quake" && !spent) {
+      // The quake: Blood Font inverted — fixed chip ticks on enemies inside —
+      // plus a slow refreshed EVERY step (step out and it lingers slowLinger).
+      // Dash i-frames dodge both; Ironhide takes reduced ticks, no slow.
+      for (const p of players) {
+        if (p.team === d.team || !p.alive || dashInvulnerable(p) || ironhideActive(p)) continue;
+        if (distance(p.mover.pos, d.pos) - PLAYER_RADIUS > TREMOR.radius) continue;
+        // Strongest factor wins while a hammer slow (0.5) overlaps this one.
+        p.slowFactor = p.slowLeft > 0 ? Math.min(p.slowFactor, TREMOR.slowFactor) : TREMOR.slowFactor;
+        p.slowLeft = Math.max(p.slowLeft, TREMOR.slowLinger);
+      }
+      d.tickLeft -= dt;
+      while (d.tickLeft <= 0) {
+        for (const p of players) {
+          if (p.team === d.team || !p.alive || dashInvulnerable(p)) continue;
+          if (distance(p.mover.pos, d.pos) - PLAYER_RADIUS > TREMOR.radius) continue;
+          const damage = applyFixedHit(p, TREMOR.damagePerTick);
+          const lethal = p.combatant.hp <= 0;
+          events.push({
+            type: "hit",
+            attackerId: d.ownerId,
+            targetId: p.id,
+            damage,
+            crit: false,
+            lethal,
+            x: p.mover.pos.x,
+            y: p.mover.pos.y,
+          });
+          if (lethal) killPlayer(p, events);
+        }
+        d.tickLeft += TREMOR.tickInterval;
       }
     } else if (d.kind === "straw-man" && d.hp <= 0) {
       spent = true;

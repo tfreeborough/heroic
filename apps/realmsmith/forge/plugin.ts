@@ -17,7 +17,17 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { loadEnv, type Plugin } from "vite";
-import { EXPANDER_MODEL, ICON, SFX, SFX_BITS, expanderSystem, type SfxSpec } from "./styleBible";
+import {
+  EXPANDER_MODEL,
+  ICON,
+  SFX,
+  SFX_BITS,
+  SPRITE,
+  expanderSystem,
+  type IconSpec,
+  type SfxSpec,
+  type SpriteSpec,
+} from "./styleBible";
 import { SFX_MODEL_ID, generateSfx } from "./elevenlabs";
 import { IMAGE_MODEL_ID, expandPrompt, generateImage } from "./openai";
 import { processSfx } from "./audio";
@@ -41,6 +51,14 @@ const ICON_NAME_RE = /^[a-z][a-z0-9-]*$/;
 /** The two ElevenLabs SFX types share a pipeline — only tone/destination differ. */
 const sfxSpec = (type: string): SfxSpec | null =>
   type === SFX.id ? SFX : type === SFX_BITS.id ? SFX_BITS : null;
+
+/** The two gpt-image-1 types share a pipeline — size/destination/template differ. */
+const imageSpec = (type: string): IconSpec | SpriteSpec | null =>
+  type === ICON.id ? ICON : type === SPRITE.id ? SPRITE : null;
+
+/** Seed prompt when only a bare subject arrives (curl/testing — the panel builds its own). */
+const imageTemplate = (spec: IconSpec | SpriteSpec, subject: string): string =>
+  spec.id === ICON.id ? spec.template(subject, "weapon") : spec.template(subject);
 
 const json = (res: ServerResponse, code: number, body: unknown): void => {
   res.statusCode = code;
@@ -91,19 +109,22 @@ export const forgePlugin = (): Plugin => {
       const abs = join(repoRoot, dir);
       return existsSync(abs) ? (await readdir(abs)).filter((f) => f.endsWith(ext)) : [];
     };
-    const [iconFiles, sfxFiles] = await Promise.all([
+    const [iconFiles, sfxFiles, spriteFiles] = await Promise.all([
       listDir(ICON.destination, ".png"),
       listDir(SFX_BITS.destination, ".mp3"),
+      listDir(SPRITE.destination, ".png"),
     ]);
     return {
       types: [
         { id: SFX_BITS.id, label: SFX_BITS.label, provider: SFX_BITS.provider, candidates: SFX_BITS.candidates },
         { id: ICON.id, label: ICON.label, provider: ICON.provider, candidates: ICON.candidates },
+        { id: SPRITE.id, label: SPRITE.label, provider: SPRITE.provider, candidates: SPRITE.candidates },
         { id: SFX.id, label: SFX.label, provider: SFX.provider, candidates: SFX.candidates },
       ],
       keys: { elevenlabs: elevenKey.length > 0, openai: openaiKey.length > 0 },
       iconFiles,
       sfxFiles,
+      spriteFiles,
     };
   };
 
@@ -129,10 +150,14 @@ export const forgePlugin = (): Plugin => {
     json(res, 200, { prompt } satisfies ExpandResponse);
   };
 
-  /** Icon generation: N transparent PNGs. The panel builds the prompt (it owns
-   * the set — sim tables + subject overlay) and sends it verbatim; the bare
-   * subject fallback below only serves curl/testing. */
-  const generateIcons = async (body: GenerateRequest, res: ServerResponse): Promise<void> => {
+  /** Image generation (icons + sprites): N transparent PNGs. The panel builds
+   * the prompt (it owns the sets) and sends it verbatim; the bare subject
+   * fallback below only serves curl/testing. */
+  const generateImages = async (
+    spec: IconSpec | SpriteSpec,
+    body: GenerateRequest,
+    res: ServerResponse,
+  ): Promise<void> => {
     if (!openaiKey)
       return json(res, 503, {
         error:
@@ -141,10 +166,10 @@ export const forgePlugin = (): Plugin => {
     const subject = (body.subject ?? "").trim();
     const explicit = (body.prompt ?? "").trim().slice(0, 2400);
     if (!explicit && !subject) return json(res, 400, { error: "a prompt or subject is required" });
-    const prompt = explicit || ICON.template(subject, "weapon");
+    const prompt = explicit || imageTemplate(spec, subject);
 
     const settled = await Promise.allSettled(
-      Array.from({ length: ICON.candidates }, () => generateImage(openaiKey, prompt)),
+      Array.from({ length: spec.candidates }, () => generateImage(openaiKey, prompt, spec.size)),
     );
     const candidates: Candidate[] = [];
     for (const r of settled) {
@@ -160,7 +185,8 @@ export const forgePlugin = (): Plugin => {
 
   const generate = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const body = await readJson<GenerateRequest>(req);
-    if (body.type === ICON.id) return generateIcons(body, res);
+    const image = imageSpec(body.type);
+    if (image) return generateImages(image, body, res);
     const spec = sfxSpec(body.type);
     if (!spec) return json(res, 400, { error: `unknown asset type "${body.type}"` });
     const subject = (body.subject ?? "").trim();
@@ -193,22 +219,27 @@ export const forgePlugin = (): Plugin => {
     json(res, 200, { prompt, candidates } satisfies GenerateResponse);
   };
 
-  /** Icon save: one PNG per id, overwritten on regeneration; sidecar refreshed. */
-  const saveIcon = async (body: SaveRequest, res: ServerResponse): Promise<void> => {
+  /** Image save (icons + sprites): one PNG per id, overwritten on regeneration;
+   * sidecar refreshed. */
+  const saveImage = async (
+    spec: IconSpec | SpriteSpec,
+    body: SaveRequest,
+    res: ServerResponse,
+  ): Promise<void> => {
     const id = body.baseName ?? "";
     if (!ICON_NAME_RE.test(id) || id.length > 48)
       return json(res, 400, {
-        error: "icon name must be kebab-case — lowercase letters/digits/hyphens, starting with a letter",
+        error: "name must be kebab-case — lowercase letters/digits/hyphens, starting with a letter",
       });
     const take = Array.isArray(body.takes) ? body.takes.find((t) => typeof t === "string" && t.length > 0) : undefined;
     if (!take) return json(res, 400, { error: "no candidate selected" });
 
     const raw = Buffer.from(take, "base64");
     if (raw.length === 0) return json(res, 400, { error: "the selected candidate had an empty payload" });
-    const dir = join(repoRoot, ICON.destination);
+    const dir = join(repoRoot, spec.destination);
     await mkdir(dir, { recursive: true });
     const file = `${id}.png`;
-    await writeFile(join(dir, file), await processIcon(raw, ICON.savedSize));
+    await writeFile(join(dir, file), await processIcon(raw, spec.savedSize));
 
     // Sidecar: keep `created` across regenerations, refresh everything else.
     const sidecarPath = join(dir, `${id}.forge.json`);
@@ -223,12 +254,12 @@ export const forgePlugin = (): Plugin => {
       }
     }
     const sidecar = {
-      type: ICON.id,
+      type: spec.id,
       subject: body.subject ?? "",
       prompt: body.prompt ?? "",
-      provider: ICON.provider,
+      provider: spec.provider,
       model: IMAGE_MODEL_ID,
-      params: { size: "1024x1024", quality: "medium", background: "transparent", savedSize: ICON.savedSize },
+      params: { size: spec.size, quality: "medium", background: "transparent", savedSize: spec.savedSize },
       files: [file],
       created,
       updated: now,
@@ -237,15 +268,16 @@ export const forgePlugin = (): Plugin => {
 
     json(res, 200, {
       files: [file],
-      sidecar: `${ICON.destination}/${id}.forge.json`,
-      // The require-map line for the app's icons.tsx (src/loadout → assets).
-      manifestLines: [`  "${id}": require("../../assets/icons/${file}"),`],
+      sidecar: `${spec.destination}/${id}.forge.json`,
+      // The require-map line for the consuming module (one src/ level deep).
+      manifestLines: [`  "${id}": require("${spec.manifestDir}/${file}"),`],
     } satisfies SaveResponse);
   };
 
   const save = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const body = await readJson<SaveRequest>(req);
-    if (body.type === ICON.id) return saveIcon(body, res);
+    const image = imageSpec(body.type);
+    if (image) return saveImage(image, body, res);
     const spec = sfxSpec(body.type);
     if (!spec) return json(res, 400, { error: `unknown asset type "${body.type}"` });
     const base = body.baseName ?? "";

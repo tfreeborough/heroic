@@ -7,7 +7,10 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#141210",
     "ios": {
-      "bundleIdentifier": "com.tfreeb.blood-in-the-sand"
+      "bundleIdentifier": "com.tfreeb.blood-in-the-sand",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.heroic.blood_in_the_sand",

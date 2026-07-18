@@ -674,6 +674,21 @@ body {
   border-color: #2c6b3f;
 }
 
+/* Sprite candidates are judged on the High Sun scene's sand, not the void —
+   a figure that reads on dark can still melt into a sunlit backdrop. */
+.forge .icon-candidate.sprite {
+  background: linear-gradient(180deg, #e2c690, #cfa96e);
+}
+
+.forge .icon-cat-sprite { color: #b39763; }
+
+/* Roughly the title-screen render height (~180px at 3× ÷ panel scale). */
+.forge .icon-candidate .sprite-small {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
 .forge .icon-candidate .icon-full {
   width: 100%;
   aspect-ratio: 1;

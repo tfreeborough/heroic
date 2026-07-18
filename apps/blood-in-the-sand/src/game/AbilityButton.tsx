@@ -1,8 +1,15 @@
-import { StyleSheet } from "react-native";
-// RNGH's Pressable (not RN's): lives in the gesture-handler touch system so it
-// still fires while the thumbstick's pan gesture owns a touch — casts are
-// right-thumb actions used *while* the left thumb holds the stick.
-import { Pressable } from "react-native-gesture-handler";
+import { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+// The cast fires from RAW TOUCH EVENTS (`onTouchesDown` on a Manual gesture),
+// not from a recognized press. Casts are right-thumb actions used *while* the
+// left thumb holds the stick's pan, and on iOS RNGH refuses to ACTIVATE a
+// second gesture while one is active — RNGH's Pressable failed even with an
+// explicit `simultaneousWithExternalGesture` relation to the pan (tested
+// on-device 2026-07-18). Touch events sidestep all of that: they're delivered
+// per-handler as the touches arrive, before (and regardless of) activation
+// arbitration. Bonus: the cast lands on finger-DOWN, a swing earlier than
+// Pressable's on-release.
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   Canvas,
   ClipOp,
@@ -126,7 +133,8 @@ export interface AbilityButtonProps {
   id: AbilityId;
   /** The button face: the game loop re-records this whenever it changes. */
   overlay: SharedValue<SkPicture>;
-  /** Fired on tap. The sim decides whether the cast is actually off cooldown. */
+  /** Fired on touch-down. The sim decides whether the cast is actually off
+   * cooldown. */
   onPress: () => void;
 }
 
@@ -139,15 +147,26 @@ export interface AbilityButtonProps {
 export const AbilityButton = ({ id, overlay, onPress }: AbilityButtonProps) => {
   const icon = useImage(ICON_SOURCES[id]);
   const inset = (ABILITY_BUTTON_SIZE - GLYPH) / 2;
+  // Manual never activates, so it can neither block the stick's pan nor be
+  // blocked by it — it exists purely to receive the raw touch stream.
+  const press = useMemo(
+    () =>
+      Gesture.Manual()
+        .runOnJS(true)
+        .onTouchesDown(() => onPress()),
+    [onPress],
+  );
   return (
-    <Pressable onPress={onPress} hitSlop={8}>
-      <Canvas style={styles.canvas}>
-        {icon ? (
-          <SkiaImage image={icon} x={inset} y={inset} width={GLYPH} height={GLYPH} fit="contain" />
-        ) : null}
-        <Picture picture={overlay} />
-      </Canvas>
-    </Pressable>
+    <GestureDetector gesture={press}>
+      <View hitSlop={8} collapsable={false}>
+        <Canvas style={styles.canvas}>
+          {icon ? (
+            <SkiaImage image={icon} x={inset} y={inset} width={GLYPH} height={GLYPH} fit="contain" />
+          ) : null}
+          <Picture picture={overlay} />
+        </Canvas>
+      </View>
+    </GestureDetector>
   );
 };
 

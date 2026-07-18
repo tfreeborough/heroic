@@ -15,12 +15,14 @@ Supersedes: [pvp-pick-ceremony](./pvp-pick-ceremony.md) (draft → reveal → co
 > auto-rematch is impossible by construction and a rematch re-runs the wizard —
 > run-it-back makes that one tap. RoomScreen = the wizard (local optimistic
 > picks, idempotent sends; carousel via Animated.ScrollView interpolation;
-> measured fly-to-socket) + armed splash + lobby + countdown veil; a mid-lobby
-> single-slot edit returns straight to the lobby, skipping the splash. The
+> measured fly-to-socket) + lobby + countdown veil (the full-screen armed
+> splash was CUT 2026-07-17 — repeated ceremony; haptic + confirm sound + the
+> lobby's arsenal box mark the moment); a mid-lobby single-slot edit returns
+> straight to the lobby. The
 > cast flash rides the existing `cast` event (`FxItem "castFlash"`, forge
 > icons via `useAbilityIconImages`). Practice runs the identical flow (bot
 > arms ~1.2–3s in; the lobby interval owns the clock, GameScreen takes over at
-> countdown) — headless-verified: lobby → 10s countdown → active, plus a full
+> countdown) — headless-verified: lobby → 5s countdown → active, plus a full
 > 2-bot wire match (arm → countdown → 5 rounds → matchEnd) on the live server.
 > The old LoadoutSheet is deleted; `--noarm` bot = the straggler for testing
 > force-start from a phone. Owed: on-device polish (fly/beat timings, flash
@@ -42,7 +44,7 @@ join room ──▶ STEP 1        STEP 2         STEP 3         STEP 4        �
               WEAPON        ABILITY №1     ABILITY №2     ABILITY №3        tap any socket to
               full-screen   "your top      "your middle   "your bottom      revisit that step
               card picker    button"        button"        button"
-                                       all seats armed ──▶ 10s countdown (all clients) ──▶ match
+                                       all seats armed ──▶ 5s countdown (all clients) ──▶ match
 ```
 
 Players are walked through four decisions, one per screen, in a fixed order:
@@ -98,7 +100,7 @@ loadout — no empty picks, no random fills in the happy path, no lobby-holding.
   **CHOOSE ANEW starts from scratch, never pre-socketed (Tom, 2026-07-16):**
   pre-filling would commit the old loadout, which ARMS you — and with the
   rest of the party ready, the countdown starts while you're still browsing
-  (~10s to "change"). Staying unarmed holds the match open until you finish
+  (~5s to "change"). Staying unarmed holds the match open until you finish
   the wizard again; only SAME ARMS commits instantly.
 
 ### The lobby after arming
@@ -120,7 +122,7 @@ Roster as today (team-split, host crown, connection state), plus:
   countdown → fight. Nobody needs to know they're the host for a match to
   start — and an AFK *host* can no longer block one either (which
   `startByHost` could never handle).
-- The 10s banner doubles as the **last-look moment** — anticipation beat over
+- The 5s banner doubles as the **last-look moment** — anticipation beat over
   everyone's armed rows, replacing what the reveal splash used to provide.
 - **Picks stay editable during the countdown.** Enemy-hidden anyway, and the
   replace-not-clear invariant means edits can never invalidate readiness — so
@@ -139,7 +141,7 @@ Roster as today (team-split, host crown, connection state), plus:
   present is armed. It random-fills any stragglers (sim RNG, deterministic —
   today's auto-select), sets the sim's `forced` override (which lets the
   full-room gate pass with empty seats — cleared by any join/leave, so it can
-  never go stale), and then **feeds into the same 10s countdown, never
+  never go stale), and then **feeds into the same 5s countdown, never
   instant** (Tom 2026-07-14): everyone gets the same start moment, and the
   auto-armed player gets a beat to see what they were dealt. Uneven teams are
   the host's call; empty seats simply don't spawn. It requires at least one
@@ -192,8 +194,8 @@ lobby-countdown state, force-start message. Net: **protocol shrinks**.
 
 ## Open questions (not yet decided)
 
-- **Constants:** 10s countdown and ~30s force-start grace are starting values,
-  tune in testing.
+- **Constants:** 5s countdown (10s felt too long — Tom 2026-07-17) and ~30s
+  force-start grace are starting values, tune in testing.
 - **Cast-flash detail:** size/duration/placement of the icon pop — resolve at
   the end of the build, on device.
 

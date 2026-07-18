@@ -14,6 +14,7 @@ import { ArenaClient, DEFAULT_SERVER, resolveServerUrl } from "./src/net/connect
 import { PracticeClient } from "./src/net/practice";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+import { NameScreen } from "./src/screens/NameScreen";
 import { PracticeScreen } from "./src/screens/PracticeScreen";
 import { RoomListScreen } from "./src/screens/RoomListScreen";
 import { RoomScreen } from "./src/screens/RoomScreen";
@@ -56,7 +57,18 @@ export default function App() {
   // The offline bot match — while set, the practice route shows the game.
   const [practice, setPractice] = useState<PracticeClient | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // null = still loading from storage, "" = never set → PLAY gates on NameScreen.
+  const [playerName, setPlayerName] = useState<string | null>(null);
   const [, force] = useReducer((x: number) => x + 1, 0);
+
+  useEffect(() => {
+    void AsyncStorage.getItem(KEY_NAME).then((v) => setPlayerName(v?.trim() ?? ""));
+  }, []);
+
+  const saveName = useCallback((name: string) => {
+    setPlayerName(name);
+    void AsyncStorage.setItem(KEY_NAME, name);
+  }, []);
 
   const endPractice = useCallback(() => {
     // Bot practice returns to its lobby screen (the route stays "practice");
@@ -69,11 +81,9 @@ export default function App() {
   // The dev menu's firing range: offline sim, you vs a line of respawning
   // target dummies, reusing the whole practice flow (wizard → GameScreen).
   const startTargetDummies = useCallback(() => {
-    void AsyncStorage.getItem(KEY_NAME).then((stored) => {
-      setPractice(new PracticeClient(stored?.trim() || "gladiator", RANGE_TEAM_SIZE, "dummies"));
-      setRoute("practice");
-    });
-  }, []);
+    setPractice(new PracticeClient(playerName || "gladiator", RANGE_TEAM_SIZE, "dummies"));
+    setRoute("practice");
+  }, [playerName]);
 
   useEffect(() => {
     if (!practice) return;
@@ -164,7 +174,7 @@ export default function App() {
       />
     );
   } else if (route === "settings") {
-    screen = <SettingsScreen onBack={() => setRoute("home")} />;
+    screen = <SettingsScreen onBack={() => setRoute("home")} playerName={playerName ?? ""} onRename={saveName} />;
   } else if (route === "practice") {
     // Practice runs the SAME arming wizard as real rooms before the match.
     screen = !practice ? (
@@ -177,7 +187,11 @@ export default function App() {
     ) : (
       <GameScreen client={practice} onLeave={endPractice} onQuit={endPractice} />
     );
-  } else if (!client || client.status === "connecting") {
+  } else if (playerName !== null && playerName.length === 0) {
+    // First time through PLAY: claim a name before anything else (the
+    // connection keeps warming up behind this screen).
+    screen = <NameScreen onSubmit={saveName} />;
+  } else if (!client || client.status === "connecting" || playerName === null) {
     screen = (
       <View style={styles.centre}>
         <Text style={styles.logo}>BLOOD{"\n"}IN THE SAND</Text>
@@ -197,7 +211,7 @@ export default function App() {
       </View>
     );
   } else if (!client.welcome) {
-    screen = <RoomListScreen client={client} onBack={() => setRoute("home")} />;
+    screen = <RoomListScreen client={client} playerName={playerName} onBack={() => setRoute("home")} />;
   } else if (client.phase === "lobby") {
     // The arming wizard + lobby (and its 10s countdown) all live on RoomScreen.
     screen = <RoomScreen client={client} onLeave={() => client.leaveRoom()} />;
@@ -208,7 +222,8 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <StatusBar style="light" hidden={inMatch} />
+        {/* Home is the sunlit High Sun scene — dark icons; everywhere else stays dark-ground. */}
+        <StatusBar style={route === "home" ? "dark" : "light"} hidden={inMatch} />
         {screen}
       </SafeAreaProvider>
     </GestureHandlerRootView>
