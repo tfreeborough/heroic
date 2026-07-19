@@ -14,22 +14,20 @@
  * `expo-audio` has no built-in fade, so we ramp `player.volume` ourselves every
  * `tick(dt)` — call it once per frame (or step) with elapsed seconds.
  *
- * SFX (`playSfx`) plays one-shots through a fixed **voice pool**: a small set of
- * reusable players, growing lazily to a hard cap, stealing the oldest voice when
- * all are busy (classic game-audio voice stealing). A player per play sounds
- * simpler but exhausts Android's native audio sessions at gameplay rates
- * (footsteps every ~300ms + strikes + hurts) — "Null pointer error creating
- * session" — and leaks any player whose finish-callback never fires.
- *
- * The catch in that lazy growth: a clip's FIRST play pays the native cost —
- * `createAudioPlayer` (a whole player instantiated) or `player.replace` (a
- * source load) — on the exact frame the game moment fires, which on a weak
- * device is a visible hitch right at an ability cast or the first clash.
- * `warm(names)` fixes it: call it from a calm moment (a lobby, a loading
- * screen) and the pool pre-loads those clips one per beat, marking their
- * voices *pinned* so ordinary churn (UI taps, stingers) prefers other voices
- * and the warm set stays resident. In combat those clips then always hit the
- * cheap `seekTo(0)` path.
+ * SFX (`playSfx`) is the **Web Audio path** (react-native-audio-api): every
+ * clip decodes ONCE into in-memory PCM (an `AudioBuffer`), and a play is a
+ * tiny node graph — buffer source → gain → destination — software-mixed with
+ * everything else on a dedicated native audio render thread. Dozens of
+ * simultaneous one-shots are the design point, and the JS-side cost of a play
+ * is a couple of object allocations. This replaced an expo-audio voice pool
+ * (2026-07-19): a "voice" there was a full OS media player (ExoPlayer /
+ * AVPlayer) — ~30 resident decoder pipelines whose per-play native traffic
+ * and CPU appetite froze combat on weak Androids, and whose async state
+ * machine was the source of every iOS silent-drop workaround this file used
+ * to carry. `warm(names)` now just decodes clips ahead of time so a combat
+ * moment never waits on a decode; a cold clip's first play still fires if its
+ * decode lands within {@link LATE_PLAY_MS} (a first-ever UI tap), and every
+ * decoded buffer stays resident for the app's lifetime.
  */
 import {
   createAudioPlayer,
@@ -38,6 +36,11 @@ import {
   type AudioPlayer,
   type AudioSource,
 } from "expo-audio";
+import {
+  AudioContext,
+  AudioManager,
+  type AudioBuffer,
+} from "react-native-audio-api";
 import type { MusicSituation, ZoneAudio } from "@heroic/core";
 
 /** Clip name → bundled source (`require("…/foo.mp3")`) or a uri. The app owns this. */
@@ -47,80 +50,24 @@ export type AudioManifest = Record<string, AudioSource>;
 const DEFAULT_CROSSFADE = 2;
 /** Below this gain a faded-out deck is paused so it stops decoding silence. */
 const SILENT_EPSILON = 0.001;
-/** Default cap on simultaneous native SFX players (plus the two music decks).
- * Doubles as how many distinct clips can stay resident (loaded) at once — a game
- * with more clips than voices reloads the evicted ones cold, which reads as
- * trigger latency, so a clip-heavy game can raise this (see `sfxVoices`). */
-const DEFAULT_SFX_VOICES = 8;
+/** Default cap on simultaneous one-shots. Mixing is cheap — this is a spam
+ * guard against pathological bursts, not a resource budget; a real fight sits
+ * far below it. */
+const DEFAULT_SFX_VOICES = 32;
 /**
- * A voice counts as busy this soon after firing even if `playing` hasn't
- * flipped yet — `play()` reports asynchronously, so two same-frame one-shots
- * would otherwise both grab the same voice.
- */
-const VOICE_HOLD_MS = 250;
-/**
- * Same-clip repeats closer than the hold don't hunt for another voice — they
- * REWIND the voice already holding the clip (cutting its tail), the classic
- * fast-retrigger. Routing them to a spare voice meant a `replace()` load per
- * repeat, and on iOS a cold voice's deferred start is exactly where fast
- * swing/hit repeats were vanishing. Below this floor the two onsets would
- * read as one sound anyway, so the repeat is dropped outright.
+ * Same-clip onsets closer than this are ONE sound to the ear — layering them
+ * (three same-tick hits of the same weapon) just stacks into one louder,
+ * phasier onset, so the repeats are dropped outright. Distinct clips always
+ * layer; that's what a mixer is for.
  */
 const RETRIGGER_FLOOR_MS = 50;
-/** ms between `warm()` loads — one native player prep per beat, so warming
- * never costs any single frame more than one load. A ~20-clip set warms in ~2s,
- * well inside a lobby wait. */
-const WARM_STAGGER_MS = 90;
 /**
- * Cap on native play-starts per ~frame. Every start is a batch of native
- * calls, and on iOS those dispatch through the main thread — a burst (a
- * teamfight's worth of hits in one tick) taxes the frame even with warm
- * voices. Beyond the cap, surplus sounds are dropped outright: in a burst
- * they're perceptually masked by the ones that did play.
+ * A cold clip's play waits on its decode; if the decode lands within this
+ * window the sound still fires — late enough to measure, not to hear (a
+ * first-ever UI tap rides this). Past it the moment is gone: stay silent,
+ * and the now-resident buffer makes every later play immediate.
  */
-const MAX_STARTS_PER_WINDOW = 3;
-const START_WINDOW_MS = 16;
-/** Escape hatch: treat a voice as reusable this long after its fire even if
- * no status event ever cleared its `busy` mirror (the longest one-shots —
- * announcer lines — run ~2s). Keeps a lost event from leaking a voice. */
-const MAX_BUSY_MS = 4_000;
-
-/**
- * One reusable SFX player. `clip` is what's loaded, so same-clip replays skip
- * the reload.
- *
- * Everything the hot path needs to know about the player is MIRRORED here in
- * JS (`busy`, `loaded`, `atStart`), maintained by the status listener and the
- * fire path — because reading a property off the native player (`.playing`,
- * `.isLoaded`) is a synchronous hop into native, and on iOS that means the
- * main thread. A per-play selection scan that reads `.playing` across a warm
- * 26-voice pool is hundreds of sync native reads a second in a busy fight —
- * a steady frame tax. With the mirrors, selection is pure JS.
- */
-interface Voice {
-  player: AudioPlayer;
-  clip: string;
-  /** Wall-clock ms of the last fire — the steal heuristic takes the stalest. */
-  firedAt: number;
-  /** Pre-warmed via `warm()`: churn loads prefer unpinned voices so this clip
-   * stays resident. Softly held, not reserved — evicted (and unpinned) only
-   * when every unpinned voice is busy. */
-  pinned: boolean;
-  /** Playhead known to sit at 0 (a freshly loaded item), so the first fire
-   * can skip its `seekTo(0)`. One-way: false from the first fire until the
-   * next load. (An earlier version re-armed idle voices to 0 from the status
-   * listener to skip ALL hot-path seeks — reverted: a transient `!playing`
-   * status could rewind a LIVE sound, which reads as a double-fire.) */
-  atStart: boolean;
-  /** JS mirror of "this one-shot is still ringing" — set at fire, cleared by
-   * the status listener's didJustFinish (plus the MAX_BUSY_MS escape hatch
-   * in `free`, in case events ever go missing). */
-  busy: boolean;
-  /** JS mirror of the player's isLoaded, set by the status listener. */
-  loaded: boolean;
-  /** The status listener's subscription, removed on dispose. */
-  sub: { remove(): void };
-}
+const LATE_PLAY_MS = 250;
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -154,15 +101,17 @@ export interface AudioDirector {
   /** Advance crossfades by `dt` seconds. Call once per frame/step. */
   tick(dt: number): void;
 
-  /** Fire a one-shot SFX by manifest name. Designed-but-unused until the SFX pass. */
+  /** Fire a one-shot SFX by manifest name: a buffer-source + gain node pair
+   * mixed on the audio render thread. Muted / zero-gain plays cost nothing. */
   playSfx(name: string, opts?: { volume?: number; pitchVariance?: number }): void;
 
   /**
-   * Pre-load clips onto pinned voices so their first real play is a rewind, not
-   * a native load (the load IS the frame hitch on weak devices). Staggered one
-   * clip per {@link WARM_STAGGER_MS}; call from a calm moment — a lobby, not
-   * mid-combat. Idempotent and fire-and-forget: already-warm clips are skipped,
-   * unknown names ignored, and clips past the pool cap are simply left cold.
+   * Decode clips to resident PCM ahead of time so a combat moment never waits
+   * on a decode. Decodes run off the JS thread, one clip in flight at a time;
+   * call from a calm moment — a lobby, a loading screen. Idempotent and
+   * fire-and-forget: already-decoded clips are skipped, unknown names ignored.
+   * Buffers stay for the app's lifetime (in-memory PCM ≈ 350KB/s stereo — size
+   * the warm set, not the pool).
    */
   warm(names: string[]): void;
 
@@ -176,10 +125,10 @@ export interface AudioDirector {
 }
 
 export interface AudioDirectorOptions {
-  /** Max concurrent SFX voices AND how many clips stay resident before cold
-   * reloads begin. Default {@link DEFAULT_SFX_VOICES}. Raise it past the count of
-   * frequently-triggered clips to keep them all warm (bounded, so still safe on
-   * Android's session limit — this is a fixed pool, not per-play allocation). */
+  /** Cap on SIMULTANEOUS one-shots (a spam guard — surplus plays in a burst
+   * are dropped). Default {@link DEFAULT_SFX_VOICES}. Unlike the old voice
+   * pool this is not a residency budget: every warmed clip stays decoded
+   * regardless, and concurrent plays just mix. */
   sfxVoices?: number;
 }
 
@@ -215,6 +164,15 @@ export const createAudioDirector = (
     setAudioModeAsync({ playsInSilentMode: true, interruptionMode: "mixWithOthers" }).catch(
       () => {},
     );
+    // The Web Audio side (SFX) and the expo-audio decks share ONE iOS session;
+    // both libraries configure it, so they must ask for the same thing —
+    // playback category (audible on the ring/silent switch) that mixes politely
+    // with the user's own audio — or the last one to touch it wins a fight.
+    AudioManager.setAudioSessionOptions({
+      iosCategory: "playback",
+      iosMode: "default",
+      iosOptions: ["mixWithOthers"],
+    });
   };
   configureSession();
 
@@ -226,15 +184,22 @@ export const createAudioDirector = (
   const decks: [Deck, Deck] = [makeDeck(), makeDeck()];
   /** Index of the deck holding the bed that should be at full volume. */
   let activeIdx: 0 | 1 = 0;
-  /** The SFX voice pool — grows lazily to SFX_VOICES, then steals. */
-  const voices: Voice[] = [];
-  /** Clips still waiting for a staggered warm load. */
-  const warmQueue: string[] = [];
-  let warmTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Native play-start budget: window origin + starts used within it. */
-  let startWindowAt = 0;
-  let startsInWindow = 0;
+  // ── SFX: the Web Audio engine ─────────────────────────────────────────────
+  const sfxCtx = new AudioContext();
+  /** Clip → decoded PCM, resident for the app's lifetime once decoded. */
+  const buffers = new Map<string, AudioBuffer>();
+  /** In-flight decodes, so concurrent requests for a clip share one decode. */
+  const decoding = new Map<string, Promise<AudioBuffer | null>>();
+  /** Expected end times (epoch ms) of live one-shots — the sfxVoices spam cap
+   * reads this, pruned lazily per play. Derived from buffer duration ÷ rate
+   * rather than counted via onEnded events, so a lost event can never wedge
+   * the cap shut (the old pool needed MAX_BUSY_MS for exactly that). */
+  const liveEnds: number[] = [];
+  /** Last onset per clip — the same-clip double-fire floor. */
+  const lastOnset = new Map<string, number>();
+  /** warm()'s sequential decode chain — one clip in flight at a time. */
+  let warmChain: Promise<void> = Promise.resolve();
 
   let beds: Partial<Record<MusicSituation, string>> = {};
   let crossfade = DEFAULT_CROSSFADE;
@@ -248,110 +213,51 @@ export const createAudioDirector = (
   const resolve = (clip: string): AudioSource | undefined => manifest[clip];
 
   /**
-   * Start a voice — but wait for its source to be ready first. iOS's
-   * `playImmediately` (what expo-audio's `play()` runs) SILENTLY DROPS a play
-   * issued before the AVPlayerItem is `.readyToPlay`, so a voice we just
-   * `replace()`d onto a new clip or freshly created hasn't loaded yet and stays
-   * silent — this is why one-shots vanish intermittently (a tap dropped mid-swipe
-   * as fast repeats keep landing on cold, just-swapped voices). A voice already
-   * holding its clip is loaded and fires this frame; a cold one fires on its next
-   * status update, ~a frame later (imperceptible; assets are preloaded). `token`
-   * is the play's `firedAt` — if the voice gets stolen for a newer sound before a
-   * deferred start runs, the token no longer matches and the stale start is
-   * dropped (the newer play owns the voice and schedules its own start).
-   *
-   * `rewind` (a reused voice whose playhead isn't at 0) is the OTHER iOS silent
-   * drop: `seekTo(0)` is async, and a `play()` issued while the seek is still in
-   * flight runs at the OLD playhead — for a just-finished one-shot that's the end
-   * of the clip, which AVPlayer treats as already-done and plays nothing. Android
-   * queues the two in order, which is why only iPhones lost repeats (the
-   * countdown thud every ~1s rode this exact path). So the seek must COMPLETE
-   * before the play is issued; on a local, already-loaded asset that's ~ms.
+   * Decode a clip to resident PCM, once; concurrent callers share the decode.
+   * The manifest holds expo-audio `AudioSource` shapes — a `require()` module
+   * number, a uri string, or `{ uri }` — and `decodeAudioData` takes the first
+   * two directly. Decode failures resolve null (a silent clip, never a throw
+   * on the play path) and are NOT cached, so a transient miss (dev-server
+   * hiccup) retries on the next request.
    */
-  const fire = (voice: Voice, token: number, volume: number, rate: number, rewind: boolean): void => {
-    const start = (): void => {
-      if (voice.firedAt !== token) return; // stolen for a newer play — that one fires instead
-      voice.player.volume = volume;
-      // Always set the rate — voices are reused, so a previous play's variance
-      // would otherwise stick to the next sound. (An earlier version skipped
-      // "unchanged" volume/rate via JS mirrors — reverted: whether a replace()
-      // resets native player state is expo-audio-internal, and a wrong guess
-      // means wrong-volume or wrong-pitch sounds.)
-      voice.player.setPlaybackRate(rate);
-      // play() can throw from inside native session activation (a phone call,
-      // Siri) — a dropped sound, never a crashed frame.
-      try {
-        voice.player.play();
-      } catch {
-        voice.busy = false;
-      }
-    };
-    const begin = (): void => {
-      if (voice.firedAt !== token) return;
-      // Play even if the seek failed: worst case is the old (dropped-sound)
-      // behaviour, never worse.
-      if (rewind) voice.player.seekTo(0).then(start, start);
-      else start();
-    };
-    // The JS mirror answers without touching native; fall back to ONE native
-    // read only while a cold voice hasn't reported loaded yet.
-    if (voice.loaded || voice.player.isLoaded) {
-      voice.loaded = true;
-      begin();
-      return;
-    }
-    const sub = voice.player.addListener("playbackStatusUpdate", (status) => {
-      if (!status.isLoaded) return;
-      voice.loaded = true;
-      sub.remove();
-      begin();
-    });
+  const loadBuffer = (name: string): Promise<AudioBuffer | null> => {
+    const ready = buffers.get(name);
+    if (ready) return Promise.resolve(ready);
+    const inFlight = decoding.get(name);
+    if (inFlight) return inFlight;
+    const source = resolve(name);
+    const input =
+      typeof source === "number" || typeof source === "string"
+        ? source
+        : (source && typeof source === "object" && source.uri) || null;
+    if (input === null) return Promise.resolve(null);
+    const p = sfxCtx
+      .decodeAudioData(input)
+      .then((buffer): AudioBuffer | null => {
+        buffers.set(name, buffer);
+        return buffer;
+      })
+      .catch((): null => null)
+      .finally(() => decoding.delete(name));
+    decoding.set(name, p);
+    return p;
   };
 
-  /**
-   * Create a pool voice. Its persistent status listener maintains the JS
-   * mirrors so the hot path never reads a native property. Deliberately
-   * minimal after a correctness scare: only the unambiguous `didJustFinish`
-   * frees a voice (a transient `!playing` — buffering, a deferred start still
-   * pending — must not), and the listener never touches the playhead (a seek
-   * under a live sound reads as a double-fire). Note most combat clips are
-   * SHORTER than VOICE_HOLD_MS, so their finish lands inside the hold window
-   * — busy must clear regardless of fire recency, or every short clip's voice
-   * locks out until the MAX_BUSY_MS hatch.
-   */
-  const makeVoice = (source: AudioSource, clip: string, pinned: boolean): Voice => {
-    const voice: Voice = {
-      player: createAudioPlayer(source, PLAYER_OPTIONS),
-      clip,
-      firedAt: 0,
-      pinned,
-      atStart: true,
-      busy: false,
-      loaded: false,
-      sub: { remove: () => {} },
+  /** Fire a decoded buffer: source → gain → out, self-releasing on end. */
+  const startSfx = (buffer: AudioBuffer, volume: number, rate: number): void => {
+    liveEnds.push(Date.now() + (buffer.duration / rate) * 1000 + 100);
+    const gain = sfxCtx.createGain();
+    gain.gain.value = volume;
+    const src = sfxCtx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = rate;
+    src.connect(gain);
+    gain.connect(sfxCtx.destination);
+    src.onEnded = () => {
+      src.disconnect();
+      gain.disconnect();
     };
-    voice.sub = voice.player.addListener("playbackStatusUpdate", (status) => {
-      if (status.isLoaded) voice.loaded = true;
-      if (status.didJustFinish) voice.busy = false;
-    });
-    return voice;
-  };
-
-  /** One warm beat: load (or just pin) the next queued clip, then re-arm. */
-  const warmStep = (): void => {
-    warmTimer = null;
-    const name = warmQueue.shift();
-    if (name !== undefined) {
-      const source = resolve(name);
-      const resident = voices.find((v) => v.clip === name);
-      if (resident) {
-        resident.pinned = true; // already loaded — just protect it from churn
-      } else if (source !== undefined && voices.length < sfxVoices) {
-        voices.push(makeVoice(source, name, true));
-      }
-      // Unknown name or pool full: drop it — playSfx handles it cold as before.
-    }
-    if (warmQueue.length > 0) warmTimer = setTimeout(warmStep, WARM_STAGGER_MS);
+    src.start();
   };
 
   /** Recompute every deck's real volume from master · music · mute · its fade gain. */
@@ -442,95 +348,62 @@ export const createAudioDirector = (
     },
 
     playSfx(name, opts) {
-      const source = resolve(name);
-      if (source === undefined) {
+      if (resolve(name) === undefined) {
         console.warn(`[audio] no manifest entry for sfx "${name}"`);
         return;
       }
-      const now = Date.now();
-      // Per-frame start budget — drop surplus burst sounds before any native work.
-      if (now - startWindowAt > START_WINDOW_MS) {
-        startWindowAt = now;
-        startsInWindow = 0;
-      }
-      if (startsInWindow >= MAX_STARTS_PER_WINDOW) return;
-      startsInWindow += 1;
-      // Pure-JS freeness — the busy mirror, never a native `.playing` read
-      // (that's a sync main-thread hop on iOS, and this runs across the whole
-      // pool per play). MAX_BUSY_MS is the lost-event escape hatch.
-      const free = (v: Voice): boolean =>
-        now - v.firedAt > VOICE_HOLD_MS && (!v.busy || now - v.firedAt > MAX_BUSY_MS);
-      /** Point a voice at a different clip; the new source must load again. */
-      const load = (v: Voice): void => {
-        v.player.replace(source);
-        v.clip = name;
-        v.loaded = false;
-        v.atStart = true; // a fresh item starts at 0
-      };
-      // Best → worst: a free voice already holding this clip (re-armed at 0 or
-      // a cheap rewind — no reload); the SAME voice mid-ring for a fast repeat
-      // (rewind-retrigger, see RETRIGGER_FLOOR_MS — cuts the tail, never
-      // reloads); a free UNPINNED voice (load onto it — pinned warm clips stay
-      // resident); grow the pool while under the cap (lazily, so a menu screen
-      // isn't holding eight native sessions); evict a free pinned voice (better
-      // than cutting a still-ringing one-shot); steal the stalest voice
-      // outright. `rewind` = the playhead isn't at 0, so fire() must complete a
-      // seek before playing (the iOS ordering rule on fire's doc).
-      let rewind = false;
-      let voice = voices.find((v) => v.clip === name && free(v));
-      if (voice) {
-        rewind = !voice.atStart;
-      } else if ((voice = voices.find((v) => v.clip === name))) {
-        if (now - voice.firedAt <= RETRIGGER_FLOOR_MS) return; // one onset, already playing
-        rewind = !voice.atStart;
-      } else if ((voice = voices.find((v) => free(v) && !v.pinned))) {
-        load(voice);
-      } else if (voices.length < sfxVoices) {
-        voice = makeVoice(source, name, false);
-        voices.push(voice);
-      } else if ((voice = voices.find(free))) {
-        voice.pinned = false;
-        load(voice);
-      } else {
-        voice = voices.reduce((a, b) => (a.firedAt <= b.firedAt ? a : b));
-        voice.pinned = false;
-        load(voice);
-      }
-      voice.firedAt = now;
-      voice.busy = true;
-      voice.atStart = false; // it's about to play (or about to rewind to 0)
+      // Silence is free: muted or fully-attenuated plays skip ALL audio work,
+      // which also makes the mute toggle a true perf kill-switch on device.
       const volume = clamp01((muted ? 0 : master * sfx) * (opts?.volume ?? 1));
+      if (volume <= 0) return;
+      const now = Date.now();
+      const last = lastOnset.get(name);
+      if (last !== undefined && now - last < RETRIGGER_FLOOR_MS) return; // one onset
+      lastOnset.set(name, now);
+      for (let i = liveEnds.length - 1; i >= 0; i--) {
+        if (liveEnds[i]! <= now) liveEnds.splice(i, 1);
+      }
+      if (liveEnds.length >= sfxVoices) return; // spam guard; real fights sit well below
       const rate = opts?.pitchVariance ? 1 + (Math.random() * 2 - 1) * opts.pitchVariance : 1;
-      fire(voice, now, volume, rate, rewind);
+      const ready = buffers.get(name);
+      if (ready) {
+        startSfx(ready, volume, rate);
+        return;
+      }
+      // Cold clip: decode off-thread, and still fire if it lands inside the
+      // LATE_PLAY_MS grace (first-ever UI taps); a combat moment never gets
+      // here — its clips are warmed. Either way the buffer is now resident.
+      void loadBuffer(name).then((buffer) => {
+        if (buffer && Date.now() - now <= LATE_PLAY_MS) startSfx(buffer, volume, rate);
+      });
     },
 
     warm(names) {
-      for (const name of names) {
-        if (!warmQueue.includes(name)) warmQueue.push(name);
-      }
-      if (warmTimer === null && warmQueue.length > 0) warmTimer = setTimeout(warmStep, 0);
+      warmChain = warmChain.then(async () => {
+        for (const name of names) {
+          if (resolve(name) !== undefined) await loadBuffer(name);
+        }
+      });
     },
 
     resume() {
       configureSession();
       setIsAudioActiveAsync(true).catch(() => {});
+      void sfxCtx.resume().catch(() => {});
       const active = decks[activeIdx];
       if (active.clip && !active.player.playing) active.player.play();
     },
     suspend() {
+      void sfxCtx.suspend().catch(() => {});
       setIsAudioActiveAsync(false).catch(() => {});
     },
 
     dispose() {
-      if (warmTimer !== null) clearTimeout(warmTimer);
-      warmTimer = null;
-      warmQueue.length = 0;
       for (const d of decks) d.player.remove();
-      for (const v of voices) {
-        v.sub.remove();
-        v.player.remove();
-      }
-      voices.length = 0;
+      buffers.clear();
+      lastOnset.clear();
+      liveEnds.length = 0;
+      void sfxCtx.close().catch(() => {});
     },
   };
 };

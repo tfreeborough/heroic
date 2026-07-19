@@ -17,7 +17,8 @@
   },
   "peerDependencies": {
     "expo-audio": "*",
-    "react": "*"
+    "react": "*",
+    "react-native-audio-api": "*"
   },
   "devDependencies": {
     "@types/matter-js": "^0.19.7",

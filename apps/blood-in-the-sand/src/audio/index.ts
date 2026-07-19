@@ -1,6 +1,7 @@
 /**
- * The app's one voice: a process-wide AudioDirector (`@heroic/engine`, the
- * expo-audio voice pool) driven by a pure scheduler (`@heroic/core`). Screens
+ * The app's one voice: a process-wide AudioDirector (`@heroic/engine` — Web
+ * Audio SFX mixing + expo-audio music decks) driven by a pure scheduler
+ * (`@heroic/core`). Screens
  * and the match loop both call `playSound` — a single director means UI taps and
  * combat share the voice pool and one volume/mute bus, and no screen has to own
  * audio lifecycle.
@@ -20,15 +21,10 @@ import { SOUND_CATALOGUE, type BitsSoundEvent } from "./catalogue";
 
 export type { BitsSoundEvent } from "./catalogue";
 
-/** Voices ≈ how many clips stay warm at once. Sized to hold the whole
- * mid-combat set (~24 clips: every cast, hit, fire, death, hurt, the quake
- * bed — see `warmCombatAudio`) on pinned voices with a few unpinned left
- * over for UI/flow/announcer churn. A cold clip's first play is a native
- * load — a visible frame hitch on weak devices — so combat clips must never
- * be the ones reloading. Still a fixed pool, so Android-safe; if a low-end
- * device ever objects to this many resident players, shrink the warm SET
- * first. */
-const SFX_VOICES = 28;
+/** Cap on SIMULTANEOUS one-shots (the Web Audio engine mixes them all; this
+ * is a spam guard, not a residency budget — warmed clips stay decoded
+ * regardless). A full 4v4 teamfight peaks well under this. */
+const SFX_VOICES = 32;
 
 let director: AudioDirector | null = null;
 let scheduler: SoundScheduler<BitsSoundEvent> | null = null;
@@ -94,12 +90,14 @@ export const playSound = (
 };
 
 /**
- * The events that can fire MID-FIGHT — every clip they can resolve to must be
- * warm before the first clash, because a cold clip's first play is a native
- * player load on the exact frame the moment fires (the "screen freezes when an
- * ability goes off" bug). Match-flow stings and UI stay cold: they play at
- * calm phase boundaries where a one-off load can't stutter combat. Derived
- * from the catalogue, so a newly forged weapon/ability clip warms itself.
+ * The events that can fire MID-FIGHT — every clip they can resolve to is
+ * decoded to resident PCM before the first clash, so no combat moment ever
+ * waits on (or drops to) a decode. Warming = RAM now, not native players, so
+ * the old pool-pressure exclusions (crowd, announcer) are gone: kills are
+ * exactly when those fire, and they were the last cold loads mid-combat.
+ * Match-flow stings (roundEnd/matchEnd, UI taps) stay lazy — they play at calm
+ * phase boundaries and self-warm on first use. Derived from the catalogue, so
+ * a newly forged weapon/ability clip warms itself.
  */
 const COMBAT_EVENTS: BitsSoundEvent[] = [
   "weaponFire",
@@ -111,9 +109,13 @@ const COMBAT_EVENTS: BitsSoundEvent[] = [
   "harpoonWhip",
   "quakeRumble",
   "heal",
-  // NOT crowdCheer: its 8 long takes (~8s) would over-subscribe the voice pool,
-  // and its ~8s throttle means cheers never fire in a burst — so a cold load on
-  // a clip's first use can't stutter a run of them. Kept cold like the announcer.
+  "crowdCheer",
+  "crowdJeer",
+  "firstBlood",
+  "multiKill",
+  "countdownTick",
+  "roundStart",
+  "fightStart",
 ];
 
 /**

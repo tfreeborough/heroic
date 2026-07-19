@@ -1,13 +1,14 @@
 # Audio: Music & Sound
 
 Status: **music shipped (v1)** · SFX scheduler built (core) — app wiring in progress · Applies to: both
-games (shared system) · First consumer: Enter the Gauntlet · Last decided: 2026-07-05
+games (shared system) · First consumer: Enter the Gauntlet · Last decided: 2026-07-19
 
 Built: `core` carries `ZoneAudio` + the `musicState` decider **and now the pure SFX scheduler**
-(`audio/sound.ts`); `@heroic/engine` has the crossfading `AudioDirector` on `expo-audio` (its `playSfx`
-one-shot is the device sink); Enter the Gauntlet plays its idle bed (`assets/audio/music/idle.mp3`),
-crossfading to combat when a combat bed exists. Remaining: the app catalogue + clip files + the call-site
-wiring that feeds the scheduler's decisions to `playSfx`.
+(`audio/sound.ts`); `@heroic/engine` has the `AudioDirector` — music beds crossfade on `expo-audio`,
+one-shot SFX mix through **react-native-audio-api** (Web Audio; see the 2026-07-19 section below);
+Enter the Gauntlet plays its idle bed (`assets/audio/music/idle.mp3`), crossfading to combat when a
+combat bed exists. Remaining: the app catalogue + clip files + the call-site wiring that feeds the
+scheduler's decisions to `playSfx`.
 
 How the game makes sound. Two halves share one system: **music** — zone-attached, looping beds that
 crossfade with the situation (idle ↔ combat) — and **SFX** — short one-shot sounds tied to gameplay
@@ -249,16 +250,30 @@ own whoosh).
 
 Nothing in the music build blocked this; `playSfx`, the `sfxVolume` bus + its Settings slider all pre-exist.
 
-### One-shots play through a voice pool *(decided 2026-07-06)*
+### One-shots play through a voice pool *(decided 2026-07-06 — superseded 2026-07-19)*
 
 `playSfx` originally created a fresh native player per one-shot, self-released on finish. At real
 gameplay rates (footsteps every ~300ms + strikes + hurts) that exhausts Android's native audio
 sessions — `AudioPlayer.constructor … Null pointer error creating session` — and leaks any player
-whose finish callback never fires. The director now owns a fixed **voice pool** (max 8 SFX players +
-the 2 music decks): voices are created lazily, a free voice already holding the clip just rewinds
-(no reload), and when all voices are busy the **stalest is stolen** — the oldest still-ringing
-one-shot gets cut, the standard game-audio trade. Playback rate is re-set on every fire since voices
-are reused (a previous play's pitch variance would otherwise stick).
+whose finish callback never fires. The second pass owned a fixed **voice pool** (reusable
+`expo-audio` players, warm pinning, stalest-steal) — but every voice was still a full OS media
+player (ExoPlayer/AVPlayer), and BITS proved ~30 resident decoder pipelines plus per-play native
+traffic freezes combat on weak Androids (and bred every iOS silent-drop workaround the director
+carried).
+
+### One-shots are Web Audio *(decided 2026-07-19)*
+
+SFX now play through **react-native-audio-api** (Software Mansion's Web Audio implementation):
+clips decode ONCE to in-memory PCM (`AudioBuffer`, ≈350KB/s stereo — size the warm set
+accordingly); a play is a buffer-source → gain → destination graph mixed on a dedicated native
+audio render thread. Dozens of simultaneous one-shots are the design point; the JS cost of a play
+is two allocations. `warm(names)` = decode ahead (sequential, off-thread); a cold clip still fires
+if its decode lands within ~250ms (first-ever UI taps), else stays silent — and is resident from
+then on. The pool, stealing, busy-mirrors, deferred starts, and seek-before-play ordering are all
+deleted with the media players; muted/zero-gain plays cost nothing. **Music beds stay on the
+`expo-audio` two-deck crossfader** (two long-lived players, no per-play churn); both libraries
+configure the shared iOS session with the SAME category (`playback` + `mixWithOthers`) so neither
+fights the other. Positional **pan** (StereoPannerNode) is now a cheap future add.
 
 ## Volume, mute & settings
 
