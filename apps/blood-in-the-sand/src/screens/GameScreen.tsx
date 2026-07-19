@@ -625,7 +625,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
                     bestId = p.id;
                   }
                 }
-                spectateId.current = bestId;
+                // No living ally: LINGER on whoever the camera already holds
+                // — the fallen ally's corpse, or our own — never the zoomed-
+                // out bowl fit (Tom, 2026-07-19: the end-of-match zoom-out
+                // read as a bug). Corpses stay in every snapshot, so the
+                // follow target keeps resolving; only a vanished body (seat
+                // fully gone) falls back to our own corpse.
+                spectateId.current =
+                  bestId ?? (cur ? spectateId.current : selfId);
               }
             }
           } else {
@@ -645,6 +652,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             fx: fx.map((f) => f.item),
             blood: blood.decals,
             cracks: cracks.decals,
+            scarEpoch: blood.epoch + cracks.epoch,
             pulses,
             nowMs: now,
             atlas,

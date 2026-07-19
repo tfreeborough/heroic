@@ -39,7 +39,7 @@ import {
   type PlayerSnapshot,
   type ProjectileSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
-import { decalAlpha, type BloodDecal } from "./blood";
+import { decalAlpha, POOL_MIN_R, type BloodDecal } from "./blood";
 import { crackAlpha, type CrackDecal } from "./cracks";
 import { buildCrowd, CROWD_REVEAL } from "./crowd";
 import type { StatusPulses } from "./statusRings";
@@ -284,9 +284,11 @@ export interface ArenaRenderInput {
    *  null = pure spectator (fit the arena). The camera follows this player only
    *  while they're alive — once dead it follows `spectateId` instead. */
   myId: number | null;
-  /** Death spectator: the living ally the camera trails after we've died. Null
-   *  when we're alive, a pure spectator, or our whole team is down (→ fit the
-   *  bowl). Chosen client-side (GameScreen) — all players are in every snapshot. */
+  /** Death spectator: the ally the camera trails after we've died — kept even
+   *  once THEY fall (the camera lingers on the last corpse rather than zoom
+   *  out; the bowl fit is for pure spectators only). Null when we're alive or
+   *  a pure spectator. Chosen client-side (GameScreen) — all players stay in
+   *  every snapshot, corpses included. */
   spectateId?: number | null;
   screenW: number;
   screenH: number;
@@ -300,6 +302,10 @@ export interface ArenaRenderInput {
   blood: readonly BloodDecal[];
   /** Tremor's cracked-earth decals — same client-derived floor-layer rule. */
   cracks: readonly CrackDecal[];
+  /** Sum of the blood + crack fields' epochs (total decals ever added) — the
+   *  scar cache's dirty signal: unchanged → fades step at 1Hz; bumped → the
+   *  new marks land within 200ms. */
+  scarEpoch: number;
   /** Per-player status-ring pulse phases, advanced by the caller per frame. */
   pulses: StatusPulses;
   /** The clock the decals were aged against (performance.now). */
@@ -319,9 +325,10 @@ export interface ArenaRenderInput {
 // holds, so a still-wet trail means someone bled here seconds ago (a readable
 // freshness signal in a one-life arena, not just eye-candy). All of it is a
 // pure function of data the decal already carries — position, radius, birth,
-// seed — so it costs nothing on the wire and rebuilds inside the same ~5Hz
-// cached scar picture; per-frame cost stays one drawPicture.
-const TAU = Math.PI * 2;
+// seed — so it costs nothing on the wire and rebuilds inside the same cached
+// scar picture; per-frame cost stays one drawPicture. Silhouette paths are
+// baked at birth in blood.ts (the cracks.ts lesson); a rebuild here only
+// re-samples colours and alphas.
 /** A spill dries fully over this long, then holds coagulated for the rest of
  *  its ttl. Shorter than the decal lifetime on purpose — the freshness signal
  *  lives in the first seconds. */
@@ -364,61 +371,19 @@ const RAMP_CLOT = buildRamp([30, 8, 6], [14, 5, 4]); // tacky centre clot
 const rampIdx = (w: number): number =>
   Math.min(RAMP_N - 1, Math.max(0, Math.round((1 - w) * (RAMP_N - 1))));
 
-/** Stable per-decal edge noise — layered sines keyed on the frozen seed so the
- *  silhouette is irregular but doesn't crawl between rebuilds. */
-const wobble = (seed: number, a: number): number =>
-  0.5 * Math.sin(a * 3 + seed) +
-  0.3 * Math.sin(a * 5 - seed * 1.7 + 1.3) +
-  0.2 * Math.sin(a * 2 + seed * 0.6);
-
-/** A closed, smoothly-rounded irregular blob (no circular edge). */
-const blobPath = (
-  cx: number,
-  cy: number,
-  r: number,
-  seed: number,
-  amp: number,
-) => {
-  const N = 16;
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (let i = 0; i < N; i++) {
-    const a = (i / N) * TAU;
-    const rr = r * (1 + amp * wobble(seed, a));
-    xs.push(cx + Math.cos(a) * rr);
-    ys.push(cy + Math.sin(a) * rr);
-  }
-  const path = Skia.Path.Make();
-  path.moveTo((xs[0]! + xs[N - 1]!) / 2, (ys[0]! + ys[N - 1]!) / 2);
-  for (let i = 0; i < N; i++) {
-    const j = (i + 1) % N;
-    path.quadTo(xs[i]!, ys[i]!, (xs[i]! + xs[j]!) / 2, (ys[i]! + ys[j]!) / 2);
-  }
-  path.close();
-  return path;
-};
-
-/** A flung droplet: rounded fat back at (x,y) tapering to a point at
- *  (x+dx,y+dy) — spray reads as thrown blood, not round dots. */
-const teardropPath = (x: number, y: number, dx: number, dy: number, r: number) => {
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
-  const nx = -uy;
-  const ny = ux;
-  const tipx = x + dx;
-  const tipy = y + dy;
-  const bkx = x - ux * r * 1.15;
-  const bky = y - uy * r * 1.15;
-  const path = Skia.Path.Make();
-  path.moveTo(tipx, tipy);
-  path.quadTo(x + nx * r * 1.05, y + ny * r * 1.05, x + nx * r, y + ny * r);
-  path.quadTo(bkx + nx * r * 0.55, bky + ny * r * 0.55, bkx, bky);
-  path.quadTo(bkx - nx * r * 0.55, bky - ny * r * 0.55, x - nx * r, y - ny * r);
-  path.quadTo(x - nx * r * 1.05, y - ny * r * 1.05, tipx, tipy);
-  path.close();
-  return path;
-};
+// One pool gradient per ramp step, built once at UNIT radius — pools draw
+// their unit-baked path under translate+scale, so these fit every pool at any
+// size. A rebuild used to allocate a fresh native radial gradient PER POOL
+// (hundreds each pass): a big slice of the weak-device `rec` spike.
+const POOL_GRADIENTS = Array.from({ length: RAMP_N }, (_, i) =>
+  Skia.Shader.MakeRadialGradient(
+    vec(-0.15, -0.15),
+    1.1,
+    [RAMP_CORE[i]!, RAMP_BODY[i]!, RAMP_EDGE[i]!],
+    [0, 0.55, 1],
+    TileMode.Clamp,
+  ),
+);
 
 /**
  * Floor blood. Small drops and flung spray are cheap solid-colour shapes (the
@@ -439,61 +404,50 @@ const drawBlood = (
     const idx = rampIdx(w);
     const alpha = Math.min(1, d.alpha * BLOOD_ALPHA_BOOST) * life;
 
-    // Flung spray → tapered teardrop, single solid fill.
-    if (d.dx !== undefined && d.dy !== undefined) {
-      bloodFill.setShader(null);
+    // Drops + flung spray → the world-coord baked path, single solid fill.
+    if (d.r < POOL_MIN_R || d.dx !== undefined) {
       bloodFill.setColor(RAMP_BODY[idx]!);
       bloodFill.setAlphaf(alpha);
-      canvas.drawPath(teardropPath(d.x, d.y, d.dx, d.dy, Math.max(1, d.r)), bloodFill);
+      canvas.drawPath(d.path, bloodFill);
       continue;
     }
 
-    // Small drops → one irregular blob, solid fill.
-    if (d.r < 6) {
-      bloodFill.setShader(null);
-      bloodFill.setColor(RAMP_BODY[idx]!);
-      bloodFill.setAlphaf(alpha);
-      canvas.drawPath(blobPath(d.x, d.y, d.r, d.seed, d.r < 4 ? 0.16 : 0.3), bloodFill);
-      continue;
-    }
-
-    // Pools → the full treatment.
+    // Pools → the full treatment. The path is baked at unit radius, so draw
+    // in decal-local space: translate+scale places it AND makes the cached
+    // unit gradient land exactly where the per-pool one used to.
     const dry = 1 - w;
-    const body = blobPath(d.x, d.y, d.r, d.seed, 0.32);
-    bloodFill.setShader(
-      Skia.Shader.MakeRadialGradient(
-        vec(d.x - d.r * 0.15, d.y - d.r * 0.15),
-        d.r * 1.1,
-        [RAMP_CORE[idx]!, RAMP_BODY[idx]!, RAMP_EDGE[idx]!],
-        [0, 0.55, 1],
-        TileMode.Clamp,
-      ),
-    );
+    canvas.save();
+    canvas.translate(d.x, d.y);
+    canvas.scale(d.r, d.r);
+    bloodFill.setShader(POOL_GRADIENTS[idx]!);
     bloodFill.setAlphaf(alpha);
-    canvas.drawPath(body, bloodFill);
+    canvas.drawPath(d.path, bloodFill);
     bloodFill.setShader(null);
 
     // Tacky clot sets in the centre as it dries.
-    if (dry > 0.05) {
+    if (dry > 0.05 && d.clotPath) {
       bloodFill.setColor(RAMP_CLOT[idx]!);
       bloodFill.setAlphaf(Math.min(1, 0.42 * dry) * life);
-      canvas.drawPath(blobPath(d.x, d.y, d.r * 0.6, d.seed * 1.7 + 11, 0.28), bloodFill);
+      canvas.drawPath(d.clotPath, bloodFill);
     }
 
-    // Coffee-ring rim thickens and darkens with age.
+    // Coffee-ring rim thickens and darkens with age. Widths are in local
+    // units (×d.r on screen): same numbers as the old world-space
+    // max(1, r * (0.09 + 0.14 * dry)).
     if (d.r >= 8) {
       bloodStroke.setColor(RAMP_RIM[idx]!);
       bloodStroke.setAlphaf(Math.min(1, 0.45 + 0.4 * dry) * life);
-      bloodStroke.setStrokeWidth(Math.max(1, d.r * (0.09 + 0.14 * dry)));
-      canvas.drawPath(body, bloodStroke);
+      bloodStroke.setStrokeWidth(Math.max(1 / d.r, 0.09 + 0.14 * dry));
+      canvas.drawPath(d.path, bloodStroke);
     }
 
     // Wet specular sheen — fresh pools only, dies as it sets.
     if (w > 0.3) {
       bloodFill.setColor(C_SHEEN);
       bloodFill.setAlphaf(0.24 * w * life);
-      canvas.drawCircle(d.x - d.r * 0.34, d.y - d.r * 0.44, d.r * 0.6, bloodFill);
+      canvas.drawCircle(-0.34, -0.44, 0.6, bloodFill);
     }
+    canvas.restore();
   }
   bloodFill.setShader(null);
   bloodFill.setAlphaf(1);
@@ -1055,23 +1009,31 @@ const drawCracks = (
 /**
  * The floor-scar layer — cracks then blood (fresh pools cover old fractures)
  * — cached as ONE world-space SkPicture and rebuilt on a slow beat instead of
- * per rendered frame. The scars fade over 20–100 SECONDS, so re-recording
- * hundreds of decals at 60Hz bought nothing: stepping their alphas at ~5Hz is
- * imperceptible, and a new decal appearing ≤200ms late lands behind the cast
+ * per rendered frame. The scars fade over 20–100 SECONDS, so alphas only need
+ * stepping at 1Hz — but FRESH marks must not wait for that beat (a splash
+ * landing a second after its hit reads as detached), so a dirty epoch (new
+ * decals since the last build) drops the wait to 200ms, behind the cast
  * stomp / hit FX that mask it. Per-frame cost collapses to one drawPicture
  * call; the camera transform applies at replay, so the cache never invalidates
  * on camera movement.
  */
-const SCAR_REBUILD_MS = 200;
+const SCAR_FRESH_MS = 200;
+const SCAR_FADE_MS = 1000;
 let scarPicture: SkPicture | null = null;
 let scarBuiltMs = -Infinity;
+let scarBuiltEpoch = -1;
 const scarLayer = (
   blood: readonly BloodDecal[],
   cracks: readonly CrackDecal[],
+  epoch: number,
   nowMs: number,
 ): SkPicture => {
-  if (scarPicture && nowMs - scarBuiltMs < SCAR_REBUILD_MS) return scarPicture;
+  if (scarPicture) {
+    const wait = epoch !== scarBuiltEpoch ? SCAR_FRESH_MS : SCAR_FADE_MS;
+    if (nowMs - scarBuiltMs < wait) return scarPicture;
+  }
   scarBuiltMs = nowMs;
+  scarBuiltEpoch = epoch;
   scarPicture = createPicture((canvas) => {
     drawCracks(canvas, cracks, nowMs);
     drawBlood(canvas, blood, nowMs);
@@ -1270,8 +1232,8 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     const vcx = viewW / 2;
     const vcy = padTop + viewH / 2;
 
-    // Camera: follow yourself while alive, the spectated ally once you're down,
-    // and fit the whole bowl for a pure spectator or a wiped-out team.
+    // Camera: follow yourself while alive, the spectated ally (or lingered-on
+    // corpse) once you're down; the whole-bowl fit is the pure-spectator view.
     let zoom: number;
     let cx: number;
     let cy: number;
@@ -1353,8 +1315,8 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     );
 
     // Ground scars: the cached world-space picture (cracks under blood),
-    // rebuilt at ~5Hz inside scarLayer — one replayed op per frame here.
-    canvas.drawPicture(scarLayer(r.blood, r.cracks, r.nowMs));
+    // rebuilt on scarLayer's slow beat — one replayed op per frame here.
+    canvas.drawPicture(scarLayer(r.blood, r.cracks, r.scarEpoch, r.nowMs));
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:

@@ -13,6 +13,7 @@
  * same. Known trade-off: a spectator or rejoiner arriving mid-match starts
  * with a clean floor and only sees blood spilt after they arrived.
  */
+import { Skia, type SkPath } from "@shopify/react-native-skia";
 import type { PlayerSnapshot } from "@heroic/blood-in-the-sand-sim";
 
 export interface BloodDecal {
@@ -28,9 +29,17 @@ export interface BloodDecal {
   dx?: number;
   dy?: number;
   /** Per-decal random, frozen at birth. Seeds the irregular splat silhouette
-   * in the renderer so a mark's shape is stable across the ~5Hz scar rebuilds
-   * (a fresh Math.random per frame would make every pool crawl). */
+   * so a mark's shape is stable across scar rebuilds (a fresh Math.random per
+   * rebuild would make every pool crawl). */
   seed: number;
+  /** Silhouette built ONCE at birth (the cracks.ts lesson — rebuilding every
+   * path each scar pass was the `rec`-spike killer on weak devices). Drops and
+   * teardrops bake in world coords and draw directly; pools bake at UNIT
+   * radius around the origin and draw under translate(x,y)+scale(r), which is
+   * what lets the renderer reuse one cached radial gradient per ramp step. */
+  path: SkPath;
+  /** Pools only: the drying clot blob, unit-local like `path`. */
+  clotPath?: SkPath;
 }
 
 // ── Tuning ─────────────────────────────────────────────────────────────────
@@ -56,6 +65,73 @@ const gapJitter = (): number => 0.35 + Math.random() * 1.4;
 const IDLE_DRIP_MS_MAX = 2800;
 const IDLE_DRIP_MS_MIN = 840;
 
+/** Decals at least this big are pools — the premium gradient treatment. */
+export const POOL_MIN_R = 6;
+
+const TAU = Math.PI * 2;
+
+/** Stable per-decal edge noise — layered sines keyed on the frozen seed so the
+ *  silhouette is irregular but doesn't crawl between rebuilds. */
+const wobble = (seed: number, a: number): number =>
+  0.5 * Math.sin(a * 3 + seed) +
+  0.3 * Math.sin(a * 5 - seed * 1.7 + 1.3) +
+  0.2 * Math.sin(a * 2 + seed * 0.6);
+
+/** A closed, smoothly-rounded irregular blob (no circular edge). */
+const blobPath = (
+  cx: number,
+  cy: number,
+  r: number,
+  seed: number,
+  amp: number,
+): SkPath => {
+  const N = 16;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * TAU;
+    const rr = r * (1 + amp * wobble(seed, a));
+    xs.push(cx + Math.cos(a) * rr);
+    ys.push(cy + Math.sin(a) * rr);
+  }
+  const path = Skia.Path.Make();
+  path.moveTo((xs[0]! + xs[N - 1]!) / 2, (ys[0]! + ys[N - 1]!) / 2);
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    path.quadTo(xs[i]!, ys[i]!, (xs[i]! + xs[j]!) / 2, (ys[i]! + ys[j]!) / 2);
+  }
+  path.close();
+  return path;
+};
+
+/** A flung droplet: rounded fat back at (x,y) tapering to a point at
+ *  (x+dx,y+dy) — spray reads as thrown blood, not round dots. */
+const teardropPath = (
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  r: number,
+): SkPath => {
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -uy;
+  const ny = ux;
+  const tipx = x + dx;
+  const tipy = y + dy;
+  const bkx = x - ux * r * 1.15;
+  const bky = y - uy * r * 1.15;
+  const path = Skia.Path.Make();
+  path.moveTo(tipx, tipy);
+  path.quadTo(x + nx * r * 1.05, y + ny * r * 1.05, x + nx * r, y + ny * r);
+  path.quadTo(bkx + nx * r * 0.55, bky + ny * r * 0.55, bkx, bky);
+  path.quadTo(bkx - nx * r * 0.55, bky - ny * r * 0.55, x - nx * r, y - ny * r);
+  path.quadTo(x - nx * r * 1.05, y - ny * r * 1.05, tipx, tipy);
+  path.close();
+  return path;
+};
+
 /** Current opacity of a decal (0 once expired). */
 export const decalAlpha = (d: BloodDecal, nowMs: number): number => {
   const age = (nowMs - d.bornMs) / d.ttlMs;
@@ -76,6 +152,10 @@ interface DripTracker {
 
 export class BloodField {
   readonly decals: BloodDecal[] = [];
+  /** Total decals ever pushed — the scar cache's dirty signal (render.ts).
+   * A plain length can't serve: at the MAX_DECALS cap a push also evicts,
+   * so the length sits still while the field churns. */
+  epoch = 0;
   private readonly trackers = new Map<number, DripTracker>();
 
   /**
@@ -267,9 +347,18 @@ export class BloodField {
     }
   }
 
-  private push(decal: Omit<BloodDecal, "seed">): void {
+  private push(decal: Omit<BloodDecal, "seed" | "path" | "clotPath">): void {
     const d = decal as BloodDecal;
     d.seed = Math.random() * 1000;
+    if (d.dx !== undefined && d.dy !== undefined) {
+      d.path = teardropPath(d.x, d.y, d.dx, d.dy, Math.max(1, d.r));
+    } else if (d.r < POOL_MIN_R) {
+      d.path = blobPath(d.x, d.y, d.r, d.seed, d.r < 4 ? 0.16 : 0.3);
+    } else {
+      d.path = blobPath(0, 0, 1, d.seed, 0.32);
+      d.clotPath = blobPath(0, 0, 0.6, d.seed * 1.7 + 11, 0.28);
+    }
+    this.epoch++;
     if (this.decals.length >= MAX_DECALS) this.decals.shift();
     this.decals.push(d);
   }

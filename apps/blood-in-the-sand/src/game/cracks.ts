@@ -54,6 +54,8 @@ const jaggedLine = (x: number, y: number, angle: number, length: number): Vec2[]
 
 export class CrackField {
   readonly decals: CrackDecal[] = [];
+  /** Total cracks ever added — the scar cache's dirty signal (render.ts). */
+  epoch = 0;
 
   /** Fracture the ground at a slam point. `radius` scales the burst. */
   add(x: number, y: number, radius: number, nowMs: number, ttlMs = CRACK_TTL_MS): void {
@@ -74,6 +76,7 @@ export class CrackField {
         addArm(jaggedLine(from.x, from.y, angle + (Math.random() - 0.5) * 1.6, length * 0.4));
       }
     }
+    this.epoch++;
     this.decals.push({ x, y, bornMs: nowMs, ttlMs, path });
     if (this.decals.length > MAX_CRACKS) this.decals.splice(0, this.decals.length - MAX_CRACKS);
   }
