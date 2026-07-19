@@ -8,7 +8,7 @@
  * `caffeinate -i bun src/main.ts` stops macOS sleeping mid-match.
  */
 import { networkInterfaces } from "node:os";
-import { DEFAULT_PORT } from "@heroic/blood-in-the-sand-sim";
+import { DEFAULT_PORT, PROTOCOL_VERSION } from "@heroic/blood-in-the-sand-sim";
 import { RoomManager } from "./manager";
 import type { ClientData } from "./room";
 
@@ -20,7 +20,7 @@ const server = Bun.serve<ClientData, never>({
   port,
   fetch(req, srv) {
     if (srv.upgrade(req, { data: { roomCode: null, playerId: null } })) return;
-    return new Response(`Blood in the Sand server — ${manager.roomCount()} room(s) open. Connect with the app.`);
+    return new Response(`Blood in the Sand server — protocol v${PROTOCOL_VERSION}, ${manager.roomCount()} room(s) open. Connect with the app.`);
   },
   websocket: {
     message: (ws, raw) => manager.message(ws, raw),
