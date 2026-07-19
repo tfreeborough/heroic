@@ -140,6 +140,9 @@ export interface AudioDirector {
   setZone(audio: ZoneAudio | undefined): void;
   /** Set the active music situation (from the core decider). Crossfades if its bed changed. */
   setSituation(situation: MusicSituation): void;
+  /** Stop all music: pause both decks and clear their fades, so nothing keeps
+   *  looping silently. A later setZone/setSituation restarts the bed. */
+  stopMusic(): void;
 
   /** Master / music / SFX volume, each 0..1. */
   setMasterVolume(v: number): void;
@@ -397,6 +400,15 @@ export const createAudioDirector = (
     setSituation(next) {
       situation = next;
       apply();
+    },
+
+    stopMusic() {
+      for (const d of decks) {
+        d.target = 0;
+        d.gain = 0;
+        if (d.player.playing) d.player.pause();
+      }
+      applyVolumes();
     },
 
     setMasterVolume(v) {

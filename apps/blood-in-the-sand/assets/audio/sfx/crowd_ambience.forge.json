@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a constant low arena-crowd ambience bed — a distant restless gladiator-pit crowd murmuring, shifting chatter and shuffles and the odd muffled shout, no distinct cheers or words, no music, EVEN and steady so it loops seamlessly under the action (forge ONE long take, 30s+ if the tool allows — it becomes the crossfade-looped background bed)",
+  "prompt": "Long steady, sun-baked arena crowd: distant restless murmur, layered low chatter, shuffle of sanded feet, occasional muffled guttural shout and throat-rumble, airy dusty ambience; even, loopable 30s bed with soft dynamics, close-enough presence but distant focus.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 30,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "crowd_ambience_1.mp3"
+  ],
+  "created": "2026-07-18T23:14:31.675Z",
+  "updated": "2026-07-18T23:14:31.675Z"
+}

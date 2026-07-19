@@ -62,6 +62,25 @@ export const AUDIO_MANIFEST: AudioManifest = {
     ui_back_1: require("../../assets/audio/sfx/ui_back_1.mp3"),
     ui_error_1: require("../../assets/audio/sfx/ui_error_1.mp3"),
 
+    title_gust_1: require("../../assets/audio/sfx/title_gust_1.mp3"),
+
+    crowd_cheer_1: require("../../assets/audio/sfx/crowd_cheer_1.mp3"),
+    crowd_cheer_2: require("../../assets/audio/sfx/crowd_cheer_2.mp3"),
+    crowd_cheer_3: require("../../assets/audio/sfx/crowd_cheer_3.mp3"),
+    crowd_cheer_4: require("../../assets/audio/sfx/crowd_cheer_4.mp3"),
+    crowd_cheer_5: require("../../assets/audio/sfx/crowd_cheer_5.mp3"),
+    crowd_cheer_6: require("../../assets/audio/sfx/crowd_cheer_6.mp3"),
+    crowd_cheer_7: require("../../assets/audio/sfx/crowd_cheer_7.mp3"),
+    crowd_cheer_8: require("../../assets/audio/sfx/crowd_cheer_8.mp3"),
+
+    // For when you get dunk'd on!
+    crowd_jeer_1: require("../../assets/audio/sfx/crowd_jeer_1.mp3"),
+    crowd_jeer_2: require("../../assets/audio/sfx/crowd_jeer_2.mp3"),
+    crowd_jeer_3: require("../../assets/audio/sfx/crowd_jeer_3.mp3"),
+    crowd_jeer_4: require("../../assets/audio/sfx/crowd_jeer_4.mp3"),
+
+    crowd_ambience_1: require("../../assets/audio/sfx/crowd_ambience_1.mp3"),
+
     // The active announcer pack (announcer.ts) — announce_first_blood_1, …
     ...ANNOUNCER_MANIFEST,
 };

@@ -19,13 +19,25 @@ import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
 import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
-import { playSound, unlockAudio, warmCombatAudio } from "../audio";
+import {
+  playSound,
+  startCrowdAmbience,
+  stopCrowdAmbience,
+  unlockAudio,
+  warmCombatAudio,
+} from "../audio";
 import { KillStreaks, type MultiKillTier } from "../audio/killstreaks";
-import { AbilityButton, EMPTY_BUTTON_PICTURE, recordAbilityButton } from "../game/AbilityButton";
+import {
+  AbilityButton,
+  EMPTY_BUTTON_PICTURE,
+  recordAbilityButton,
+} from "../game/AbilityButton";
 import { useAbilityIconImages } from "../game/abilityIcons";
 import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
 import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
+import { RoundBanner } from "../game/RoundBanner";
+import { pickOutcome, type OutcomeKind } from "../game/roundMessages";
 import { StatusPulses } from "../game/statusRings";
 import { loadLefty } from "../settings";
 import { devFlags } from "../dev";
@@ -36,6 +48,9 @@ const DETONATE_TTL = 1150; // the sandtrap boom lingers well past a hit ping
 const FIGHT_BANNER_TTL = 900;
 /** How long a First Blood / multi-kill call stays on screen. */
 const ANNOUNCE_TTL = 1900;
+/** Beat the death-camera holds on your own corpse before cutting to an ally —
+ *  a moment for the kill to sink in (Tom, 2026-07-19). */
+const SPECTATE_DELAY_MS = 2000;
 /** Proximity attenuation: a positional sound plays full within SOUND_NEAR px of
  * your fighter, fading to SOUND_FLOOR by SOUND_FAR px — a floor, not silence, so
  * distant fights still read faintly as info. Global cues (round/match stings,
@@ -80,10 +95,34 @@ interface HudState {
   countdown: number | null;
   wins: [number, number];
   banner: string | null;
+  /** The premium round-/match-end plate (win/loss/draw + Victory/Defeat), or
+   *  null outside those phases. Kept separate from `banner` so plain cues
+   *  (FIGHT / connection lost) stay as the simple centre text. */
+  outcome: {
+    key: string;
+    kind: OutcomeKind;
+    title: string;
+    subtitle: string;
+    score: [number, number];
+  } | null;
   lost: boolean;
+  /** We're down this round — hide the controls and show the spectator chip. */
+  dead: boolean;
+  /** The ally the death-camera is trailing (name + hp for the chip), or null
+   *  when alive / whole team wiped. hpFrac is quantised to keep setState calm. */
+  spectate: { name: string; hpFrac: number } | null;
 }
 
-const INITIAL_HUD: HudState = { phase: "countdown", countdown: null, wins: [0, 0], banner: null, lost: false };
+const INITIAL_HUD: HudState = {
+  phase: "countdown",
+  countdown: null,
+  wins: [0, 0],
+  banner: null,
+  outcome: null,
+  lost: false,
+  dead: false,
+  spectate: null,
+};
 
 export interface GameScreenProps {
   client: GameClient;
@@ -131,19 +170,38 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   quakePopsRef.current ??= new Map();
   const quakePops = quakePopsRef.current;
   const fightBannerUntil = useRef(0);
+  // The flavour line for the current round-/match-end is picked ONCE per outcome
+  // and latched here (keyed by phase+winner+round count), so the per-frame HUD
+  // rebuild reads a stable pick instead of re-rolling the message every render.
+  const outcomeRef = useRef<{
+    key: string;
+    kind: OutcomeKind;
+    title: string;
+    subtitle: string;
+  } | null>(null);
   // Last countdown digit sounded, so 3·2·1 ticks fire once each (null between rounds).
   const lastCountdown = useRef<number | null>(null);
   // Audio needs a user gesture to start (web/iOS); unlock on the first touch.
   const audioUnlocked = useRef(false);
   const stickRef = useRef<StickSample>(STICK_ZERO);
   // Cast taps latched per slot until the next input send (the dash pattern ×3).
-  const castRequests = useRef<boolean[]>(Array.from({ length: LOADOUT_ABILITY_COUNT }, () => false));
-  const lastButtonKeys = useRef<string[]>(Array.from({ length: LOADOUT_ABILITY_COUNT }, () => ""));
+  const castRequests = useRef<boolean[]>(
+    Array.from({ length: LOADOUT_ABILITY_COUNT }, () => false),
+  );
+  const lastButtonKeys = useRef<string[]>(
+    Array.from({ length: LOADOUT_ABILITY_COUNT }, () => ""),
+  );
   // The drafted hand, from snapshots — names the buttons once the match feeds us.
   const [buttonIds, setButtonIds] = useState<AbilityId[]>([]);
   const buttonIdsKey = useRef("");
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const hudKey = useRef("");
+  // Death spectator: the ally id the camera trails once we're down. Sticky —
+  // re-picked only when that ally dies or leaves; cleared while we're alive.
+  const spectateId = useRef<number | null>(null);
+  // The instant we died (performance.now), so the camera lingers on our corpse
+  // for SPECTATE_DELAY_MS before cutting to an ally — a beat to let it land.
+  const spectateDeadAt = useRef<number | null>(null);
   // Status-ring pulse clocks (slow/bleed), advanced per rendered frame.
   const pulsesRef = useRef<StatusPulses | null>(null);
   pulsesRef.current ??= new StatusPulses();
@@ -158,6 +216,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   // here): idempotent, so the normal lobby-warmed case costs nothing.
   useEffect(() => {
     warmCombatAudio();
+  }, []);
+
+  // The looping pit-crowd ambience bed — plays the whole time you're in the
+  // arena (incl. spectating your own death), fades out on the way back to the
+  // lobby. Silent until the crowd_ambience clip is forged.
+  useEffect(() => {
+    startCrowdAmbience();
+    return () => stopCrowdAmbience();
   }, []);
 
   // --- Frame profiler (dev menu toggle, session-only). Accumulate JS-thread
@@ -199,16 +265,25 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const killStreaksRef = useRef<KillStreaks | null>(null);
   killStreaksRef.current ??= new KillStreaks();
   const killStreaks = killStreaksRef.current;
-  const [announce, setAnnounce] = useState<string | null>(null);
+  // A kill call is two lines: a small credit line ("Ragnar gets a") over the big
+  // booming label ("DOUBLE KILL"). `who` is omitted when we can't name the killer
+  // (seat already gone from the view) — then only the label shows.
+  const [announce, setAnnounce] = useState<{
+    who: string | null;
+    label: string;
+  } | null>(null);
   const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showAnnounce = (text: string): void => {
-    setAnnounce(text);
+  const showAnnounce = (label: string, who: string | null = null): void => {
+    setAnnounce({ who, label });
     if (announceTimer.current) clearTimeout(announceTimer.current);
     announceTimer.current = setTimeout(() => setAnnounce(null), ANNOUNCE_TTL);
   };
-  useEffect(() => () => {
-    if (announceTimer.current) clearTimeout(announceTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (announceTimer.current) clearTimeout(announceTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     client.onEvents = (events) => {
@@ -218,7 +293,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       // The listener for proximity attenuation is your own fighter (your corpse
       // while spectating your death). Sampled once per batch — events share a tick.
       const view = client.buffer.sample(now);
-      const listener = myId != null ? view?.players.find((p) => p.id === myId) : undefined;
+      const listener =
+        myId != null ? view?.players.find((p) => p.id === myId) : undefined;
       /** Volume factor for a sound at world (x, y): 1 near you → SOUND_FLOOR far.
        *  No listener (pure spectator) → unattenuated. */
       const gainAt = (x: number, y: number): number => {
@@ -226,43 +302,74 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         const d = Math.hypot(x - listener.x, y - listener.y);
         if (d <= SOUND_NEAR) return 1;
         if (d >= SOUND_FAR) return SOUND_FLOOR;
-        return 1 - ((d - SOUND_NEAR) / (SOUND_FAR - SOUND_NEAR)) * (1 - SOUND_FLOOR);
+        return (
+          1 - ((d - SOUND_NEAR) / (SOUND_FAR - SOUND_NEAR)) * (1 - SOUND_FLOOR)
+        );
       };
       for (const e of events) {
         if (e.type === "hit") {
           // Straw men don't bleed — deployable-target hits skip the decals.
-          if (!isDeployableId(e.targetId)) blood.splatter(e.x, e.y, e.damage, e.lethal, now);
+          if (!isDeployableId(e.targetId))
+            blood.splatter(e.x, e.y, e.damage, e.lethal, now);
           if (e.lethal) {
             // The kill spray fires out of the victim's BACK — away from the
             // killer. The victim auto-faces their attacker, so if the killer's
             // position isn't in the view (seat gone), -facing is the same line.
             const victim = view?.players.find((p) => p.id === e.targetId);
             const attacker = view?.players.find((p) => p.id === e.attackerId);
-            const dx = attacker ? e.x - attacker.x : victim ? -Math.cos(victim.facing) : 1;
-            const dy = attacker ? e.y - attacker.y : victim ? -Math.sin(victim.facing) : 0;
+            const dx = attacker
+              ? e.x - attacker.x
+              : victim
+                ? -Math.cos(victim.facing)
+                : 1;
+            const dy = attacker
+              ? e.y - attacker.y
+              : victim
+                ? -Math.sin(victim.facing)
+                : 0;
             const len = Math.hypot(dx, dy) || 1;
             blood.deathBurst(e.x, e.y, dx / len, dy / len, now);
             // First Blood + Unreal-style kill chains (everyone hears them). Only
             // real players count — dummies never report a lethal hit anyway.
             if (!isDeployableId(e.targetId)) {
-              const call = killStreaks.registerKill(e.attackerId, e.targetId, now);
+              const call = killStreaks.registerKill(
+                e.attackerId,
+                e.targetId,
+                now,
+              );
+              const killer = attacker?.name ?? null;
               if (call?.firstBlood) {
                 playSound("firstBlood");
-                showAnnounce("FIRST BLOOD");
+                showAnnounce("FIRST BLOOD", killer && `${killer} gets`);
               } else if (call?.tier) {
                 playSound("multiKill", call.tier);
-                showAnnounce(MULTI_KILL_TEXT[call.tier]);
+                showAnnounce(
+                  MULTI_KILL_TEXT[call.tier],
+                  killer && `${killer} gets a`,
+                );
               }
             }
           }
           fxRef.current.push({
-            item: { kind: "number", x: e.x, y: e.y, life: 1, text: String(e.damage), crit: e.crit, bleed: e.bleed },
+            item: {
+              kind: "number",
+              x: e.x,
+              y: e.y,
+              life: 1,
+              text: String(e.damage),
+              crit: e.crit,
+              bleed: e.bleed,
+            },
             bornMs: now,
             ttlMs: NUMBER_TTL,
           });
           // Bleed ticks are ambient damage — a red number, no impact ring.
           if (!e.bleed) {
-            fxRef.current.push({ item: { kind: "ring", x: e.x, y: e.y, life: 1 }, bornMs: now, ttlMs: RING_TTL });
+            fxRef.current.push({
+              item: { kind: "ring", x: e.x, y: e.y, life: 1 },
+              bornMs: now,
+              ttlMs: RING_TTL,
+            });
           }
           // Haptics (gauntlet system): heavy is reserved for kills and dying;
           // landing a hit thuds at the weapon's weight; taking one is medium.
@@ -285,8 +392,15 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             if (e.targetId === myId) {
               if (e.crit) playSound("hitTaken"); // your own pain — always full, it's you
             } else {
-              const weapon = view?.players.find((p) => p.id === e.attackerId)?.weapon;
-              playSound("weaponStrike", weapon ?? undefined, undefined, gainAt(e.x, e.y));
+              const weapon = view?.players.find(
+                (p) => p.id === e.attackerId,
+              )?.weapon;
+              playSound(
+                "weaponStrike",
+                weapon ?? undefined,
+                undefined,
+                gainAt(e.x, e.y),
+              );
             }
           }
         } else if (e.type === "shoot") {
@@ -295,17 +409,33 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         } else if (e.type === "death") {
           const dp = view?.players.find((p) => p.id === e.playerId);
           playSound("death", undefined, undefined, dp ? gainAt(dp.x, dp.y) : 1);
+          // The crowd roars when an ENEMY falls (YOUR side scored) and groans when
+          // one of YOURS falls (the enemy scored) — partisan per-client, so each
+          // side hears the mob on its own team's side. Own throttle keys, so a
+          // cheer and a jeer never gate each other.
+          if (dp) playSound(dp.team !== myTeam ? "crowdCheer" : "crowdJeer");
         } else if (e.type === "cast") {
           if (e.playerId === myId) playStrikeHaptic("soft"); // tactile confirm of the cast
           const caster = view?.players.find((p) => p.id === e.playerId);
           // every cast is audible — the tell is information — but fades with distance
-          playSound("abilityCast", e.ability, undefined, caster ? gainAt(caster.x, caster.y) : 1);
+          playSound(
+            "abilityCast",
+            e.ability,
+            undefined,
+            caster ? gainAt(caster.x, caster.y) : 1,
+          );
           if (caster) {
             // The cast flash: the ability's icon pops above the caster —
             // "they just pressed this button". The ONLY way enemy kits show
             // (pvp-loadout-flow.md); allies and self flash too, one language.
             fxRef.current.push({
-              item: { kind: "castFlash", x: caster.x, y: caster.y - CAST_FLASH_RISE_FROM, life: 1, ability: e.ability },
+              item: {
+                kind: "castFlash",
+                x: caster.x,
+                y: caster.y - CAST_FLASH_RISE_FROM,
+                life: 1,
+                ability: e.ability,
+              },
               bornMs: now,
               ttlMs: CAST_FLASH_TTL,
             });
@@ -315,12 +445,23 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             // the cast stays the sharp tell).
             if (e.ability === "tremor") {
               cracks.add(caster.x, caster.y, 110, now, QUAKE_CRACK_TTL_MS);
-              playSound("quakeRumble", undefined, undefined, gainAt(caster.x, caster.y));
+              playSound(
+                "quakeRumble",
+                undefined,
+                undefined,
+                gainAt(caster.x, caster.y),
+              );
             }
             // Warding Shout: the bellow's wedge, out of the caster's facing.
             if (e.ability === "warding-shout") {
               fxRef.current.push({
-                item: { kind: "cone", x: caster.x, y: caster.y, angle: caster.facing, life: 1 },
+                item: {
+                  kind: "cone",
+                  x: caster.x,
+                  y: caster.y,
+                  angle: caster.facing,
+                  life: 1,
+                },
                 bornMs: now,
                 ttlMs: SHOUT_CONE_TTL,
               });
@@ -329,11 +470,23 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         } else if (e.type === "harpoon") {
           // The chain flash: caster → hook point, gone in a blink.
           fxRef.current.push({
-            item: { kind: "line", x: e.fromX, y: e.fromY, x2: e.toX, y2: e.toY, life: 1 },
+            item: {
+              kind: "line",
+              x: e.fromX,
+              y: e.fromY,
+              x2: e.toX,
+              y2: e.toY,
+              life: 1,
+            },
             bornMs: now,
             ttlMs: 260,
           });
-          playSound("harpoonWhip", undefined, undefined, gainAt(e.fromX, e.fromY));
+          playSound(
+            "harpoonWhip",
+            undefined,
+            undefined,
+            gainAt(e.fromX, e.fromY),
+          );
         } else if (e.type === "detonate") {
           fxRef.current.push({
             item: { kind: "ring", x: e.x, y: e.y, life: 1, big: true },
@@ -345,7 +498,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           playSound("abilityDetonate", "sandtrap", undefined, gainAt(e.x, e.y));
         } else if (e.type === "heal") {
           fxRef.current.push({
-            item: { kind: "number", x: e.x, y: e.y, life: 1, text: `+${e.amount}`, heal: true },
+            item: {
+              kind: "number",
+              x: e.x,
+              y: e.y,
+              life: 1,
+              text: `+${e.amount}`,
+              heal: true,
+            },
             bornMs: now,
             ttlMs: NUMBER_TTL,
           });
@@ -356,7 +516,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           fightBannerUntil.current = now + FIGHT_BANNER_TTL;
           playSound("fightStart");
         } else if (e.type === "roundEnd") {
-          playSound("roundEnd", e.winnerTeam === 0 ? "draw" : e.winnerTeam === myTeam ? "win" : "loss");
+          playSound(
+            "roundEnd",
+            e.winnerTeam === 0
+              ? "draw"
+              : e.winnerTeam === myTeam
+                ? "win"
+                : "loss",
+          );
         } else if (e.type === "matchEnd") {
           playSound("matchEnd", e.winnerTeam === myTeam ? "win" : "loss");
         }
@@ -374,9 +541,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         // (consumed here; the server latches them so a between-tick press holds).
         const stick = stickRef.current;
         const t0 = perfOn ? performance.now() : 0;
-        client.sendInput(stick.dir.x * stick.magnitude, stick.dir.y * stick.magnitude, [
-          ...castRequests.current,
-        ]);
+        client.sendInput(
+          stick.dir.x * stick.magnitude,
+          stick.dir.y * stick.magnitude,
+          [...castRequests.current],
+        );
         castRequests.current.fill(false);
         if (perfOn) {
           perf.current.simMs += performance.now() - t0;
@@ -407,7 +576,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           for (const d of view.deployables) {
             if (d.kind !== "quake") continue;
             liveQuakes++;
-            if (now - (quakePops.get(d.id) ?? 0) < QUAKE_POP_INTERVAL_MS) continue;
+            if (now - (quakePops.get(d.id) ?? 0) < QUAKE_POP_INTERVAL_MS)
+              continue;
             quakePops.set(d.id, now);
             const popDist = TREMOR.radius * 0.85 * Math.sqrt(Math.random());
             const popAng = Math.random() * Math.PI * 2;
@@ -421,10 +591,53 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           }
           if (liveQuakes === 0 && quakePops.size > 0) quakePops.clear();
           pulses.update(view.players, now);
+
+          // Death spectator: once we're down, hold on our own corpse for a beat
+          // (SPECTATE_DELAY_MS — let the death land), THEN trail a living
+          // teammate. Keep the current ally until it dies or leaves, then
+          // re-pick the nearest survivor to where the camera already sits — the
+          // fallen ally's last spot (their body lingers in the snapshot), or our
+          // corpse on the first hop — so the camera slides, never leaps.
+          const selfId = client.welcome.playerId;
+          const meNow = view.players.find((p) => p.id === selfId);
+          if (meNow && !meNow.alive) {
+            if (spectateDeadAt.current == null) spectateDeadAt.current = now;
+            if (now - spectateDeadAt.current < SPECTATE_DELAY_MS) {
+              // Grace beat: stay on the corpse (following our own id = us).
+              spectateId.current = selfId;
+            } else {
+              // Our own id doesn't count as a live ally — force a fresh pick
+              // the first frame past the grace window.
+              const cur =
+                spectateId.current != null && spectateId.current !== selfId
+                  ? view.players.find((p) => p.id === spectateId.current)
+                  : undefined;
+              if (!cur || !cur.alive) {
+                const anchor = cur ?? meNow;
+                let bestId: number | null = null;
+                let bestD = Infinity;
+                for (const p of view.players) {
+                  if (p.team !== meNow.team || !p.alive || p.id === meNow.id)
+                    continue;
+                  const d = Math.hypot(p.x - anchor.x, p.y - anchor.y);
+                  if (d < bestD) {
+                    bestD = d;
+                    bestId = p.id;
+                  }
+                }
+                spectateId.current = bestId;
+              }
+            }
+          } else {
+            spectateId.current = null;
+            spectateDeadAt.current = null;
+          }
+
           picture.value = recordArena({
             view,
             config: client.welcome.config,
             myId: client.welcome.playerId,
+            spectateId: spectateId.current,
             screenW: w,
             screenH: h,
             insetTop: insets.top,
@@ -440,7 +653,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
           // Ability buttons: name them from the snapshot's slot list (pick
           // order), re-record a face only when its clock or state moved.
-          const me = view.players.find((p) => p.id === client.welcome!.playerId);
+          const me = view.players.find(
+            (p) => p.id === client.welcome!.playerId,
+          );
           const slots = me?.abilities ?? [];
           const idsKey = slots.map((s) => s.id).join(",");
           if (idsKey !== buttonIdsKey.current) {
@@ -462,12 +677,20 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             // canvas redraw) EVERY frame for its whole 10–20s — a steady tax
             // that lands right after every cast. At 1% it re-records a few
             // times a second; 3.6° of wedge per step is invisible.
-            const frac = Math.min(1, Math.max(0, Math.round((slot.cd / def.cooldown) * 100) / 100));
+            const frac = Math.min(
+              1,
+              Math.max(0, Math.round((slot.cd / def.cooldown) * 100) / 100),
+            );
             const active = slot.active > 0;
             const key = `${slot.id}:${frac}:${active}:${slot.charges}`;
             if (key !== lastButtonKeys.current[i]) {
               lastButtonKeys.current[i] = key;
-              overlays[i]!.value = recordAbilityButton(frac, active, slot.charges, def.charges);
+              overlays[i]!.value = recordAbilityButton(
+                frac,
+                active,
+                slot.charges,
+                def.charges,
+              );
             }
           }
           if (perfOn) perf.current.recMs += performance.now() - recStart;
@@ -479,29 +702,89 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         const phase = round?.phase ?? "countdown";
         // The whole enemy TEAM must be gone — one teammate-of-theirs dropping
         // out of a 3v3 is not "finish them".
-        const enemies = client.roomState?.players.filter((p) => p.team !== myTeam) ?? [];
-        const enemyGone = enemies.length > 0 && enemies.every((p) => !p.connected);
+        const enemies =
+          client.roomState?.players.filter((p) => p.team !== myTeam) ?? [];
+        const enemyGone =
+          enemies.length > 0 && enemies.every((p) => !p.connected);
         let banner: string | null = null;
         let countdown: number | null = null;
+        let outcome: HudState["outcome"] = null;
         if (client.status === "closed") banner = "connection lost";
-        else if (round && phase === "countdown") countdown = Math.max(1, Math.ceil(round.timer));
-        else if (round && phase === "roundEnd")
-          banner = round.lastWinner === 0 ? "nobody survives" : round.lastWinner === myTeam ? "round to you" : "round to them";
-        else if (round && phase === "matchEnd") banner = round.lastWinner === myTeam ? "VICTORY" : "DEFEAT";
-        else if (phase === "active" && now < fightBannerUntil.current) banner = "FIGHT";
+        else if (round && phase === "countdown")
+          countdown = Math.max(1, Math.ceil(round.timer));
+        else if (round && (phase === "roundEnd" || phase === "matchEnd")) {
+          const kind: OutcomeKind =
+            phase === "matchEnd"
+              ? round.lastWinner === myTeam
+                ? "victory"
+                : "defeat"
+              : round.lastWinner === 0
+                ? "roundDraw"
+                : round.lastWinner === myTeam
+                  ? "roundWin"
+                  : "roundLoss";
+          // One key per distinct outcome (winsSum bumps every round) so the
+          // flavour is rolled once and stays put for the whole hold window.
+          const winsSum = round.wins[0] + round.wins[1];
+          const key = `${phase}:${round.lastWinner}:${winsSum}`;
+          if (!outcomeRef.current || outcomeRef.current.key !== key) {
+            const variant = pickOutcome(kind);
+            outcomeRef.current = { key, kind, ...variant };
+          }
+          const mine = myTeam === 1 ? round.wins[0] : round.wins[1];
+          const theirs = myTeam === 1 ? round.wins[1] : round.wins[0];
+          outcome = {
+            key,
+            kind,
+            title: outcomeRef.current.title,
+            subtitle: outcomeRef.current.subtitle,
+            score: [mine, theirs],
+          };
+        } else if (phase === "active" && now < fightBannerUntil.current)
+          banner = "FIGHT";
         else if (phase === "active" && enemyGone)
-          banner = enemies.length === 1 ? "opponent disconnected — finish them" : "enemies disconnected — finish them";
+          banner =
+            enemies.length === 1
+              ? "opponent disconnected — finish them"
+              : "enemies disconnected — finish them";
 
         // A soft tick on each new pre-round digit (roundStart already boomed).
-        if (countdown !== null && countdown !== lastCountdown.current) playSound("countdownTick");
+        if (countdown !== null && countdown !== lastCountdown.current)
+          playSound("countdownTick");
         lastCountdown.current = countdown;
+
+        // Are we down, and who is the death-camera watching? (spectateId was
+        // resolved above, in the record pass.)
+        const meHud = view?.players.find(
+          (p) => p.id === client.welcome?.playerId,
+        );
+        const dead = !!meHud && !meHud.alive;
+        let spectate: HudState["spectate"] = null;
+        // Not during the corpse-hold grace (spectateId === us) — only once the
+        // camera is actually on a teammate.
+        if (
+          dead &&
+          spectateId.current != null &&
+          spectateId.current !== client.welcome?.playerId
+        ) {
+          const ally = view?.players.find((p) => p.id === spectateId.current);
+          // Round hp to whole percents so the chip's bar doesn't setState every hit.
+          if (ally)
+            spectate = {
+              name: ally.name,
+              hpFrac: Math.round(Math.max(0, ally.hp / ally.maxHp) * 100) / 100,
+            };
+        }
 
         const next: HudState = {
           phase,
           countdown,
           wins: round ? round.wins : [0, 0],
           banner,
+          outcome,
           lost: client.status === "closed",
+          dead,
+          spectate,
         };
         const key = JSON.stringify(next);
         if (key !== hudKey.current) {
@@ -527,7 +810,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
     <View
       style={styles.root}
       onLayout={(e) => {
-        layoutRef.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+        layoutRef.current = {
+          w: e.nativeEvent.layout.width,
+          h: e.nativeEvent.layout.height,
+        };
       }}
     >
       <Canvas style={StyleSheet.absoluteFill}>
@@ -535,17 +821,36 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       </Canvas>
 
       {/* score */}
-      <View style={[styles.scoreRow, { top: insets.top + 12 }]} pointerEvents="none">
-        <Text style={[styles.score, myTeam === 1 ? styles.mine : styles.theirs]}>{hud.wins[0]}</Text>
+      <View
+        style={[styles.scoreRow, { top: insets.top + 12 }]}
+        pointerEvents="none"
+      >
+        <Text
+          style={[styles.score, myTeam === 1 ? styles.mine : styles.theirs]}
+        >
+          {hud.wins[0]}
+        </Text>
         <Text style={styles.scoreDash}>—</Text>
-        <Text style={[styles.score, myTeam === 2 ? styles.mine : styles.theirs]}>{hud.wins[1]}</Text>
+        <Text
+          style={[styles.score, myTeam === 2 ? styles.mine : styles.theirs]}
+        >
+          {hud.wins[1]}
+        </Text>
       </View>
 
       {/* kill announcements (First Blood / DOUBLE KILL …) — sits below the score,
           clear of the centre countdown/banner */}
       {announce ? (
-        <View style={[styles.announceWrap, { top: insets.top + 70 }]} pointerEvents="none">
-          <Text style={styles.announceText}>{announce}</Text>
+        <View
+          style={[styles.announceWrap, { top: insets.top + 70 }]}
+          pointerEvents="none"
+        >
+          {announce.who ? (
+            <Text style={styles.announceCredit} numberOfLines={1}>
+              {announce.who}
+            </Text>
+          ) : null}
+          <Text style={styles.announceText}>{announce.label}</Text>
         </View>
       ) : null}
 
@@ -553,8 +858,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       {hud.countdown !== null ? (
         <View style={styles.centre} pointerEvents="none">
           <Text style={styles.countdown}>{hud.countdown}</Text>
-          <Text style={styles.teamHint}>you are {myTeam === 1 ? "RED" : "BLUE"}</Text>
+          <Text style={styles.teamHint}>
+            you are {myTeam === 1 ? "RED" : "BLUE"}
+          </Text>
         </View>
+      ) : hud.outcome ? (
+        <RoundBanner
+          key={hud.outcome.key}
+          kind={hud.outcome.kind}
+          title={hud.outcome.title}
+          subtitle={hud.outcome.subtitle}
+          score={hud.outcome.score}
+        />
       ) : hud.banner ? (
         <View style={styles.centre} pointerEvents="none">
           <Text style={styles.banner}>{hud.banner}</Text>
@@ -567,39 +882,70 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           thumb: default = movement right + buttons left; lefty mode mirrors
           (movement left, buttons right). Scheme test verdict 2026-07-12:
           FLOAT won; fixed stick and orbit pad are gone. */}
-      <View
-        style={[styles.controlsRow, lefty && styles.controlsLefty, { bottom: insets.bottom + 24 }]}
-        pointerEvents="box-none"
-      >
-        <FloatingStick
-          onChange={(sample) => {
-            stickRef.current = sample;
-            if (!audioUnlocked.current) {
-              audioUnlocked.current = true;
-              unlockAudio();
-            }
-          }}
-        />
-        <View style={styles.buttonsCol}>
-          {buttonIds.map((id, i) => (
-            <AbilityButton
-              key={`${i}-${id}`}
-              id={id}
-              overlay={overlays[i]!}
-              onPress={() => {
-                castRequests.current[i] = true;
-                if (!audioUnlocked.current) {
-                  audioUnlocked.current = true;
-                  unlockAudio();
-                }
-              }}
-            />
-          ))}
+      {/* Death spectator: a corpse has no inputs — swap the controls for a chip
+          naming the ally the camera is trailing, with their live HP. */}
+      {hud.dead ? (
+        hud.spectate ? (
+          <View
+            style={[styles.spectateBar, { bottom: insets.bottom + 40 }]}
+            pointerEvents="none"
+          >
+            <Text style={styles.spectateLabel}>
+              SPECTATING {hud.spectate.name.toUpperCase()}
+            </Text>
+            <View style={styles.spectateHpBack}>
+              <View
+                style={[
+                  styles.spectateHpFill,
+                  { width: `${Math.round(hud.spectate.hpFrac * 100)}%` },
+                ]}
+              />
+            </View>
+          </View>
+        ) : null
+      ) : (
+        <View
+          style={[
+            styles.controlsRow,
+            lefty && styles.controlsLefty,
+            { bottom: insets.bottom + 24 },
+          ]}
+          pointerEvents="box-none"
+        >
+          <FloatingStick
+            onChange={(sample) => {
+              stickRef.current = sample;
+              if (!audioUnlocked.current) {
+                audioUnlocked.current = true;
+                unlockAudio();
+              }
+            }}
+          />
+          <View style={styles.buttonsCol}>
+            {buttonIds.map((id, i) => (
+              <AbilityButton
+                key={`${i}-${id}`}
+                id={id}
+                overlay={overlays[i]!}
+                onPress={() => {
+                  castRequests.current[i] = true;
+                  if (!audioUnlocked.current) {
+                    audioUnlocked.current = true;
+                    unlockAudio();
+                  }
+                }}
+              />
+            ))}
+          </View>
         </View>
-      </View>
+      )}
 
       {onQuit ? (
-        <Pressable onPress={onQuit} style={[styles.quitChip, { top: insets.top + 10 }]} hitSlop={12}>
+        <Pressable
+          onPress={onQuit}
+          style={[styles.quitChip, { top: insets.top + 10 }]}
+          hitSlop={12}
+        >
           <Text style={styles.quitText}>✕</Text>
         </Pressable>
       ) : null}
@@ -607,7 +953,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       {/* Frame profiler readout (dev menu toggle) — top-left, clear of the
           centred score and the top-right quit chip. */}
       {perfOn && perfText ? (
-        <Text style={[styles.perfReadout, { top: insets.top + 12 }]} pointerEvents="none">
+        <Text
+          style={[styles.perfReadout, { top: insets.top + 12 }]}
+          pointerEvents="none"
+        >
           {perfText}
         </Text>
       ) : null}
@@ -646,7 +995,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  announceWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
+  announceWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  // The small credit line ("Ragnar gets a") — deliberately much smaller than the
+  // label below so long player names never dwarf FIRST BLOOD / DOUBLE KILL.
+  announceCredit: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#e8dcc4",
+    letterSpacing: 1,
+    textAlign: "center",
+    marginBottom: 1,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   announceText: {
     fontSize: 32,
     fontWeight: "900",
@@ -659,7 +1026,13 @@ const styles = StyleSheet.create({
   },
   countdown: { fontSize: 96, fontWeight: "900", color: "#f0e8d8" },
   teamHint: { fontSize: 15, color: "#f0e8d8", opacity: 0.8, marginTop: 4 },
-  banner: { fontSize: 34, fontWeight: "900", color: "#f0e8d8", letterSpacing: 2, textAlign: "center" },
+  banner: {
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#f0e8d8",
+    letterSpacing: 2,
+    textAlign: "center",
+  },
   // The bottom control band: stick region flexes, buttons keep their width.
   controlsRow: {
     position: "absolute",
@@ -675,7 +1048,12 @@ const styles = StyleSheet.create({
   // The ability buttons hug the bottom corner opposite the stick, out of the
   // play space (2026-07-16) — flex-end anchors them to the band's floor (which
   // already sits insets.bottom + 24 above the tray) and they grow upward.
-  buttonsCol: { justifyContent: "flex-end", paddingBottom: 0, paddingHorizontal: 12, gap: 14 },
+  buttonsCol: {
+    justifyContent: "flex-end",
+    paddingBottom: 0,
+    paddingHorizontal: 12,
+    gap: 14,
+  },
   // Dev frame profiler: small mono readout pinned top-left.
   perfReadout: {
     position: "absolute",
@@ -694,7 +1072,43 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   quitText: { color: "#8a7f70", fontSize: 18, fontWeight: "700" },
+  // Death spectator chip: sits where the controls were, naming the ally the
+  // camera trails with a live HP bar (matches the world-space bar's colours).
+  spectateBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    gap: 8,
+  },
+  spectateLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#f0e8d8",
+    letterSpacing: 2,
+    opacity: 0.85,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  spectateHpBack: {
+    width: 160,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    overflow: "hidden",
+  },
+  spectateHpFill: {
+    height: "100%",
+    borderRadius: 4,
+    backgroundColor: "#5fc75f",
+  },
   leaveWrap: { position: "absolute", bottom: 260, alignSelf: "center" },
-  leave: { backgroundColor: "#8c2f2f", borderRadius: 8, paddingHorizontal: 28, paddingVertical: 12 },
+  leave: {
+    backgroundColor: "#8c2f2f",
+    borderRadius: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+  },
   leaveText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1 },
 });

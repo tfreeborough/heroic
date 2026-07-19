@@ -1,0 +1,25 @@
+{
+  "type": "sfx-bits",
+  "subject": "a bloodthirsty arena crowd demonic chanting with drums playing in the background",
+  "prompt": "a bloodthirsty arena crowd demonic chanting with drums playing in the background. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 8,
+    "promptInfluence": 0.55,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "crowd_cheer_1.mp3",
+    "crowd_cheer_2.mp3",
+    "crowd_cheer_3.mp3",
+    "crowd_cheer_4.mp3",
+    "crowd_cheer_5.mp3",
+    "crowd_cheer_6.mp3",
+    "crowd_cheer_7.mp3",
+    "crowd_cheer_8.mp3"
+  ],
+  "created": "2026-07-18T21:32:24.498Z",
+  "updated": "2026-07-18T21:43:21.212Z"
+}

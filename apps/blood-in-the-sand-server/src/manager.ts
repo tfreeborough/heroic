@@ -11,6 +11,8 @@ import type { Server } from "bun";
 import { advanceFixed } from "@heroic/core";
 import {
   ABILITIES,
+  HEARTBEAT_SWEEP_MS,
+  HEARTBEAT_TIMEOUT_MS,
   LOADOUT_ABILITY_COUNT,
   MAX_ROOMS,
   PROTOCOL_VERSION,
@@ -45,6 +47,7 @@ export class RoomManager {
     // accumulator — interval jitter never drifts the sim clocks.
     setInterval(() => this.tick(), 1000 / TICK_RATE);
     setInterval(() => this.sweep(), SWEEP_MS);
+    setInterval(() => this.heartbeat(), HEARTBEAT_SWEEP_MS);
   }
 
   roomCount(): number {
@@ -58,6 +61,10 @@ export class RoomManager {
     } catch {
       return; // not our protocol — drop it
     }
+    // Any message from a seated socket proves it's alive — refresh its
+    // heartbeat before dispatching (input covers a match; ping covers the
+    // quiet lobby). Unseated create/join traffic simply has no seat to stamp.
+    if (ws.data.playerId !== null) this.roomOf(ws)?.markSeen(ws.data.playerId, performance.now());
     switch (msg.t) {
       case "createRoom":
         return this.onCreate(ws, msg);
@@ -69,13 +76,13 @@ export class RoomManager {
         return this.onWatch(ws, msg.code);
       case "leaveRoom": {
         const room = this.roomOf(ws);
-        const wasHost = room != null && ws.data.playerId === room.meta.hostId;
         room?.dropSocket(ws, performance.now());
         this.send(ws, { t: "left" });
-        // An explicit host leave closes the room outright — even mid-match
-        // (unlike a disconnect, this is a deliberate "I'm done"). The leaver is
-        // already detached above, so kickAll only reaches the others.
-        if (wasHost && room) this.closeRoom(room, "the host left the room");
+        // The host leaving no longer ends everyone's night (reversed v7): the
+        // crown hands off and the room lives on. reconcileHost migrates (or
+        // closes only if this was the last player) — for a non-host leaver it's
+        // a no-op. The leaver is already detached, so a notice never reaches them.
+        if (room) this.reconcileHost(room, performance.now());
         return;
       }
       case "setWeapon": {
@@ -104,6 +111,8 @@ export class RoomManager {
         if (id !== null) this.roomOf(ws)?.forceStart(id, performance.now());
         return;
       }
+      case "ping":
+        return; // liveness only — the seat was already stamped above
       case "input": {
         const id = ws.data.playerId;
         if (id !== null) this.roomOf(ws)?.input(id, msg);
@@ -113,12 +122,14 @@ export class RoomManager {
   }
 
   close(ws: Socket): void {
-    this.roomOf(ws)?.dropSocket(ws, performance.now());
-    // A host who drops in the LOBBY frees their seat here → the room is now
-    // host-less and gets reaped. A mid-match host disconnect keeps the seat
-    // (disconnected, not freed), so the match plays on; that seat only frees at
-    // match end, and the next reap sweep closes the room then (Tom, 2026-07-13).
-    this.reapHostless();
+    const room = this.roomOf(ws);
+    room?.dropSocket(ws, performance.now());
+    // A host who drops in the LOBBY frees their seat here → the crown hands off
+    // to another player (or the room closes if they were the last one). A
+    // mid-match host disconnect keeps the seat (disconnected, not freed) so the
+    // match plays on; the crown still migrates to a connected teammate, and the
+    // idle body's seat frees at match end.
+    if (room) this.reconcileHost(room, performance.now());
   }
 
   /** Close a room and drop it from the registry — everyone still seated gets a
@@ -129,13 +140,37 @@ export class RoomManager {
     console.log(`✝ room ${room.meta.code} "${room.meta.name}" closed — ${reason}`);
   }
 
-  /** Close any room whose host seat is gone. Cheap to run after any departure
-   * and after each tick (it catches the host who never returned from a
-   * mid-match disconnect, whose seat frees only at match end). */
-  private reapHostless(): void {
-    for (const room of this.rooms.values()) {
-      if (!room.hostPresent()) this.closeRoom(room, "the host left the room");
+  /** Keep every room's crown on a connected player, closing only the ones with
+   * nobody left. Cheap to run after any departure and after each tick (it
+   * catches the host who never returned from a mid-match disconnect, whose seat
+   * frees only at match end). Iterates a snapshot — reconcileHost may delete. */
+  private reconcileHosts(nowMs: number): void {
+    for (const room of [...this.rooms.values()]) this.reconcileHost(room, nowMs);
+  }
+
+  /** Reconcile ONE room's host: migrate the crown (with a lobby notice) if its
+   * holder is gone, or close the room if the last player left. */
+  private reconcileHost(room: Room, nowMs: number): void {
+    const result = room.reassignHost(nowMs);
+    if (result === "empty") {
+      // Nobody connected to hold the crown. Close only if the room is truly
+      // deserted (lobby — all seats freed); a mid-match room whose players are
+      // merely disconnected keeps its idling bodies for the rejoin window and
+      // is left to the GC grace sweep instead.
+      if (room.isDeserted()) this.closeRoom(room, "everyone left the room");
+    } else if (result) {
+      room.notice(`${result.from} left — ${result.to} is now the host.`);
     }
+  }
+
+  /** Free ghost seats: any socket gone silent past the heartbeat timeout (a
+   * force-quit / lost-network client that never sent a close frame), then
+   * reconcile crowns so a timed-out host hands off rather than freezing a full
+   * room. */
+  private heartbeat(): void {
+    const now = performance.now();
+    for (const room of this.rooms.values()) room.sweepStale(now, HEARTBEAT_TIMEOUT_MS);
+    this.reconcileHosts(now);
   }
 
   private roomOf(ws: Socket): Room | undefined {
@@ -202,8 +237,9 @@ export class RoomManager {
 
   /** A socket already in a room must leave it before creating/joining another. */
   private leaveFirst(ws: Socket): boolean {
-    this.roomOf(ws)?.dropSocket(ws, performance.now());
-    this.reapHostless(); // a host who hops rooms closes the one they left
+    const room = this.roomOf(ws);
+    room?.dropSocket(ws, performance.now());
+    if (room) this.reconcileHost(room, performance.now()); // a host who hops hands off the room they left
     return false; // never blocks — just cleans up
   }
 
@@ -224,8 +260,9 @@ export class RoomManager {
     this.accumulator = result.accumulator;
     if (result.steps === 0) return;
     for (const room of this.rooms.values()) room.step(result.steps, now);
-    // Match end frees a never-returned host's seat — reap the room in that case.
-    this.reapHostless();
+    // Match end frees a never-returned host's idle seat — hand the crown off
+    // (or close the room if that seat was the last one).
+    this.reconcileHosts(now);
   }
 
   private sweep(): void {

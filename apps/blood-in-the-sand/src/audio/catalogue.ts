@@ -32,6 +32,8 @@ export type BitsSoundEvent =
   | "weaponStrike" //   an attack connects             (qualifier: WeaponId)
   | "hitTaken" //       the LOCAL player is struck
   | "death" //          a combatant falls
+  | "crowdCheer" //     the pit mob roars when YOUR side scores (8-take bank, randomised)
+  | "crowdJeer" //      the pit mob groans when the ENEMY scores on you (bank, randomised)
   // ── Abilities ─────────────────────────────────────────────────────────────
   | "abilityCast" //    an ability fires              (qualifier: AbilityId)
   | "abilityDetonate" //a deployable goes off         (qualifier: AbilityId)
@@ -51,7 +53,8 @@ export type BitsSoundEvent =
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
   | "uiBack" //         cancel / back
-  | "uiError"; //       a rejected action
+  | "uiError" //        a rejected action
+  | "titleGust"; //     a dust squall crosses the title screen
 
 /** Per-weapon IMPACT banks (the thwack into a body). Base `clips` cover a hit
  * from an unseen weapon. Ranged weapons connect here too — distinct from their
@@ -106,6 +109,42 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   hitTaken: { clips: ["player_hurt_1"], volume: 0.9, pitchVariance: 0.06 },
   // A combatant dies (player kill; straw men don't route here).
   death: { clips: ["death_1"], pitchVariance: 0.05 },
+  // The pit crowd erupting at a kill — an 8-take bank the scheduler picks from at
+  // random (never the same take twice running) plus a wide pitch wobble, so a
+  // busy match never sounds like one looped roar. Non-positional. Only fires when
+  // YOUR side scores (the team gate lives in GameScreen's death handler).
+  // throttleMs 0 = NO backoff: every enemy death gets its own cheer, and kills in
+  // quick succession just LAYER (one-shots on separate voices — a second cheer
+  // never cuts the first) so a teamfight wipe reads as the crowd swelling louder.
+  // (An earlier 3s throttle was swallowing the 2nd kill of a cluster — the "why
+  // didn't it cheer?" — and there's no reason to gate overlapping crowd roars.)
+  crowdCheer: {
+    clips: [
+      "crowd_cheer_1",
+      "crowd_cheer_2",
+      "crowd_cheer_3",
+      "crowd_cheer_4",
+      "crowd_cheer_5",
+      "crowd_cheer_6",
+      "crowd_cheer_7",
+      "crowd_cheer_8",
+    ],
+    pitchVariance: 0.12,
+    throttleMs: 0,
+    volume: 0.85,
+  },
+  // The flip side of crowdCheer — the pit's disappointed groan when YOUR side is
+  // scored on (a teammate or you falls). Same random-take + pitch-wobble + team
+  // gate (GameScreen); a lower "oooh"/grumble, not a cheer. Its OWN throttle key,
+  // so a jeer and a cheer never gate each other. throttleMs 0 like the cheers —
+  // every loss groans, overlapping groans just deepen the collective dismay.
+  // ADJUST the clip list to match however many takes you forge.
+  crowdJeer: {
+    clips: ["crowd_jeer_1", "crowd_jeer_2", "crowd_jeer_3", "crowd_jeer_4"],
+    pitchVariance: 0.12,
+    throttleMs: 0,
+    volume: 0.8,
+  },
 
   // ── Abilities ───────────────────────────────────────────────────────────
   // The cast confirm — one per ability. Everyone hears every cast (positional
@@ -163,4 +202,8 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   uiConfirm: { clips: ["ui_confirm_1"] },
   uiBack: { clips: ["ui_back_1"], volume: 0.7 },
   uiError: { clips: ["ui_error_1"] },
+  // The title screen's dust squall (HomeScreen's DustStorm) — quiet ambience,
+  // not a stinger. Note the first gust after a cold launch can land before any
+  // tap has unlocked audio; it stays silent and the next one sounds.
+  titleGust: { clips: ["title_gust_1"], volume: 0.5 },
 };

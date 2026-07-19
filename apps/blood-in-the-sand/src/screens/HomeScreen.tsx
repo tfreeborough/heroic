@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Canvas, Picture } from "@shopify/react-native-skia";
+import { Blur, Canvas, Fill, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
+import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { playSound, unlockAudio, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
-import { buildCrowd, makeHighSunPicture, makeLifePicture, sceneAnchors } from "./homeScene";
+import { DUST_EFFECT } from "./dustStorm";
+import { bannerAnchors, buildCrowd, makeHighSunPicture, sceneAnchors, type BannerAnchor } from "./homeScene";
 import { pickDuel, TITLE_SPRITE_SCALE, TITLE_SPRITES } from "./titleSprites";
 
 export interface HomeScreenProps {
@@ -71,31 +73,48 @@ const Mote = ({ w, h, seed }: { w: number; h: number; seed: number }) => {
 };
 
 /**
- * The scene's slow living details — rippling banners + the stands' glint
- * (makeLifePicture) — re-recorded on a vsync-aligned rAF throttled to ~30fps.
- * Isolated in its own component so the tick re-renders a dozen Skia draws,
- * not the whole home screen. Fast movers (the swallows) are NOT here — they
- * ride native-driver Animated transforms below, immune to redraw cadence.
+ * One swallowtail banner riding the wind — the ribbon path is rebuilt every
+ * frame in a Reanimated derived value, so the cloth animates on the UI thread
+ * at the display's refresh rate. (This layer used to be a ~30fps JS-thread
+ * picture re-record, which read as visibly low-frame-rate cloth AND kept a
+ * permanent rAF loop alive on the idle title screen — this way costs less
+ * and looks better.)
+ */
+const BannerRibbon = ({ b, clock }: { b: BannerAnchor; clock: SharedValue<number> }) => {
+  const path = useDerivedValue(() => {
+    const t = clock.value;
+    const topX = (u: number): number => b.x + u * 30;
+    const topY = (u: number): number => b.y + u * 2 + Math.sin(t * 0.004 + b.phase + u * 3.2) * u * 3.4;
+    const ribbon = Skia.Path.Make();
+    ribbon.moveTo(topX(0), topY(0));
+    for (let k = 1; k <= 8; k++) ribbon.lineTo(topX(k / 8), topY(k / 8));
+    ribbon.lineTo(topX(1) - 6, topY(1) + 2.3); // swallowtail notch
+    for (let k = 8; k >= 0; k--) ribbon.lineTo(topX(k / 8), topY(k / 8) + 7 - (k / 8) * 2.5);
+    ribbon.close();
+    return ribbon;
+  });
+  // sun-bleached red riding the wind (the scene's red, kept scarce)
+  return <Path path={path} color="#8a3a2e" />;
+};
+
+/**
+ * The scene's living details — the rippling banners and a stray glint
+ * wandering the stands (sun off a helmet, a raised cup). All motion is
+ * UI-thread Reanimated values feeding Skia props; no React re-renders.
  */
 const SceneLife = ({ w, h }: { w: number; h: number }) => {
-  const [, tick] = useReducer((x: number) => x + 1, 0);
+  const clock = useClock();
   const crowd = useMemo(() => buildCrowd(w, h), [w, h]);
-  useEffect(() => {
-    let raf = 0;
-    let last = 0;
-    const frame = (t: number): void => {
-      if (t - last >= 30) {
-        last = t;
-        tick();
-      }
-      raf = requestAnimationFrame(frame);
-    };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  const anchors = useMemo(() => bannerAnchors(w, h), [w, h]);
+  const glintX = useDerivedValue(() => crowd[Math.floor(clock.value / 700) % crowd.length].x);
+  const glintY = useDerivedValue(() => crowd[Math.floor(clock.value / 700) % crowd.length].y);
+  const glintA = useDerivedValue(() => 0.45 + 0.4 * Math.sin(clock.value * 0.02));
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Picture picture={makeLifePicture(w, h, crowd, performance.now())} />
+      {anchors.map((b, i) => (
+        <BannerRibbon key={i} b={b} clock={clock} />
+      ))}
+      <Rect x={glintX} y={glintY} width={2.6} height={2.6} color="#fff2c8" opacity={glintA} />
     </Canvas>
   );
 };
@@ -162,6 +181,114 @@ const Swallow = ({ w, h, i }: { w: number; h: number; i: number }) => {
   );
 };
 
+/** How far the PLAY ember glow bleeds past the button on each side. */
+const GLOW_SPREAD = 30;
+
+/**
+ * A real blurred glow behind PLAY — three Gaussian layers in one static Skia
+ * canvas (wide deep-red bloom, hot orange core, bright ember rim). The old
+ * version stacked two solid Views at low opacity, which read as hard-edged
+ * boxes; actual blur is what sells "heat". The breathing rides the wrapping
+ * Animated.View (opacity + scale, native driver), so the canvas never
+ * re-records — same cost profile as the fake it replaces.
+ */
+const EmberGlow = ({ w, h, glow }: { w: number; h: number; glow: Animated.Value }) => (
+  <Animated.View
+    pointerEvents="none"
+    style={{
+      position: "absolute",
+      left: -GLOW_SPREAD,
+      top: -GLOW_SPREAD,
+      width: w + GLOW_SPREAD * 2,
+      height: h + GLOW_SPREAD * 2,
+      opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
+      transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1.03] }) }],
+    }}
+  >
+    <Canvas style={{ flex: 1 }}>
+      <RoundedRect x={GLOW_SPREAD} y={GLOW_SPREAD} width={w} height={h} r={12} color="rgba(217,65,44,0.5)">
+        <Blur blur={16} />
+      </RoundedRect>
+      <RoundedRect x={GLOW_SPREAD} y={GLOW_SPREAD} width={w} height={h} r={12} color="rgba(255,122,64,0.4)">
+        <Blur blur={7} />
+      </RoundedRect>
+      <RoundedRect
+        x={GLOW_SPREAD}
+        y={GLOW_SPREAD}
+        width={w}
+        height={h}
+        r={12}
+        color="rgba(255,196,128,0.55)"
+        style="stroke"
+        strokeWidth={1.6}
+      >
+        <Blur blur={2.2} />
+      </RoundedRect>
+    </Canvas>
+  </Animated.View>
+);
+
+/** Gust cadence: a dust squall crosses every 20–30s and lasts ~9s. */
+const GUST_GAP_MIN_MS = 20000;
+const GUST_GAP_RANGE_MS = 10000;
+const GUST_MS = 9000;
+/** The dust canvas rasterizes at this fraction of screen size and the
+ * compositor scales it up — the shader pays per pixel, and soft dust
+ * upscaled 2x is indistinguishable, so shade a quarter of them. */
+const DUST_SCALE = 0.5;
+
+/** The live squall: the SkSL shader (dustStorm.ts) with its clock fed from a
+ * Reanimated clock on the UI thread — zero React renders and zero JS-thread
+ * work per frame (the previous 30fps re-record was a visible hitch source). */
+const GustShader = ({ w, h }: { w: number; h: number }) => {
+  const clock = useClock();
+  const uniforms = useDerivedValue(() => ({
+    u_res: [w * DUST_SCALE, h * DUST_SCALE],
+    u_t: clock.value / 1000,
+    u_prog: Math.min(clock.value / GUST_MS, 1),
+  }));
+  if (!DUST_EFFECT) return null;
+  return (
+    <Canvas
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: w * DUST_SCALE,
+        height: h * DUST_SCALE,
+        transformOrigin: "top left",
+        transform: [{ scale: 1 / DUST_SCALE }],
+      }}
+    >
+      <Fill>
+        <Shader source={DUST_EFFECT} uniforms={uniforms} />
+      </Fill>
+    </Canvas>
+  );
+};
+
+/**
+ * The dust storm's scheduler: every 20–30s (the gap re-rolls each cycle — a
+ * metronomic storm reads as a screensaver, not weather) a squall blows through
+ * left-to-right, the same direction the banners fly. The shader mounts only
+ * while the gust is live and UNMOUNTS after, so the idle screen pays nothing.
+ */
+const DustStorm = ({ w, h }: { w: number; h: number }) => {
+  const [gusting, setGusting] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(
+      () => {
+        if (!gusting) playSound("titleGust");
+        setGusting(!gusting);
+      },
+      gusting ? GUST_MS : GUST_GAP_MIN_MS + Math.random() * GUST_GAP_RANGE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [gusting]);
+  return gusting ? <GustShader w={w} h={h} /> : null;
+};
+
 /**
  * The front door: the High Sun arena scene (homeScene.ts — static Skia
  * painting; forged gladiator sprites breathe over it) with the title at the
@@ -177,6 +304,8 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [devOpen, setDevOpen] = useState(false);
+  // PLAY's measured box — the ember glow canvas needs pixel dims to blur in.
+  const [playBox, setPlayBox] = useState<{ w: number; h: number } | null>(null);
   // Mirror devFlags so the toggle labels re-render on tap.
   const [perfOverlay, setPerfOverlay] = useState(devFlags.perfOverlay);
   const [sfxOff, setSfxOff] = useState(devFlags.disableSfx);
@@ -305,6 +434,8 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
         ]}
       />
 
+      <DustStorm w={width} h={height} />
+
       <View style={[styles.ui, { paddingTop: insets.top + 54, paddingBottom: insets.bottom + 70 }]} pointerEvents="box-none">
         <Animated.View style={rise(0, 0.45)}>
           <Pressable onPress={onTitleTap}>
@@ -322,29 +453,8 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
         <View style={styles.spacer} pointerEvents="none" />
 
         <Animated.View style={[styles.menu, rise(0.4, 1)]}>
-          <View>
-            {/* Two stacked halo layers fake a blur RN views can't do. */}
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.halo,
-                styles.haloOuter,
-                {
-                  opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.2] }),
-                  transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }) }],
-                },
-              ]}
-            />
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.halo,
-                {
-                  opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.1, 0.32] }),
-                  transform: [{ scale: glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) }],
-                },
-              ]}
-            />
+          <View onLayout={(e) => setPlayBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+            {playBox && <EmberGlow w={playBox.w} h={playBox.h} glow={glow} />}
             <Pressable onPress={withTap("uiConfirm", onPlay)} style={styles.play}>
               <Text style={styles.playText}>PLAY</Text>
             </Pressable>
@@ -448,16 +558,6 @@ const styles = StyleSheet.create({
   },
   spacer: { flex: 1 },
   menu: { width: 250, gap: 12 },
-  halo: {
-    position: "absolute",
-    top: -5,
-    bottom: -5,
-    left: -5,
-    right: -5,
-    borderRadius: 15,
-    backgroundColor: "#d94141",
-  },
-  haloOuter: { top: -11, bottom: -11, left: -11, right: -11, borderRadius: 21 },
   play: {
     backgroundColor: "#8c2f2f",
     borderColor: "#e0503c",

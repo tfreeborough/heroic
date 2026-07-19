@@ -61,6 +61,9 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "hit_generic", label: "Impact — generic", category: "combat" },
   { id: "player_hurt", label: "You take a hit", category: "combat" },
   { id: "death", label: "Death", category: "combat" },
+  { id: "crowd_cheer", label: "Crowd — kill roar (8 takes)", category: "combat" },
+  { id: "crowd_jeer", label: "Crowd — groan, you're scored on (few takes)", category: "combat" },
+  { id: "crowd_ambience", label: "Crowd — arena ambience LOOP (1 long take)", category: "flow" },
   { id: "cast_generic", label: "Cast — generic", category: "ability" },
   { id: "harpoon_whip", label: "Harpoon — chain whip", category: "ability" },
   { id: "quake_rumble", label: "Tremor — quake rumble", category: "ability" },
@@ -79,6 +82,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "ui_confirm", label: "UI confirm", category: "ui" },
   { id: "ui_back", label: "UI back", category: "ui" },
   { id: "ui_error", label: "UI error", category: "ui" },
+  { id: "title_gust", label: "Title — dust gust", category: "ui" },
 ];
 
 /** Combat first, then abilities (derived), then the flow/UI statics. */

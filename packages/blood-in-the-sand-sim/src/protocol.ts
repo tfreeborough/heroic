@@ -81,8 +81,19 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * facing. The wire SHAPE is unchanged, but both vocabularies grow
  * (deployable kinds, ability ids) and tremor's meaning flips, so the
  * version gates it.
+ * v14 (2026-07-18): lobby liveness + host migration. A force-quit/lost-network
+ * client often sends NO close frame (and the server's own snapshot broadcasts
+ * keep Bun's idle timer from ever firing), so its seat lingered as a "ghost" —
+ * a room that reads full but nobody can join, worst of all when it's the host.
+ * Adds `ping` (client→server heartbeat every HEARTBEAT_INTERVAL_MS — the quiet
+ * lobby's liveness signal; a match already streams input) so the server can
+ * free a seat gone silent past HEARTBEAT_TIMEOUT_MS. The host no longer owns
+ * the room's life (reversing v7): when the host leaves or times out the crown
+ * hands off to another seated player and the room lives on — it only closes
+ * when the LAST player is gone. Adds `notice` (server→client) for the
+ * "X left — Y is now the host" lobby banner.
  */
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
@@ -102,6 +113,10 @@ export type ClientMsg =
   /** Host-only AFK backstop: random-fill every unarmed seat, then the normal
    * 5s arming countdown runs (never instant). Ignored from non-hosts. */
   | { t: "forceStart" }
+  /** Liveness heartbeat — the quiet lobby's "still here" (a match already
+   * streams input). Any inbound message counts as alive; this is the one a
+   * seated-but-idle client sends on its own timer (HEARTBEAT_INTERVAL_MS). */
+  | { t: "ping" }
   | { t: "input"; seq: number; sx: number; sy: number; casts: boolean[] };
 
 // ── server → client ────────────────────────────────────────────────────────
@@ -256,6 +271,9 @@ export type ServerMsg =
   | { t: "rooms"; rooms: RoomListing[] }
   /** Membership/host changes — sent to the room on join/leave/migration. */
   | { t: "roomState"; players: RoomStatePlayer[]; hostId: number }
+  /** A transient lobby toast — currently host handoff ("X left — Y is now the
+   * host"). The server composes the human text; the client just shows it. */
+  | { t: "notice"; text: string }
   /** Watcher acknowledgment (no seat, snapshots only). */
   | { t: "watching"; roomCode: string; roomName: string }
   /** You left (or were never in) a room — back to the room list. */

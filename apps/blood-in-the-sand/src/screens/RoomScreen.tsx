@@ -95,6 +95,8 @@ const CARD_GAP = 14;
 const COMPACT_LOBBY_HEIGHT = 700;
 const FLY_MS = 460;
 const LAND_BEAT_MS = 320;
+/** How long a host-handoff toast stays up before it fades out. */
+const NOTICE_MS = 5000;
 
 /** The wizard's local draft: weapon + partial hand, filled in step order. */
 interface Picks {
@@ -202,6 +204,12 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   // ── The arming countdown, from the snapshot stream ───────────────────────
   const view = client.buffer.sample(performance.now());
   const timer = client.phase === "lobby" ? (view?.round.timer ?? 0) : 0;
+  // Host-handoff toast: shown for a few seconds after it lands. The 250ms
+  // roster tick already re-renders us, so it fades itself without extra state.
+  const notice =
+    client.notice !== null && performance.now() - client.notice.atMs < NOTICE_MS
+      ? client.notice.text
+      : null;
   const timerCeil = Math.ceil(timer);
   // While the countdown runs, the 250ms roster tick is too coarse — digits
   // land up to a quarter-second late and the tick sound drifts off the true
@@ -573,6 +581,12 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
         >
           <LoadoutIcon id={fly.icon} size={fly.from.size} />
         </Animated.View>
+      ) : null}
+
+      {notice !== null ? (
+        <View pointerEvents="none" style={[styles.notice, { top: insets.top + 8 }]}>
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>
       ) : null}
     </View>
   );
@@ -1268,6 +1282,26 @@ const CountdownVeil = ({ left, onLeave }: { left: number; onLeave: () => void })
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210" },
   content: { flex: 1 },
+  // Host-handoff toast — a slim banner pinned to the top, above every sub-view.
+  notice: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C_GOLD,
+    backgroundColor: "#1d1915ee",
+  },
+  noticeText: {
+    color: "#e8dcc4",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    textAlign: "center",
+  },
   /** The card-picker takeover. Near-opaque so the chrome reads as "behind a
    * layer", not gone; its own safe-area padding (the root stays unpadded —
    * the Yoga absolute-child rule). */

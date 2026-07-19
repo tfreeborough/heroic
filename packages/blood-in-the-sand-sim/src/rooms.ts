@@ -75,6 +75,20 @@ export const canJoin = (check: JoinCheck): JoinVerdict => {
   return "room full";
 };
 
+/**
+ * Who holds the crown, given the currently CONNECTED seated player ids. The
+ * host is sticky — it never moves while its holder is still connected and
+ * seated; only when they're gone does it hand off, to the lowest remaining id
+ * (deterministic + stable, so it doesn't reshuffle as others come and go).
+ * Returns null when nobody's left to hold it — the caller closes the room.
+ * (Reverses the v7 "host leaving closes the room" rule, protocol v14.)
+ */
+export const nextHost = (connectedSeatedIds: readonly number[], currentHostId: number): number | null => {
+  if (connectedSeatedIds.includes(currentHostId)) return currentHostId;
+  if (connectedSeatedIds.length === 0) return null;
+  return Math.min(...connectedSeatedIds);
+};
+
 /** GC policy: collect once a room has been empty past the grace window. */
 export const shouldCollect = (
   connectedCount: number,

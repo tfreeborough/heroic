@@ -8,6 +8,7 @@
  */
 import {
   DEFAULT_PORT,
+  HEARTBEAT_INTERVAL_MS,
   PROTOCOL_VERSION,
   SnapshotBuffer,
   TICK_RATE,
@@ -84,6 +85,13 @@ export interface GameClient {
   sendInput(sx: number, sy: number, casts: boolean[]): void;
 }
 
+/** A transient lobby toast (host handoff), with the wall-clock it arrived so
+ * the UI can fade it after a few seconds. */
+export interface Notice {
+  text: string;
+  atMs: number;
+}
+
 /**
  * What RoomScreen needs on top of GameClient to run the lobby + arming wizard
  * — satisfied by ArenaClient (real rooms) AND PracticeClient (offline, so the
@@ -94,6 +102,9 @@ export interface LobbyClient extends GameClient {
   phase: RoundPhase;
   readonly hostId: number | null;
   readonly isHost: boolean;
+  /** Latest transient lobby toast (host handoff), or null — the RoomScreen
+   * banner reads this and fades it on its own timer. */
+  readonly notice: Notice | null;
   /** Own picked hand, in button order (from the team-filtered roomState). */
   readonly myAbilities: AbilityId[];
   setWeapon(weapon: WeaponId): void;
@@ -115,6 +126,8 @@ export class ArenaClient {
   welcome: WelcomeInfo | null = null;
   roomState: RoomStateInfo | null = null;
   rooms: RoomListing[] = [];
+  /** Newest transient lobby toast (host handoff), or null. */
+  notice: Notice | null = null;
   /** Round phase from the newest snapshot — drives screen routing. */
   phase: RoundPhase = "lobby";
 
@@ -125,12 +138,16 @@ export class ArenaClient {
 
   private readonly ws: WebSocket;
   private seq = 0;
+  /** Heartbeat so the server can tell a quiet-but-alive lobby seat from a ghost
+   * (force-quit / lost network with no close frame). Runs only while open. */
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(url: string) {
     this.ws = new WebSocket(url);
     this.ws.onopen = () => {
       this.status = "open";
       this.listRooms();
+      this.pingTimer ??= setInterval(() => this.send({ t: "ping" }), HEARTBEAT_INTERVAL_MS);
       this.onChange?.();
     };
     this.ws.onmessage = (e) => {
@@ -144,6 +161,7 @@ export class ArenaClient {
     };
     this.ws.onclose = () => {
       if (this.status !== "rejected") this.status = "closed";
+      this.stopHeartbeat();
       this.onChange?.();
     };
     // onclose follows onerror; no separate handling needed.
@@ -183,6 +201,10 @@ export class ArenaClient {
         return;
       case "rooms":
         this.rooms = msg.rooms;
+        this.onChange?.();
+        return;
+      case "notice":
+        this.notice = { text: msg.text, atMs: performance.now() };
         this.onChange?.();
         return;
       case "watching":
@@ -293,9 +315,17 @@ export class ArenaClient {
     if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
+  private stopHeartbeat(): void {
+    if (this.pingTimer !== null) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+  }
+
   close(): void {
     this.onChange = null;
     this.onEvents = null;
+    this.stopHeartbeat();
     this.ws.close();
   }
 }

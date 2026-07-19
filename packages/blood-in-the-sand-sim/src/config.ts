@@ -12,6 +12,21 @@ export const TICK_DT = 1 / TICK_RATE;
 /** Broadcast every Nth tick. 1 = every tick (~21KB/s per client — nothing on LAN). */
 export const SNAPSHOT_DIVISOR = 1;
 
+// ── Liveness (heartbeat) ────────────────────────────────────────────────────
+// A force-quit / lost-network client often sends no WebSocket close frame, so
+// its seat would linger forever (the server's own snapshot broadcasts keep
+// Bun's transport idle-timer from ever firing). The client pings on this beat
+// so the server knows a QUIET lobby seat is still alive; a seat silent past the
+// timeout is a ghost and gets freed (protocol v14).
+/** How often the client sends `{t:"ping"}` while connected. */
+export const HEARTBEAT_INTERVAL_MS = 5_000;
+/** A seat with no inbound traffic for this long is dropped as a ghost. Three
+ * missed pings — a brief background/blip under this survives (you can rejoin
+ * regardless). */
+export const HEARTBEAT_TIMEOUT_MS = 15_000;
+/** How often the server sweeps every room for silent seats. */
+export const HEARTBEAT_SWEEP_MS = 5_000;
+
 // ── Players ────────────────────────────────────────────────────────────────
 export const PLAYER_RADIUS = 18;
 

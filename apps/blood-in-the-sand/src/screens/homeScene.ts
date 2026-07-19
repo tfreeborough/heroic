@@ -3,8 +3,9 @@
  * title-screen artifact round 3): high-noon colosseum interior — bleached sky,
  * sun glare, crowd band, arches, velarium masts + banners, raked sand with old
  * stains. Painted ONCE into a static SkPicture per screen size; every moving
- * thing on the title screen (figures, dust, glow, entrance) is an RN Animated
- * layer above it, so no frame loop runs outside a match.
+ * thing on the title screen (figures, dust, glow, banners, entrance) lives in
+ * HomeScreen on RN Animated or Reanimated UI-thread values, so no JS frame
+ * loop runs outside a match.
  *
  * Red is rationed here on purpose: the banners and the PLAY button are the
  * only red on screen — in this game red means blood, not wallpaper.
@@ -76,19 +77,23 @@ const rimYAt = (w: number, wallTop: number, x: number): number => {
   return (1 - u) * (1 - u) * (wallTop + 7) + 2 * u * (1 - u) * (wallTop - 7) + u * u * (wallTop + 7);
 };
 
-interface BannerAnchor {
+export interface BannerAnchor {
   x: number;
   y: number;
   phase: number;
 }
 
-/** Mast-tops that fly cloth — the life layer draws the ribbons from here. */
-const bannerAnchors = (w: number, h: number): BannerAnchor[] => {
+/** Masts lean away from centre; the middle one stands straight. */
+const mastLean = (mx: number, w: number): number =>
+  Math.abs(mx - w / 2) < 1 ? 0 : mx < w / 2 ? -3 : 3;
+
+/** Mast-tops that fly cloth — HomeScreen's SceneLife flies the ribbons from
+ * here (UI-thread Reanimated paths, so the cloth moves at refresh rate). */
+export const bannerAnchors = (w: number, h: number): BannerAnchor[] => {
   const { wallTop } = sceneAnchors(w, h);
   return [1, 3].map((bi) => {
     const mx = w * (0.08 + bi * 0.21);
-    const lean = mx < w / 2 ? -3 : 3;
-    return { x: mx + lean, y: rimYAt(w, wallTop, mx) - 22, phase: bi * 2 };
+    return { x: mx + mastLean(mx, w), y: rimYAt(w, wallTop, mx) - 22, phase: bi * 2 };
   });
 };
 
@@ -192,7 +197,7 @@ const paintScene = (c: SkCanvas, w: number, h: number): void => {
   const finial = fill("#4a3a26");
   for (let i = 0; i < 5; i++) {
     const mx = w * (0.08 + i * 0.21);
-    const lean = mx < w / 2 ? -3 : 3;
+    const lean = mastLean(mx, w);
     const my = rimY(mx);
     c.drawLine(mx, my, mx + lean, my - 23, mastPaint);
     c.drawCircle(mx + lean, my - 24, 1.6, finial);
@@ -247,43 +252,3 @@ const paintScene = (c: SkCanvas, w: number, h: number): void => {
 /** The whole backdrop as one cached picture — repainted only on resize. */
 export const makeHighSunPicture = (w: number, h: number): SkPicture =>
   createPicture((c) => paintScene(c, w, h), { width: w, height: h });
-
-/**
- * The living details that need per-frame REDRAWING — rippling swallowtail
- * banners and the wandering stands glint. Their motion is slow (sub-pixel per
- * frame), so HomeScreen's SceneLife re-record at ~30fps reads smooth. Fast
- * movers don't belong here: the swallows are native-driver Animated views in
- * HomeScreen — a redraw cadence that flatters cloth visibly stutters a bird.
- */
-export const makeLifePicture = (w: number, h: number, crowd: CrowdDot[], t: number): SkPicture =>
-  createPicture(
-    (c) => {
-      // sun-bleached banners riding the wind (the scene's red, kept scarce)
-      const bannerPaint = fill("#8a3a2e");
-      for (const b of bannerAnchors(w, h)) {
-        const top = (u: number): [number, number] => [
-          b.x + u * 30,
-          b.y + u * 2 + Math.sin(t * 0.004 + b.phase + u * 3.2) * u * 3.4,
-        ];
-        const ribbon = Skia.Path.Make();
-        ribbon.moveTo(...top(0));
-        for (let k = 1; k <= 8; k++) ribbon.lineTo(...top(k / 8));
-        const [tx, ty] = top(1);
-        ribbon.lineTo(tx - 6, ty + 2.3); // swallowtail notch
-        for (let k = 8; k >= 0; k--) {
-          const [px, py] = top(k / 8);
-          ribbon.lineTo(px, py + 7 - (k / 8) * 2.5);
-        }
-        ribbon.close();
-        c.drawPath(ribbon, bannerPaint);
-      }
-      // a stray glint wanders the stands — sun off a helmet, a raised cup
-      const g = crowd[Math.floor(t / 700) % crowd.length];
-      if (g) {
-        const p = fill("#fff2c8");
-        p.setAlphaf(0.45 + 0.4 * Math.sin(t * 0.02));
-        c.drawRect(Skia.XYWHRect(g.x, g.y, 2.6, 2.6), p);
-      }
-    },
-    { width: w, height: h },
-  );

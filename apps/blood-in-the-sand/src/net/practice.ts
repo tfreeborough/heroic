@@ -92,6 +92,8 @@ const randomHand = (): AbilityId[] => {
 export class PracticeClient implements LobbyClient {
   readonly buffer = new SnapshotBuffer(TICK_RATE);
   status: ConnectionStatus = "open";
+  /** Offline, single-player-hosted — the crown never moves, so no notices. */
+  readonly notice = null;
   welcome: WelcomeInfo | null;
   roomState: RoomStateInfo | null = null;
   /** Round phase from the newest tick — App routes lobby → RoomScreen (the

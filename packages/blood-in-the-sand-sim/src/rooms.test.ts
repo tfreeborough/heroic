@@ -6,6 +6,7 @@ import {
   ROOM_EMPTY_GRACE_MS,
   canJoin,
   generateRoomCode,
+  nextHost,
   sanitizePasscode,
   sanitizeRoomName,
   sanitizeTeamSize,
@@ -89,5 +90,21 @@ describe("GC policy", () => {
     expect(shouldCollect(0, 1000, 1000 + ROOM_EMPTY_GRACE_MS - 1)).toBe(false);
     expect(shouldCollect(0, 1000, 1000 + ROOM_EMPTY_GRACE_MS)).toBe(true);
     expect(shouldCollect(0, null, 999_999)).toBe(false); // never marked empty
+  });
+});
+
+describe("host handoff", () => {
+  test("the crown stays put while its holder is connected and seated", () => {
+    expect(nextHost([0, 1, 2], 0)).toBe(0);
+    expect(nextHost([2, 0, 1], 1)).toBe(1); // order-independent
+  });
+
+  test("a gone host hands off to the lowest remaining id", () => {
+    expect(nextHost([1, 2], 0)).toBe(1);
+    expect(nextHost([3, 2], 0)).toBe(2);
+  });
+
+  test("nobody left means the room closes", () => {
+    expect(nextHost([], 0)).toBeNull();
   });
 });

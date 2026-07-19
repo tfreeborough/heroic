@@ -1,0 +1,21 @@
+{
+  "type": "sfx-bits",
+  "subject": "an arena crowd's disappointed groan when a fighter they favour falls — a low collective 'ooohh' and dismayed grumble that sinks, deflated, dry and rowdy, no cheering and no music (forge a few varied takes for a randomised bank)",
+  "prompt": "an arena crowd's disappointed groan when a fighter they favour falls — a low collective 'ooohh' and dismayed grumble that sinks, deflated, dry and rowdy, no cheering and no music (forge a few varied takes for a randomised bank). A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "crowd_jeer_1.mp3",
+    "crowd_jeer_2.mp3",
+    "crowd_jeer_3.mp3",
+    "crowd_jeer_4.mp3"
+  ],
+  "created": "2026-07-18T23:15:33.819Z",
+  "updated": "2026-07-18T23:16:42.268Z"
+}

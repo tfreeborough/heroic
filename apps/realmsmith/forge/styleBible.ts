@@ -107,6 +107,9 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   fire_staff: "casting a magic orb from a staff — a short arcane whoosh-swell with a soft energy hum as it launches, no impact",
   player_hurt: "a single grunt of pain from a gladiator taking a blow — short, breathy, no words",
   death: "a gladiator's final choked gasp collapsing into the sand — a short wet fall, no scream",
+  crowd_cheer: "a bloodthirsty arena crowd erupting at a kill — a short sharp roar and cheer that swells then falls, rowdy and dry, shouts and claps mixed, no music (forge ~6 varied takes for a randomised bank)",
+  crowd_jeer: "an arena crowd's disappointed groan when a fighter they favour falls — a low collective 'ooohh' and dismayed grumble that sinks, deflated, dry and rowdy, no cheering and no music (forge a few varied takes for a randomised bank)",
+  crowd_ambience: "a constant low arena-crowd ambience bed — a distant restless gladiator-pit crowd murmuring, shifting chatter and shuffles and the odd muffled shout, no distinct cheers or words, no music, EVEN and steady so it loops seamlessly under the action (forge ONE long take, 30s+ if the tool allows — it becomes the crossfade-looped background bed)",
   // ── Abilities ─────────────────────────────────────────────────────────────
   cast_generic: "a short ability activation whoosh — dry, physical, a quick surge of intent",
   cast_sandtrap: "burying and arming a spiked powder charge in sand — a muffled shuffle then a metal click-latch",
@@ -138,6 +141,7 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   ui_confirm: "a confident UI confirm — a firm metallic clack-thunk with a short bright ring, committing",
   ui_back: "a soft UI back/cancel — a low muted wooden knock, a step backwards",
   ui_error: "a short UI error buzz — a dull dead thunk, a rejected action, not harsh",
+  title_gust: "a brief dry desert wind gust sweeping through a stone arena — a rising sandy hiss with grit ticking off stone, tailing away, no voices",
 };
 
 // ── Blood in the Sand icons ────────────────────────────────────────────────

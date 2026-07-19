@@ -63,7 +63,7 @@ drives blood + haptics) now also calls `playSound` per `ArenaEvent`:
 | --- | --- | --- |
 | `shoot` (ranged release) | `weaponFire`¹ | weapon (bow/staff) |
 | `hit` (non-bleed) | `weaponStrike` / `hitTaken` if it's you & crit | attacker's weapon |
-| `death` | `death` | — |
+| `death` | `death` **+ `crowdCheer`** | — |
 | `cast` | `abilityCast` | ability id |
 | `detonate` | `abilityDetonate` | `sandtrap` |
 | `harpoon` | `harpoonWhip` | — |
@@ -96,6 +96,42 @@ knobs; raise `SOUND_FLOOR` if distant deaths/casts should stay louder.
 The **death** sound already fires on *every* death from *every* source (the sim
 emits a `death` event from `killPlayer` for all kills incl. bleed; the client
 plays it unconditionally) — now distance-scaled like other combat.
+
+**Pit crowd roar (2026-07-18).** Alongside `death`, the client plays
+`crowdCheer` — the mob in the arena stands reacting to the kill (the pit-crowd
+visual, `apps/blood-in-the-sand/src/game/crowd.ts`). It's an **8-take variation
+bank** (`crowd_cheer_1..8`, built 2026-07-18): the scheduler picks a random take
+(never twice running) with a wide `pitchVariance` (0.12), so a bloody match never
+sounds like one looped roar. **Non-positional** (always full — the whole bowl
+reacts, not a point in space). **`throttleMs: 8300`** is set ABOVE the longest
+take (~8.05s) on purpose: a new kill can NEVER start a second roar over one
+already playing (Tom's rule — some takes run 8s) — a fresh cheer waits until the
+current one finishes. Kept **COLD** (NOT in `warmCombatAudio`'s set): 8 long
+clips would over-subscribe the voice pool, and the ~8s throttle means cheers
+never fire in a burst a cold load could stutter — same call as the announcer
+clips. NOTE (2026-07-18): the crowd VISUAL does not react to kills — an earlier
+whole-mob bodily surge on death was ripped out ("looks crap"); the roar carries
+it entirely. Later headroom: qualified variants (a bigger roar on a multi-kill, a
+tense murmur on a near-death).
+
+**Constant crowd ambience bed (scaffolded 2026-07-18, silent until forged).**
+Under the one-shot cheers, a LOOPING crowd murmur plays the whole time you're in
+the arena — the two are separate channels (looping music deck vs one-shot SFX
+voices) so they layer, the bed never interrupted by a cheer. It rides the
+engine `AudioDirector`'s existing crossfade **music decks** (proven in the
+gauntlet), NOT new infra: `crowd_ambience` is registered as the arena's bed
+(same clip for idle+combat = constant). BITS runs the director as a singleton
+with no per-frame music tick, so `startCrowdAmbience` snaps the deck's fade-in
+gain to full once (`director.tick(9999)`) and drives the AUDIBLE fade on the
+music BUS via a small self-contained ramp in `audio/index.ts` — no game-loop
+coupling. `stopCrowdAmbience` (GameScreen unmount) fades out then calls the NEW
+engine `director.stopMusic()` (pauses both decks so nothing loops inaudibly).
+Volume `AMBIENCE_VOLUME` 0.28 (music bus, under combat; tune on device); rides
+the master mute. Owed from Forge: ONE long seamless `crowd_ambience` take (30s+)
+— it'll be **crossfade-baked into a seamless loop** with ffmpeg like the cheer
+fades — plus the one `require` line in `manifest.ts` (commented placeholder
+already there). Future: swell the bed by round phase (calmer in the arming
+countdown, fuller during the fight — the deck crossfade already supports it).
 
 Bleed ticks stay silent (ambient, like their haptics). The 3·2·1 `countdownTick`
 derives from the HUD countdown digit (not an event). UI sounds (`uiTap`,

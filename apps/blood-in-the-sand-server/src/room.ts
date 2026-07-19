@@ -21,6 +21,7 @@ import {
   forceStartMatch,
   makeClientConfig,
   markDisconnected,
+  nextHost,
   reconnectPlayer,
   removePlayer,
   sanitizeInput,
@@ -63,6 +64,14 @@ export class Room {
 
   private readonly server: Server<ClientData>;
   private readonly seats = new Map<number, Socket>();
+  /** Last time (ms) we heard ANYTHING from each seated socket — the heartbeat
+   * sweep frees a seat gone silent past HEARTBEAT_TIMEOUT_MS (a ghost that
+   * never sent a close frame). Keyed by playerId, mirrors `seats`. */
+  private readonly lastSeen = new Map<number, number>();
+  /** The outgoing host's name, stashed the instant their seat is dropped — the
+   * sim player object may be gone by the time the crown reassigns, so the
+   * "X left" half of the handoff notice is captured here. */
+  private departedHostName: string | null = null;
   /** Seatless spectators — they get the neutral (team-0) roomState view. */
   private readonly watchers = new Set<Socket>();
   private readonly inputs = new Map<number, PlayerInput>();
@@ -84,6 +93,13 @@ export class Room {
 
   connectedCount(): number {
     return seatedPlayers(this.sim.state).filter((p) => p.connected).length;
+  }
+
+  /** No bodies left at all — every seat freed. (Distinct from "no CONNECTED
+   * seats": mid-match, disconnected players keep their idling seat for the
+   * rejoin-resume window, so such a room is NOT deserted and must survive.) */
+  isDeserted(): boolean {
+    return seatedPlayers(this.sim.state).length === 0;
   }
 
   listing(): RoomListing {
@@ -124,6 +140,7 @@ export class Room {
     // A stale socket may still hold the seat (rejoin racing the close event).
     this.seats.get(playerId)?.close();
     this.seats.set(playerId, ws);
+    this.lastSeen.set(playerId, nowMs); // fresh — don't sweep a just-seated player
     ws.data.roomCode = this.meta.code;
     ws.data.playerId = playerId;
     ws.subscribe(this.topic);
@@ -146,13 +163,6 @@ export class Room {
     return playerId;
   }
 
-  /** Is the host's seat still occupied? (A mid-match disconnect keeps the seat
-   * — disconnected but present — so the match plays on; the seat only frees at
-   * match end, which is when a never-returning host trips the room's closure.) */
-  hostPresent(): boolean {
-    return this.sim.state.players[this.meta.hostId] != null;
-  }
-
   /** Tear the room down: tell every seat and watcher why, detach them, and let
    * the manager drop the room from its registry. Idempotent. */
   kickAll(reason: string): void {
@@ -160,6 +170,7 @@ export class Room {
     for (const ws of this.seats.values()) this.detach(ws, msg);
     for (const ws of this.watchers) this.detach(ws, msg);
     this.seats.clear();
+    this.lastSeen.clear();
     this.watchers.clear();
   }
 
@@ -195,6 +206,10 @@ export class Room {
 
     if (this.seats.get(id) !== ws) return; // superseded by a rejoin
     this.seats.delete(id);
+    this.lastSeen.delete(id);
+    // Capture the departing host's name NOW — reassignHost runs after the sim
+    // may have removed the player object, so "X left" can't be read back then.
+    if (id === this.meta.hostId) this.departedHostName = this.sim.state.players[id]?.name ?? null;
     if (this.sim.state.round.phase === "lobby") {
       removePlayer(this.sim, id);
     } else {
@@ -202,6 +217,54 @@ export class Room {
       console.log(`[${this.meta.code}] player ${id} dropped — body idles on`);
     }
     this.syncRoomState(nowMs);
+  }
+
+  /** Stamp a seated socket as alive (called for every inbound message). */
+  markSeen(playerId: number, nowMs: number): void {
+    if (this.seats.has(playerId)) this.lastSeen.set(playerId, nowMs);
+  }
+
+  /** Drop every seat gone silent past `timeoutMs` — a ghost that force-quit or
+   * lost its network without a close frame. Each drop runs the normal
+   * dropSocket path (lobby → seat freed; mid-match → body idles on). */
+  sweepStale(nowMs: number, timeoutMs: number): void {
+    const stale: Socket[] = [];
+    for (const [id, ws] of this.seats) {
+      if (nowMs - (this.lastSeen.get(id) ?? nowMs) > timeoutMs) stale.push(ws);
+    }
+    for (const ws of stale) {
+      console.log(`[${this.meta.code}] player ${ws.data.playerId} timed out (${timeoutMs}ms silent) — freeing ghost seat`);
+      this.dropSocket(ws, nowMs); // sim bookkeeping first…
+      ws.close(); // …then release the dead socket
+    }
+  }
+
+  /**
+   * Make sure the crown sits on a CONNECTED seated player. Returns the handoff
+   * (old + new names) if it moved — the manager turns that into a lobby notice
+   * — "empty" if nobody's left to hold it (the manager closes the room), or
+   * null if the current host is fine. Idempotent: a no-op on a healthy room.
+   */
+  reassignHost(nowMs: number): { from: string; to: string } | "empty" | null {
+    const connected = seatedPlayers(this.sim.state)
+      .filter((p) => p.connected)
+      .map((p) => p.id);
+    const next = nextHost(connected, this.meta.hostId);
+    if (next === null) return "empty";
+    if (next === this.meta.hostId) return null;
+
+    const from = this.departedHostName ?? this.sim.state.players[this.meta.hostId]?.name ?? "The host";
+    const to = this.sim.state.players[next]?.name ?? "A player";
+    this.departedHostName = null;
+    this.meta.hostId = next;
+    this.syncRoomState(nowMs); // the new hostId rides the roomState diff to everyone
+    console.log(`[${this.meta.code}] host handed off: ${from} → ${to}`);
+    return { from, to };
+  }
+
+  /** Broadcast a transient lobby toast to the whole room (host handoff). */
+  notice(text: string): void {
+    this.broadcast({ t: "notice", text });
   }
 
   /** The host's start-early control: fills every unarmed seat AND overrides
@@ -260,9 +323,10 @@ export class Room {
     this.syncRoomState(nowMs);
   }
 
-  /** roomState broadcast + empty tracking, on any change. (The host never
-   * migrates: they own the room, and their departure closes it — the manager
-   * reaps a host-less room via hostPresent(), see manager.reapHostless.) */
+  /** roomState broadcast + empty tracking, on any change. (Host handoff rides
+   * this too: reassignHost mutates meta.hostId then calls here, so the new
+   * crown reaches every viewer through the roomState diff — see the manager's
+   * reconcileHost.) */
   private syncRoomState(nowMs: number): void {
     this.emptySinceMs = this.connectedCount() === 0 ? (this.emptySinceMs ?? nowMs) : null;
 

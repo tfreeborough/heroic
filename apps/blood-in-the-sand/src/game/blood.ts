@@ -27,6 +27,10 @@ export interface BloodDecal {
    * (a round-capped thick line, r = half-width) instead of a round drop. */
   dx?: number;
   dy?: number;
+  /** Per-decal random, frozen at birth. Seeds the irregular splat silhouette
+   * in the renderer so a mark's shape is stable across the ~5Hz scar rebuilds
+   * (a fresh Math.random per frame would make every pool crawl). */
+  seed: number;
 }
 
 // ── Tuning ─────────────────────────────────────────────────────────────────
@@ -263,8 +267,10 @@ export class BloodField {
     }
   }
 
-  private push(decal: BloodDecal): void {
+  private push(decal: Omit<BloodDecal, "seed">): void {
+    const d = decal as BloodDecal;
+    d.seed = Math.random() * 1000;
     if (this.decals.length >= MAX_DECALS) this.decals.shift();
-    this.decals.push(decal);
+    this.decals.push(d);
   }
 }

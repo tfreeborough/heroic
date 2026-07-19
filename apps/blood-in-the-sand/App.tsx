@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, BackHandler, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { useKeepAwake } from "expo-keep-awake";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ABILITY_IDS,
@@ -49,6 +50,18 @@ const randomAutoHand = (): AbilityId[] => {
   return hand;
 };
 
+/** Shared "are you sure?" prompt for backing out of a lobby or a live match. */
+const confirmLeave = (what: "lobby" | "match", leave: () => void): void => {
+  Alert.alert(
+    what === "match" ? "Leave the match?" : "Leave the lobby?",
+    what === "match" ? "You'll forfeit this fight and leave the arena." : undefined,
+    [
+      { text: "Stay", style: "cancel" },
+      { text: "Leave", style: "destructive", onPress: leave },
+    ],
+  );
+};
+
 type Route = "home" | "play" | "practice" | "settings";
 
 export default function App() {
@@ -60,6 +73,11 @@ export default function App() {
   // null = still loading from storage, "" = never set → PLAY gates on NameScreen.
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [, force] = useReducer((x: number) => x + 1, 0);
+
+  // A game should never dim or lock mid-session — keep the screen awake the
+  // whole time the app is foregrounded, not just during a match (GameScreen
+  // keeps its own call too; redundant awake locks are harmless).
+  useKeepAwake();
 
   useEffect(() => {
     void AsyncStorage.getItem(KEY_NAME).then((v) => setPlayerName(v?.trim() ?? ""));
@@ -157,6 +175,37 @@ export default function App() {
       client.setAbilities(randomAutoHand());
     }
   });
+
+  // Android hardware-back / back-gesture policy. Without a handler, back exits
+  // the app from ANY screen — one stray tap in a menu drops players out. So:
+  //   • in a lobby or a live match → confirm before leaving (it's destructive)
+  //   • any other sub-screen (settings, connecting, room list, name) → home
+  //   • on home (the root) → confirm before quitting the app entirely
+  // Kept in a ref so it always sees the latest client/practice state (their
+  // phase/welcome fields mutate in place, so effect deps wouldn't catch them).
+  // No-op on iOS, which has no hardware back.
+  const handleBack = useRef<() => void>(() => {});
+  handleBack.current = () => {
+    if (route === "home") {
+      Alert.alert("Leave Blood in the Sand?", undefined, [
+        { text: "Stay", style: "cancel" },
+        { text: "Leave", style: "destructive", onPress: () => BackHandler.exitApp() },
+      ]);
+    } else if (route === "practice" && practice) {
+      confirmLeave(practice.phase === "lobby" ? "lobby" : "match", endPractice);
+    } else if (route === "play" && client?.welcome) {
+      confirmLeave(client.phase === "lobby" ? "lobby" : "match", () => client.leaveRoom());
+    } else {
+      setRoute("home");
+    }
+  };
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBack.current();
+      return true; // we always handle back ourselves — never fall through to exit
+    });
+    return () => sub.remove();
+  }, []);
 
   // RoomScreen owns the lobby (the arming wizard lives there); the rest is match.
   const inMatch =

@@ -14,6 +14,8 @@ import {
   Skia,
   StrokeCap,
   StrokeJoin,
+  TileMode,
+  vec,
   type SkCanvas,
   type SkImage,
   type SkPicture,
@@ -39,6 +41,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import { decalAlpha, type BloodDecal } from "./blood";
 import { crackAlpha, type CrackDecal } from "./cracks";
+import { buildCrowd, CROWD_REVEAL } from "./crowd";
 import type { StatusPulses } from "./statusRings";
 
 // Zone geometry is static — derive once at module scope (loadZone is pure).
@@ -46,6 +49,10 @@ const ZONE = loadZone(ARENA_00);
 const WORLD_W = ZONE.size.x;
 const WORLD_H = ZONE.size.y;
 const TILESET = TILESETS[ZONE.tileset];
+
+// The animated pit crowd (crowd.ts) — a procedural amphitheatre drawn in the
+// void beyond the sand, revealed by the relaxed camera clamp below.
+const CROWD = buildCrowd(WORLD_W, WORLD_H);
 
 // Props pre-resolved for the draw loop: cached src/dst rects + sprite bounds,
 // sorted by baseline (feet y) once — the per-frame y-sort only interleaves
@@ -89,7 +96,7 @@ const hiddenBehind = (
 
 /** How much world fits on screen when following a player. Pulled back from
  * 0.85 (2026-07-12, tester feedback): the old zoom hid approaching enemies. */
-const FOLLOW_ZOOM = 0.6;
+const FOLLOW_ZOOM = 0.71;
 
 // Palette parsed once (never re-string rgba per frame — floods the colour cache).
 const C_VOID = Skia.Color("#141210");
@@ -106,7 +113,6 @@ const C_HP_BACK = Skia.Color("rgba(0, 0, 0, 0.55)");
 const C_HP_FILL = Skia.Color("#5fc75f");
 const C_HP_LOW = Skia.Color("#e0503c");
 const C_DASH_RING = Skia.Color("rgba(255, 255, 255, 0.85)");
-const C_BLOOD = Skia.Color("#6e150e");
 const C_BOLT = Skia.Color("#f0e8d8");
 const C_STAFF_ORB = Skia.Color("#9b6dd9");
 const C_STAFF_RING = Skia.Color("rgba(155, 109, 217, 0.45)");
@@ -135,10 +141,20 @@ const C_DUMMY_DARK = Skia.Color("#6f5c3d");
 const C_HARPOON = Skia.Color("#d9d2c6");
 const C_CRACK = Skia.Color("#4f3f2a");
 const C_FX_HEAL = Skia.Color("#5fc75f");
+// Off-screen ally pointer: a team-coloured chevron pinned to the screen edge,
+// dark-rimmed so it reads over any floor/crowd behind it.
+const C_ARROW_EDGE = Skia.Color("rgba(0, 0, 0, 0.55)");
 
 const fill = Skia.Paint();
 const stroke = Skia.Paint();
 stroke.setStyle(PaintStyle.Stroke);
+
+// Dedicated blood paints — the premium decal renderer swaps shaders and stroke
+// widths per decal; a dedicated pair keeps that churn out of the shared paints.
+const bloodFill = Skia.Paint();
+const bloodStroke = Skia.Paint();
+bloodStroke.setStyle(PaintStyle.Stroke);
+bloodStroke.setStrokeJoin(StrokeJoin.Round);
 
 // Dedicated paint so the dash effect never leaks into the shared stroke.
 const rangeStroke = Skia.Paint();
@@ -173,7 +189,10 @@ const floorImage = (atlas: SkImage): SkImage | null => {
   const ct = ZONE.chunkTiles;
   const paint = Skia.Paint();
   for (const chunk of ZONE.chunks) {
-    const drawLayer = (layer: Uint16Array | null, floorFallback: boolean): void => {
+    const drawLayer = (
+      layer: Uint16Array | null,
+      floorFallback: boolean,
+    ): void => {
       if (!layer) return;
       for (let ly = 0; ly < ct; ly++) {
         for (let lx = 0; lx < ct; lx++) {
@@ -238,16 +257,37 @@ const C_FX_CRIT = Skia.Color("#f2c14e");
 // matchFont NEEDS an explicit family: with none, Android resolves a null
 // typeface and drawText silently draws nothing (iOS falls back to the system
 // font, which is how this hid). Same fix as the gauntlet's renderCombat.
-const FX_FONT_FAMILY = Platform.select({ ios: "Helvetica", default: "sans-serif" });
-const FX_FONT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 26, fontWeight: "bold" });
-const FX_FONT_CRIT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 34, fontWeight: "bold" });
-const NAME_FONT = matchFont({ fontFamily: FX_FONT_FAMILY, fontSize: 12, fontWeight: "600" });
+const FX_FONT_FAMILY = Platform.select({
+  ios: "Helvetica",
+  default: "sans-serif",
+});
+const FX_FONT = matchFont({
+  fontFamily: FX_FONT_FAMILY,
+  fontSize: 26,
+  fontWeight: "bold",
+});
+const FX_FONT_CRIT = matchFont({
+  fontFamily: FX_FONT_FAMILY,
+  fontSize: 34,
+  fontWeight: "bold",
+});
+const NAME_FONT = matchFont({
+  fontFamily: FX_FONT_FAMILY,
+  fontSize: 12,
+  fontWeight: "600",
+});
 
 export interface ArenaRenderInput {
   view: InterpolatedView;
   config: ArenaClientConfig;
-  /** Our slot — the camera follows them; null = spectator (fit the arena). */
+  /** Our slot — identifies the real self for range-ring / ally-pointer logic;
+   *  null = pure spectator (fit the arena). The camera follows this player only
+   *  while they're alive — once dead it follows `spectateId` instead. */
   myId: number | null;
+  /** Death spectator: the living ally the camera trails after we've died. Null
+   *  when we're alive, a pure spectator, or our whole team is down (→ fit the
+   *  bowl). Chosen client-side (GameScreen) — all players are in every snapshot. */
+  spectateId?: number | null;
   screenW: number;
   screenH: number;
   /** Safe-area padding: the OS notch (top) and home-indicator / system tray
@@ -272,28 +312,192 @@ export interface ArenaRenderInput {
   abilityIcons: Partial<Record<AbilityId, SkImage>>;
 }
 
-/** Floor blood (translucent overlaps darken into pools). Round drops are
- * circles; smear decals (dx/dy set) are round-capped streaks. Recorded into
- * the cached scar picture, not per frame — no viewport cull here (the cache is
- * camera-independent; raster quick-rejects offscreen ops by bounds). */
-const drawBlood = (canvas: SkCanvas, blood: readonly BloodDecal[], nowMs: number): void => {
-  fill.setColor(C_BLOOD);
-  stroke.setColor(C_BLOOD);
-  stroke.setStrokeCap(StrokeCap.Round);
+// ── Premium blood material ──────────────────────────────────────────────────
+// Blood reads as gore, not paint, from three things flat circles never had:
+// an irregular silhouette (no circular edge anywhere), tonal depth (near-black
+// core → oxblood → wet arterial edge), and AGE — a spill sets over ~16s then
+// holds, so a still-wet trail means someone bled here seconds ago (a readable
+// freshness signal in a one-life arena, not just eye-candy). All of it is a
+// pure function of data the decal already carries — position, radius, birth,
+// seed — so it costs nothing on the wire and rebuilds inside the same ~5Hz
+// cached scar picture; per-frame cost stays one drawPicture.
+const TAU = Math.PI * 2;
+/** A spill dries fully over this long, then holds coagulated for the rest of
+ *  its ttl. Shorter than the decal lifetime on purpose — the freshness signal
+ *  lives in the first seconds. */
+const BLOOD_DRY_MS = 16_000;
+/** Premium marks sit a touch more solid than the old flat alpha (which was
+ *  tuned for cheap overlapping circles). */
+const BLOOD_ALPHA_BOOST = 1.5;
+const C_SHEEN = Skia.Color("#ffb4aa"); // wet specular, fresh pools only
+
+/** wetness 1 (fresh, bright + wet) → 0 (set, dark + matte). Smoothstep in so it
+ *  looks wet a beat before it starts drying, then holds at 0. */
+const bloodWetness = (ageMs: number): number => {
+  const t = Math.min(1, Math.max(0, ageMs / BLOOD_DRY_MS));
+  return 1 - t * t * (3 - 2 * t);
+};
+
+// Colour ramps baked once (fresh → dried), sampled by wetness — never restring
+// rgba per decal (that floods Skia's colour cache; see the palette note above).
+const RAMP_N = 10;
+const buildRamp = (
+  fresh: readonly [number, number, number],
+  dried: readonly [number, number, number],
+): Float32Array[] => {
+  const out: Float32Array[] = [];
+  for (let i = 0; i < RAMP_N; i++) {
+    const t = i / (RAMP_N - 1);
+    const r = Math.round(fresh[0] + (dried[0] - fresh[0]) * t);
+    const g = Math.round(fresh[1] + (dried[1] - fresh[1]) * t);
+    const b = Math.round(fresh[2] + (dried[2] - fresh[2]) * t);
+    out.push(Skia.Color(`rgb(${r}, ${g}, ${b})`));
+  }
+  return out;
+};
+const RAMP_CORE = buildRamp([42, 6, 4], [24, 8, 5]); // near-black centre
+const RAMP_BODY = buildRamp([104, 18, 12], [52, 15, 9]); // oxblood
+const RAMP_EDGE = buildRamp([158, 32, 22], [74, 27, 19]); // wet arterial rim
+const RAMP_RIM = buildRamp([24, 6, 5], [30, 10, 6]); // coagulated coffee-ring
+const RAMP_CLOT = buildRamp([30, 8, 6], [14, 5, 4]); // tacky centre clot
+/** dryness (1 - wetness) → ramp index. */
+const rampIdx = (w: number): number =>
+  Math.min(RAMP_N - 1, Math.max(0, Math.round((1 - w) * (RAMP_N - 1))));
+
+/** Stable per-decal edge noise — layered sines keyed on the frozen seed so the
+ *  silhouette is irregular but doesn't crawl between rebuilds. */
+const wobble = (seed: number, a: number): number =>
+  0.5 * Math.sin(a * 3 + seed) +
+  0.3 * Math.sin(a * 5 - seed * 1.7 + 1.3) +
+  0.2 * Math.sin(a * 2 + seed * 0.6);
+
+/** A closed, smoothly-rounded irregular blob (no circular edge). */
+const blobPath = (
+  cx: number,
+  cy: number,
+  r: number,
+  seed: number,
+  amp: number,
+) => {
+  const N = 16;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * TAU;
+    const rr = r * (1 + amp * wobble(seed, a));
+    xs.push(cx + Math.cos(a) * rr);
+    ys.push(cy + Math.sin(a) * rr);
+  }
+  const path = Skia.Path.Make();
+  path.moveTo((xs[0]! + xs[N - 1]!) / 2, (ys[0]! + ys[N - 1]!) / 2);
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    path.quadTo(xs[i]!, ys[i]!, (xs[i]! + xs[j]!) / 2, (ys[i]! + ys[j]!) / 2);
+  }
+  path.close();
+  return path;
+};
+
+/** A flung droplet: rounded fat back at (x,y) tapering to a point at
+ *  (x+dx,y+dy) — spray reads as thrown blood, not round dots. */
+const teardropPath = (x: number, y: number, dx: number, dy: number, r: number) => {
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -uy;
+  const ny = ux;
+  const tipx = x + dx;
+  const tipy = y + dy;
+  const bkx = x - ux * r * 1.15;
+  const bky = y - uy * r * 1.15;
+  const path = Skia.Path.Make();
+  path.moveTo(tipx, tipy);
+  path.quadTo(x + nx * r * 1.05, y + ny * r * 1.05, x + nx * r, y + ny * r);
+  path.quadTo(bkx + nx * r * 0.55, bky + ny * r * 0.55, bkx, bky);
+  path.quadTo(bkx - nx * r * 0.55, bky - ny * r * 0.55, x - nx * r, y - ny * r);
+  path.quadTo(x - nx * r * 1.05, y - ny * r * 1.05, tipx, tipy);
+  path.close();
+  return path;
+};
+
+/**
+ * Floor blood. Small drops and flung spray are cheap solid-colour shapes (the
+ * bulk — a kill throws ~90); only the few big pools pay for a tonal radial
+ * gradient, a coagulated rim, a drying clot and a wet sheen. Recorded into the
+ * cached scar picture, not per frame — no viewport cull here (the cache is
+ * camera-independent; raster quick-rejects offscreen ops by bounds).
+ */
+const drawBlood = (
+  canvas: SkCanvas,
+  blood: readonly BloodDecal[],
+  nowMs: number,
+): void => {
   for (const d of blood) {
-    const a = decalAlpha(d, nowMs);
-    if (a <= 0) continue;
+    const life = decalAlpha(d, nowMs) / d.alpha; // fade curve, 1 → 0 at ttl
+    if (life <= 0) continue;
+    const w = bloodWetness(nowMs - d.bornMs);
+    const idx = rampIdx(w);
+    const alpha = Math.min(1, d.alpha * BLOOD_ALPHA_BOOST) * life;
+
+    // Flung spray → tapered teardrop, single solid fill.
     if (d.dx !== undefined && d.dy !== undefined) {
-      stroke.setAlphaf(a);
-      stroke.setStrokeWidth(d.r * 2);
-      canvas.drawLine(d.x, d.y, d.x + d.dx, d.y + d.dy, stroke);
-    } else {
-      fill.setAlphaf(a);
-      canvas.drawCircle(d.x, d.y, d.r, fill);
+      bloodFill.setShader(null);
+      bloodFill.setColor(RAMP_BODY[idx]!);
+      bloodFill.setAlphaf(alpha);
+      canvas.drawPath(teardropPath(d.x, d.y, d.dx, d.dy, Math.max(1, d.r)), bloodFill);
+      continue;
+    }
+
+    // Small drops → one irregular blob, solid fill.
+    if (d.r < 6) {
+      bloodFill.setShader(null);
+      bloodFill.setColor(RAMP_BODY[idx]!);
+      bloodFill.setAlphaf(alpha);
+      canvas.drawPath(blobPath(d.x, d.y, d.r, d.seed, d.r < 4 ? 0.16 : 0.3), bloodFill);
+      continue;
+    }
+
+    // Pools → the full treatment.
+    const dry = 1 - w;
+    const body = blobPath(d.x, d.y, d.r, d.seed, 0.32);
+    bloodFill.setShader(
+      Skia.Shader.MakeRadialGradient(
+        vec(d.x - d.r * 0.15, d.y - d.r * 0.15),
+        d.r * 1.1,
+        [RAMP_CORE[idx]!, RAMP_BODY[idx]!, RAMP_EDGE[idx]!],
+        [0, 0.55, 1],
+        TileMode.Clamp,
+      ),
+    );
+    bloodFill.setAlphaf(alpha);
+    canvas.drawPath(body, bloodFill);
+    bloodFill.setShader(null);
+
+    // Tacky clot sets in the centre as it dries.
+    if (dry > 0.05) {
+      bloodFill.setColor(RAMP_CLOT[idx]!);
+      bloodFill.setAlphaf(Math.min(1, 0.42 * dry) * life);
+      canvas.drawPath(blobPath(d.x, d.y, d.r * 0.6, d.seed * 1.7 + 11, 0.28), bloodFill);
+    }
+
+    // Coffee-ring rim thickens and darkens with age.
+    if (d.r >= 8) {
+      bloodStroke.setColor(RAMP_RIM[idx]!);
+      bloodStroke.setAlphaf(Math.min(1, 0.45 + 0.4 * dry) * life);
+      bloodStroke.setStrokeWidth(Math.max(1, d.r * (0.09 + 0.14 * dry)));
+      canvas.drawPath(body, bloodStroke);
+    }
+
+    // Wet specular sheen — fresh pools only, dies as it sets.
+    if (w > 0.3) {
+      bloodFill.setColor(C_SHEEN);
+      bloodFill.setAlphaf(0.24 * w * life);
+      canvas.drawCircle(d.x - d.r * 0.34, d.y - d.r * 0.44, d.r * 0.6, bloodFill);
     }
   }
-  fill.setAlphaf(1);
-  stroke.setAlphaf(1);
+  bloodFill.setShader(null);
+  bloodFill.setAlphaf(1);
+  bloodStroke.setAlphaf(1);
 };
 
 /**
@@ -302,7 +506,11 @@ const drawBlood = (canvas: SkCanvas, blood: readonly BloodDecal[], nowMs: number
  * feedback): enemy rings gave away their spacing for free; now reading an
  * opponent's reach is a skill. Pure client derivation from snapshot data.
  */
-const drawMyRangeRing = (canvas: SkCanvas, me: PlayerSnapshot, playerRadius: number): void => {
+const drawMyRangeRing = (
+  canvas: SkCanvas,
+  me: PlayerSnapshot,
+  playerRadius: number,
+): void => {
   if (!me.alive) return;
   // reach is measured to the victim's rim, so the strike circle extends one
   // body radius past it (matching hitsInArc's rule).
@@ -393,7 +601,12 @@ const drawPlayer = (
       for (let i = 0; i < 3; i++) {
         const arc = Skia.Path.Make();
         arc.addArc(
-          Skia.XYWHRect(p.x - shieldR - 2, p.y - shieldR - 2, (shieldR + 2) * 2, (shieldR + 2) * 2),
+          Skia.XYWHRect(
+            p.x - shieldR - 2,
+            p.y - shieldR - 2,
+            (shieldR + 2) * 2,
+            (shieldR + 2) * 2,
+          ),
           spin + i * 120,
           55,
         );
@@ -438,7 +651,13 @@ const drawPlayer = (
   // Name tag, small under the body — who is who (dead stay labelled, dimmer).
   fill.setColor(C_NAME);
   fill.setAlphaf(p.alive ? 0.7 : 0.35);
-  canvas.drawText(p.name, p.x - NAME_FONT.getTextWidth(p.name) / 2, p.y + r + 16, fill, NAME_FONT);
+  canvas.drawText(
+    p.name,
+    p.x - NAME_FONT.getTextWidth(p.name) / 2,
+    p.y + r + 16,
+    fill,
+    NAME_FONT,
+  );
   fill.setAlphaf(1);
 
   if (p.alive) {
@@ -542,7 +761,12 @@ const drawFx = (
       const startDeg = (f.angle * 180) / Math.PI - halfDeg;
       const wedge = Skia.Path.Make();
       wedge.moveTo(f.x, f.y);
-      wedge.arcToOval(Skia.XYWHRect(f.x - reach, f.y - reach, reach * 2, reach * 2), startDeg, halfDeg * 2, false);
+      wedge.arcToOval(
+        Skia.XYWHRect(f.x - reach, f.y - reach, reach * 2, reach * 2),
+        startDeg,
+        halfDeg * 2,
+        false,
+      );
       wedge.close();
       fill.setColor(C_FX_NUM);
       fill.setAlphaf(0.16 * f.life);
@@ -574,16 +798,31 @@ const drawFx = (
     } else if (f.text) {
       const font = f.crit ? FX_FONT_CRIT : FX_FONT;
       const rise = (1 - f.life) * 34;
-      fill.setColor(f.crit ? C_FX_CRIT : f.bleed ? C_FX_BLEED : f.heal ? C_FX_HEAL : C_FX_NUM);
+      fill.setColor(
+        f.crit
+          ? C_FX_CRIT
+          : f.bleed
+            ? C_FX_BLEED
+            : f.heal
+              ? C_FX_HEAL
+              : C_FX_NUM,
+      );
       fill.setAlphaf(Math.min(1, f.life * 2));
-      canvas.drawText(f.text, f.x - font.getTextWidth(f.text) / 2, f.y - 26 - rise, fill, font);
+      canvas.drawText(
+        f.text,
+        f.x - font.getTextWidth(f.text) / 2,
+        f.y - 26 - rise,
+        fill,
+        font,
+      );
       fill.setAlphaf(1);
     }
   }
 };
 
 /** Fade a placed thing out over its last half-second. */
-const deployAlpha = (d: DeployableSnapshot): number => Math.min(1, d.lifeLeft / 0.5);
+const deployAlpha = (d: DeployableSnapshot): number =>
+  Math.min(1, d.lifeLeft / 0.5);
 
 /** The enemy sandtrap's occasional tell: a brief glint every few seconds.
  * Returns the flash envelope 0..1 (0 almost always; a short sine bump when
@@ -626,7 +865,12 @@ const drawDeployables = (
       canvas.drawCircle(d.x, d.y, BLOOD_FONT.radius, stroke);
       stroke.setAlphaf((0.2 + 0.4 * beat) * a);
       stroke.setStrokeWidth(2.5);
-      canvas.drawCircle(d.x, d.y, BLOOD_FONT.radius * (0.55 + 0.3 * beat), stroke);
+      canvas.drawCircle(
+        d.x,
+        d.y,
+        BLOOD_FONT.radius * (0.55 + 0.3 * beat),
+        stroke,
+      );
       fill.setAlphaf((0.35 + 0.3 * beat) * a);
       canvas.drawCircle(d.x, d.y, 6, fill); // the font itself
     } else if (d.kind === "sandstorm") {
@@ -652,7 +896,12 @@ const drawDeployables = (
       // A faint inner ring jittering against the rim sells motion cheaply.
       stroke.setAlphaf(0.22 * a);
       stroke.setStrokeWidth(1.5);
-      canvas.drawCircle(d.x, d.y, TREMOR.radius * (0.6 + 0.02 * shudder), stroke);
+      canvas.drawCircle(
+        d.x,
+        d.y,
+        TREMOR.radius * (0.6 + 0.02 * shudder),
+        stroke,
+      );
     } else if (d.kind === "sandtrap") {
       const arming = d.armLeft > 0;
       const mine = d.team === myTeam;
@@ -769,7 +1018,11 @@ const drawSandstormOverlays = (
       stroke.setAlphaf((0.22 + 0.3 * hash01(seed + 4)) * a);
       stroke.setStrokeWidth(2 + 2 * hash01(seed + 5));
       const arc = Skia.Path.Make();
-      arc.addArc(Skia.XYWHRect(d.x - radius, d.y - radius, radius * 2, radius * 2), start % 360, sweep);
+      arc.addArc(
+        Skia.XYWHRect(d.x - radius, d.y - radius, radius * 2, radius * 2),
+        start % 360,
+        sweep,
+      );
       canvas.drawPath(arc, stroke);
     }
   }
@@ -781,7 +1034,11 @@ const drawSandstormOverlays = (
  * pools over old fractures). One prebuilt SkPath per crack (built at spawn in
  * cracks.ts), one drawPath here — per-frame path construction was what made
  * a quake's 128 live cracks cost ~10ms of record time. */
-const drawCracks = (canvas: SkCanvas, cracks: readonly CrackDecal[], nowMs: number): void => {
+const drawCracks = (
+  canvas: SkCanvas,
+  cracks: readonly CrackDecal[],
+  nowMs: number,
+): void => {
   stroke.setColor(C_CRACK);
   stroke.setStrokeCap(StrokeCap.Round);
   stroke.setStrokeJoin(StrokeJoin.Round);
@@ -825,7 +1082,10 @@ const scarLayer = (
 /** Live harpoon chains — taut from each rooted puller to whoever they're
  * hauling in, redrawn from lerped positions every frame so the drag reads as
  * one continuous "against their will" pull. */
-const drawReelChains = (canvas: SkCanvas, players: readonly PlayerSnapshot[]): void => {
+const drawReelChains = (
+  canvas: SkCanvas,
+  players: readonly PlayerSnapshot[],
+): void => {
   for (const p of players) {
     if (p.reeling === null) continue;
     const victim = players.find((v) => v.id === p.reeling);
@@ -841,7 +1101,12 @@ const drawReelChains = (canvas: SkCanvas, players: readonly PlayerSnapshot[]): v
     const dy = victim.y - p.y;
     const links = Math.max(3, Math.floor(Math.hypot(dx, dy) / 34));
     for (let i = 1; i < links; i++) {
-      canvas.drawCircle(p.x + (dx * i) / links, p.y + (dy * i) / links, 1.8, fill);
+      canvas.drawCircle(
+        p.x + (dx * i) / links,
+        p.y + (dy * i) / links,
+        1.8,
+        fill,
+      );
     }
     stroke.setAlphaf(1);
   }
@@ -855,7 +1120,11 @@ const DRUM_BPS = 1.9;
 /** War Drums' moving aura — drawn around every player whose drums are live:
  * the boundary circle, plus beat rings that pound outward from the drummer
  * to the aura's edge, two per cycle like alternating drum hands. */
-const drawDrumAuras = (canvas: SkCanvas, players: readonly PlayerSnapshot[], nowMs: number): void => {
+const drawDrumAuras = (
+  canvas: SkCanvas,
+  players: readonly PlayerSnapshot[],
+  nowMs: number,
+): void => {
   for (const p of players) {
     if (!p.alive) continue;
     const drums = p.abilities.find((s) => s.id === "war-drums");
@@ -875,7 +1144,12 @@ const drawDrumAuras = (canvas: SkCanvas, players: readonly PlayerSnapshot[], now
       const beat = ((nowMs / 1000) * DRUM_BPS + offset) % 1;
       stroke.setAlphaf(0.55 * (1 - beat) * a);
       stroke.setStrokeWidth(3 * (1 - beat) + 1);
-      canvas.drawCircle(p.x, p.y, SIM_PLAYER_RADIUS + beat * (WAR_DRUMS.radius - SIM_PLAYER_RADIUS), stroke);
+      canvas.drawCircle(
+        p.x,
+        p.y,
+        SIM_PLAYER_RADIUS + beat * (WAR_DRUMS.radius - SIM_PLAYER_RADIUS),
+        stroke,
+      );
     }
   }
   fill.setAlphaf(1);
@@ -884,7 +1158,10 @@ const drawDrumAuras = (canvas: SkCanvas, players: readonly PlayerSnapshot[], now
 
 /** Live shots: bow = a short bolt along its travel line; staff = a seeking
  * orb. (The harpoon is an instant chain — it draws as a line FX, not here.) */
-const drawProjectiles = (canvas: SkCanvas, projectiles: readonly ProjectileSnapshot[]): void => {
+const drawProjectiles = (
+  canvas: SkCanvas,
+  projectiles: readonly ProjectileSnapshot[],
+): void => {
   for (const p of projectiles) {
     if (p.kind === "staff") {
       fill.setColor(C_STAFF_ORB);
@@ -907,9 +1184,78 @@ const drawProjectiles = (canvas: SkCanvas, projectiles: readonly ProjectileSnaps
   }
 };
 
+/**
+ * Off-screen ally pointers (Tom, 2026-07-18): a teammate who has wandered out
+ * of frame gets a small team-coloured chevron pinned to the screen edge,
+ * pointing the way to them — so you always know where your team is without
+ * hunting the minimap you don't have. ONLY allies: an enemy pointer would hand
+ * you their position for free, and reading where the other team is should be a
+ * skill (same rule as the range ring and the enemy sandtrap). Drawn in SCREEN
+ * space, so this runs after the camera transform is popped.
+ */
+const ARROW_MARGIN = 26; // px in from the safe-viewport edge — clear of notch/tray
+const ARROW_LEN = 15; // chevron length, tip to base
+const ARROW_HALF = 9; // chevron half-width at its base
+const drawOffscreenAllies = (
+  canvas: SkCanvas,
+  players: readonly PlayerSnapshot[],
+  me: PlayerSnapshot,
+  cx: number,
+  cy: number,
+  zoom: number,
+  vcx: number,
+  vcy: number,
+  left: number,
+  right: number,
+  top: number,
+  bottom: number,
+): void => {
+  const teamColor = me.team === 1 ? C_TEAM1 : C_TEAM2;
+  for (const p of players) {
+    if (p.id === me.id || p.team !== me.team || !p.alive) continue;
+    // Where the ally sits on screen (may be well outside the canvas).
+    const sx = vcx + (p.x - cx) * zoom;
+    const sy = vcy + (p.y - cy) * zoom;
+    // On-screen inside the safe rect → they're visible, no pointer needed.
+    if (sx >= left && sx <= right && sy >= top && sy <= bottom) continue;
+    // March along the ray from screen centre toward the ally to the first edge
+    // of the inset rect — that hit point is where the chevron pins, aimed out.
+    const dx = sx - vcx;
+    const dy = sy - vcy;
+    if (dx === 0 && dy === 0) continue;
+    let t = Infinity;
+    if (dx > 0) t = Math.min(t, (right - vcx) / dx);
+    else if (dx < 0) t = Math.min(t, (left - vcx) / dx);
+    if (dy > 0) t = Math.min(t, (bottom - vcy) / dy);
+    else if (dy < 0) t = Math.min(t, (top - vcy) / dy);
+    if (!(t > 0) || !isFinite(t)) continue;
+    const ex = vcx + dx * t;
+    const ey = vcy + dy * t;
+    // Chevron: tip at the edge point, base pulled back along the ray.
+    const len = Math.hypot(dx, dy);
+    const ax = dx / len;
+    const ay = dy / len;
+    const px = -ay; // unit perpendicular
+    const py = ax;
+    const bcx = ex - ax * ARROW_LEN;
+    const bcy = ey - ay * ARROW_LEN;
+    const arrow = Skia.Path.Make();
+    arrow.moveTo(ex, ey);
+    arrow.lineTo(bcx + px * ARROW_HALF, bcy + py * ARROW_HALF);
+    arrow.lineTo(bcx - px * ARROW_HALF, bcy - py * ARROW_HALF);
+    arrow.close();
+    fill.setColor(teamColor);
+    canvas.drawPath(arrow, fill);
+    stroke.setColor(C_ARROW_EDGE);
+    stroke.setStrokeWidth(1.5);
+    stroke.setStrokeJoin(StrokeJoin.Round);
+    canvas.drawPath(arrow, stroke);
+  }
+};
+
 export const recordArena = (r: ArenaRenderInput): SkPicture =>
   createPicture((canvas) => {
-    const { view, config, myId, screenW, screenH } = r;
+    const { view, config, myId, spectateId, screenW, screenH } = r;
 
     // The camera aims at the SAFE viewport — the band between the top notch and
     // the bottom system tray — not the raw canvas. Baking against this rect
@@ -924,22 +1270,42 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     const vcx = viewW / 2;
     const vcy = padTop + viewH / 2;
 
-    // Camera: follow our player; spectators get the whole arena fitted.
+    // Camera: follow yourself while alive, the spectated ally once you're down,
+    // and fit the whole bowl for a pure spectator or a wiped-out team.
     let zoom: number;
     let cx: number;
     let cy: number;
-    const me = myId === null ? undefined : view.players.find((p) => p.id === myId);
-    if (me) {
+    const me =
+      myId === null ? undefined : view.players.find((p) => p.id === myId);
+    const follow =
+      me && me.alive
+        ? me
+        : me && spectateId != null
+          ? view.players.find((p) => p.id === spectateId)
+          : undefined;
+    if (follow) {
       zoom = FOLLOW_ZOOM;
       const halfW = viewW / 2 / zoom;
       const halfH = viewH / 2 / zoom;
-      cx = Math.min(Math.max(me.x, halfW), WORLD_W - halfW);
-      cy = Math.min(Math.max(me.y, halfH), WORLD_H - halfH);
+      // Clamp is relaxed by CROWD_REVEAL past the sand edge, so fighting near a
+      // wall slides a band of the pit crowd into frame instead of hard void.
+      cx = Math.min(
+        Math.max(follow.x, halfW - CROWD_REVEAL),
+        WORLD_W - halfW + CROWD_REVEAL,
+      );
+      cy = Math.min(
+        Math.max(follow.y, halfH - CROWD_REVEAL),
+        WORLD_H - halfH + CROWD_REVEAL,
+      );
       // A viewport axis larger than the world: just centre it.
       if (halfW * 2 >= WORLD_W) cx = WORLD_W / 2;
       if (halfH * 2 >= WORLD_H) cy = WORLD_H / 2;
     } else {
-      zoom = Math.min(viewW / WORLD_W, viewH / WORLD_H);
+      // Spectators fit the whole bowl — sand PLUS the revealed crowd band.
+      zoom = Math.min(
+        viewW / (WORLD_W + CROWD_REVEAL * 2),
+        viewH / (WORLD_H + CROWD_REVEAL * 2),
+      );
       cx = WORLD_W / 2;
       cy = WORLD_H / 2;
     }
@@ -957,13 +1323,34 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     // smooth downscale under the camera zoom, no nearest-neighbour shimmer.
     const floor = r.atlas ? floorImage(r.atlas) : null;
     if (floor) {
-      canvas.drawImageRectOptions(floor, FLOOR_RECT, FLOOR_RECT, FilterMode.Linear, MipmapMode.None, fill);
+      canvas.drawImageRectOptions(
+        floor,
+        FLOOR_RECT,
+        FLOOR_RECT,
+        FilterMode.Linear,
+        MipmapMode.None,
+        fill,
+      );
     } else {
       fill.setColor(C_FLOOR_EDGE);
       canvas.drawRect(Skia.XYWHRect(0, 0, WORLD_W, WORLD_H), fill);
       fill.setColor(C_FLOOR);
       canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
     }
+
+    // The pit crowd, in the void beyond the sand. LOD is picked from the zoom
+    // inside CROWD.draw: the live culled mob down in the pit, a single baked
+    // still when a spectator fits the whole bowl. The mob does NOT react to
+    // kills — the crowd-roar SFX carries that (a bodily lurch read badly).
+    CROWD.draw(
+      canvas,
+      cx - vcx / zoom,
+      cy - vcy / zoom,
+      cx + (screenW - vcx) / zoom,
+      cy + (screenH - vcy) / zoom,
+      r.nowMs,
+      zoom,
+    );
 
     // Ground scars: the cached world-space picture (cracks under blood),
     // rebuilt at ~5Hz inside scarLayer — one replayed op per frame here.
@@ -974,9 +1361,15 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     // the prop sprite is their visual (docs/design/tilesets.md).
     for (const w of ZONE.walls) {
       fill.setColor(C_WALL);
-      canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h), fill);
+      canvas.drawRect(
+        Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h),
+        fill,
+      );
       fill.setColor(C_WALL_TOP);
-      canvas.drawRect(Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h), fill);
+      canvas.drawRect(
+        Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h),
+        fill,
+      );
     }
 
     if (me) drawMyRangeRing(canvas, me, config.playerRadius);
@@ -992,7 +1385,10 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     const byFeet = [...view.players].sort((a, b) => a.y - b.y);
     let pi = 0;
     for (const prop of PROPS_SORTED) {
-      while (pi < byFeet.length && byFeet[pi]!.y + config.playerRadius <= prop.y) {
+      while (
+        pi < byFeet.length &&
+        byFeet[pi]!.y + config.playerRadius <= prop.y
+      ) {
         drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
         pi++;
       }
@@ -1000,15 +1396,25 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         // Anyone drawn behind this sprite → ease toward see-through; else back
         // to solid. Eased per rendered frame (~60Hz), so ~0.25 reaches the
         // target in a few frames without popping.
-        const covered = view.players.some((p) => hiddenBehind(prop, p, config.playerRadius));
+        const covered = view.players.some((p) =>
+          hiddenBehind(prop, p, config.playerRadius),
+        );
         const target = covered ? FADE_ALPHA : 1;
         prop.fade += (target - prop.fade) * FADE_RATE;
         if (Math.abs(prop.fade - target) < 0.01) prop.fade = target;
         propPaint.setAlphaf(prop.fade);
-        canvas.drawImageRectOptions(r.atlas, prop.src, prop.dst, FilterMode.Nearest, MipmapMode.None, propPaint);
+        canvas.drawImageRectOptions(
+          r.atlas,
+          prop.src,
+          prop.dst,
+          FilterMode.Nearest,
+          MipmapMode.None,
+          propPaint,
+        );
       }
     }
-    for (; pi < byFeet.length; pi++) drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
+    for (; pi < byFeet.length; pi++)
+      drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
 
     drawProjectiles(canvas, view.projectiles);
     drawReelChains(canvas, view.players);
@@ -1017,6 +1423,26 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     drawFx(canvas, r.fx, r.abilityIcons);
 
     canvas.restore();
+
+    // Screen-space overlay (camera popped): pointers to off-screen allies,
+    // pinned to the safe-viewport edge. Only when following a player — a
+    // spectator fitting the whole bowl has everyone in frame already.
+    if (me) {
+      drawOffscreenAllies(
+        canvas,
+        view.players,
+        me,
+        cx,
+        cy,
+        zoom,
+        vcx,
+        vcy,
+        ARROW_MARGIN,
+        screenW - ARROW_MARGIN,
+        padTop + ARROW_MARGIN,
+        screenH - padBottom - ARROW_MARGIN,
+      );
+    }
   });
 
 export const EMPTY_ARENA_PICTURE: SkPicture = createPicture(() => {});

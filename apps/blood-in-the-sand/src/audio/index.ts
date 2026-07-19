@@ -111,6 +111,9 @@ const COMBAT_EVENTS: BitsSoundEvent[] = [
   "harpoonWhip",
   "quakeRumble",
   "heal",
+  // NOT crowdCheer: its 8 long takes (~8s) would over-subscribe the voice pool,
+  // and its ~8s throttle means cheers never fire in a burst — so a cold load on
+  // a clip's first use can't stutter a run of them. Kept cold like the announcer.
 ];
 
 /**
@@ -149,4 +152,54 @@ export const unlockAudio = (): void => {
 export const setAudioMuted = (on: boolean): void => {
   muted = on;
   director?.setMuted(on);
+};
+
+/**
+ * The constant pit-crowd AMBIENCE bed — a looping murmur on the music deck,
+ * UNDER the one-shot crowd-cheer SFX (separate channels, they layer). Rides the
+ * director's crossfade decks (proven in the gauntlet); BITS runs the director as
+ * a singleton with no per-frame music tick, so we snap the deck's fade-in gain
+ * to full once (`tick(9999)`) and drive the AUDIBLE fade on the music BUS via a
+ * small self-contained ramp — no game-loop coupling. Silent until the
+ * `crowd_ambience` clip is forged (crossfadeTo warns once, then nothing plays).
+ */
+const AMBIENCE_BED = "crowd_ambience_1";
+const AMBIENCE_VOLUME = 0.28; // under combat SFX; tune on device
+const AMBIENCE_FADE_MS = 900;
+let ambienceTimer: ReturnType<typeof setInterval> | null = null;
+let musicLevel = 0; // our own mirror of the music-bus level (no getter on the director)
+
+/** Ramp the music bus from its current level to `to` over AMBIENCE_FADE_MS; when
+ *  fading to silence, pause the decks after so nothing loops inaudibly. */
+const fadeMusic = (d: AudioDirector, to: number, stopAtEnd: boolean): void => {
+  if (ambienceTimer) clearInterval(ambienceTimer);
+  const from = musicLevel;
+  const start = Date.now();
+  ambienceTimer = setInterval(() => {
+    const t = Math.min(1, (Date.now() - start) / AMBIENCE_FADE_MS);
+    musicLevel = from + (to - from) * t;
+    d.setMusicVolume(musicLevel);
+    if (t >= 1) {
+      clearInterval(ambienceTimer!);
+      ambienceTimer = null;
+      if (stopAtEnd) d.stopMusic();
+    }
+  }, 33);
+};
+
+/** Start the looping crowd bed — call on entering the arena (GameScreen mount). */
+export const startCrowdAmbience = (): void => {
+  if (devFlags.disableSfx) return; // dev A/B: no audio work at all
+  const { director } = ensure();
+  director.setMusicVolume(0);
+  musicLevel = 0;
+  director.setZone({ beds: { idle: AMBIENCE_BED, combat: AMBIENCE_BED } });
+  director.tick(9999); // snap the crossfade gain to full; the audible fade rides the bus
+  fadeMusic(director, AMBIENCE_VOLUME, false);
+};
+
+/** Fade out and stop the crowd bed — call on leaving the arena (GameScreen unmount). */
+export const stopCrowdAmbience = (): void => {
+  if (!director) return;
+  fadeMusic(director, 0, true);
 };
