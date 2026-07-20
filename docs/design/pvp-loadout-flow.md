@@ -146,6 +146,11 @@ Roster as today (team-split, host crown, connection state), plus:
   auto-armed player gets a beat to see what they were dealt. Uneven teams are
   the host's call; empty seats simply don't spawn. It requires at least one
   player on each team.
+  **Amended 2026-07-19 (protocol v15, [bits-bot-backfill](./bits-bot-backfill.md)):**
+  empty seats no longer go unspawned — a force-start FILLS them with
+  server-run bots (the button shows immediately when seats are empty; the
+  ~30s grace now applies only to the full-room straggler case), and during
+  the 5s countdown of a bot-filled start any seated player may cancel.
 
 ## Information rules
 

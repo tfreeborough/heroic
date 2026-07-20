@@ -515,7 +515,7 @@ describe("straw man", () => {
     expect(dummy).toBeDefined();
     expect(dummy.hp).toBe(STRAW_MAN.hp);
 
-    // Bob slips away; the dummy stands where he was — nearest wins the lock.
+    // Bob slips away; the drop-taunt holds alice on the dummy while he goes.
     const flee = new Map([[1, { seq: 0, sx: 1, sy: 0.5, casts: [] as boolean[] }]]);
     const events = run(sim, 40, () => flee);
     expect(ofType(events, "hit").some((h) => h.event.targetId === dummy.id)).toBe(true);
@@ -532,6 +532,117 @@ describe("straw man", () => {
     expect(sim.state.deployables).toHaveLength(1);
     run(sim, Math.ceil(STRAW_MAN.lifetime / TICK_DT) + 5);
     expect(sim.state.deployables).toHaveLength(0);
+  });
+
+  test("the drop force-locks nearby enemies onto the dummy — hysteresis be damned", () => {
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
+    const alice = sim.state.players[0]!;
+    alice.mover.pos = { x: 200, y: 400 };
+    sim.state.players[1]!.mover.pos = { x: 290, y: 400 };
+
+    run(sim, 2); // alice locks bob — the dummy will spawn at the SAME distance
+    expect(alice.targetId).toBe(1);
+    run(sim, 1, () => press(sim, 1, "straw-man"));
+    const dummy = sim.state.deployables.find((d) => d.kind === "straw-man")!;
+    // Plain nearest-with-hysteresis would keep bob (an equal-distance
+    // challenger never steals a lock) — only the forced hold flips this.
+    expect(alice.tauntLeft).toBeGreaterThan(0);
+    expect(alice.targetId).toBe(dummy.id);
+  });
+
+  test("a windup already in flight falls on the straw — the clutch save", () => {
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    // Bob at the blade's reach EDGE (dist 100, in-range limit ~106): close
+    // enough to be mid-windup fodder, far enough that plain walking clears
+    // the arc before it lands. (No dash here on purpose — the dash SHOVE
+    // would push alice out of reach and the strike would whiff by distance.)
+    alice.mover.pos = { x: 200, y: 400 };
+    bob.mover.pos = { x: 300, y: 400 };
+
+    run(sim, 1); // in blade reach → alice's windup starts, locked on bob
+    expect(alice.attack.phase).toBe("windup");
+    expect(alice.lockedTargetId).toBe(1);
+
+    run(sim, 1, () => press(sim, 1, "straw-man"));
+    const dummy = sim.state.deployables.find((d) => d.kind === "straw-man")!;
+    expect(alice.lockedTargetId).toBe(dummy.id); // the blow is re-aimed mid-swing
+
+    // Bob walks clear while the blow comes down on where he WAS.
+    const flee = new Map([[1, { seq: 0, sx: 1, sy: 0, casts: [] as boolean[] }]]);
+    const events = run(sim, 10, () => flee);
+    const hits = ofType(events, "hit");
+    expect(hits.some((h) => h.event.targetId === dummy.id)).toBe(true);
+    expect(hits.every((h) => h.event.targetId !== 1)).toBe(true);
+    expect(hp(sim, 1)).toBe(100); // the sword fell on straw
+  });
+
+  test("walking the dummy out of your own reach releases the hold early", () => {
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
+    const alice = sim.state.players[0]!;
+    alice.mover.pos = { x: 200, y: 400 };
+    sim.state.players[1]!.mover.pos = { x: 270, y: 400 };
+
+    run(sim, 2);
+    run(sim, 1, () => press(sim, 1, "straw-man"));
+    const dummy = sim.state.deployables.find((d) => d.kind === "straw-man")!;
+    expect(alice.tauntLeft).toBeGreaterThan(0);
+
+    // Blade engagement is 250: ~180px of retreat breaks the hold well before
+    // the 1.5s runs out (40 ticks = 1.33s) — the intended counterplay.
+    const flee = new Map([[0, { seq: 0, sx: -1, sy: 0, casts: [] as boolean[] }]]);
+    run(sim, 40, () => flee);
+    expect(alice.tauntLeft).toBe(0);
+    expect(dummy.hp).toBeGreaterThan(0); // released by range, not by breaking it
+  });
+
+  test("enemies past the taunt radius are never flipped", () => {
+    const sim = makeFight({ w0: "bow", a1: ["straw-man", "dash"] });
+    const alice = sim.state.players[0]!;
+    alice.mover.pos = { x: 120, y: 400 };
+    // 330px out: inside the bow's 380 engagement, past the 310 taunt radius —
+    // a shooter at standoff distance keeps their own aim.
+    sim.state.players[1]!.mover.pos = { x: 450, y: 400 };
+
+    run(sim, 2);
+    expect(alice.targetId).toBe(1);
+    run(sim, 1, () => press(sim, 1, "straw-man"));
+    expect(alice.tauntLeft).toBe(0);
+    expect(alice.targetId).toBe(1);
+  });
+
+  test("breaking the dummy releases the hold; expiry does too", () => {
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
+    const alice = sim.state.players[0]!;
+    // Inside the taunt radius but past blade reach: taunted, no swings land.
+    alice.mover.pos = { x: 200, y: 400 };
+    sim.state.players[1]!.mover.pos = { x: 400, y: 400 };
+
+    run(sim, 2);
+    run(sim, 1, () => press(sim, 1, "straw-man"));
+    const dummy = sim.state.deployables.find((d) => d.kind === "straw-man")!;
+    expect(alice.targetId).toBe(dummy.id);
+
+    run(sim, 20); // 0.7s in: the hold is still on
+    expect(alice.tauntLeft).toBeGreaterThan(0);
+    dummy.hp = 0; // shot out from under the hold
+    run(sim, 2);
+    expect(alice.tauntLeft).toBe(0);
+    expect(alice.targetId).toBe(1); // aim falls straight back to the real bob
+  });
+
+  test("the taunt runs out on its own clock", () => {
+    const sim = makeFight({ a1: ["straw-man", "dash"] });
+    const alice = sim.state.players[0]!;
+    alice.mover.pos = { x: 200, y: 400 };
+    sim.state.players[1]!.mover.pos = { x: 400, y: 400 };
+
+    run(sim, 2);
+    run(sim, 1, () => press(sim, 1, "straw-man"));
+    expect(alice.tauntLeft).toBeGreaterThan(0);
+    run(sim, Math.ceil(STRAW_MAN.tauntDuration / TICK_DT) + 2);
+    expect(alice.tauntLeft).toBe(0);
   });
 });
 

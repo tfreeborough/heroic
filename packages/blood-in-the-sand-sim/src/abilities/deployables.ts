@@ -15,12 +15,12 @@ import { ironhideActive } from "./statuses";
 
 /** Place a deployable at the caster's feet. Sandtrap enforces its one-live-
  * mine rule here: planting a new one fizzles (removes) the old, silently. */
-export const castDeployable = (state: ArenaState, kind: DeployableKind, caster: ArenaPlayer): void => {
+export const castDeployable = (state: ArenaState, kind: DeployableKind, caster: ArenaPlayer): Deployable => {
   if (kind === "sandtrap") {
     const old = state.deployables.findIndex((d) => d.kind === "sandtrap" && d.ownerId === caster.id);
     if (old !== -1) state.deployables.splice(old, 1);
   }
-  state.deployables.push({
+  const placed: Deployable = {
     id: state.nextDeployableId++,
     kind,
     ownerId: caster.id,
@@ -42,7 +42,27 @@ export const castDeployable = (state: ArenaState, kind: DeployableKind, caster: 
     // bites the moment it opens, and all 4 ticks (0/1/2/3s) land safely
     // inside the 4s life (a tick riding exactly on expiry would be dropped).
     tickLeft: kind === "blood-font" ? BLOOD_FONT.tickInterval : 0,
-  });
+  };
+  state.deployables.push(placed);
+  return placed;
+};
+
+/**
+ * The drop-taunt (Tom, 2026-07-20, pvp-abilities.md § Straw Man): every enemy
+ * inside tauntRadius of the fresh dummy has their aim force-locked onto it —
+ * an in-flight windup included, so a blow already coming down falls on straw.
+ * Feet stay free; the hold's per-tick validity (and every early release,
+ * walking-out-of-reach above all) lives in the targeting step.
+ */
+export const applyTaunt = (dummy: Deployable, players: readonly ArenaPlayer[]): void => {
+  for (const e of players) {
+    if (e.team === dummy.team || !e.alive || e.dummy) continue;
+    if (distance(e.mover.pos, dummy.pos) > STRAW_MAN.tauntRadius) continue;
+    e.tauntLeft = STRAW_MAN.tauntDuration;
+    e.tauntTargetId = dummy.id;
+    e.targetId = dummy.id;
+    if (e.attack.phase === "windup") e.lockedTargetId = dummy.id;
+  }
 };
 
 /**

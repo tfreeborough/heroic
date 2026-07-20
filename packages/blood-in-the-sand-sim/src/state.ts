@@ -17,6 +17,7 @@ import {
   type AbilityId,
   type WeaponId,
 } from "./config";
+import { pickTeamNames } from "./teamNames";
 
 export type Team = 1 | 2;
 
@@ -118,6 +119,10 @@ export interface ArenaPlayer {
   slowLeft: number;
   /** Max-speed multiplier while slowLeft > 0 (from the slowing weapon's config). */
   slowFactor: number;
+  /** Permanent max-speed multiplier — HOST-set only (never wire-settable):
+   * the top bot difficulty tiers run 5–10% hot (bot-brains.md, Tom
+   * 2026-07-20 — the one stat difficulty touches; damage/HP stay even). */
+  moveFactor: number;
   /** Kinematic body — handed to stepCrowd, which mutates it in place (state owns it). */
   mover: Mover;
   /** Radians, 0 = +x, clockwise (screen y down). */
@@ -131,6 +136,10 @@ export interface ArenaPlayer {
   lockedTargetId: number | null;
   /** Latched on windupStarted — drives the arc resolve AND the client telegraph. */
   lockedFacing: number;
+  /** Straw Man's hold: seconds this player's aim stays force-locked (0 = free). */
+  tauntLeft: number;
+  /** The dummy id the taunt binds the aim to while tauntLeft > 0. */
+  tauntTargetId: number | null;
   /** The drafted hand at match time, one runtime per pick, in button order. */
   slots: AbilityRuntime[];
   /** Last input seq applied — echoed in snapshots. */
@@ -139,6 +148,12 @@ export interface ArenaPlayer {
    * never swings, and the training pass respawns it after death. Real players
    * are never dummies — only addDummy sets this. */
   dummy: boolean;
+  /** A server-run backfill bot (docs/design/bits-bot-backfill.md): seated by a
+   * host force-start to fill an empty seat, thought for by the server, and
+   * dismissed at every lobby return. Fights exactly like a player — the flag
+   * exists so rooms can tell humans from bots (host succession, GC, the
+   * cancel window, roster markers). Only addBot sets this. */
+  bot: boolean;
   /** Training only: seconds until a dead dummy is replaced; 0 = none pending. */
   respawnLeft: number;
 }
@@ -218,6 +233,11 @@ export const isDeployableId = (id: number): boolean => id >= DEPLOYABLE_ID_BASE;
 
 export interface ArenaState {
   tick: number;
+  /** The two sides' faction names, indexed team − 1 (teamNames.ts). Assigned
+   * at creation from the seed and never touched again — a room wears the same
+   * two names from open to close, rematches included. Pure presentation: the
+   * name is the absolute identity, colour is the relative allegiance cue. */
+  teamNames: [string, string];
   /** Training mode (the dev menu's target-dummy range): rounds never end —
    * checkRoundOver stands down and dead dummies respawn in place instead. */
   training: boolean;
@@ -238,6 +258,7 @@ export interface ArenaState {
 
 export const createArenaState = (seed: number, seatCount: number, training = false): ArenaState => ({
   tick: 0,
+  teamNames: pickTeamNames(seed),
   training,
   seed,
   rngDraws: 0,
@@ -277,6 +298,7 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   dots: [],
   slowLeft: 0,
   slowFactor: 1,
+  moveFactor: 1,
   mover: createMover(spawn.x, spawn.y, PLAYER_RADIUS),
   facing,
   combatant: makeCombatant(PLAYER_STATS),
@@ -284,9 +306,12 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   targetId: null,
   lockedTargetId: null,
   lockedFacing: facing,
+  tauntLeft: 0,
+  tauntTargetId: null,
   slots: [],
   lastSeq: 0,
   dummy: false,
+  bot: false,
   respawnLeft: 0,
 });
 

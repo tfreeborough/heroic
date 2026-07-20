@@ -2,9 +2,12 @@
  * Headless test client — the server's integration test and the app's traffic
  * generator, now rooms-aware. Two of these play full matches, no phones:
  *
- *   bun scripts/bot.ts --name rex  --strategy seek --create          # makes a room, hosts it
- *   bun scripts/bot.ts --name fifi --strategy circle                 # joins the first open room
+ *   bun scripts/bot.ts --name rex  --create                          # makes a room, hosts it
+ *   bun scripts/bot.ts --name fifi --archetype sniper                # joins the first open room
  *   bun scripts/bot.ts --name kilo --room KRVX --pass hunter2        # joins a specific room
+ *
+ * The brain derives its archetype from its (random) loadout; `--archetype`
+ * pins one instead — for testing a specific matchup regardless of the hand.
  *
  * Bots arm the moment they're seated (weapon + hand), so with everyone armed
  * the server's own arming countdown starts each match — nobody presses
@@ -14,17 +17,27 @@
  */
 import {
   ABILITY_IDS,
+  ARCHETYPE_IDS,
+  ARENA_00,
   botThink,
   createBotMemory,
-  nearestEnemy,
+  createBotNav,
+  DEFAULT_DIFFICULTY,
+  deriveArchetype,
+  deriveArenaZone,
   DEFAULT_PORT,
+  DIFFICULTIES,
+  DIFFICULTY_IDS,
   LOADOUT_ABILITY_COUNT,
   PROTOCOL_VERSION,
+  SnapshotHistory,
   TICK_RATE,
   WEAPON_IDS,
   type AbilityId,
-  type BotStrategy,
+  type ArchetypeId,
+  type BotDecision,
   type ClientMsg,
+  type DifficultyId,
   type RoundPhase,
   type ServerMsg,
   type SnapshotMsg,
@@ -39,7 +52,16 @@ const arg = (flag: string, fallback: string): string => {
 const has = (flag: string): boolean => process.argv.includes(flag);
 
 const name = arg("--name", `bot-${Math.floor(Math.random() * 1000)}`);
-const strategy = arg("--strategy", "seek") as BotStrategy;
+/** Pin an archetype regardless of loadout; unset = derive from the hand. */
+const archetypeArg = arg("--archetype", "");
+const archetype: ArchetypeId | undefined = (ARCHETYPE_IDS as readonly string[]).includes(archetypeArg)
+  ? (archetypeArg as ArchetypeId)
+  : undefined;
+/** Execution-quality tier (novice…godlike); default plays like a person. */
+const difficultyArg = arg("--difficulty", "");
+const difficulty: DifficultyId = (DIFFICULTY_IDS as readonly string[]).includes(difficultyArg)
+  ? (difficultyArg as DifficultyId)
+  : DEFAULT_DIFFICULTY;
 const host = arg("--host", "localhost");
 const port = Number(arg("--port", String(DEFAULT_PORT)));
 const matchLimit = Number(arg("--matches", "1"));
@@ -56,11 +78,11 @@ const weapon: WeaponId = (WEAPON_IDS as readonly string[]).includes(weaponArg)
   ? (weaponArg as WeaponId)
   : WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!;
 
-/** The drafted hand: dash first (the only ability this brain casts — see
- * bot.ts's cheapest-v1 rule) plus random filler for the other slots. */
-const abilities: AbilityId[] = ["dash"];
+/** The drafted hand: fully random and distinct — the brain plays its whole
+ * kit (botCasts.ts), so dash is a pick like any other. */
+const abilities: AbilityId[] = [];
 {
-  const pool = ABILITY_IDS.filter((a) => a !== "dash");
+  const pool = [...ABILITY_IDS];
   while (abilities.length < LOADOUT_ABILITY_COUNT) {
     abilities.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
   }
@@ -107,7 +129,7 @@ ws.onmessage = (e) => {
         log("staying unarmed (--noarm) — force-start me");
       } else {
         // Bots arm instantly; the server's countdown does the rest.
-        log(`arming: ${weapon} + [${abilities.join(", ")}]`);
+        log(`arming: ${weapon} + [${abilities.join(", ")}] → ${archetype ?? deriveArchetype(weapon, abilities)}`);
         send({ t: "setWeapon", weapon });
         send({ t: "setAbilities", abilities });
       }
@@ -124,6 +146,7 @@ ws.onmessage = (e) => {
       process.exit(1);
     case "snapshot": {
       latest = msg;
+      history.push(msg);
       const prevPhase = phase;
       phase = msg.round.phase;
       // The lobby return disarms everyone (no auto-rematch by flow) — a bot
@@ -156,18 +179,23 @@ ws.onclose = () => {
 };
 
 // The brain itself lives in the sim package (botThink) — shared with the
-// app's offline practice mode. This script is just its WebSocket body.
-const memory = createBotMemory();
+// app's offline practice mode. This script is just its WebSocket body. The
+// nav grid builds from the same statically-imported arena the server runs
+// (welcome.zoneId asserts both ends agree).
+const memory = createBotMemory((Math.random() * 0x7fffffff) | 0);
+const nav = createBotNav(deriveArenaZone(ARENA_00));
+const history = new SnapshotHistory();
 
-/** One decision per tick, from the latest snapshot. */
-const think = (): { sx: number; sy: number; dash: boolean } => {
-  if (myId === null || latest === null) return { sx: 0, sy: 0, dash: false };
+/** One decision per tick: stale world at the tier's reaction time, current
+ * self (bot-brains.md step 4). */
+const think = (): BotDecision => {
+  if (myId === null || latest === null) return { sx: 0, sy: 0, casts: [] };
   const me = latest.players.find((p) => p.id === myId);
-  return botThink(memory, strategy, me, nearestEnemy(me, latest.players));
+  const world = history.stale(DIFFICULTIES[difficulty].reactionTicks) ?? latest;
+  return botThink(memory, me, world.players, world.deployables, nav, { archetype, difficulty });
 };
 
 setInterval(() => {
   const d = think();
-  // Dash sits in slot 0 by construction (the hand is sent dash-first).
-  send({ t: "input", seq: seq++, sx: d.sx, sy: d.sy, casts: [d.dash, false, false] });
+  send({ t: "input", seq: seq++, sx: d.sx, sy: d.sy, casts: d.casts });
 }, 1000 / TICK_RATE);

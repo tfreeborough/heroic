@@ -26,14 +26,16 @@ import {
   addDummy,
   addPlayer,
   ARENA_00,
-  BOT_STRATEGIES,
   botThink,
   createBotMemory,
+  createBotNav,
   createSim,
+  DEFAULT_DIFFICULTY,
+  DIFFICULTIES,
+  SnapshotHistory,
   forceStartMatch,
   LOADOUT_ABILITY_COUNT,
   makeClientConfig,
-  nearestEnemy,
   setPlayerAbilities,
   setPlayerWeapon,
   SnapshotBuffer,
@@ -47,11 +49,13 @@ import {
   type ArenaEvent,
   type ArenaSim,
   type BotMemory,
-  type BotStrategy,
+  type BotNav,
+  type DifficultyId,
   type RoundPhase,
   type SnapshotMsg,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
+import { devFlags } from "../dev";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
 
 const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus", "Spartacus", "Agron", "Duro"];
@@ -65,10 +69,14 @@ const DUMMY_NAMES = ["Dummy I", "Dummy II", "Dummy III", "Dummy IV", "Dummy V"];
 /** Dev nicety: the range clamps the 5s arming ceremony to a quick beat. */
 const RANGE_ARM_SECONDS = 2;
 
-/** Per-bot brain state — one entry per bot seat (every id except the human's 0). */
+/** Per-bot brain state — one entry per bot seat (every id except the human's
+ * 0). No archetype here: the brain derives it from the bot's own loadout
+ * every tick (botArchetypes.ts), so a re-armed bot re-derives for free. */
 interface BotSeat {
   memory: BotMemory;
-  strategy: BotStrategy;
+  /** Execution-quality tier (botDifficulty.ts) — every practice bot plays
+   * Skilled until the lobby picker lands (bot-brains.md step 5). */
+  difficulty: DifficultyId;
   /** ms after entering the lobby at which this bot arms itself — staggered
    * beats, so the roster ticker flips one by one while you're mid-wizard. */
   armAtMs: number;
@@ -78,11 +86,12 @@ const randomArmBeat = (): number => 1200 + Math.random() * 1800;
 
 const randomWeapon = (): WeaponId => WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!;
 
-/** The bot's hand always leads with dash — the only ability its brain casts
- * (cheapest v1, per pvp-abilities.md); the other slots are random dressing. */
+/** A fully random distinct hand — the brain plays its whole kit now
+ * (botCasts.ts), so bots draft like players do: anything goes, dash is a
+ * pick not a given. Varied hands also exercise every cast rule in practice. */
 const randomHand = (): AbilityId[] => {
-  const pool = ABILITY_IDS.filter((a) => a !== "dash");
-  const hand: AbilityId[] = ["dash"];
+  const pool = [...ABILITY_IDS];
+  const hand: AbilityId[] = [];
   while (hand.length < LOADOUT_ABILITY_COUNT) {
     hand.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
   }
@@ -108,6 +117,11 @@ export class PracticeClient implements LobbyClient {
   readonly mode: PracticeMode;
 
   private readonly sim: ArenaSim;
+  /** Wall-aware routing shared by every bot brain — built once per arena. */
+  private readonly nav: BotNav;
+  /** Snapshot ring the difficulty layer reads — each bot thinks on the
+   * world its tier's reaction time behind (bot-brains.md step 4). */
+  private readonly history = new SnapshotHistory();
   /** Brain state per bot seat, keyed by player id (every id except 0). */
   private readonly bots = new Map<number, BotSeat>();
   private lobbyEnteredMs: number;
@@ -115,10 +129,16 @@ export class PracticeClient implements LobbyClient {
   private lastSnap: SnapshotMsg;
   private seq = 0;
 
-  constructor(playerName: string, teamSize: number = 1, mode: PracticeMode = "bot") {
+  constructor(
+    playerName: string,
+    teamSize: number = 1,
+    mode: PracticeMode = "bot",
+    difficulty: DifficultyId = DEFAULT_DIFFICULTY,
+  ) {
     this.mode = mode;
     // Practice needn't be replayable — wall-clock seeding is fine here.
     this.sim = createSim(ARENA_00, Date.now() >>> 0, teamSize, mode === "dummies");
+    this.nav = createBotNav(this.sim.zone);
 
     // The human takes seat 0. In bot mode, bots fill every other seat, BOTH
     // teams — assignment is the production addPlayer path (random-balanced),
@@ -136,8 +156,8 @@ export class PracticeClient implements LobbyClient {
       for (let i = 0; i < teamSize * 2 - 1; i++) {
         const bot = addPlayer(this.sim, names[i % names.length]!)!;
         this.bots.set(bot.id, {
-          memory: createBotMemory(),
-          strategy: BOT_STRATEGIES[Math.floor(Math.random() * BOT_STRATEGIES.length)]!,
+          memory: createBotMemory((Math.random() * 0x7fffffff) | 0),
+          difficulty,
           armAtMs: randomArmBeat(),
         });
       }
@@ -149,6 +169,7 @@ export class PracticeClient implements LobbyClient {
       playerId: me.id,
       team: me.team,
       teamSize,
+      teamNames: this.sim.state.teamNames,
       roomCode: "BOT",
       roomName:
         mode === "dummies"
@@ -256,11 +277,22 @@ export class PracticeClient implements LobbyClient {
     const inputs = new Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>();
     inputs.set(0, { seq: this.seq++, sx, sy, casts });
     for (const [id, seat] of this.bots) {
+      // Stale WORLD, current self: the tier's reaction time is how old a view
+      // of everyone else this bot acts on; its own body it always knows. The
+      // dev menu's session overrides trump the lobby pick (bits-dev-menu.md).
+      const difficulty = devFlags.botDifficulty ?? seat.difficulty;
+      const tier = DIFFICULTIES[difficulty];
+      // The tier's speed multiplier is a HOST-side sim write (never on the
+      // wire) — re-asserted each tick so a dev-menu tier flip applies live.
+      const body = this.sim.state.players[id];
+      if (body) body.moveFactor = tier.speedFactor;
+      const world = this.history.stale(tier.reactionTicks) ?? this.lastSnap;
       const snap = this.lastSnap.players.find((p) => p.id === id);
-      const decision = botThink(seat.memory, seat.strategy, snap, nearestEnemy(snap, this.lastSnap.players));
-      // The brain's dash flag lands on whichever slot holds dash in this bot's hand.
-      const botCasts = (this.sim.state.players[id]?.slots ?? []).map((s) => decision.dash && s.id === "dash");
-      inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: botCasts });
+      const decision = botThink(seat.memory, snap, world.players, world.deployables, this.nav, {
+        difficulty,
+        archetype: devFlags.botArchetype ?? undefined,
+      });
+      inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
     }
     this.step(inputs);
   }
@@ -268,6 +300,7 @@ export class PracticeClient implements LobbyClient {
   private step(inputs: Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>): void {
     const events = stepSim(this.sim, inputs, TICK_DT);
     this.lastSnap = toSnapshot(this.sim.state, events);
+    this.history.push(this.lastSnap);
     const drained = this.buffer.push(this.lastSnap, performance.now());
     if (drained.length > 0) this.onEvents?.(drained);
     if (this.lastSnap.round.phase !== this.phase) {

@@ -92,8 +92,32 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * hands off to another seated player and the room lives on — it only closes
  * when the LAST player is gone. Adds `notice` (server→client) for the
  * "X left — Y is now the host" lobby banner.
+ * v15 (2026-07-19): bot backfill + team switching (bits-bot-backfill.md). A
+ * host force-start now FILLS empty seats with server-run bots (previously it
+ * waived them) — the same 5s countdown runs, and during it any seated player
+ * may `cancelStart` (the veto: you queued for humans; bots dismissed, lobby
+ * restored). `switchTeam` hops the sender to the other side when it has a
+ * free seat (random-balanced assignment can split a couple who wanted to
+ * fight each other). RoomStatePlayer gains `bot` (roster markers + the
+ * cancel button's visibility). Cancel announcements reuse `notice`.
+ * v16 (2026-07-20): team identity (bits-bot-backfill.md § team identity). Each
+ * side gets a persistent COLOUR-NEUTRAL faction name, born with the room and
+ * stable until it closes; `welcome` carries `teamNames` ([team 1, team 2]).
+ * Colour flips from absolute (was: team 1 red / team 2 blue everywhere) to
+ * RELATIVE — your side is always blue, the enemy always red, in lobby AND
+ * match — so the name is the shared identity and the colour is the allegiance
+ * cue. Only the welcome shape changes on the wire (names ride it once; they're
+ * fixed for the room's life, so nothing per-tick); the colour flip is
+ * client-only. The added welcome field is a compatibility contract, so the
+ * version gates it.
+ * v17 (2026-07-20): Straw Man REWORKED into a drop-taunt (pvp-abilities.md §
+ * Straw Man): enemies inside the taunt radius at cast are force-locked onto
+ * the dummy — an in-flight windup included — until the hold runs out, the
+ * dummy stops being a legal mark, or they walk it out of their own weapon's
+ * engagement radius. PlayerSnapshot gains `tauntLeft` (the victim's straw
+ * status ring; the aim ring snapping to the dummy carries the rest).
  */
-export const PROTOCOL_VERSION = 14;
+export const PROTOCOL_VERSION = 17;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
@@ -110,9 +134,17 @@ export type ClientMsg =
   | { t: "setWeapon"; weapon: WeaponId }
   /** The whole picked hand each change (idempotent) — same gate as setWeapon. */
   | { t: "setAbilities"; abilities: AbilityId[] }
-  /** Host-only AFK backstop: random-fill every unarmed seat, then the normal
-   * 5s arming countdown runs (never instant). Ignored from non-hosts. */
+  /** Host-only: fill every empty seat with a bot AND random-fill every
+   * unarmed straggler, then the normal 5s arming countdown runs (never
+   * instant). Ignored from non-hosts. */
   | { t: "forceStart" }
+  /** Any seated player's veto on a bot-filled countdown: bots dismissed,
+   * countdown stopped, lobby restored (bits-bot-backfill.md). Ignored unless
+   * a countdown with bots in it is running. */
+  | { t: "cancelStart" }
+  /** Hop to the other team — lobby only, and only while the other side has a
+   * free seat (the sim re-checks). Loadout survives the hop. */
+  | { t: "switchTeam" }
   /** Liveness heartbeat — the quiet lobby's "still here" (a match already
    * streams input). Any inbound message counts as alive; this is the one a
    * seated-but-idle client sends on its own timer (HEARTBEAT_INTERVAL_MS). */
@@ -171,6 +203,9 @@ export interface PlayerSnapshot {
   /** Seconds until the last pending bleed tick lands (0 = clean) — the red
    * status ring, same pulse rule. */
   bleedLeft: number;
+  /** Seconds left on a Straw Man's forced lock (0 = free aim) — the straw
+   * status ring, same pulse rule. */
+  tauntLeft: number;
   /** The picked hand in button order. Scrubbed to [] alongside `weapon` in
    * the lobby. In-match it IS broadcast (cooldown clocks need it), but the
    * client renders enemy abilities only as they're cast — the cast flash. */
@@ -202,6 +237,9 @@ export interface RoomStatePlayer {
   abilities: AbilityId[] | null;
   /** Public: weapon + full hand picked — enemies see "armed"/"choosing…". */
   armed: boolean;
+  /** A server-run backfill bot — drives roster markers and the countdown
+   * veil's cancel button (only a bot-filled start is cancellable). */
+  bot: boolean;
 }
 
 /** A live shot, projected for rendering (the client lerps x/y/angle by id). */
@@ -262,6 +300,10 @@ export type ServerMsg =
       /** Players per side — the client renders capacity (2×N) and empty-seat
        * rows from this. Per-room, like zoneId, so NOT in ArenaClientConfig. */
       teamSize: number;
+      /** The two sides' faction names, [team 1, team 2] — fixed for the room's
+       * life (teamNames.ts). Both clients get the same array; each renders its
+       * own side blue and the other red. */
+      teamNames: [string, string];
       roomCode: string;
       roomName: string;
       hostId: number;

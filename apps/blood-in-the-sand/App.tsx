@@ -229,7 +229,7 @@ export default function App() {
     screen = !practice ? (
       <PracticeScreen
         onBack={() => setRoute("home")}
-        onStart={(name, teamSize) => setPractice(new PracticeClient(name, teamSize))}
+        onStart={(name, teamSize, difficulty) => setPractice(new PracticeClient(name, teamSize, "bot", difficulty))}
       />
     ) : practice.phase === "lobby" ? (
       <RoomScreen client={practice} onLeave={endPractice} />

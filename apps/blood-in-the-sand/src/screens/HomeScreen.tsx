@@ -4,6 +4,7 @@ import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Blur, Canvas, Fill, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
+import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
 import { playSound, unlockAudio, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
 import { DUST_EFFECT } from "./dustStorm";
@@ -310,6 +311,8 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
   const [perfOverlay, setPerfOverlay] = useState(devFlags.perfOverlay);
   const [sfxOff, setSfxOff] = useState(devFlags.disableSfx);
   const [hapticsOff, setHapticsOff] = useState(devFlags.disableHaptics);
+  const [botArchetype, setBotArchetype] = useState(devFlags.botArchetype);
+  const [botDifficulty, setBotDifficulty] = useState(devFlags.botDifficulty);
   const knock = useRef({ count: 0, lastMs: 0 });
 
   const scene = useMemo(() => makeHighSunPicture(width, height), [width, height]);
@@ -371,6 +374,23 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
   const onToggleHaptics = (): void => {
     devFlags.disableHaptics = !devFlags.disableHaptics;
     setHapticsOff(devFlags.disableHaptics);
+  };
+
+  // Matchup testing (bot-brains.md step 5): cycle every practice bot through
+  // a pinned archetype / difficulty; null = the normal behaviour (archetype
+  // from loadout, tier from the practice lobby's pick).
+  const onCycleBotArchetype = (): void => {
+    const ring = [null, ...ARCHETYPE_IDS] as const;
+    const next = ring[(ring.indexOf(devFlags.botArchetype) + 1) % ring.length]!;
+    devFlags.botArchetype = next;
+    setBotArchetype(next);
+  };
+
+  const onCycleBotDifficulty = (): void => {
+    const ring = [null, ...DIFFICULTY_IDS] as const;
+    const next = ring[(ring.indexOf(devFlags.botDifficulty) + 1) % ring.length]!;
+    devFlags.botDifficulty = next;
+    setBotDifficulty(next);
   };
 
   // Deliberately silent until the fifth tap — a secret shouldn't click.
@@ -493,6 +513,17 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
               feedback generator per pulse). */}
           <Pressable onPress={withTap("uiTap", onToggleHaptics)} style={styles.devButton}>
             <Text style={styles.devButtonText}>HAPTICS {hapticsOff ? "○ KILLED" : "◉ ON"}</Text>
+          </Pressable>
+          {/* Bot-brain overrides for practice matchup testing — tap to cycle. */}
+          <Pressable onPress={withTap("uiTap", onCycleBotArchetype)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              BOT BRAIN {botArchetype ? `◉ ${botArchetype.toUpperCase()}` : "○ FROM LOADOUT"}
+            </Text>
+          </Pressable>
+          <Pressable onPress={withTap("uiTap", onCycleBotDifficulty)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              BOT TIER {botDifficulty ? `◉ ${botDifficulty.toUpperCase()}` : "○ FROM LOBBY"}
+            </Text>
           </Pressable>
         </View>
       )}

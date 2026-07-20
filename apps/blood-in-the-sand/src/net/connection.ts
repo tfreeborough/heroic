@@ -57,6 +57,9 @@ export interface WelcomeInfo {
   team: Team;
   /** Players per side — capacity (2×N) and empty-seat rows derive from this. */
   teamSize: number;
+  /** The two sides' faction names, [team 1, team 2] — your side renders blue,
+   * the other red (bits-bot-backfill.md § team identity). */
+  teamNames: [string, string];
   roomCode: string;
   roomName: string;
   hostId: number;
@@ -109,8 +112,16 @@ export interface LobbyClient extends GameClient {
   readonly myAbilities: AbilityId[];
   setWeapon(weapon: WeaponId): void;
   setAbilities(abilities: AbilityId[]): void;
-  /** Host-only AFK backstop: auto-arm the stragglers; the countdown follows. */
+  /** Host-only: bots fill the empty seats, stragglers auto-arm; the countdown
+   * follows (bits-bot-backfill.md). */
   forceStart(): void;
+  /** Any seated player's veto on a bot-filled countdown. OPTIONAL — real
+   * rooms only; practice never reaches a cancellable state (its bots seat at
+   * construction, so the roster is always full). */
+  cancelStart?(): void;
+  /** Hop to the other team while it has a free seat. OPTIONAL like
+   * cancelStart — practice rooms are always full, so there's nowhere to hop. */
+  switchTeam?(): void;
 }
 
 export class ArenaClient {
@@ -183,6 +194,7 @@ export class ArenaClient {
           playerId: msg.playerId,
           team: msg.team,
           teamSize: msg.teamSize,
+          teamNames: msg.teamNames,
           roomCode: msg.roomCode,
           roomName: msg.roomName,
           hostId: msg.hostId,
@@ -195,10 +207,16 @@ export class ArenaClient {
         this.buffer.reset(); // a new room's tick counter starts over
         this.onChange?.();
         return;
-      case "roomState":
+      case "roomState": {
         this.roomState = { players: msg.players, hostId: msg.hostId };
+        // A SWITCH SIDE hop changes our team server-side; welcome was stamped
+        // at join. Sync it here so every welcome.team reader (GameScreen's
+        // friend/foe tint, the lobby's YOUR TEAM grouping) follows the hop.
+        const mine = msg.players.find((p) => p.id === this.welcome?.playerId);
+        if (this.welcome && mine) this.welcome.team = mine.team;
         this.onChange?.();
         return;
+      }
       case "rooms":
         this.rooms = msg.rooms;
         this.onChange?.();
@@ -277,9 +295,20 @@ export class ArenaClient {
     this.send({ t: "setAbilities", abilities });
   }
 
-  /** Host-only: auto-arm the stragglers; the server ignores it from others. */
+  /** Host-only: fill empty seats with bots + auto-arm the stragglers; the
+   * server ignores it from others. */
   forceStart(): void {
     this.send({ t: "forceStart" });
+  }
+
+  /** The veto — the server ignores it unless a bot-filled countdown runs. */
+  cancelStart(): void {
+    this.send({ t: "cancelStart" });
+  }
+
+  /** SWITCH SIDE — the server ignores it unless the other side has a seat. */
+  switchTeam(): void {
+    this.send({ t: "switchTeam" });
   }
 
   /** Our own row in the latest team-filtered roomState broadcast. */

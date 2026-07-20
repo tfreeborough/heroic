@@ -6,9 +6,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ABILITIES,
+  DEFAULT_DIFFICULTY,
+  DIFFICULTY_IDS,
   LOADOUT_ABILITY_COUNT,
   WEAPONS,
   type AbilityId,
+  type DifficultyId,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 
@@ -48,4 +51,20 @@ export const loadLastLoadout = async (): Promise<SavedLoadout | null> => {
 
 export const saveLastLoadout = (loadout: SavedLoadout): void => {
   void AsyncStorage.setItem(KEY_LAST_LOADOUT, JSON.stringify(loadout));
+};
+
+/** The practice lobby's bot difficulty pick (bot-brains.md step 5) —
+ * remembered so climbing the ladder doesn't mean re-picking every visit.
+ * Validated against the live tier list on load. */
+const KEY_BOT_DIFFICULTY = "bits.botDifficulty";
+
+export const loadBotDifficulty = async (): Promise<DifficultyId> => {
+  const raw = await AsyncStorage.getItem(KEY_BOT_DIFFICULTY);
+  return raw !== null && (DIFFICULTY_IDS as readonly string[]).includes(raw)
+    ? (raw as DifficultyId)
+    : DEFAULT_DIFFICULTY;
+};
+
+export const saveBotDifficulty = (difficulty: DifficultyId): void => {
+  void AsyncStorage.setItem(KEY_BOT_DIFFICULTY, difficulty);
 };

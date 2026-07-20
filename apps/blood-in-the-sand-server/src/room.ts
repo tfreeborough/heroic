@@ -16,8 +16,17 @@ import {
   PROTOCOL_VERSION,
   SNAPSHOT_DIVISOR,
   TICK_DT,
+  addBot,
   addPlayer,
+  armingComplete,
+  botThink,
+  cancelStart,
+  createBotMemory,
+  createBotNav,
   createSim,
+  DEFAULT_DIFFICULTY,
+  DIFFICULTIES,
+  SnapshotHistory,
   forceStartMatch,
   makeClientConfig,
   markDisconnected,
@@ -29,18 +38,26 @@ import {
   setPlayerAbilities,
   setPlayerWeapon,
   stepSim,
+  switchTeam,
   toRoomStatePlayers,
   toSnapshot,
   type ArenaEvent,
   type ArenaSim,
+  type BotMemory,
+  type BotNav,
   type ClientMsg,
   type PlayerInput,
   type RoomListing,
   type ServerMsg,
+  type SnapshotMsg,
   type AbilityId,
   type Team,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
+
+/** Backfill-bot names — distinct from the app's practice roster so "who's a
+ * bot" stays legible in mixed rooms even before the roster marker lands. */
+const BOT_NAMES = ["Priscus", "Verus", "Tetraites", "Flamma", "Carpophorus", "Attilius", "Amazon", "Achillia"];
 
 export interface ClientData {
   roomCode: string | null;
@@ -77,6 +94,21 @@ export class Room {
   private readonly inputs = new Map<number, PlayerInput>();
   /** Per-player OR-latch of ability presses since the last simulated step. */
   private readonly castLatch = new Map<number, boolean[]>();
+  /** Brains for backfill-bot seats (bits-bot-backfill.md), keyed by player id.
+   * The sim owns the SEATS (addBot/cancelStart/lobby-return dismissal); this
+   * map only holds what thinks for them — reaped whenever a seat stops being
+   * a bot. The brain itself is a black-box sim import, exactly as the app's
+   * practice mode runs it. */
+  private readonly botSeats = new Map<number, { memory: BotMemory }>();
+  /** Wall-aware routing shared by every bot brain — built once per arena. */
+  private readonly nav: BotNav;
+  /** Snapshot ring the difficulty layer reads — each bot acts on the world
+   * its tier's reaction time behind (bot-brains.md step 4; every backfill
+   * bot plays the default tier until a room picker exists, step 5). */
+  private readonly history = new SnapshotHistory();
+  /** The last broadcast snapshot — bots read broadcasts, not live state:
+   * they see exactly what a client sees. */
+  private lastSnap: SnapshotMsg | null = null;
   private eventBuffer: ArenaEvent[] = [];
   private lastRoomStateKey = "";
 
@@ -84,6 +116,7 @@ export class Room {
     this.server = server;
     this.meta = meta;
     this.sim = createSim(ARENA_00, seed, teamSize);
+    this.nav = createBotNav(this.sim.zone);
     this.emptySinceMs = nowMs; // occupied the moment the creator is seated
   }
 
@@ -91,15 +124,18 @@ export class Room {
     return `room:${this.meta.code}`;
   }
 
+  /** Connected HUMANS — bots never count as occupancy: not in the listing,
+   * never keeping a room alive, never holding off the GC. */
   connectedCount(): number {
-    return seatedPlayers(this.sim.state).filter((p) => p.connected).length;
+    return seatedPlayers(this.sim.state).filter((p) => p.connected && !p.bot).length;
   }
 
-  /** No bodies left at all — every seat freed. (Distinct from "no CONNECTED
-   * seats": mid-match, disconnected players keep their idling seat for the
-   * rejoin-resume window, so such a room is NOT deserted and must survive.) */
+  /** No human bodies left at all — every human seat freed. (Distinct from "no
+   * CONNECTED seats": mid-match, disconnected players keep their idling seat
+   * for the rejoin-resume window, so such a room is NOT deserted and must
+   * survive. Bots don't count — a bots-only room is a dead room.) */
   isDeserted(): boolean {
-    return seatedPlayers(this.sim.state).length === 0;
+    return seatedPlayers(this.sim.state).filter((p) => !p.bot).length === 0;
   }
 
   listing(): RoomListing {
@@ -113,8 +149,13 @@ export class Room {
     };
   }
 
+  /** A truly free seat, or one a bot is only KEEPING WARM: while the phase is
+   * still "lobby" (the bot-filled 5s window included) a human joiner outranks
+   * the bots — seat() stands them down. A force-start is a soft commit, never
+   * a door slammed on real players. */
   hasFreeSeatInLobby(): boolean {
-    return this.sim.state.round.phase === "lobby" && this.sim.state.players.includes(null);
+    if (this.sim.state.round.phase !== "lobby") return false;
+    return this.sim.state.players.includes(null) || seatedPlayers(this.sim.state).some((p) => p.bot);
   }
 
   hasDisconnectedSeat(): boolean {
@@ -133,6 +174,14 @@ export class Room {
       reconnectPlayer(this.sim, ghost.id, name);
       playerId = ghost.id;
     } else {
+      // A human arriving during the bot-filled window: the bots stand down
+      // (cancelStart frees their seats and stops the countdown) and the
+      // joiner takes a real seat. The host can simply force again.
+      if (!this.sim.state.players.includes(null) && cancelStart(this.sim)) {
+        this.dismissBotBrains();
+        this.notice(`${name} arrives — the bots stand down.`);
+        console.log(`[${this.meta.code}] ${name} joined mid-bot-countdown — bots dismissed`);
+      }
       playerId = addPlayer(this.sim, name)?.id ?? null;
     }
     if (playerId === null) return null;
@@ -153,6 +202,7 @@ export class Room {
       playerId,
       team: player.team,
       teamSize: this.sim.state.players.length / 2,
+      teamNames: this.sim.state.teamNames,
       roomCode: this.meta.code,
       roomName: this.meta.name,
       hostId: this.meta.hostId,
@@ -246,8 +296,9 @@ export class Room {
    * null if the current host is fine. Idempotent: a no-op on a healthy room.
    */
   reassignHost(nowMs: number): { from: string; to: string } | "empty" | null {
+    // Humans only — the crown can never land on a bot.
     const connected = seatedPlayers(this.sim.state)
-      .filter((p) => p.connected)
+      .filter((p) => p.connected && !p.bot)
       .map((p) => p.id);
     const next = nextHost(connected, this.meta.hostId);
     if (next === null) return "empty";
@@ -267,15 +318,80 @@ export class Room {
     this.broadcast({ t: "notice", text });
   }
 
-  /** The host's start-early control: fills every unarmed seat AND overrides
-   * the full-room gate on a partial lobby, then the sim's own 5s arming
-   * countdown runs (the machine notices the gate passing — the server never
-   * starts a match; pvp-loadout-flow.md). */
+  /** The host's start-early control (bits-bot-backfill.md): every EMPTY seat
+   * fills with a server-run bot, every unarmed straggler is random-armed, and
+   * the sim's own 5s arming countdown runs (the machine notices the room
+   * turning full-and-armed — the server never starts a match;
+   * pvp-loadout-flow.md). During that countdown any seated player may cancel. */
   forceStart(playerId: number, nowMs: number): void {
     if (playerId !== this.meta.hostId) return;
+    if (this.sim.state.round.phase !== "lobby") return;
+
+    const added: number[] = [];
+    while (this.sim.state.players.includes(null)) {
+      const bot = addBot(this.sim, this.pickBotName());
+      if (!bot) break;
+      added.push(bot.id);
+      // No archetype stored: the brain derives it from the loadout the force
+      // sweep is about to draft (and re-derives if the bot ever re-arms).
+      // Seed by seat so same-tier bots don't roll their dice in lockstep.
+      this.botSeats.set(bot.id, { memory: createBotMemory(0x9e3779b9 ^ bot.id) });
+      // The tier's speed multiplier (1 at the default tier today; a room
+      // difficulty picker would set it here).
+      bot.moveFactor = DIFFICULTIES[DEFAULT_DIFFICULTY].speedFactor;
+    }
+    // The fill leaves the fresh bots unarmed, so the force sweep below always
+    // has work — it drafts their loadouts (and any AFK human's) from the sim
+    // rng, then the arming gate passes on the now-full room.
     if (forceStartMatch(this.sim)) {
-      console.log(`[${this.meta.code}] host force-started — stragglers auto-armed, empty seats waived`);
+      console.log(
+        `[${this.meta.code}] host force-started — ${added.length} bot${added.length === 1 ? "" : "s"} seated, stragglers auto-armed`,
+      );
+    } else if (added.length > 0) {
+      // The force was rejected under us (e.g. a lone unarmed host) — never
+      // leave unarmed bots squatting the lobby.
+      for (const id of added) removePlayer(this.sim, id);
+      this.dismissBotBrains();
+    }
+    this.syncRoomState(nowMs);
+  }
+
+  /** Any seated player's veto on a bot-filled countdown (the sim gates it):
+   * bots stand down, the countdown stops, and a notice names the canceller —
+   * social pressure is the v1 anti-grief mechanism. */
+  cancelStart(playerId: number, nowMs: number): void {
+    const player = this.sim.state.players[playerId];
+    if (!player || player.bot) return;
+    if (cancelStart(this.sim)) {
+      this.dismissBotBrains();
+      this.notice(`${player.name} cancelled the start — the bots stand down.`);
+      console.log(`[${this.meta.code}] ${player.name} cancelled the bot-filled start`);
       this.syncRoomState(nowMs);
+    }
+  }
+
+  /** SWITCH SIDE — the sim validates (lobby only, free seat across the sand). */
+  switchTeam(playerId: number, nowMs: number): void {
+    if (switchTeam(this.sim, playerId)) this.syncRoomState(nowMs);
+  }
+
+  /** A fresh arena name not already on the roster (sim-rng, deterministic). */
+  private pickBotName(): string {
+    const taken = new Set(seatedPlayers(this.sim.state).map((p) => p.name));
+    const free = BOT_NAMES.filter((n) => !taken.has(n));
+    const pool = free.length > 0 ? free : BOT_NAMES;
+    return pool[Math.floor(this.sim.rng.next() * pool.length)]!;
+  }
+
+  /** Drop brains (and buffered inputs) for seats that are no longer bots —
+   * after a cancel, a join-over-bots, or the lobby return's dismissal. */
+  private dismissBotBrains(): void {
+    for (const id of [...this.botSeats.keys()]) {
+      if (!this.sim.state.players[id]?.bot) {
+        this.botSeats.delete(id);
+        this.inputs.delete(id);
+        this.castLatch.delete(id);
+      }
     }
   }
 
@@ -301,6 +417,17 @@ export class Room {
 
   /** Advance `steps` fixed ticks and broadcast. Called by the manager's loop. */
   step(steps: number, nowMs: number): void {
+    // Bots exist only while their start is live: a countdown running (or about
+    // to — the gate holds and the machine starts it this tick) or a match on.
+    // Any OTHER lobby state means the start died some way cancelStart didn't
+    // see — a leaver, a heartbeat drop — and the squatters stand down so real
+    // players can take the seats back.
+    const { round } = this.sim.state;
+    if (round.phase === "lobby" && round.timer <= 0 && !armingComplete(this.sim)) {
+      for (const p of seatedPlayers(this.sim.state)) if (p.bot) removePlayer(this.sim, p.id);
+      this.dismissBotBrains();
+    }
+    this.thinkBots();
     const noCasts: boolean[] = [];
     for (let i = 0; i < steps; i++) {
       const stepInputs = new Map<number, PlayerInput>();
@@ -314,13 +441,40 @@ export class Room {
     this.logEvents();
 
     if (this.sim.state.tick % SNAPSHOT_DIVISOR === 0) {
-      this.broadcast(toSnapshot(this.sim.state, this.eventBuffer));
+      this.lastSnap = toSnapshot(this.sim.state, this.eventBuffer);
+      this.history.push(this.lastSnap);
+      this.broadcast(this.lastSnap);
       this.eventBuffer = [];
     }
 
-    // The sim itself can change membership (ghost seats freed at lobby return)
-    // — diffing here catches that without event plumbing.
+    // The sim itself can change membership (ghost seats freed at lobby return,
+    // bots dismissed with it) — diffing here catches that without event
+    // plumbing; the brain reap rides the same beat.
+    this.dismissBotBrains();
     this.syncRoomState(nowMs);
+  }
+
+  /** One decision per bot seat per manager beat, exactly the practice-mode
+   * loop server-side: read the last BROADCAST snapshot (what any client sees),
+   * emit one input. Casts ride the same OR-latch as socket presses. Bots
+   * stand still through the lobby (armed statues until the countdown ends the
+   * phase — there is nothing to move toward yet). */
+  private thinkBots(): void {
+    if (this.botSeats.size === 0 || this.lastSnap === null) return;
+    if (this.sim.state.round.phase === "lobby") return;
+    const world = this.history.stale(DIFFICULTIES[DEFAULT_DIFFICULTY].reactionTicks) ?? this.lastSnap;
+    for (const [id, seat] of this.botSeats) {
+      // Stale WORLD, current self (bot-brains.md step 4).
+      const snap = this.lastSnap.players.find((p) => p.id === id);
+      const decision = botThink(seat.memory, snap, world.players, world.deployables, this.nav);
+      const input = sanitizeInput({ seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
+      this.inputs.set(id, input);
+      if (input.casts.some(Boolean)) {
+        const latch = this.castLatch.get(id) ?? input.casts.map(() => false);
+        for (let i = 0; i < input.casts.length; i++) latch[i] = latch[i] || input.casts[i]!;
+        this.castLatch.set(id, latch);
+      }
+    }
   }
 
   /** roomState broadcast + empty tracking, on any change. (Host handoff rides

@@ -175,6 +175,47 @@ export const addDummy = (sim: ArenaSim, name: string): ArenaPlayer | null => {
 };
 
 /**
+ * Seat a backfill bot (docs/design/bits-bot-backfill.md): the server fills a
+ * host force-start's empty seats with these. Assignment runs the production
+ * addPlayer path (random-balanced, deterministic), and the bot arrives
+ * UNARMED — forceStartMatch's random-fill sweep drafts its weapon and hand
+ * exactly the way it arms an AFK human. What makes it a bot is the flag: the
+ * server thinks for the seat, rooms exclude it from human bookkeeping, and
+ * every lobby return dismisses it.
+ */
+export const addBot = (sim: ArenaSim, name: string): ArenaPlayer | null => {
+  const bot = addPlayer(sim, name);
+  if (bot) bot.bot = true;
+  return bot;
+};
+
+/**
+ * Hop to the other team (lobby only): random-balanced join assignment can
+ * split a couple who wanted to fight each other, so the lobby offers SWITCH
+ * SIDE — gated on a free seat across the sand, which also makes it impossible
+ * in any full room (including a bot-filled countdown). Loadouts survive the
+ * hop (picks aren't team-dependent); the lobby body re-anchors to the new
+ * side's spawn line. Like a join/leave, the party changed: any running arming
+ * countdown cancels and a pending force-start is voided.
+ */
+export const switchTeam = (sim: ArenaSim, id: number): boolean => {
+  const player = sim.state.players[id];
+  if (!player || sim.state.round.phase !== "lobby") return false;
+  const other: Team = player.team === 1 ? 2 : 1;
+  const [n1, n2] = teamCounts(sim.state);
+  const otherCount = other === 1 ? n1 : n2;
+  if (otherCount >= teamSizeOf(sim.state)) return false;
+  player.team = other;
+  const spawn = spawnSlotPos(sim, other, otherCount);
+  player.mover.pos.x = spawn.x;
+  player.mover.pos.y = spawn.y;
+  player.facing = spawnFacing(sim, spawn);
+  sim.state.round.timer = 0;
+  sim.state.round.forced = false;
+  return true;
+};
+
+/**
  * A weapon pick (duplicates allowed — variety by choice, not by rule).
  * Rebuilds the combatant so the weapon's stat overlay lands. Lobby only —
  * picks REPLACE, never clear, so a player can never become un-armed (which is

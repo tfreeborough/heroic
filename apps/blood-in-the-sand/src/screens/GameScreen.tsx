@@ -74,6 +74,9 @@ const CAST_FLASH_TTL = 950;
 const CAST_FLASH_RISE_FROM = 24;
 /** Warding Shout's cone blast — gone in a blink, like the bellow. */
 const SHOUT_CONE_TTL = 380;
+/** Straw Man soaking a blow: the puff of flung straw settles just after the
+ * hit ping — long enough to read "that landed on the DUMMY", not on flesh. */
+const STRAW_BURST_TTL = 520;
 /** The quake's ground-giving-way pops: a small crack burst somewhere inside
  * each live zone on this beat (client-derived from the zone's presence in
  * snapshots — the blood-trail rule, never networked). */
@@ -308,9 +311,17 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       };
       for (const e of events) {
         if (e.type === "hit") {
-          // Straw men don't bleed — deployable-target hits skip the decals.
-          if (!isDeployableId(e.targetId))
+          // Straw men don't bleed — deployable-target hits puff straw instead
+          // of blood (the "sword fell on straw" tell).
+          if (!isDeployableId(e.targetId)) {
             blood.splatter(e.x, e.y, e.damage, e.lethal, now);
+          } else {
+            fxRef.current.push({
+              item: { kind: "strawBurst", x: e.x, y: e.y, life: 1 },
+              bornMs: now,
+              ttlMs: STRAW_BURST_TTL,
+            });
+          }
           if (e.lethal) {
             // The kill spray fires out of the victim's BACK — away from the
             // killer. The victim auto-faces their attacker, so if the killer's
@@ -813,6 +824,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   );
 
   const myTeam = client.welcome?.team ?? 1;
+  const teamNames = client.welcome?.teamNames ?? ["Team 1", "Team 2"];
 
   return (
     <View
@@ -866,8 +878,13 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       {hud.countdown !== null ? (
         <View style={styles.centre} pointerEvents="none">
           <Text style={styles.countdown}>{hud.countdown}</Text>
+          {/* The pre-round beat teaches the names AND the colours at once:
+              your faction blue, theirs red — the same allegiance cue the
+              bodies wear (bits-bot-backfill.md § team identity). */}
           <Text style={styles.teamHint}>
-            you are {myTeam === 1 ? "RED" : "BLUE"}
+            <Text style={styles.teamHintMine}>{teamNames[myTeam - 1]}</Text>
+            <Text style={styles.teamHintVs}>{"  vs  "}</Text>
+            <Text style={styles.teamHintFoe}>{teamNames[2 - myTeam]}</Text>
           </Text>
         </View>
       ) : hud.outcome ? (
@@ -992,8 +1009,10 @@ const styles = StyleSheet.create({
   },
   score: { fontSize: 30, fontWeight: "900", color: "#f0e8d8" },
   scoreDash: { fontSize: 20, color: "#8a7f70" },
-  mine: { color: "#f0e8d8" },
-  theirs: { color: "#8a7f70" },
+  // Your tally reads friend-blue, theirs foe-red — the same allegiance cue as
+  // the bodies, so the scoreboard says which number is yours at a glance.
+  mine: { color: "#5aa9e0" },
+  theirs: { color: "#e07a6a" },
   centre: {
     position: "absolute",
     top: 0,
@@ -1033,7 +1052,10 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   countdown: { fontSize: 96, fontWeight: "900", color: "#f0e8d8" },
-  teamHint: { fontSize: 15, color: "#f0e8d8", opacity: 0.8, marginTop: 4 },
+  teamHint: { fontSize: 15, marginTop: 4, fontWeight: "800", letterSpacing: 0.5 },
+  teamHintMine: { color: "#5aa9e0" },
+  teamHintFoe: { color: "#e07a6a" },
+  teamHintVs: { color: "#8a7f70", fontWeight: "700" },
   banner: {
     fontSize: 34,
     fontWeight: "900",

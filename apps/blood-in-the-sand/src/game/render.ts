@@ -104,8 +104,12 @@ const C_FLOOR = Skia.Color("#b39763");
 const C_FLOOR_EDGE = Skia.Color("#8a744c");
 const C_WALL = Skia.Color("#4a3b2b");
 const C_WALL_TOP = Skia.Color("#5d4c38");
-const C_TEAM1 = Skia.Color("#d94141");
-const C_TEAM2 = Skia.Color("#4d7fd9");
+// Allegiance is RELATIVE (bits-bot-backfill.md § team identity): your side is
+// always FRIEND blue, the enemy always FOE red — in the lobby and here. A
+// seatless spectator has no side, so they fall back to absolute team 1 = red /
+// team 2 = blue (see bodyColorFor).
+const C_FOE = Skia.Color("#d94141");
+const C_FRIEND = Skia.Color("#4d7fd9");
 const C_DEAD = Skia.Color("rgba(90, 84, 76, 0.55)");
 const C_FACING = Skia.Color("rgba(255, 255, 255, 0.9)");
 const C_TELEGRAPH = Skia.Color("#ff4a3d");
@@ -121,6 +125,8 @@ const C_RANGE_RING = Skia.Color("#f0e8d8");
 // Status rings: pulse rate carries the "expiring soon" signal (statusRings.ts).
 const C_RING_SLOW = Skia.Color("#4da3d9");
 const C_RING_BLEED = Skia.Color("#e0503c");
+// Straw Man's forced lock — straw yellow, so the aim-hijack reads as an effect.
+const C_RING_TAUNT = Skia.Color("#d9b34d");
 // Body-effect ring for Mirror Guard (Ironhide gets a full shield bubble).
 const C_RING_MIRROR = Skia.Color("#cfe0ec");
 // Ironhide's shield bubble: translucent iron dome + rotating plates.
@@ -230,7 +236,7 @@ const FLOOR_RECT = Skia.XYWHRect(0, 0, WORLD_W, WORLD_H);
  * the cast flash (an ability icon popping above its caster), the warding
  * shout's cone blast. */
 export interface FxItem {
-  kind: "number" | "ring" | "line" | "castFlash" | "cone";
+  kind: "number" | "ring" | "line" | "castFlash" | "cone" | "strawBurst";
   x: number;
   y: number;
   /** 1 → 0 over the effect's life. */
@@ -473,10 +479,20 @@ const drawMyRangeRing = (
   canvas.drawCircle(me.x, me.y, ring, rangeStroke);
 };
 
+/** A body's disc colour: dead → grey ghost; else friend blue / foe red
+ * relative to the viewer's side. `friendTeam` 0 (a seatless spectator) has no
+ * allegiance, so it reads absolute — team 1 red, team 2 blue. */
+const bodyColorFor = (p: PlayerSnapshot, friendTeam: number) => {
+  if (!p.alive) return C_DEAD;
+  if (friendTeam === 0) return p.team === 1 ? C_FOE : C_FRIEND;
+  return p.team === friendTeam ? C_FRIEND : C_FOE;
+};
+
 const drawPlayer = (
   canvas: SkCanvas,
   p: PlayerSnapshot,
   config: ArenaClientConfig,
+  friendTeam: number,
   pulses: StatusPulses,
   nowMs: number,
 ): void => {
@@ -522,8 +538,8 @@ const drawPlayer = (
     }
   }
 
-  // Body disc (grey ghost when down).
-  fill.setColor(p.alive ? (p.team === 1 ? C_TEAM1 : C_TEAM2) : C_DEAD);
+  // Body disc (grey ghost when down; else friend blue / foe red).
+  fill.setColor(bodyColorFor(p, friendTeam));
   canvas.drawCircle(p.x, p.y, r, fill);
 
   if (p.alive && p.dashing) {
@@ -571,10 +587,10 @@ const drawPlayer = (
     }
   }
 
-  // Status rings, concentric (inner → outer): slow · bleed · ability — the
-  // pvp-abilities.md ring order, so stacked states stay legible. Brightness
-  // pulses at the clock's rate — quickening toward expiry is the "about to
-  // drop" tell (see statusRings.ts).
+  // Status rings, concentric (inner → outer): slow · bleed · taunt · ability
+  // — the pvp-abilities.md ring order, so stacked states stay legible.
+  // Brightness pulses at the clock's rate — quickening toward expiry is the
+  // "about to drop" tell (see statusRings.ts).
   if (p.alive) {
     const slow = pulses.strength(p.id, "slow");
     if (slow > 0) {
@@ -590,6 +606,13 @@ const drawPlayer = (
       stroke.setStrokeWidth(2.5);
       canvas.drawCircle(p.x, p.y, r + 10, stroke);
     }
+    const taunt = pulses.strength(p.id, "taunt");
+    if (taunt > 0) {
+      stroke.setColor(C_RING_TAUNT);
+      stroke.setAlphaf(0.25 + 0.6 * taunt);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(p.x, p.y, r + 14, stroke);
+    }
     // Body-effect ring: Mirror Guard, one radius step further out. (Ironhide
     // draws its shield dome above instead of a ring.)
     const mirror = pulses.strength(p.id, "mirror-guard");
@@ -597,7 +620,7 @@ const drawPlayer = (
       stroke.setColor(C_RING_MIRROR);
       stroke.setAlphaf(0.3 + 0.55 * mirror);
       stroke.setStrokeWidth(2.5);
-      canvas.drawCircle(p.x, p.y, r + 14, stroke);
+      canvas.drawCircle(p.x, p.y, r + 18, stroke);
     }
     stroke.setAlphaf(1);
   }
@@ -707,6 +730,34 @@ const drawFx = (
       stroke.setColor(C_DASH_RING);
       stroke.setStrokeWidth(2 + 2 * f.life);
       canvas.drawCircle(f.x, f.y, 20 + (1 - f.life) * 26, stroke);
+    } else if (f.kind === "strawBurst") {
+      // The dummy soaking a blow: a puff of straw flecks thrown out of the
+      // impact — the "sword fell on straw" tell (Tom, 2026-07-20). Each fleck
+      // is a short stalk flying outward on its own deterministic angle/speed
+      // (hash01 keyed by index + position: per-burst variety, zero state),
+      // easing out with a slight downward settle, fading with life.
+      const out = 1 - f.life * f.life; // ease-out: pop fast, drift to rest
+      stroke.setStrokeCap(StrokeCap.Round);
+      for (let i = 0; i < 12; i++) {
+        const h1 = hash01(i * 7.13 + f.x * 0.37 + f.y * 0.61);
+        const h2 = hash01(i * 3.71 + f.x * 0.53 + f.y * 0.29);
+        const ang = h1 * Math.PI * 2;
+        const reach = (14 + h2 * 22) * out;
+        const cx = f.x + Math.cos(ang) * reach;
+        const cy = f.y + Math.sin(ang) * reach + (1 - f.life) * 6; // settle
+        const stalk = 3 + h2 * 3;
+        stroke.setColor(h1 > 0.5 ? C_DUMMY : C_DUMMY_DARK);
+        stroke.setAlphaf(Math.min(1, f.life * 1.6));
+        stroke.setStrokeWidth(2);
+        canvas.drawLine(
+          cx - Math.cos(ang) * stalk,
+          cy - Math.sin(ang) * stalk,
+          cx + Math.cos(ang) * stalk,
+          cy + Math.sin(ang) * stalk,
+          stroke,
+        );
+      }
+      stroke.setAlphaf(1);
     } else if (f.kind === "cone" && f.angle !== undefined) {
       // Warding Shout: the bellow made visible — a wedge blasting out to the
       // shout's TRUE range (the honest-telegraph rule) then gone in a blink.
@@ -912,22 +963,48 @@ const drawDeployables = (
         }
       }
     } else {
-      // Straw man: a body-coloured stand-in with its own little hp bar.
+      // Straw man, sized UP and made unmissable (Tom, 2026-07-20 — it now
+      // taunts, so it has to LOOK like the thing everyone's blades snapped
+      // to): a fat straw body on a cross-frame with scarecrow arms poking
+      // past the disc, a painted target on its chest (the icon, honoured),
+      // a taunt-yellow rim tying it to the ring on its victims, and a lazy
+      // creak-sway so the eye finds it. Hurtbox is unchanged (PLAYER_RADIUS
+      // in the sim) — the decoy dresses bigger than it stands, which for a
+      // thing that WANTS to be shot at is honest advertising.
+      const sway = 0.09 * Math.sin(nowMs / 420 + d.id * 2.1);
+      const armR = 34;
+      stroke.setColor(C_DUMMY_DARK);
+      stroke.setAlphaf(a);
+      stroke.setStrokeWidth(4);
+      stroke.setStrokeCap(StrokeCap.Round);
+      canvas.drawLine(
+        d.x - Math.cos(sway) * armR,
+        d.y - Math.sin(sway) * armR,
+        d.x + Math.cos(sway) * armR,
+        d.y + Math.sin(sway) * armR,
+        stroke,
+      ); // the crossbar, swaying on its post
       fill.setColor(C_DUMMY);
       fill.setAlphaf(a);
-      canvas.drawCircle(d.x, d.y, 18, fill);
+      canvas.drawCircle(d.x, d.y, 24, fill); // the straw body
+      stroke.setColor(C_RING_TAUNT);
+      stroke.setAlphaf(0.85 * a);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(d.x, d.y, 24, stroke); // taunt-yellow rim
+      // The painted target on its chest.
       stroke.setColor(C_DUMMY_DARK);
       stroke.setAlphaf(a);
       stroke.setStrokeWidth(2.5);
-      stroke.setStrokeCap(StrokeCap.Round);
-      canvas.drawLine(d.x - 7, d.y - 7, d.x + 7, d.y + 7, stroke);
-      canvas.drawLine(d.x + 7, d.y - 7, d.x - 7, d.y + 7, stroke);
-      const w = 32;
+      canvas.drawCircle(d.x, d.y, 13, stroke);
+      canvas.drawCircle(d.x, d.y, 6.5, stroke);
+      fill.setColor(C_DUMMY_DARK);
+      canvas.drawCircle(d.x, d.y, 2.5, fill);
+      const w = 40;
       const frac = Math.max(0, d.hp / STRAW_MAN.hp);
       fill.setColor(C_HP_BACK);
-      canvas.drawRect(Skia.XYWHRect(d.x - w / 2 - 1, d.y - 33, w + 2, 6), fill);
+      canvas.drawRect(Skia.XYWHRect(d.x - w / 2 - 1, d.y - 40, w + 2, 6), fill);
       fill.setColor(frac > 0.35 ? C_HP_FILL : C_HP_LOW);
-      canvas.drawRect(Skia.XYWHRect(d.x - w / 2, d.y - 32, w * frac, 4), fill);
+      canvas.drawRect(Skia.XYWHRect(d.x - w / 2, d.y - 39, w * frac, 4), fill);
     }
   }
   fill.setAlphaf(1);
@@ -1172,7 +1249,7 @@ const drawOffscreenAllies = (
   top: number,
   bottom: number,
 ): void => {
-  const teamColor = me.team === 1 ? C_TEAM1 : C_TEAM2;
+  const teamColor = C_FRIEND; // an ally pointer only ever marks your own side
   for (const p of players) {
     if (p.id === me.id || p.team !== me.team || !p.alive) continue;
     // Where the ally sits on screen (may be well outside the canvas).
@@ -1351,7 +1428,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         pi < byFeet.length &&
         byFeet[pi]!.y + config.playerRadius <= prop.y
       ) {
-        drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
+        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
         pi++;
       }
       if (r.atlas) {
@@ -1376,7 +1453,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       }
     }
     for (; pi < byFeet.length; pi++)
-      drawPlayer(canvas, byFeet[pi]!, config, r.pulses, r.nowMs);
+      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
 
     drawProjectiles(canvas, view.projectiles);
     drawReelChains(canvas, view.players);

@@ -55,6 +55,7 @@ const toPlayerSnapshot = (p: ArenaPlayer, hidePicks: boolean): PlayerSnapshot =>
   dashing: isDashing(p),
   slowLeft: p.slowLeft,
   bleedLeft: bleedRemaining(p),
+  tauntLeft: p.tauntLeft,
   abilities: hidePicks
     ? []
     : p.slots.map((s) => ({
@@ -124,4 +125,5 @@ export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): Roo
     weapon: p.team === viewerTeam ? p.weapon : null,
     abilities: p.team === viewerTeam ? [...p.abilities] : null,
     armed: loadoutComplete(p),
+    bot: p.bot,
   }));

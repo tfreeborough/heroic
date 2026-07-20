@@ -57,6 +57,8 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.targetId = null;
     p.lockedTargetId = null;
     p.lockedFacing = p.facing;
+    p.tauntLeft = 0;
+    p.tauntTargetId = null;
     p.slots = createAbilitySlots(p.abilities); // every cooldown clean each round
     p.dots.length = 0;
     p.slowLeft = 0;
@@ -135,6 +137,25 @@ export const forceStartMatch = (sim: ArenaSim): boolean => {
 };
 
 /**
+ * Any seated player's veto on a bot-filled start (bits-bot-backfill.md): you
+ * joined to fight PEOPLE, and a force-start changes what match you're getting
+ * — so during its 5s countdown anyone may cancel. Only a countdown with bots
+ * in it is cancellable (a full room of humans counting down has no cancel,
+ * exactly as before): the bots are dismissed, the countdown stops, and the
+ * lobby returns to its partial state with every human loadout intact.
+ */
+export const cancelStart = (sim: ArenaSim): boolean => {
+  const { round } = sim.state;
+  if (round.phase !== "lobby" || round.timer <= 0) return false;
+  const bots = seatedPlayers(sim.state).filter((p) => p.bot);
+  if (bots.length === 0) return false;
+  for (const b of bots) sim.state.players[b.id] = null;
+  round.timer = 0;
+  round.forced = false;
+  return true;
+};
+
+/**
  * Programmatic match start — tests and tools that don't want to wait out the
  * arming countdown. The live flow never calls this: the lobby case of
  * tickRoundMachine starts the match itself.
@@ -200,7 +221,9 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
       if (round.timer <= 0) {
         // Back to the lobby. Wins/lastWinner survive for the lobby's "last
         // match" line (cleared by the next match start). Seats whose players
-        // never reconnected are freed — they can rejoin the lobby normally.
+        // never reconnected are freed — they can rejoin the lobby normally —
+        // and backfill bots are dismissed with them: their seats open up for
+        // real players, and a rematch's force-start seats fresh ones.
         // Everyone returns UNARMED: loadouts clear so the arming countdown
         // can't fire an instant auto-rematch — the wizard reopens (with
         // run-it-back one tap away) and a rematch is a deliberate re-arm.
@@ -208,7 +231,7 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
         round.timer = 0;
         for (let i = 0; i < sim.state.players.length; i++) {
           const p = sim.state.players[i];
-          if (p && !p.connected) sim.state.players[i] = null;
+          if (p && (!p.connected || p.bot)) sim.state.players[i] = null;
           else if (p) {
             p.weapon = null;
             p.abilities = [];

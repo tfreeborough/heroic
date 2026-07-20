@@ -10,7 +10,7 @@ import type { ArenaEvent } from "../events";
 import type { ArenaSim } from "../sim";
 import { seatedPlayers, type ArenaPlayer, type PlayerInput } from "../state";
 import { beginDash, dashVelocity, dashingSlot } from "./dash";
-import { castDeployable } from "./deployables";
+import { applyTaunt, castDeployable } from "./deployables";
 import { fireHarpoon } from "./harpoon";
 import { inSandstorm, targetView, type TargetView } from "./targets";
 import { castWardingShout } from "./wardingShout";
@@ -75,8 +75,12 @@ export const stepPlayerAbilities = (
         case "tremor":
           castDeployable(sim.state, "quake", p);
           break;
-        case "sandtrap":
+        // The decoy taunts on the drop: nearby enemies force-lock onto it,
+        // a windup already in flight included (pvp-abilities.md § Straw Man).
         case "straw-man":
+          applyTaunt(castDeployable(sim.state, "straw-man", p), players);
+          break;
+        case "sandtrap":
         case "blood-font":
         case "sandstorm":
           castDeployable(sim.state, slot.id, p);

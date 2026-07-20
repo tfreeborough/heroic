@@ -114,6 +114,9 @@ export const stepSim = (
     // committed roll overwrites velocity wholesale (in stepPlayerAbilities),
     // so the escape hop stays a real answer to being slowed.
     p.slowLeft = Math.max(0, p.slowLeft - dt);
+    // Ticked BEFORE the ability pass, so a taunt applied this tick keeps its
+    // full duration through the targeting stage below.
+    p.tauntLeft = Math.max(0, p.tauntLeft - dt);
     const maxSpeed = PLAYER_MAX_SPEED * speedFactorOf(p, players);
     const desired = { x: input.sx * maxSpeed, y: input.sy * maxSpeed };
     p.mover.vel = approachVelocity(p.mover.vel, desired, dt, PLAYER_ACCEL, PLAYER_DECEL);
@@ -156,6 +159,8 @@ export const stepSim = (
       candidateScratch.length = 0;
       if (inSandstorm(state, p.mover.pos)) {
         p.targetId = null;
+        p.tauntLeft = 0; // can't take aim from inside the cloud — hold included
+        p.tauntTargetId = null;
         const input = inputs.get(p.id);
         if (input) {
           const mag = Math.hypot(input.sx, input.sy);
@@ -163,19 +168,41 @@ export const stepSim = (
         }
         continue;
       }
-      for (const e of players) {
-        if (e.team === p.team || !e.alive) continue;
-        if (inSandstorm(state, e.mover.pos)) continue;
-        if (!canSeePos(sim, p, e.mover.pos)) continue;
-        candidateScratch.push({ id: e.id, pos: e.mover.pos });
+      // Straw Man's hold: while the taunt lasts AND the dummy would still be a
+      // legal mark by this player's own rules (alive, seen, unsmoked, inside
+      // THEIR weapon's engagement radius), the lock is not negotiable. Any
+      // failed check releases the hold early — walking the dummy out of your
+      // own reach is the intended counterplay (pvp-abilities.md § Straw Man).
+      if (p.tauntLeft > 0) {
+        const forced = targetView(state, p.tauntTargetId);
+        if (
+          forced !== null &&
+          forced.alive &&
+          distance(p.mover.pos, forced.pos) <= weaponOf(p).engagementRadius &&
+          !inSandstorm(state, forced.pos) &&
+          canSeePos(sim, p, forced.pos)
+        ) {
+          p.targetId = forced.id;
+        } else {
+          p.tauntLeft = 0;
+          p.tauntTargetId = null;
+        }
       }
-      for (const d of state.deployables) {
-        if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
-        if (inSandstorm(state, d.pos)) continue;
-        if (!canSeePos(sim, p, d.pos)) continue;
-        candidateScratch.push({ id: d.id, pos: d.pos });
+      if (p.tauntLeft <= 0) {
+        for (const e of players) {
+          if (e.team === p.team || !e.alive) continue;
+          if (inSandstorm(state, e.mover.pos)) continue;
+          if (!canSeePos(sim, p, e.mover.pos)) continue;
+          candidateScratch.push({ id: e.id, pos: e.mover.pos });
+        }
+        for (const d of state.deployables) {
+          if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
+          if (inSandstorm(state, d.pos)) continue;
+          if (!canSeePos(sim, p, d.pos)) continue;
+          candidateScratch.push({ id: d.id, pos: d.pos });
+        }
+        p.targetId = selectTarget(candidateScratch, p.mover.pos, weaponOf(p).engagementRadius, p.targetId);
       }
-      p.targetId = selectTarget(candidateScratch, p.mover.pos, weaponOf(p).engagementRadius, p.targetId);
 
       const target = targetView(state, p.targetId);
       if (target) {

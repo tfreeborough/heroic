@@ -27,6 +27,9 @@ export const speedFactorOf = (p: ArenaPlayer, players: readonly ArenaPlayer[]): 
     : p.slowLeft > 0
       ? p.slowFactor
       : 1;
+  // The host-set permanent multiplier (top bot tiers run hot) composes with
+  // statuses — a slowed Godlike is still slowed, just from a higher base.
+  factor *= p.moveFactor;
   for (const drummer of players) {
     if (drummer.team !== p.team || !drummer.alive || !abilityActive(drummer, "war-drums")) continue;
     if (distance(p.mover.pos, drummer.mover.pos) <= WAR_DRUMS.radius) {

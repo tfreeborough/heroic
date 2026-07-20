@@ -111,6 +111,16 @@ export class RoomManager {
         if (id !== null) this.roomOf(ws)?.forceStart(id, performance.now());
         return;
       }
+      case "cancelStart": {
+        const id = ws.data.playerId;
+        if (id !== null) this.roomOf(ws)?.cancelStart(id, performance.now());
+        return;
+      }
+      case "switchTeam": {
+        const id = ws.data.playerId;
+        if (id !== null) this.roomOf(ws)?.switchTeam(id, performance.now());
+        return;
+      }
       case "ping":
         return; // liveness only — the seat was already stamped above
       case "input": {

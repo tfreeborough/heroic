@@ -98,6 +98,11 @@ const LAND_BEAT_MS = 320;
 /** How long a host-handoff toast stays up before it fades out. */
 const NOTICE_MS = 5000;
 
+// Allegiance colours (bits-bot-backfill.md § team identity): your side is
+// always FRIEND blue, the enemy always FOE red — never absolute team numbers.
+const C_FRIEND = "#4da3d9";
+const C_FOE = "#d94141";
+
 /** The wizard's local draft: weapon + partial hand, filled in step order. */
 interface Picks {
   weapon: WeaponId | null;
@@ -229,6 +234,18 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
     }
     if (timer <= 0) lastTick.current = 0;
   }, [timer, timerCeil]);
+
+  // A bot-filled countdown that collapses while we're STILL in the lobby was
+  // vetoed (cancelStart, or a joiner over the bots) — a normal completion
+  // leaves the lobby phase and never trips this. The notice says who; the
+  // sting says something happened even if you weren't reading.
+  const hasBots = client.roomState?.players.some((p) => p.bot) ?? false;
+  const wasCancellable = useRef(false);
+  useEffect(() => {
+    const cancellable = timer > 0 && hasBots;
+    if (wasCancellable.current && !cancellable && client.phase === "lobby") playSound("startCancelled");
+    wasCancellable.current = cancellable;
+  });
 
   const commit = useCallback(
     (next: Picks): void => {
@@ -407,24 +424,25 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   const me = players.find((p) => p.id === welcome.playerId);
   const meArmed = me?.armed ?? allComplete(picks);
 
-  // Host force-start: someone's sat unarmed past the grace while the rest are
-  // ready, OR the room has empty seats but everyone present is armed (the
-  // partial-room launcher). Client-side gate only — the sim re-checks
-  // everything, including a body on each team.
+  // Host force-start (bits-bot-backfill.md). With EMPTY seats it shows the
+  // moment the host is armed — bots fill the gaps, so even a lone host can
+  // launch. In a FULL room it stays the AFK backstop: only after the grace,
+  // so a straggler gets a fair window to arm. Client-side gate only — the
+  // sim re-checks everything.
   const unarmed = players.filter((p) => !p.armed);
-  const graceCond =
+  const emptySeats = capacity - players.length;
+  const forceCond =
     client.isHost &&
     meArmed &&
-    players.length >= 2 &&
-    players.some((p) => p.team !== myTeam) &&
-    (unarmed.length > 0 || players.length < capacity) &&
-    players.every((p) => p.connected);
+    players.every((p) => p.connected) &&
+    (emptySeats > 0 || unarmed.length > 0);
   // Keyed on the roster AND who's unarmed: any join/leave or arming restarts
   // the grace clock (the sim clears `forced` on membership changes too).
-  const graceKey = graceCond ? `${players.length}:${unarmed.map((p) => p.id).join(",")}` : "";
+  const graceKey = forceCond ? `${players.length}:${unarmed.map((p) => p.id).join(",")}` : "";
   if (graceSince.current.key !== graceKey) graceSince.current = { key: graceKey, atMs: performance.now() };
   const showForceStart =
-    graceCond && performance.now() - graceSince.current.atMs > FORCE_START_GRACE_SECONDS * 1000;
+    forceCond &&
+    (emptySeats > 0 || performance.now() - graceSince.current.atMs > FORCE_START_GRACE_SECONDS * 1000);
 
   return (
     // The root carries NO padding: overlays (veil/rib/fly) are its absolute
@@ -536,7 +554,22 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
         </Animated.View>
       ) : null}
 
-      {timer > 0 && wizard === null ? <CountdownVeil left={timer} onLeave={askLeave} /> : null}
+      {timer > 0 && wizard === null ? (
+        <CountdownVeil
+          left={timer}
+          onLeave={askLeave}
+          // The veto (any seated player, bot-filled starts only): the server
+          // dismisses the bots and stops the count; the room hears who did it.
+          onCancel={
+            hasBots && client.cancelStart
+              ? () => {
+                  playSound("uiBack");
+                  client.cancelStart?.();
+                }
+              : null
+          }
+        />
+      ) : null}
 
       {rib !== null && wizard !== null ? (
         <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={ribChange} onLeave={askLeave} />
@@ -1089,6 +1122,7 @@ interface LobbyViewProps {
 
 const LobbyView = (props: LobbyViewProps) => {
   const { client, players, myId, myTeam, capacity, picks, roomName, roomCode } = props;
+  const teamNames = client.welcome?.teamNames ?? ["Team 1", "Team 2"];
   // Short screens (iPhone SE) can't fit a 4v4 roster at full size — tighten
   // everything and collapse the open-seat padding into single rows.
   const compact = useWindowDimensions().height < COMPACT_LOBBY_HEIGHT;
@@ -1113,6 +1147,19 @@ const LobbyView = (props: LobbyViewProps) => {
   const mine = players.filter((p) => p.team === myTeam);
   const theirs = players.filter((p) => p.team !== myTeam);
   const emptySeats = capacity - players.length;
+  // SWITCH SIDE rides the enemy team's open-seat row: hop into the seat you
+  // can see (real rooms only — practice is always full, so it never shows).
+  // Hidden while you're ALONE: the lobby renders viewer-relative (YOUR TEAM
+  // always on top), so a solo hop changes nothing on screen — and balanced
+  // join assignment seats the next joiner opposite you either way. The
+  // control only means something once there's someone to be across from.
+  const switchSide =
+    client.switchTeam && players.length > 1 && theirs.length < teamCap
+      ? () => {
+          playSound("uiTap");
+          client.switchTeam?.();
+        }
+      : undefined;
   const lastMatch =
     props.lastWinner !== 0
       ? `last match: ${props.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...props.wins)}–${Math.min(...props.wins)}`
@@ -1127,16 +1174,19 @@ const LobbyView = (props: LobbyViewProps) => {
         </Pressable>
       </View>
 
-      <TeamHeader label="YOUR TEAM" color="#d94141" compact={compact} />
+      {/* Faction names are the absolute identity; colour is the allegiance
+          cue — your side always blue, the enemy always red, matching the
+          match (bits-bot-backfill.md § team identity). */}
+      <TeamHeader label={teamNames[myTeam - 1]} color={C_FRIEND} you compact={compact} />
       {mine.map((p) => (
         <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={client.hostId} own compact={compact} />
       ))}
       <OpenSeats count={teamCap - mine.length} compact={compact} />
-      <TeamHeader label="ENEMY TEAM" color="#4da3d9" compact={compact} />
+      <TeamHeader label={teamNames[2 - myTeam]} color={C_FOE} compact={compact} />
       {theirs.map((p) => (
         <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} compact={compact} />
       ))}
-      <OpenSeats count={teamCap - theirs.length} compact={compact} />
+      <OpenSeats count={teamCap - theirs.length} compact={compact} onSwitch={switchSide} />
 
       <TeamHeader label="YOUR ARSENAL" color={C_MUTED} compact={compact} />
       <SocketStrip
@@ -1163,9 +1213,9 @@ const LobbyView = (props: LobbyViewProps) => {
             style={styles.forceStart}
           >
             <Text style={styles.forceStartText}>
-              {props.unarmedCount > 0
-                ? `⚑ START NOW — AUTO-ARM ${props.unarmedCount} GLADIATOR${props.unarmedCount === 1 ? "" : "S"}`
-                : `⚑ START NOW — ${emptySeats} SEAT${emptySeats === 1 ? "" : "S"} EMPTY`}
+              {emptySeats > 0
+                ? `⚑ START NOW — ${emptySeats} BOT${emptySeats === 1 ? "" : "S"} STEP IN`
+                : `⚑ START NOW — AUTO-ARM ${props.unarmedCount} GLADIATOR${props.unarmedCount === 1 ? "" : "S"}`}
             </Text>
           </Pressable>
         ) : (
@@ -1180,30 +1230,48 @@ const LobbyView = (props: LobbyViewProps) => {
 
 /** Dashed placeholder rows padding a team list to its capacity. Random team
  * assignment means a joiner can land on either side — both lists pad. On
- * compact screens several empties collapse into one "N open seats" row. */
-const OpenSeats = ({ count, compact }: { count: number; compact: boolean }) => {
+ * compact screens several empties collapse into one "N open seats" row.
+ * With `onSwitch` (the enemy side, when it has room) the first row is the
+ * SWITCH SIDE control: you hop into the seat you can see. */
+const OpenSeats = ({ count, compact, onSwitch }: { count: number; compact: boolean; onSwitch?: () => void }) => {
   if (count <= 0) return null;
-  if (compact && count > 1) {
-    return (
-      <View style={[styles.openSeat, tight.openSeat]}>
-        <Text style={styles.openSeatText}>{`${count} open seats…`}</Text>
-      </View>
-    );
-  }
+  const rows = compact && count > 1 ? 1 : count;
+  const label = compact && count > 1 ? `${count} open seats…` : "open seat…";
   return (
     <>
-      {Array.from({ length: count }, (_, i) => (
-        <View key={i} style={[styles.openSeat, compact && tight.openSeat]}>
-          <Text style={styles.openSeatText}>open seat…</Text>
-        </View>
-      ))}
+      {Array.from({ length: rows }, (_, i) =>
+        i === 0 && onSwitch ? (
+          <Pressable key={i} onPress={onSwitch} style={[styles.openSeat, compact && tight.openSeat]}>
+            <Text style={styles.openSeatText}>
+              {label}
+              <Text style={styles.switchSide}>{"  ⇄ TAP TO SWITCH SIDE"}</Text>
+            </Text>
+          </Pressable>
+        ) : (
+          <View key={i} style={[styles.openSeat, compact && tight.openSeat]}>
+            <Text style={styles.openSeatText}>{label}</Text>
+          </View>
+        ),
+      )}
     </>
   );
 };
 
-const TeamHeader = ({ label, color, compact }: { label: string; color: string; compact?: boolean }) => (
+const TeamHeader = ({
+  label,
+  color,
+  you = false,
+  compact,
+}: {
+  label: string;
+  color: string;
+  /** Marks the viewer's own side — a small "(YOU)" tag beside the faction. */
+  you?: boolean;
+  compact?: boolean;
+}) => (
   <View style={[styles.teamHead, compact && tight.teamHead]}>
-    <Text style={[styles.teamLabel, { color }]}>{label}</Text>
+    <Text style={[styles.teamLabel, { color }]}>{label.toUpperCase()}</Text>
+    {you ? <Text style={styles.teamYou}>YOU</Text> : null}
     <View style={styles.teamRule} />
   </View>
 );
@@ -1225,6 +1293,7 @@ const PlayerRow = ({
     <Text style={[styles.playerName, compact && tight.playerName]}>
       {p.id === hostId ? "♛ " : ""}
       {p.name}
+      {p.bot ? <Text style={styles.botTag}>{"  BOT"}</Text> : null}
       {isMe ? " (you)" : ""}
       {p.connected ? "" : " — reconnecting…"}
     </Text>
@@ -1248,7 +1317,16 @@ const PlayerRow = ({
 
 // ── Countdown veil ──────────────────────────────────────────────────────────
 
-const CountdownVeil = ({ left, onLeave }: { left: number; onLeave: () => void }) => {
+const CountdownVeil = ({
+  left,
+  onLeave,
+  onCancel,
+}: {
+  left: number;
+  onLeave: () => void;
+  /** Non-null on a bot-filled start: any gladiator's veto (bits-bot-backfill.md). */
+  onCancel: (() => void) | null;
+}) => {
   const insets = useSafeAreaInsets();
   const n = Math.ceil(left);
   const frac = Math.max(0, Math.min(1, left / LOBBY_COUNTDOWN_SECONDS));
@@ -1262,7 +1340,7 @@ const CountdownVeil = ({ left, onLeave }: { left: number; onLeave: () => void })
     // passes touches through.
     <View style={styles.veil} pointerEvents="box-none">
       <LeaveX onPress={onLeave} style={[styles.leaveXFloat, { top: insets.top + 18 }]} />
-      <Text style={styles.veilEyebrow}>ALL GLADIATORS ARMED</Text>
+      <Text style={styles.veilEyebrow}>{onCancel ? "BOTS FILL THE EMPTY SEATS" : "ALL GLADIATORS ARMED"}</Text>
       <View style={styles.veilRing}>
         <Canvas style={styles.veilCanvas}>
           <Path path={track} style="stroke" strokeWidth={5} color="#221e19" />
@@ -1272,7 +1350,16 @@ const CountdownVeil = ({ left, onLeave }: { left: number; onLeave: () => void })
           <Text style={[styles.veilNum, n <= 3 && { color: "#d94141" }]}>{n}</Text>
         </View>
       </View>
-      <Text style={styles.veilSub}>the match starts itself — no one presses anything</Text>
+      {onCancel ? (
+        <>
+          <Text style={styles.veilSub}>rather wait for real players? any gladiator may cancel</Text>
+          <Pressable onPress={onCancel} style={[styles.cta, styles.ctaGhost, styles.veilCancel]}>
+            <Text style={[styles.ctaText, styles.ctaGhostText]}>CANCEL THE START</Text>
+          </Pressable>
+        </>
+      ) : (
+        <Text style={styles.veilSub}>the match starts itself — no one presses anything</Text>
+      )}
     </View>
   );
 };
@@ -1535,6 +1622,19 @@ const styles = StyleSheet.create({
   roomCode: { color: C_GOLD, fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
   teamHead: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 4 },
   teamLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
+  // The "(YOU)" tag on your own faction header — muted so the faction name
+  // leads and the tag just confirms which side is yours.
+  teamYou: {
+    color: "#0f0d0b",
+    backgroundColor: "#8a9bb0",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
   teamRule: { flex: 1, height: 1, backgroundColor: "#2e2820" },
   playerRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
   playerGone: { opacity: 0.45 },
@@ -1554,6 +1654,12 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   openSeatText: { color: "#6b6257", fontSize: 13, fontStyle: "italic" },
+  // The SWITCH SIDE affordance riding the enemy side's first open-seat row.
+  // Neutral gold, deliberately NOT red/blue: you're crossing sides, so a
+  // team colour here would fight the allegiance cue rather than read as "move".
+  switchSide: { color: C_GOLD, fontSize: 11, fontWeight: "800", fontStyle: "normal", letterSpacing: 1 },
+  // The roster's bot marker — muted so a bot reads as furniture, not a rival.
+  botTag: { color: "#6b6154", fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
   arsenalHint: { color: "#6b6257", fontSize: 10, fontStyle: "italic", marginTop: 8, marginLeft: 2 },
   lastMatch: { color: C_MUTED, fontSize: 13, marginTop: 18, textAlign: "center" },
   lobbyFoot: { marginTop: "auto", paddingBottom: 6 },
@@ -1602,6 +1708,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   veilSub: { color: C_MUTED, fontSize: 12, fontStyle: "italic" },
+  veilCancel: { marginTop: 18 },
 
   leaveX: {
     width: 30,

@@ -23,6 +23,7 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   dashing: false,
   slowLeft: 0,
   bleedLeft: 0,
+  tauntLeft: 0,
   abilities: [],
   reeling: null,
   lastSeq: 0,

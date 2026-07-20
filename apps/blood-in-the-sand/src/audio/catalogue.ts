@@ -49,6 +49,7 @@ export type BitsSoundEvent =
   | "fightStart" //     the "FIGHT" go
   | "roundEnd" //       a round resolves              (qualifier: win|loss|draw)
   | "matchEnd" //       the match resolves            (qualifier: win|loss)
+  | "startCancelled" // a bot-filled start vetoed — the veil collapses (bits-bot-backfill.md)
   // ── UI ────────────────────────────────────────────────────────────────────
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
@@ -196,6 +197,9 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
       loss: { clips: ["match_loss_1"] },
     },
   },
+  // Owed from the Forge — silent until start_cancelled_1 lands (the missing-
+  // manifest rule); a deflating "stand down" beat, not a defeat sting.
+  startCancelled: { clips: ["start_cancelled_1"] },
 
   // ── UI ──────────────────────────────────────────────────────────────────
   uiTap: { clips: ["ui_tap_1"], volume: 0.7 },

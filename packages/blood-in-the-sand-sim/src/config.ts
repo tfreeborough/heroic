@@ -299,8 +299,14 @@ export const MIRROR_GUARD = { duration: 2, homingTurnRate: 4 };
 /** Ironhide: walk through the telegraph instead of dodging it. */
 export const IRONHIDE = { duration: 2.5, damageTakenFactor: 0.3, selfSlowFactor: 0.5 };
 
-/** Straw Man: a targetable decoy (a combatant that can't act). */
-export const STRAW_MAN = { hp: 30, lifetime: 4 };
+/** Straw Man: a targetable decoy (a combatant that can't act) that TAUNTS on
+ * the drop (Tom, 2026-07-20 — the passive decoy underwhelmed; pvp-abilities.md
+ * § Straw Man): enemies inside tauntRadius of the drop point are force-locked
+ * onto it for tauntDuration, an in-flight windup included. The radius sits
+ * between melee reach (blade 250 / hammer 285) and ranged standoff (staff 340
+ * / bow 380) on purpose: it flips divers, never shooters. Bumped 260→310
+ * (Tom, 2026-07-20) — still under the staff's band, but only just. */
+export const STRAW_MAN = { hp: 30, lifetime: 4, tauntRadius: 310, tauntDuration: 1.5 };
 
 /** War Drums: a moving ally aura — the slow plumbing mirrored (>1 factor).
  * Radius doubled 130→260 (Tom, 2026-07-15: the circle should feel like a

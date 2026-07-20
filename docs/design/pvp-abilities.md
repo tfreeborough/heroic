@@ -141,7 +141,7 @@ The host pressing START begins a four-beat draft, not the match:
 | 4 | Dash | Defensive | committed move + i-frames | 3s | 4 |
 | 5 | Mirror Guard | Defensive | self status | 12s | 3 |
 | 6 | Ironhide | Defensive | self status | 12s | 3 |
-| 7 | Straw Man | Defensive | deployable (decoy) | 14s | 2 |
+| 7 | Straw Man | Defensive | deployable (taunt decoy) | 14s | 2 |
 | 8 | War Drums | Support | moving ally aura | 12s | 3 |
 | 9 | Blood Font | Support | deployable (heal zone) | 16s | 1 |
 | 10 | Sandstorm | Support | deployable (no-target zone) | 14s | 2 |
@@ -332,21 +332,69 @@ Everything else is a moment — big value, once or twice a round.
 > *"Plant a convincing stand-in. Enemy eyes — and blades — snap to it while you
 > slip away."*
 
-- **Mechanics:** drops a stationary dummy at your position; you keep moving.
-  The dummy is a **valid auto-target** — enemies acquire it by the normal
-  nearest rule (it's standing where you just were; nearest usually wins on its
-  own). Dies to a couple of hits or times out.
-- **Numbers:** dummy hp **30** (~2 weapon hits) · max lifetime **4s** ·
-  cooldown **14s**.
-- **Integration wrinkle (the one real one):** auto-targeting currently picks
-  from enemy *player* ids. Deployable ids must join the target space —
-  deployables get ids above the seat range and `targetId` widens to "player or
-  deployable". Flagged here so it's costed, not discovered.
-- **Icon:** a training dummy with a target painted on its chest.
-- **Cast SFX:** soft pop of dust with a canvas-and-rope creak, like a scarecrow
-  snapping upright.
-- **Reuses:** `Deployable` entity · existing acquisition logic (widened) ·
-  `resolveAttack` (a dummy is just a combatant that can't act).
+- **REWORKED to a taunt (Tom, 2026-07-20, tester feedback):** the passive
+  decoy underwhelmed — every tester who drew it said they'd repick. Root
+  cause: as a plain nearest-candidate the lock hysteresis worked *against* it
+  (it spawns at your feet — the same distance as you, never 15% closer, so it
+  steals no locks), and being stationary meant enemies disengaged for free by
+  walking on. The dummy now **forces** attention instead of politely offering
+  itself.
+- **Mechanics:** drops the dummy at your feet as before; every enemy inside
+  the **taunt radius** of the drop point has their auto-target *forced* onto
+  the dummy for the **taunt duration**. Feet stay free — a taunt hijacks aim,
+  never movement. The forced lock releases early the moment the dummy stops
+  being a valid mark for that enemy: it dies, a sandstorm smokes it, LOS
+  breaks, or — the intended counterplay — the enemy **walks it out of their
+  own weapon's engagement radius**.
+- **Counterplay is two-lane by design:** burn it down (30hp ≈ 2 hits, so a
+  taunted *group* shreds it in one swing cycle and frees itself — mass taunts
+  self-cancel) or walk out of your own reach. A lone diver eats the full
+  hold; a mob barely notices. That asymmetry is the point: an anti-dive peel,
+  not a teamfight flip.
+- **A moment, not a zone:** the taunt applies only to enemies inside the
+  radius at the cast instant. Latecomers see a normal candidate dummy — no
+  lingering CC field to overtune.
+- **Mid-swing redirect (Tom, 2026-07-20):** a taunted enemy's *in-flight
+  windup* retargets to the dummy too — the sword falls on straw. Cast it as
+  the blow is coming down and you've bought the clutch save; the windup keeps
+  tracking its (new) target exactly like any PvP windup, and the release
+  range/cone rules are unchanged, so a swing can still whiff if its owner has
+  walked the dummy out of reach.
+- **Numbers:** taunt radius **310** (260 at first cut; bumped, Tom
+  2026-07-20) · taunt duration **1.5s** · dummy hp **30** · lifetime **4s** ·
+  cooldown **14s** · charges **2**. The radius is the balance dial: 310
+  catches any melee in reach of you (blade 250, hammer 285) but a bow (380)
+  or staff (340) at standoff distance never flips — it punishes divers, not
+  shooters. The staff margin is only 30px, and that's fine (Tom, 2026-07-20):
+  the melee/ranged line doesn't need to be crisp, because 30hp is the real
+  guard — a flipped shooter just shoots the dummy down from where they stand
+  (two bow hits) and is free. If it plays too strong, shrink radius or
+  duration before touching anything else.
+- **Client cue:** the victim's own aim ring snapping to the dummy carries
+  most of the feedback; a per-player `tauntLeft` snapshot field drives a
+  status-ring pulse (same plumbing as `slowLeft`/`bleedLeft`) so the flip
+  reads as an effect, not a targeting bug. Protocol bump.
+- **Presence pass (Tom, 2026-07-20):** the dummy is drawn BIG — a 24px straw
+  body on a swaying cross-frame with arms past the disc, the painted chest
+  target from the icon, and a taunt-yellow rim matching its victims' status
+  ring (one colour = one story). Hurtbox unchanged (`PLAYER_RADIUS`): a decoy
+  dressing bigger than it stands is honest advertising. Every hit it soaks
+  throws a **puff of straw flecks** (client-derived from the hit event, like
+  blood — never networked) so a redirected blow visibly falls on straw.
+- **Icon:** a training dummy with a target painted on its chest (unchanged).
+- **Cast SFX:** soft pop of dust with a canvas-and-rope creak, like a
+  scarecrow snapping upright (unchanged — the creak now doubles as the
+  "you've been taunted" cue).
+- **Reuses:** `Deployable` entity · a `forcedTargetId`/`tauntLeft` pair on
+  the player, consulted before `selectTarget` and validated by the same
+  candidate rules (alive, LOS, sandstorm, own engagement radius) ·
+  `resolveAttack` (a dummy is still just a combatant that can't act) ·
+  status-ring plumbing for the victim cue.
+- **Bots:** being taunted costs zero bot work — bots receive `targetId` from
+  the same sim targeting step as humans. The `botCasts.ts` rule flips from
+  paced to **reactive**: cast when pressured — enemies inside taunt radius
+  with their lock on you (bot-brains.md cast-rule table needs the matching
+  update).
 
 ### 11 · Warding Shout
 
@@ -491,7 +539,7 @@ anywhere, so the seed/`rngDraws` restore contract is untouched.
   state on their own. These join the `StatusPulses` system as new kinds:
   same accumulated-phase pulse, same speeds-up-near-expiry rule, drawn one
   radius step outside the slow/bleed rings so stacked states stay legible.
-  Concentric ring order (inner → outer): slow · bleed · ability.
+  Concentric ring order (inner → outer): slow · bleed · taunt · ability.
 - **Zones** (Sandtrap, Blood Font, Sandstorm, War Drums' area) draw as a
   ground ring + interior effect, under players, over blood decals.
 - **Deployables are clearly visible to all players** (Tom, 2026-07-12) — no

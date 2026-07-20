@@ -14,7 +14,7 @@
  */
 import type { PlayerSnapshot } from "@heroic/blood-in-the-sand-sim";
 
-export type StatusKind = "slow" | "bleed" | "mirror-guard";
+export type StatusKind = "slow" | "bleed" | "taunt" | "mirror-guard";
 
 /** The abilities whose active window draws a body ring (War Drums draws its
  * aura circle in-world; Ironhide draws a full shield dome — see render.ts). */
@@ -26,10 +26,11 @@ const pulseFreq = (left: number): number => Math.min(5, 0.9 + 1.8 / Math.max(lef
 const timeLeft = (p: PlayerSnapshot, kind: StatusKind): number => {
   if (kind === "slow") return p.slowLeft;
   if (kind === "bleed") return p.bleedLeft;
+  if (kind === "taunt") return p.tauntLeft;
   return p.abilities.find((s) => s.id === kind)?.active ?? 0;
 };
 
-const KINDS: readonly StatusKind[] = ["slow", "bleed", ...RING_ABILITIES];
+const KINDS: readonly StatusKind[] = ["slow", "bleed", "taunt", ...RING_ABILITIES];
 
 export class StatusPulses {
   private readonly phases = new Map<string, number>();
