@@ -2,6 +2,7 @@
   "expo": {
     "name": "Blood in the Sand",
     "slug": "blood-in-the-sand",
+    "icon": "./assets/blood-in-the-sand-icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -9,7 +10,8 @@
     "ios": {
       "bundleIdentifier": "com.tfreeb.blood-in-the-sand",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Blood in the Sand does not record audio. This declaration is required by the game's audio playback engine."
       }
     },
     "android": {
@@ -21,6 +23,12 @@
       "eas": {
         "projectId": "4cb5b5aa-5c5d-49ff-ab45-69a775dbeee1"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4cb5b5aa-5c5d-49ff-ab45-69a775dbeee1"
     }
   }
 }

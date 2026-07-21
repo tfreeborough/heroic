@@ -12,6 +12,7 @@ import {
   type AbilityId,
 } from "@heroic/blood-in-the-sand-sim";
 import { ArenaClient, DEFAULT_SERVER, resolveServerUrl } from "./src/net/connection";
+import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -70,9 +71,19 @@ export default function App() {
   // The offline bot match — while set, the practice route shows the game.
   const [practice, setPractice] = useState<PracticeClient | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The server refused our PROTOCOL_VERSION — the player's JS is behind the
+  // arena. Routes the connect screen to the update flow instead of RETRY.
+  const [mismatch, setMismatch] = useState(false);
+  // Feedback from the UPDATE NOW attempt ("none" → store nudge, "failed" → retry).
+  const [updateHint, setUpdateHint] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   // null = still loading from storage, "" = never set → PLAY gates on NameScreen.
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [, force] = useReducer((x: number) => x + 1, 0);
+
+  // Staged-OTA flag for the home screen's restart pill — and the fast path
+  // out of a protocol mismatch (the fix is usually already downloaded).
+  const updateReady = useUpdateReady();
 
   // A game should never dim or lock mid-session — keep the screen awake the
   // whole time the app is foregrounded, not just during a match (GameScreen
@@ -116,6 +127,8 @@ export default function App() {
 
   const connect = useCallback(() => {
     setError(null);
+    setMismatch(false);
+    setUpdateHint(null);
     if (!SERVER) {
       setError("no server configured — set EXPO_PUBLIC_DEFAULT_SERVER");
       return;
@@ -128,12 +141,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
   }, []);
 
+  // UPDATE NOW on the mismatch screen. If the fix is already staged, restart
+  // into it; otherwise fetch it live. Success never returns (JS reloads).
+  const applyUpdate = useCallback(async () => {
+    setUpdateHint(null);
+    if (updateReady) {
+      restartToApply();
+      return;
+    }
+    setUpdating(true);
+    const result = await fetchAndApplyUpdate();
+    setUpdating(false);
+    if (result === "none") {
+      setUpdateHint("No update is live yet — install the newest build from TestFlight or Google Play, or try again shortly.");
+    } else if (result === "failed") {
+      setUpdateHint("Couldn't reach the update server — check your connection and try again.");
+    }
+  }, [updateReady]);
+
   useEffect(() => {
     if (!client) return;
     // A dead connection drops the play route back to its connect screen.
     const check = (): void => {
       if (client.status === "closed" || client.status === "rejected") {
         setError(client.rejectReason ?? "connection lost");
+        // "rejected" is only ever the protocol gate (connection.ts) — route
+        // the connect screen to the update flow instead of a doomed RETRY.
+        setMismatch(client.status === "rejected");
         client.close();
         setClient(null);
       }
@@ -220,6 +254,8 @@ export default function App() {
         onPractice={() => setRoute("practice")}
         onSettings={() => setRoute("settings")}
         onTargetDummies={startTargetDummies}
+        updateReady={updateReady}
+        onApplyUpdate={restartToApply}
       />
     );
   } else if (route === "settings") {
@@ -244,7 +280,19 @@ export default function App() {
     screen = (
       <View style={styles.centre}>
         <Text style={styles.logo}>BLOOD{"\n"}IN THE SAND</Text>
-        {error ? (
+        {mismatch ? (
+          <>
+            <Text style={styles.updateTitle}>UPDATE REQUIRED</Text>
+            <Text style={styles.updateBody}>
+              Your game is a version behind the arena, so live matches are off until you update.
+              Practice still works offline.
+            </Text>
+            <Pressable onPress={() => void applyUpdate()} style={styles.retry} disabled={updating}>
+              <Text style={styles.retryText}>{updating ? "UPDATING…" : "UPDATE NOW"}</Text>
+            </Pressable>
+            {updateHint && <Text style={styles.updateHint}>{updateHint}</Text>}
+          </>
+        ) : error ? (
           <>
             <Text style={styles.error}>{error}</Text>
             <Pressable onPress={connect} style={styles.retry}>
@@ -292,6 +340,9 @@ const styles = StyleSheet.create({
   },
   connecting: { color: "#8a7f70", fontSize: 15 },
   error: { color: "#e0503c", fontSize: 14, textAlign: "center", marginBottom: 16 },
+  updateTitle: { color: "#e8c87a", fontSize: 16, fontWeight: "900", letterSpacing: 3, marginBottom: 10 },
+  updateBody: { color: "#b0a493", fontSize: 14, textAlign: "center", lineHeight: 21, marginBottom: 18, maxWidth: 300 },
+  updateHint: { color: "#8a7f70", fontSize: 12, textAlign: "center", marginTop: 14, maxWidth: 300, lineHeight: 18 },
   retry: { backgroundColor: "#8c2f2f", borderRadius: 8, paddingVertical: 12, paddingHorizontal: 36 },
   retryText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1 },
   homeLink: { marginTop: 28 },

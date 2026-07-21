@@ -1,0 +1,49 @@
+# Blood in the Sand — OTA update on every push that touches its JS.
+#
+# Publishes the current JS + assets to the `production` update channel, which
+# every store/TestFlight build listens on. The runtimeVersion (appVersion
+# policy) makes this safe to run on every push: an update is only delivered
+# to binaries whose app.json `version` matches the one it was published
+# against — a push containing native changes + a version bump simply publishes
+# an update no installed binary picks up until the next store build ships.
+#
+# Needs an EXPO_TOKEN repo secret (expo.dev → Account settings → Access
+# tokens) with access to the free-the-borough-games account.
+name: eas-update-bits
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "apps/blood-in-the-sand/**"
+      - "packages/blood-in-the-sand-sim/**"
+      - "packages/core/**"
+      - "packages/engine/**"
+      - "bun.lock"
+
+concurrency:
+  # A rapid push train publishes in order, last one wins — never interleaved.
+  group: eas-update-bits
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Publish OTA update
+        working-directory: apps/blood-in-the-sand
+        env:
+          # Via env, not inline — commit messages contain quotes and newlines.
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: eas update --channel production --message "$COMMIT_MSG" --non-interactive

@@ -17,6 +17,9 @@ android/
 *.key
 *.mobileprovision
 
+# google play service account credential (used by eas submit, never committed)
+play-service-account.json
+
 # misc
 .DS_Store
 *.log

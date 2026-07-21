@@ -3,7 +3,7 @@ import { speedFactorOf } from "./abilities";
 import { ARCHETYPES, botThink, createBotMemory, decideCasts, deriveArchetype, DIFFICULTIES, focusTarget, nearestEnemy, SnapshotHistory } from "./bot";
 import type { AbilityId } from "./config";
 import { createBotNav, dashClear, navDirection, openDirection } from "./nav";
-import type { AbilitySlotSnapshot, DeployableSnapshot, PlayerSnapshot, SnapshotMsg } from "./protocol";
+import type { AbilitySlotSnapshot, DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot, SnapshotMsg } from "./protocol";
 import { addPlayer, createSim } from "./sim";
 import { ARENA_00 } from "./zone";
 
@@ -133,6 +133,22 @@ const deployable = (over: Partial<DeployableSnapshot>): DeployableSnapshot => ({
   ...over,
 });
 
+/** The brain's world view — players plus whatever ground/air the test needs. */
+const w = (
+  players: PlayerSnapshot[],
+  deployables: DeployableSnapshot[] = [],
+  projectiles: ProjectileSnapshot[] = [],
+) => ({ players, deployables, projectiles });
+
+const arrow = (over: Partial<ProjectileSnapshot>): ProjectileSnapshot => ({
+  id: 500,
+  x: 0,
+  y: 0,
+  angle: 0,
+  kind: "bow",
+  ...over,
+});
+
 describe("botThink", () => {
   const nav = createBotNav(POCKET_ZONE);
 
@@ -144,7 +160,7 @@ describe("botThink", () => {
     });
     const enemy = snap({ id: 9, team: 2, x: 600, y: 100 });
     // Archetype pinned via the override — a brawler gap-closes with dash.
-    const d = botThink(createBotMemory(), me, [me, enemy], [], nav, { archetype: "brawler" });
+    const d = botThink(createBotMemory(), me, w([me, enemy]), nav, { archetype: "brawler" });
     expect(d.casts).toEqual([false, true]); // far + clear hop → dash, slot 1
     expect(d.sx).toBeGreaterThan(0);
   });
@@ -152,9 +168,9 @@ describe("botThink", () => {
   test("no dash without charges; idle without a living enemy", () => {
     const me = snap({ abilities: [slot("dash", { charges: 0 })] });
     const enemy = snap({ id: 9, team: 2, x: 600, y: 0 });
-    expect(botThink(createBotMemory(), me, [me, enemy], [], nav).casts).toEqual([false]);
+    expect(botThink(createBotMemory(), me, w([me, enemy]), nav).casts).toEqual([false]);
     const dead = snap({ id: 9, team: 2, alive: false });
-    expect(botThink(createBotMemory(), me, [me, dead], [], nav)).toEqual({ sx: 0, sy: 0, casts: [] });
+    expect(botThink(createBotMemory(), me, w([me, dead]), nav)).toEqual({ sx: 0, sy: 0, casts: [] });
   });
 
   test("one proactive press per pacing beat", () => {
@@ -165,11 +181,11 @@ describe("botThink", () => {
     const godlike = { difficulty: "godlike" as const };
     const me = snap({ x: 100, y: 100, abilities: [slot("harpoon"), slot("tremor")] });
     const enemy = snap({ id: 9, team: 2, x: 500, y: 100, weapon: "bow" });
-    const first = botThink(memory, me, [me, enemy], [], nav, godlike);
+    const first = botThink(memory, me, w([me, enemy]), nav, godlike);
     expect(first.casts).toEqual([true, false]);
     // Enemy now point-blank — tremor's rule is satisfied but the beat holds.
     const close = snap({ id: 9, team: 2, x: 150, y: 100 });
-    const second = botThink(memory, me, [me, close], [], nav, godlike);
+    const second = botThink(memory, me, w([me, close]), nav, godlike);
     expect(second.casts).toEqual([false, false]);
   });
 
@@ -206,7 +222,7 @@ describe("archetypes", () => {
       abilities: [slot("dash", { charges: 4 }), slot("mirror-guard")],
     });
     const enemy = snap({ id: 9, team: 2, x: 350, y: 300, weapon: "blade" });
-    const d = botThink(createBotMemory(), me, [me, enemy], [], nav);
+    const d = botThink(createBotMemory(), me, w([me, enemy]), nav);
     expect(d.sx).toBeLessThan(0); // enemy at +x, well inside the band → retreat
     expect(d.casts[0]).toBe(true); // deep inside near-band → hop out
   });
@@ -219,7 +235,7 @@ describe("archetypes", () => {
     const players = [me, ward, nearMe, onWard];
     expect(focusTarget(ARCHETYPES.bodyguard, me, players)?.id).toBe(9);
     // Movement agrees: toward the ward's side of the sand (+x), not enemy 8.
-    const d = botThink(createBotMemory(), me, players, [], nav);
+    const d = botThink(createBotMemory(), me, w(players), nav);
     expect(d.sx).toBeGreaterThan(0);
   });
 
@@ -228,7 +244,7 @@ describe("archetypes", () => {
     const weak = snap({ id: 9, team: 2, x: 600, y: 100, hp: 30 });
     const near = snap({ id: 8, team: 2, x: 150, y: 100 });
     expect(focusTarget(ARCHETYPES.opportunist, me, [me, weak, near])?.id).toBe(9);
-    const d = botThink(createBotMemory(), me, [me, weak, near], [], nav);
+    const d = botThink(createBotMemory(), me, w([me, weak, near]), nav);
     expect(d.sx).toBeGreaterThan(0); // diving the weak mark, past the near body
   });
 
@@ -245,12 +261,12 @@ describe("archetypes", () => {
     });
     const enemy = snap({ id: 9, team: 2, x: 600, y: 100, weapon: "bow" });
     const mate = snap({ id: 1, team: 1, x: 300, y: 550 });
-    const withMate = botThink(createBotMemory(), hurt, [hurt, mate, enemy], [], nav, { difficulty: "godlike" });
+    const withMate = botThink(createBotMemory(), hurt, w([hurt, mate, enemy]), nav, { difficulty: "godlike" });
     expect(withMate.sx).toBeLessThan(0); // retreating
-    const alone = botThink(createBotMemory(), hurt, [hurt, enemy], [], nav, { difficulty: "godlike" });
+    const alone = botThink(createBotMemory(), hurt, w([hurt, enemy]), nav, { difficulty: "godlike" });
     expect(alone.sx).toBeGreaterThan(0); // last stand: back into the fight
     const deadMate = snap({ id: 1, team: 1, x: 300, y: 550, alive: false });
-    const mateDown = botThink(createBotMemory(), hurt, [hurt, deadMate, enemy], [], nav, { difficulty: "godlike" });
+    const mateDown = botThink(createBotMemory(), hurt, w([hurt, deadMate, enemy]), nav, { difficulty: "godlike" });
     expect(mateDown.sx).toBeGreaterThan(0); // a corpse is not a teammate
   });
 
@@ -258,7 +274,7 @@ describe("archetypes", () => {
     const me = snap({ x: 300, y: 300, weapon: "blade", abilities: [] });
     const enemy = snap({ id: 9, team: 2, x: 600, y: 300 });
     const quake = deployable({ kind: "quake", team: 2, x: 340, y: 300 });
-    const d = botThink(createBotMemory(), me, [me, enemy], [quake], nav);
+    const d = botThink(createBotMemory(), me, w([me, enemy], [quake]), nav);
     expect(d.sx).toBeLessThan(0.1); // the engage pull is beaten back by the zone push
   });
 });
@@ -278,7 +294,7 @@ describe("difficulty", () => {
     const dodges = (difficulty: "godlike" | "novice"): number => {
       let n = 0;
       for (let seed = 1; seed <= 100; seed++) {
-        const d = botThink(createBotMemory(seed), me, players, [], nav, { difficulty });
+        const d = botThink(createBotMemory(seed), me, w(players), nav, { difficulty });
         if (d.casts[0]) n += 1;
       }
       return n;
@@ -293,10 +309,10 @@ describe("difficulty", () => {
     const { me, players } = dodgeSetup();
     for (let seed = 1; seed <= 20; seed++) {
       const memory = createBotMemory(seed);
-      const first = botThink(memory, me, players, [], nav, { difficulty: "novice" });
+      const first = botThink(memory, me, w(players), nav, { difficulty: "novice" });
       if (first.casts[0]) continue; // this seed dodged; not the case under test
       for (let tick = 0; tick < 5; tick++) {
-        expect(botThink(memory, me, players, [], nav, { difficulty: "novice" }).casts[0]).toBe(false);
+        expect(botThink(memory, me, w(players), nav, { difficulty: "novice" }).casts[0]).toBe(false);
       }
       return;
     }
@@ -309,7 +325,7 @@ describe("difficulty", () => {
     const presses = (difficulty: "godlike" | "novice"): number => {
       let n = 0;
       for (let seed = 1; seed <= 100; seed++) {
-        const d = botThink(createBotMemory(seed), me, [me, enemy], [], nav, { difficulty });
+        const d = botThink(createBotMemory(seed), me, w([me, enemy]), nav, { difficulty });
         if (d.casts[0]) n += 1;
       }
       return n;
@@ -328,11 +344,11 @@ describe("difficulty", () => {
     const memory = createBotMemory();
     const me = snap({ x: 150, y: 100, weapon: "bow", abilities: [slot("dash", { charges: 4 }), slot("mirror-guard")] });
     const enemy = snap({ id: 9, team: 2, x: 400, y: 100, weapon: "bow" }); // dist 250, inside [209, 304]
-    const early = botThink(memory, me, [me, enemy], [], nav, { difficulty: "godlike" });
+    const early = botThink(memory, me, w([me, enemy]), nav, { difficulty: "godlike" });
     expect(Math.abs(early.sx)).toBeLessThan(0.6); // holding: strafe dominates
     let pressed = false;
     for (let tick = 0; tick < 260; tick++) {
-      const d = botThink(memory, me, [me, enemy], [], nav, { difficulty: "godlike" });
+      const d = botThink(memory, me, w([me, enemy]), nav, { difficulty: "godlike" });
       if (d.sx > 0.6) pressed = true; // charging the enemy at +x (weave adds lateral)
     }
     expect(pressed).toBe(true);
@@ -355,7 +371,7 @@ describe("difficulty", () => {
       const memory = createBotMemory(7);
       let frozen = 0;
       for (let tick = 0; tick < 300; tick++) {
-        const d = botThink(memory, me, [me, enemy], [], nav, { difficulty });
+        const d = botThink(memory, me, w([me, enemy]), nav, { difficulty });
         if (d.sx === 0 && d.sy === 0) frozen += 1;
       }
       return frozen;
@@ -379,7 +395,7 @@ describe("difficulty", () => {
       let sawNeg = false;
       for (let tick = 0; tick < 30; tick++) {
         const me = snap({ x: pos.x, y: pos.y, weapon: "blade", abilities: [] });
-        const d = botThink(memory, me, [me, enemy], [], nav, { difficulty: "masterful" });
+        const d = botThink(memory, me, w([me, enemy]), nav, { difficulty: "masterful" });
         pos.x += d.sx * 9;
         pos.y += d.sy * 9;
         maxLat = Math.max(maxLat, Math.abs(d.sy));
@@ -397,12 +413,63 @@ describe("difficulty", () => {
   test("smartDodge: the dash waits for the arrow and hops perpendicular", () => {
     const me = snap({ x: 150, y: 100, weapon: "blade", abilities: [slot("dash", { charges: 4 })] });
     const early = snap({ id: 9, team: 2, x: 350, y: 100, weapon: "bow", atk: "windup", atkLeft: 0.4 });
-    const held = botThink(createBotMemory(), me, [me, early], [], nav, { difficulty: "godlike" });
+    const held = botThink(createBotMemory(), me, w([me, early]), nav, { difficulty: "godlike" });
     expect(held.casts[0]).toBe(false); // shot not close to loosing — hold the dash
     const late = snap({ id: 9, team: 2, x: 350, y: 100, weapon: "bow", atk: "windup", atkLeft: 0.1 });
-    const dodge = botThink(createBotMemory(), me, [me, late], [], nav, { difficulty: "godlike" });
+    const dodge = botThink(createBotMemory(), me, w([me, late]), nav, { difficulty: "godlike" });
     expect(dodge.casts[0]).toBe(true); // now — dodge by displacement
     expect(Math.abs(dodge.sy)).toBeGreaterThan(0.8); // perpendicular to the shot line
+  });
+
+  test("in-flight evasion: a smart tier steps off the arrow's line, dashes when it's imminent", () => {
+    // Arrow flying -x, dead-on at the bot: far out (eta ~0.31s) the feet
+    // move perpendicular but the dash is held; close in (eta ~0.12s) it
+    // spends the hop. A tier without smartDodge is blind to the air.
+    const me = snap({ x: 300, y: 100, weapon: "blade", abilities: [slot("dash", { charges: 4 })] });
+    const enemy = snap({ id: 9, team: 2, x: 600, y: 100 });
+    const farShot = arrow({ x: 500, y: 100, angle: Math.PI });
+    const evade = botThink(createBotMemory(), me, w([me, enemy], [], [farShot]), nav, { difficulty: "godlike" });
+    expect(Math.abs(evade.sy)).toBeGreaterThan(0.8); // off the line
+    expect(evade.casts[0]).toBe(false); // hop held
+    const nearShot = arrow({ x: 380, y: 100, angle: Math.PI });
+    const dodge = botThink(createBotMemory(), me, w([me, enemy], [], [nearShot]), nav, { difficulty: "godlike" });
+    expect(Math.abs(dodge.sy)).toBeGreaterThan(0.8);
+    expect(dodge.casts[0]).toBe(true); // imminent — spend it
+    const blind = botThink(createBotMemory(), me, w([me, enemy], [], [nearShot]), nav, { difficulty: "skilled" });
+    expect(Math.abs(blind.sy)).toBeLessThan(0.4); // no in-flight model down here
+  });
+
+  test("dash-down punish: a duellist surges when the target's escape is spent", () => {
+    // In-band a duellist normally holds and strafes; the target's dash on
+    // cooldown flips it into the punish charge (public cooldown clocks).
+    const me = snap({ x: 300, y: 100, weapon: "blade", abilities: [slot("dash", { charges: 4 }), slot("ironhide")] });
+    const escapeUp = snap({ id: 9, team: 2, x: 400, y: 100, abilities: [slot("dash")] });
+    const hold = botThink(createBotMemory(), me, w([me, escapeUp]), nav, { difficulty: "godlike" });
+    expect(hold.sx).toBeLessThan(0.6); // holding the band, strafing
+    const escapeDown = snap({ id: 9, team: 2, x: 400, y: 100, abilities: [slot("dash", { cd: 2.5 })] });
+    const surge = botThink(createBotMemory(), me, w([me, escapeDown]), nav, { difficulty: "godlike" });
+    expect(surge.sx).toBeGreaterThan(0.7); // the punish window
+  });
+
+  test("focus fire: top tiers hunt the weakest, not the nearest", () => {
+    const me = snap({ x: 300, y: 100, weapon: "blade", abilities: [] });
+    const strongNear = snap({ id: 8, team: 2, x: 120, y: 100 }); // -x, closer
+    const weakFar = snap({ id: 9, team: 2, x: 600, y: 100, hp: 20 }); // +x
+    const players = [me, strongNear, weakFar];
+    const godlike = botThink(createBotMemory(), me, w(players), nav, { difficulty: "godlike" });
+    expect(godlike.sx).toBeGreaterThan(0); // toward the kill at +x
+    const skilled = botThink(createBotMemory(), me, w(players), nav, { difficulty: "skilled" });
+    expect(skilled.sx).toBeLessThan(0); // dogpiles the nearest at -x
+  });
+
+  test("dash economy: the last hop is never spent gap-closing a shooter", () => {
+    const enemy = snap({ id: 9, team: 2, x: 640, y: 100, weapon: "bow" });
+    const lastCharge = snap({ x: 150, y: 100, weapon: "blade", abilities: [slot("dash", { charges: 1 })] });
+    const held = botThink(createBotMemory(), lastCharge, w([lastCharge, enemy]), nav, { archetype: "brawler", difficulty: "godlike" });
+    expect(held.casts[0]).toBe(false); // reserve it for the dodge
+    const flush = snap({ x: 150, y: 100, weapon: "blade", abilities: [slot("dash", { charges: 4 })] });
+    const spend = botThink(createBotMemory(), flush, w([flush, enemy]), nav, { archetype: "brawler", difficulty: "godlike" });
+    expect(spend.casts[0]).toBe(true); // plenty left — close the gap
   });
 
   test("the top tiers run hot: moveFactor multiplies into the speed stack", () => {

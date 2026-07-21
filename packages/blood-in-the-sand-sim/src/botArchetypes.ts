@@ -227,18 +227,22 @@ export const resolveBand = (
  * `weakest` hunts the lowest hp fraction (distance breaks ties); `protect`
  * hunts whoever is closest to my most-hurt living teammate — which, blended
  * with the anchor leash, IS the peel: the bodyguard moves at the diver.
+ * `focusFire` (the top difficulty tiers) upgrades `nearest` to `weakest` so
+ * a bot TEAM concentrates its kills — protect keeps its ward.
  */
 export const focusTarget = (
   preset: ArchetypePreset,
   me: PlayerSnapshot,
   players: PlayerSnapshot[],
+  focusFire = false,
 ): PlayerSnapshot | undefined => {
   const enemies = players.filter((p) => p.team !== me.team && p.alive);
   if (enemies.length === 0) return undefined;
   const distTo = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
     Math.hypot(a.x - b.x, a.y - b.y);
+  const focus = focusFire && preset.focus === "nearest" ? "weakest" : preset.focus;
 
-  if (preset.focus === "weakest") {
+  if (focus === "weakest") {
     let best = enemies[0]!;
     for (const e of enemies) {
       const eFrac = e.hp / Math.max(1, e.maxHp);
@@ -248,7 +252,7 @@ export const focusTarget = (
     return best;
   }
 
-  if (preset.focus === "protect") {
+  if (focus === "protect") {
     let ward: PlayerSnapshot | undefined;
     for (const p of players) {
       if (p.id === me.id || p.team !== me.team || !p.alive) continue;

@@ -13,6 +13,7 @@
 import {
   BLOOD_FONT,
   HARPOON,
+  PLAYER_RADIUS,
   SANDSTORM,
   STRAW_MAN,
   TREMOR,
@@ -21,7 +22,7 @@ import {
   WEAPONS,
   type AbilityId,
 } from "./config";
-import type { DeployableSnapshot, PlayerSnapshot } from "./protocol";
+import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot } from "./protocol";
 
 /**
  * Target selection: the nearest living opponent. Shared by every caller
@@ -87,6 +88,64 @@ export const windupThreat = (me: PlayerSnapshot, players: PlayerSnapshot[]): Pla
   }
   return null;
 };
+
+/** An in-flight projectile on course for me, distilled for the dodge. */
+export interface IncomingShot {
+  id: number;
+  /** Seconds until it's abreast of me on its current heading. */
+  eta: number;
+  /** Unit direction pushing me OFF the flight line (perpendicular escape). */
+  awayX: number;
+  awayY: number;
+}
+
+/**
+ * The most imminent projectile whose current line threatens me — the thing
+ * the windup-based threat model can never see (docs/design/bot-brains.md,
+ * sharpened after Tom + wife beat the top tiers 2026-07-21): a shot already
+ * in the air, a STAFF orb curving back after a dodge, a mirror-reflected
+ * arrow, the second archer. Re-assessed every tick from the snapshot's
+ * projectiles (position + travel angle are public — every client renders
+ * them), so a homing orb gets re-dodged as it turns. Ownership isn't in the
+ * snapshot; dodging a teammate's passing arrow is wasted footwork we accept
+ * (humans flinch at those too).
+ */
+export const incomingShot = (
+  me: PlayerSnapshot,
+  projectiles: ProjectileSnapshot[],
+): IncomingShot | null => {
+  let best: IncomingShot | null = null;
+  for (const s of projectiles) {
+    const w = WEAPONS[s.kind];
+    if (!w.projectile || w.attack.projectileSpeed === undefined) continue;
+    const hx = Math.cos(s.angle);
+    const hy = Math.sin(s.angle);
+    const rx = me.x - s.x;
+    const ry = me.y - s.y;
+    /** Distance along the heading until abreast of me; behind = harmless. */
+    const along = rx * hx + ry * hy;
+    if (along < -PLAYER_RADIUS) continue;
+    /** Signed perpendicular offset of me from the flight line. */
+    const lateral = rx * -hy + ry * hx;
+    // Homers steer up to their turn rate — treat their corridor as wider.
+    const corridor =
+      w.projectile.radius + PLAYER_RADIUS + 24 + (w.projectile.homingTurnRate ? 70 : 0);
+    if (Math.abs(lateral) > corridor) continue;
+    const eta = Math.max(0, along) / w.attack.projectileSpeed;
+    if (eta > 0.9) continue;
+    if (best !== null && eta >= best.eta) continue;
+    // Escape perpendicular to the heading, on the side I'm already offset
+    // toward (dead-centre defaults to the heading's left).
+    const sign = lateral >= 0 ? 1 : -1;
+    best = { id: s.id, eta, awayX: -hy * sign, awayY: hx * sign };
+  }
+  return best;
+};
+
+/** Is this player's escape hop down (cooling or out of charges)? Cooldown
+ * clocks are public in-match — reading them is the bait-and-punish game. */
+export const dashDown = (p: PlayerSnapshot): boolean =>
+  p.abilities.some((s) => s.id === "dash" && (s.cd > 0 || s.charges === 0));
 
 /**
  * Pick this tick's ability press, or null. `enemy` is the brain's FOCUS

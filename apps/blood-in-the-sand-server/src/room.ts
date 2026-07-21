@@ -466,7 +466,7 @@ export class Room {
     for (const [id, seat] of this.botSeats) {
       // Stale WORLD, current self (bot-brains.md step 4).
       const snap = this.lastSnap.players.find((p) => p.id === id);
-      const decision = botThink(seat.memory, snap, world.players, world.deployables, this.nav);
+      const decision = botThink(seat.memory, snap, world, this.nav);
       const input = sanitizeInput({ seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
       this.inputs.set(id, input);
       if (input.casts.some(Boolean)) {

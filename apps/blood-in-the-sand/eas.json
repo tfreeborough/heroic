@@ -9,22 +9,30 @@
       "env": {
         "APP_VARIANT": "development",
         "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./play-service-account.json",
+        "track": "internal"
+      }
+    }
   }
 }

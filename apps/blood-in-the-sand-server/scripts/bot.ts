@@ -192,7 +192,7 @@ const think = (): BotDecision => {
   if (myId === null || latest === null) return { sx: 0, sy: 0, casts: [] };
   const me = latest.players.find((p) => p.id === myId);
   const world = history.stale(DIFFICULTIES[difficulty].reactionTicks) ?? latest;
-  return botThink(memory, me, world.players, world.deployables, nav, { archetype, difficulty });
+  return botThink(memory, me, world, nav, { archetype, difficulty });
 };
 
 setInterval(() => {

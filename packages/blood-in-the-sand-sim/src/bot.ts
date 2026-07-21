@@ -15,12 +15,12 @@
  * shuffle survives only as a counted last-resort fallback behind nav.
  */
 import { ARCHETYPES, deriveArchetype, focusTarget, resolveBand, type ArchetypeId } from "./botArchetypes";
-import { decideCasts, rangedWeapon, windupThreat } from "./botCasts";
+import { dashDown, decideCasts, incomingShot, rangedWeapon, windupThreat } from "./botCasts";
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, type DifficultyId } from "./botDifficulty";
 import { DASH_DISTANCE, SANDSTORM, SANDTRAP, TREMOR } from "./config";
 import type { BotNav } from "./nav";
 import { dashClear, navDirection, openDirection } from "./nav";
-import type { DeployableSnapshot, PlayerSnapshot } from "./protocol";
+import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot } from "./protocol";
 
 export * from "./botArchetypes";
 export * from "./botDifficulty";
@@ -66,6 +66,10 @@ export interface BotMemory {
   threatApproved: boolean;
   /** Ticks left in a low-tier hesitation freeze (the dither dial). */
   ditherTicks: number;
+  /** The in-flight projectile last rolled against (per-shot episode, like
+   * the windup's) and whether that roll passed. */
+  shotKey: number | null;
+  shotApproved: boolean;
   /** Serpentine state: which way the approach is currently cutting, and
    * ticks until the next irregular flip. */
   weaveSign: number;
@@ -91,9 +95,19 @@ export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
   threatKey: null,
   threatApproved: false,
   ditherTicks: 0,
+  shotKey: null,
+  shotApproved: false,
   weaveSign: 1,
   weaveTicks: 0,
 });
+
+/** Everything the brain reads about the match — the three snapshot arrays a
+ * host passes each tick (players/deployables at the tier's staleness). */
+export interface BotWorld {
+  players: PlayerSnapshot[];
+  deployables: DeployableSnapshot[];
+  projectiles: ProjectileSnapshot[];
+}
 
 /** No blood on either side for this long → the bot loses patience. */
 const STALL_TICKS = 240; // 8s at 30Hz
@@ -215,12 +229,12 @@ export interface BotThinkOptions {
 export const botThink = (
   memory: BotMemory,
   me: PlayerSnapshot | undefined,
-  players: PlayerSnapshot[],
-  deployables: DeployableSnapshot[],
+  world: BotWorld,
   nav: BotNav,
   opts?: BotThinkOptions,
 ): BotDecision => {
   if (!me || !me.alive) return IDLE;
+  const { players, deployables, projectiles } = world;
   const tier = DIFFICULTIES[opts?.difficulty ?? DEFAULT_DIFFICULTY];
 
   // Dither: the overwhelmed-new-player hesitation — a low tier occasionally
@@ -238,7 +252,7 @@ export const botThink = (
 
   const archetype = opts?.archetype ?? deriveArchetype(me.weapon, me.abilities.map((s) => s.id));
   const preset = ARCHETYPES[archetype];
-  const target = focusTarget(preset, me, players);
+  const target = focusTarget(preset, me, players, tier.focusFire);
   if (!target) return IDLE;
 
   const mePos = { x: me.x, y: me.y };
@@ -288,7 +302,13 @@ export const botThink = (
     vy += d.y * w;
   };
 
-  const punishing = preset.punishRecovery && target.atk === "recovery" && dist < 400;
+  // The punish window: their swing's recovery — and, for the smart tiers,
+  // their ESCAPE being down (dash cooldowns are public clocks; surging the
+  // moment yours is spent is the doc's promised bait-and-punish).
+  const punishing =
+    preset.punishRecovery &&
+    ((target.atk === "recovery" && dist < 400) ||
+      (tier.smartDodge && dashDown(target) && dist < 350));
 
   // Band-keeping — or the contact charge for band-less brains.
   if (fleeing) {
@@ -414,13 +434,47 @@ export const botThink = (
     }
   }
 
-  // Dash: the (possibly held) dodge, else the archetype's distance play.
+  // In-flight shot evasion (smart tiers): the windup model can't see a shot
+  // already in the air — a staff orb curving back, a mirror-reflected arrow,
+  // the second archer. Re-assessed every tick, so homers get RE-dodged as
+  // they turn. Feet move off the flight line; the dash spends only when the
+  // hit is imminent. One roll per shot, like the windup episode.
+  let evadeDash = false;
+  let evading = false;
+  if (tier.smartDodge) {
+    const shot = incomingShot(me, projectiles);
+    if (shot === null) {
+      memory.shotKey = null;
+    } else {
+      if (shot.id !== memory.shotKey) {
+        memory.shotKey = shot.id;
+        memory.shotApproved = nextRand(memory) < tier.dodgeChance;
+      }
+      if (memory.shotApproved) {
+        evading = true;
+        intent = openDirection(nav, mePos, { x: shot.awayX, y: shot.awayY });
+        evadeDash = shot.eta < 0.22;
+      }
+    }
+  }
+
+  // Dash economy: against a live shooter, the smart tiers keep a charge in
+  // reserve for dodging — the LAST hop is never spent closing a gap.
+  const rangedEnemyAlive = players.some((p) => p.team !== me.team && p.alive && rangedWeapon(p));
+  const dashChargesLeft = me.abilities.find((s) => s.id === "dash")?.charges ?? 0;
+  const mayGapClose = !tier.smartDodge || !rangedEnemyAlive || dashChargesLeft >= 2;
+
+  // Dash: the (possibly held) dodge, else the archetype's distance play —
+  // which yields entirely while a shot-evasion owns the feet (a distance
+  // dash mid-evade would spend the charge along the escape line for nothing).
   const dash =
     dashReady(me) &&
     dashClear(nav, mePos, intent, DASH_DISTANCE) &&
     (dodgeNow ||
-      ((preset.gapCloseDash || pressing) && dist > (band ? band.far + 120 : 220)) ||
-      (band !== null && dist < band.near * 0.6));
+      evadeDash ||
+      (!evading &&
+        (((preset.gapCloseDash || pressing) && mayGapClose && dist > (band ? band.far + 120 : 220)) ||
+          (band !== null && dist < band.near * 0.6))));
 
   if (memory.castHoldTicks > 0) memory.castHoldTicks -= 1;
   let pick = decideCasts(me, target, players, deployables, memory.castHoldTicks === 0, reactApproved);

@@ -16,6 +16,7 @@
     "expo-haptics": "~56.0.3",
     "expo-keep-awake": "~56.0.3",
     "expo-status-bar": "~56.0.4",
+    "expo-updates": "~56.0.22",
     "react": "19.2.3",
     "react-native": "0.85.3",
     "react-native-audio-api": "^0.13.2",
@@ -37,6 +38,8 @@
     "build:android:dev": "eas build --platform android --profile development",
     "build:ios:preview": "eas build --platform ios --profile preview",
     "build:android:preview": "eas build --platform android --profile preview",
+    "ship": "eas build --platform all --profile production --auto-submit",
+    "update:ota": "eas update --channel production",
     "typecheck": "tsc --noEmit"
   },
   "private": true

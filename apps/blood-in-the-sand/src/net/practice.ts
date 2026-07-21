@@ -288,7 +288,7 @@ export class PracticeClient implements LobbyClient {
       if (body) body.moveFactor = tier.speedFactor;
       const world = this.history.stale(tier.reactionTicks) ?? this.lastSnap;
       const snap = this.lastSnap.players.find((p) => p.id === id);
-      const decision = botThink(seat.memory, snap, world.players, world.deployables, this.nav, {
+      const decision = botThink(seat.memory, snap, world, this.nav, {
         difficulty,
         archetype: devFlags.botArchetype ?? undefined,
       });

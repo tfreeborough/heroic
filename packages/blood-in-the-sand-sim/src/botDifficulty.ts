@@ -73,17 +73,21 @@ export interface DifficultyPreset {
    * top two tiers run 5/10% hot — the ONE stat difficulty touches; damage
    * and HP stay even at every tier). Host-applied via ArenaPlayer.moveFactor. */
   speedFactor: number;
+  /** Team target discipline: the top tiers hunt the WEAKEST enemy together
+   * (a coordinated 2v2 focus is most of what makes a duo feel outmatched).
+   * Overrides "nearest" focus only — the bodyguard keeps its ward. */
+  focusFire: boolean;
 }
 
 export const DIFFICULTIES: Record<DifficultyId, DifficultyPreset> = {
-  novice: { name: "Novice", reactionTicks: 20, dodgeChance: 0, castChance: 0.2, castHoldExtra: 60, wobble: 0.8, dither: 0.5, weave: 0, smartDodge: false, speedFactor: 1 },
-  average: { name: "Average", reactionTicks: 15, dodgeChance: 0.1, castChance: 0.35, castHoldExtra: 36, wobble: 0.6, dither: 0.3, weave: 0, smartDodge: false, speedFactor: 1 },
-  experienced: { name: "Experienced", reactionTicks: 11, dodgeChance: 0.3, castChance: 0.55, castHoldExtra: 18, wobble: 0.35, dither: 0.1, weave: 0.15, smartDodge: false, speedFactor: 1 },
-  skilled: { name: "Skilled", reactionTicks: 8, dodgeChance: 0.55, castChance: 0.75, castHoldExtra: 9, wobble: 0.18, dither: 0, weave: 0.3, smartDodge: false, speedFactor: 1 },
-  adept: { name: "Adept", reactionTicks: 6, dodgeChance: 0.7, castChance: 0.85, castHoldExtra: 4, wobble: 0.1, dither: 0, weave: 0.5, smartDodge: true, speedFactor: 1 },
-  masterful: { name: "Masterful", reactionTicks: 4, dodgeChance: 0.85, castChance: 0.95, castHoldExtra: 0, wobble: 0.04, dither: 0, weave: 0.65, smartDodge: true, speedFactor: 1 },
-  inhuman: { name: "Inhuman", reactionTicks: 3, dodgeChance: 0.95, castChance: 1, castHoldExtra: 0, wobble: 0, dither: 0, weave: 0.75, smartDodge: true, speedFactor: 1.05 },
-  godlike: { name: "Godlike", reactionTicks: 1, dodgeChance: 1, castChance: 1, castHoldExtra: 0, wobble: 0, dither: 0, weave: 0.8, smartDodge: true, speedFactor: 1.1 },
+  novice: { name: "Novice", reactionTicks: 20, dodgeChance: 0, castChance: 0.2, castHoldExtra: 60, wobble: 0.8, dither: 0.5, weave: 0, smartDodge: false, speedFactor: 1, focusFire: false },
+  average: { name: "Average", reactionTicks: 15, dodgeChance: 0.1, castChance: 0.35, castHoldExtra: 36, wobble: 0.6, dither: 0.3, weave: 0, smartDodge: false, speedFactor: 1, focusFire: false },
+  experienced: { name: "Experienced", reactionTicks: 11, dodgeChance: 0.3, castChance: 0.55, castHoldExtra: 18, wobble: 0.35, dither: 0.1, weave: 0.15, smartDodge: false, speedFactor: 1, focusFire: false },
+  skilled: { name: "Skilled", reactionTicks: 8, dodgeChance: 0.55, castChance: 0.75, castHoldExtra: 9, wobble: 0.18, dither: 0, weave: 0.3, smartDodge: false, speedFactor: 1, focusFire: false },
+  adept: { name: "Adept", reactionTicks: 6, dodgeChance: 0.7, castChance: 0.85, castHoldExtra: 4, wobble: 0.1, dither: 0, weave: 0.5, smartDodge: true, speedFactor: 1, focusFire: false },
+  masterful: { name: "Masterful", reactionTicks: 4, dodgeChance: 0.85, castChance: 0.95, castHoldExtra: 0, wobble: 0.04, dither: 0, weave: 0.65, smartDodge: true, speedFactor: 1, focusFire: false },
+  inhuman: { name: "Inhuman", reactionTicks: 3, dodgeChance: 0.95, castChance: 1, castHoldExtra: 0, wobble: 0, dither: 0, weave: 0.75, smartDodge: true, speedFactor: 1.05, focusFire: true },
+  godlike: { name: "Godlike", reactionTicks: 1, dodgeChance: 1, castChance: 1, castHoldExtra: 0, wobble: 0, dither: 0, weave: 0.8, smartDodge: true, speedFactor: 1.1, focusFire: true },
 };
 
 /**

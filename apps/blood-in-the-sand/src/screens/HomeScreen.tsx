@@ -17,6 +17,10 @@ export interface HomeScreenProps {
   onSettings: () => void;
   /** Dev menu: start the target-dummy firing range (offline, respawning dummies). */
   onTargetDummies: () => void;
+  /** A downloaded OTA update is staged — show the restart pill. */
+  updateReady: boolean;
+  /** Restart into the staged update (instant JS reload). */
+  onApplyUpdate: () => void;
 }
 
 /** Wrap a nav handler so the tap unlocks audio (first gesture) and sounds. */
@@ -301,7 +305,7 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
  * Session-only on purpose — it never persists, so a fresh launch is always
  * clean (nothing to stumble into mid-playtest).
  */
-export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: HomeScreenProps) => {
+export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [devOpen, setDevOpen] = useState(false);
@@ -459,6 +463,7 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
       <View style={[styles.ui, { paddingTop: insets.top + 54, paddingBottom: insets.bottom + 70 }]} pointerEvents="box-none">
         <Animated.View style={rise(0, 0.45)}>
           <Pressable onPress={onTitleTap}>
+            <Text style={styles.eyebrow}>HEROIC</Text>
             <Text style={styles.wordA}>BLOOD</Text>
             <Text style={styles.wordB}>IN THE SAND</Text>
           </Pressable>
@@ -471,6 +476,14 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies }: 
         </Animated.View>
 
         <View style={styles.spacer} pointerEvents="none" />
+
+        {updateReady && (
+          <Animated.View style={rise(0.3, 0.8)}>
+            <Pressable onPress={withTap("uiConfirm", onApplyUpdate)} style={styles.updatePill}>
+              <Text style={styles.updatePillText}>UPDATE READY · TAP TO RESTART</Text>
+            </Pressable>
+          </Animated.View>
+        )}
 
         <Animated.View style={[styles.menu, rise(0.4, 1)]}>
           <View onLayout={(e) => setPlayBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
@@ -545,6 +558,15 @@ const styles = StyleSheet.create({
   ui: { flex: 1, alignItems: "center", paddingHorizontal: 24 },
   // RN letterSpacing adds a trailing space — tracked centered text needs the
   // negative marginRight (the wizard's YOU ARE ARMED lesson).
+  eyebrow: {
+    color: "#8a6d44",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+    letterSpacing: 9,
+    marginRight: -9,
+    marginBottom: 6,
+  },
   wordA: {
     fontFamily: DISPLAY_FONT,
     color: "#a32c22",
@@ -588,6 +610,17 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
   spacer: { flex: 1 },
+  updatePill: {
+    backgroundColor: "rgba(30,24,16,0.82)",
+    borderColor: "#8a6d44",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    marginBottom: 14,
+    alignSelf: "center",
+  },
+  updatePillText: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 2, marginRight: -2 },
   menu: { width: 250, gap: 12 },
   play: {
     backgroundColor: "#8c2f2f",
