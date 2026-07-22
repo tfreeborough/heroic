@@ -63,6 +63,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "death", label: "Death", category: "combat" },
   { id: "crowd_cheer", label: "Crowd — kill roar (8 takes)", category: "combat" },
   { id: "crowd_jeer", label: "Crowd — groan, you're scored on (few takes)", category: "combat" },
+  { id: "blood_squelch", label: "Bloody footstep — wet squelch", category: "combat" },
   { id: "crowd_ambience", label: "Crowd — arena ambience LOOP (1 long take)", category: "flow" },
   { id: "cast_generic", label: "Cast — generic", category: "ability" },
   { id: "harpoon_whip", label: "Harpoon — chain whip", category: "ability" },

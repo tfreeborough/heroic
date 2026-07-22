@@ -34,6 +34,7 @@ export type BitsSoundEvent =
   | "death" //          a combatant falls
   | "crowdCheer" //     the pit mob roars when YOUR side scores (8-take bank, randomised)
   | "crowdJeer" //      the pit mob groans when the ENEMY scores on you (bank, randomised)
+  | "squelch" //        bloody footsteps — stepping through a fresh pool (bits-blood.md)
   // ── Abilities ─────────────────────────────────────────────────────────────
   | "abilityCast" //    an ability fires              (qualifier: AbilityId)
   | "abilityDetonate" //a deployable goes off         (qualifier: AbilityId)
@@ -145,6 +146,17 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
     pitchVariance: 0.12,
     throttleMs: 0,
     volume: 0.8,
+  },
+
+  // Stepping through a fresh pool re-inks your soles (blood.ts footprints,
+  // bits-blood.md §6): one wet squelch per pool-crossing, not per stamped
+  // print. Throttled so a teamfight wading through the same kill site doesn't
+  // stack into a swamp.
+  squelch: {
+    clips: ["blood_squelch_1"],
+    volume: 0.7,
+    pitchVariance: 0.1,
+    throttleMs: 300,
   },
 
   // ── Abilities ───────────────────────────────────────────────────────────

@@ -110,6 +110,7 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   crowd_cheer: "a bloodthirsty arena crowd erupting at a kill — a short sharp roar and cheer that swells then falls, rowdy and dry, shouts and claps mixed, no music (forge ~6 varied takes for a randomised bank)",
   crowd_jeer: "an arena crowd's disappointed groan when a fighter they favour falls — a low collective 'ooohh' and dismayed grumble that sinks, deflated, dry and rowdy, no cheering and no music (forge a few varied takes for a randomised bank)",
   crowd_ambience: "a constant low arena-crowd ambience bed — a distant restless gladiator-pit crowd murmuring, shifting chatter and shuffles and the odd muffled shout, no distinct cheers or words, no music, EVEN and steady so it loops seamlessly under the action (forge ONE long take, 30s+ if the tool allows — it becomes the crossfade-looped background bed)",
+  blood_squelch: "a bare foot stepping through a fresh pool of blood on sand — one short wet squelch with a sticky peel as the foot lifts, subtle, no splash",
   // ── Abilities ─────────────────────────────────────────────────────────────
   cast_generic: "a short ability activation whoosh — dry, physical, a quick surge of intent",
   cast_sandtrap: "burying and arming a spiked powder charge in sand — a muffled shuffle then a metal click-latch",

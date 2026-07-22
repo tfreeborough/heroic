@@ -62,6 +62,20 @@ const SPECTATE_DELAY_MS = 2000;
 const SOUND_NEAR = 250;
 const SOUND_FAR = 850;
 const SOUND_FLOOR = 0.22;
+/** Volume factor for a sound at world (x, y) heard by `listener` (your
+ * fighter; your corpse while spectating). No listener (pure spectator) →
+ * unattenuated. Shared by the event drain and the footprint-squelch drain. */
+const gainFrom = (
+  listener: { x: number; y: number } | undefined,
+  x: number,
+  y: number,
+): number => {
+  if (!listener) return 1;
+  const d = Math.hypot(x - listener.x, y - listener.y);
+  if (d <= SOUND_NEAR) return 1;
+  if (d >= SOUND_FAR) return SOUND_FLOOR;
+  return 1 - ((d - SOUND_NEAR) / (SOUND_FAR - SOUND_NEAR)) * (1 - SOUND_FLOOR);
+};
 /** Booming-voice announcement text per multi-kill tier. */
 const MULTI_KILL_TEXT: Record<MultiKillTier, string> = {
   double: "DOUBLE KILL",
@@ -300,23 +314,32 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       const view = client.buffer.sample(now);
       const listener =
         myId != null ? view?.players.find((p) => p.id === myId) : undefined;
-      /** Volume factor for a sound at world (x, y): 1 near you → SOUND_FLOOR far.
-       *  No listener (pure spectator) → unattenuated. */
-      const gainAt = (x: number, y: number): number => {
-        if (!listener) return 1;
-        const d = Math.hypot(x - listener.x, y - listener.y);
-        if (d <= SOUND_NEAR) return 1;
-        if (d >= SOUND_FAR) return SOUND_FLOOR;
-        return (
-          1 - ((d - SOUND_NEAR) / (SOUND_FAR - SOUND_NEAR)) * (1 - SOUND_FLOOR)
-        );
-      };
+      /** Volume factor for a sound at world (x, y): 1 near you → SOUND_FLOOR far. */
+      const gainAt = (x: number, y: number): number => gainFrom(listener, x, y);
       for (const e of events) {
         if (e.type === "hit") {
+          // The attacker→victim line: every splash exits the far side of the
+          // victim along it (the through-wound), and the kill spray fires out
+          // of the BACK on the same line. The victim auto-faces their
+          // attacker, so if the killer's position isn't in the view (seat
+          // gone), -facing is the same line.
+          const victim = view?.players.find((p) => p.id === e.targetId);
+          const attacker = view?.players.find((p) => p.id === e.attackerId);
+          const dx = attacker
+            ? e.x - attacker.x
+            : victim
+              ? -Math.cos(victim.facing)
+              : 1;
+          const dy = attacker
+            ? e.y - attacker.y
+            : victim
+              ? -Math.sin(victim.facing)
+              : 0;
+          const len = Math.hypot(dx, dy) || 1;
           // Straw men don't bleed — deployable-target hits puff straw instead
           // of blood (the "sword fell on straw" tell).
           if (!isDeployableId(e.targetId)) {
-            blood.splatter(e.x, e.y, e.damage, e.lethal, now);
+            blood.splatter(e.x, e.y, e.damage, e.lethal, now, dx / len, dy / len);
           } else {
             fxRef.current.push({
               item: { kind: "strawBurst", x: e.x, y: e.y, life: 1 },
@@ -325,22 +348,6 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             });
           }
           if (e.lethal) {
-            // The kill spray fires out of the victim's BACK — away from the
-            // killer. The victim auto-faces their attacker, so if the killer's
-            // position isn't in the view (seat gone), -facing is the same line.
-            const victim = view?.players.find((p) => p.id === e.targetId);
-            const attacker = view?.players.find((p) => p.id === e.attackerId);
-            const dx = attacker
-              ? e.x - attacker.x
-              : victim
-                ? -Math.cos(victim.facing)
-                : 1;
-            const dy = attacker
-              ? e.y - attacker.y
-              : victim
-                ? -Math.sin(victim.facing)
-                : 0;
-            const len = Math.hypot(dx, dy) || 1;
             blood.deathBurst(e.x, e.y, dx / len, dy / len, now);
             // First Blood + Unreal-style kill chains (everyone hears them). Only
             // real players count — dummies never report a lethal hit anyway.
@@ -589,6 +596,16 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         if (view && w > 0 && client.welcome) {
           const recStart = perfOn ? performance.now() : 0;
           blood.update(view.players, now);
+          // Bloody-footprint squelches (bits-blood.md §6): one per wet-pool
+          // crossing, attenuated like every other positional sound.
+          if (blood.crossings.length > 0) {
+            const listener = view.players.find(
+              (p) => p.id === client.welcome!.playerId,
+            );
+            for (const c of blood.crossings)
+              playSound("squelch", undefined, undefined, gainFrom(listener, c.x, c.y));
+            blood.crossings.length = 0;
+          }
           cracks.update(now);
           // Quake zones chew the ground while they live: pop a small,
           // short-lived crack burst at a random spot inside each on a beat.
@@ -670,7 +687,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             insetTop: insets.top,
             insetBottom: insets.bottom,
             fx: fx.map((f) => f.item),
-            blood: blood.decals,
+            blood,
             cracks: cracks.decals,
             scarEpoch: blood.epoch + cracks.epoch,
             pulses,
