@@ -13,10 +13,23 @@
 import { useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 
-/** Same convention as the game server's EXPO_PUBLIC_DEFAULT_SERVER — unset
+/**
+ * Same conventions as the game server's EXPO_PUBLIC_DEFAULT_SERVER — unset
  * means "no API configured" and every call quietly no-ops (the title screen
- * just doesn't show a wallet). */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
+ * just doesn't show a wallet), and a scheme-less value is normalised the way
+ * resolveServerUrl does it: LAN hosts (IPs, localhost, *.local) get plain
+ * `http://`, anything else is a TLS-terminated proxy → `https://` on 443.
+ */
+const resolveApiUrl = (input: string): string => {
+  const t = input.trim().replace(/\/+$/, "");
+  if (!t || t.includes("://")) return t;
+  const [host = ""] = t.split(":");
+  const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  const isLocal = isIp || host === "localhost" || host.endsWith(".local");
+  return `${isLocal ? "http" : "https"}://${t}`;
+};
+
+export const API_URL = resolveApiUrl(process.env.EXPO_PUBLIC_API_URL ?? "");
 
 const KEY_PLAYER_ID = "bits.playerId";
 const KEY_TOKEN = "bits.playerToken";
