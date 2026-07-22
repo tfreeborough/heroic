@@ -10,7 +10,9 @@ Last decided: 2026-07-12
 
 ## The model
 
-One earnable currency (coins), earned from playing and winning matches, spendable on:
+One earnable currency — named **Glory** as of 2026-07-22 ("coins" below is the same
+thing; persistence/identity design lives in [glory-economy.md](./glory-economy.md)) —
+earned from playing and winning matches, spendable on:
 
 - **Weapons & abilities** — *sidegrades, not upgrades*: new decision space, not more power.
   Always earnable by playing at generous rates; coin packs purchasable for the impatient.

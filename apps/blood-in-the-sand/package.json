@@ -15,6 +15,7 @@
     "expo-dev-client": "~56.0.20",
     "expo-haptics": "~56.0.3",
     "expo-keep-awake": "~56.0.3",
+    "expo-secure-store": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "expo-updates": "~56.0.22",
     "react": "19.2.3",

@@ -18,6 +18,7 @@
       "package": "com.heroic.blood_in_the_sand",
       "predictiveBackGestureEnabled": false
     },
+    "plugins": ["expo-secure-store"],
     "owner": "free-the-borough-games",
     "extra": {
       "eas": {

@@ -20,6 +20,9 @@ android/
 # google play service account credential (used by eas submit, never committed)
 play-service-account.json
 
+# local dev database (blood-in-the-sand-api without Turso creds)
+dev.db*
+
 # misc
 .DS_Store
 *.log

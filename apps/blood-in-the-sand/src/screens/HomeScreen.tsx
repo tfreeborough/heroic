@@ -6,6 +6,7 @@ import { Blur, Canvas, Fill, Path, Picture, Rect, RoundedRect, Shader, Skia, use
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
+import { useGlory } from "../net/api";
 import { devFlags } from "../dev";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import { DUST_EFFECT } from "./dustStorm";
@@ -327,6 +328,10 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, up
   useEffect(() => {
     void loadAnnouncerPack().then(setAnnouncer);
   }, []);
+  // The server-authoritative Glory balance (net/api.ts) — null until it
+  // loads, and the chip simply doesn't render: the title screen never shows
+  // an error state for the wallet.
+  const glory = useGlory();
   const knock = useRef({ count: 0, lastMs: 0 });
 
   const scene = useMemo(() => makeHighSunPicture(width, height), [width, height]);
@@ -524,6 +529,15 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, up
 
       <Text style={[styles.foot, { bottom: insets.bottom + 18 }]}>THE CROWD WAITS</Text>
 
+      {/* the purse — pinned clear of the title block; the gem is the scene's
+          red rationed to one more place, like the rule under the tagline */}
+      {glory !== null && (
+        <View style={[styles.gloryPill, { top: insets.top + 14 }]} pointerEvents="none">
+          <View style={styles.gloryGem} />
+          <Text style={styles.gloryText}>{glory.toLocaleString()} GLORY</Text>
+        </View>
+      )}
+
       {devOpen && (
         <View style={[styles.devMenu, { bottom: insets.bottom + 16 }]}>
           <View style={styles.devHeader}>
@@ -679,6 +693,26 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginRight: -2,
   },
+  gloryPill: {
+    position: "absolute",
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: "rgba(30,24,16,0.72)",
+    borderColor: "rgba(138,109,68,0.75)",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 13,
+  },
+  gloryGem: {
+    width: 6,
+    height: 6,
+    backgroundColor: "#8c2f2f",
+    transform: [{ rotate: "45deg" }],
+  },
+  gloryText: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 2, marginRight: -2 },
   devMenu: {
     position: "absolute",
     left: 16,
