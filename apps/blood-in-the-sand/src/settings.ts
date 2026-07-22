@@ -14,6 +14,7 @@ import {
   type DifficultyId,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
+import { ANNOUNCER_PACK_IDS, type AnnouncerPackId } from "./audio/announcer";
 
 /** Lefty mode: buttons on the LEFT, the movement region fills from the right. */
 const KEY_LEFTY = "bits.lefty";
@@ -67,4 +68,21 @@ export const loadBotDifficulty = async (): Promise<DifficultyId> => {
 
 export const saveBotDifficulty = (difficulty: DifficultyId): void => {
   void AsyncStorage.setItem(KEY_BOT_DIFFICULTY, difficulty);
+};
+
+/** The picked announcer voice (audio/announcer.ts) — a real device setting
+ * with a dev-menu-only UI for now (the store gates packs by entitlement
+ * later). Applied on launch by App.tsx via setAnnouncerPack; validated
+ * against the live pack list so a removed pack falls back to default. */
+const KEY_ANNOUNCER_PACK = "bits.announcerPack";
+
+export const loadAnnouncerPack = async (): Promise<AnnouncerPackId> => {
+  const raw = await AsyncStorage.getItem(KEY_ANNOUNCER_PACK);
+  return raw !== null && (ANNOUNCER_PACK_IDS as readonly string[]).includes(raw)
+    ? (raw as AnnouncerPackId)
+    : "default";
+};
+
+export const saveAnnouncerPack = (pack: AnnouncerPackId): void => {
+  void AsyncStorage.setItem(KEY_ANNOUNCER_PACK, pack);
 };

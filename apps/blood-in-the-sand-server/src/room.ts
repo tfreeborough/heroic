@@ -167,7 +167,7 @@ export class Room {
    * rejoin takes over the live body), else a free lobby seat. Returns the
    * player id, or null if the room filled up in the meantime.
    */
-  seat(ws: Socket, name: string, nowMs: number): number | null {
+  seat(ws: Socket, name: string, announcer: string, nowMs: number): number | null {
     const ghost = seatedPlayers(this.sim.state).find((p) => !p.connected);
     let playerId: number | null = null;
     if (ghost) {
@@ -185,6 +185,9 @@ export class Room {
       playerId = addPlayer(this.sim, name)?.id ?? null;
     }
     if (playerId === null) return null;
+    // The announcer pack rides both paths — a rejoiner's pick lands like a
+    // joiner's (reconnectPlayer refreshes name; this is its cosmetic sibling).
+    this.sim.state.players[playerId]!.announcer = announcer;
 
     // A stale socket may still hold the seat (rejoin racing the close event).
     this.seats.get(playerId)?.close();

@@ -225,6 +225,25 @@ As-built notes (2026-07-20):
   archetype's band/dodge game stays on, only the disengage retreat is
   suppressed. In 1v1s every bot is always its team's last, so 1v1 bots
   simply never flee.
+- **The flee budget (Tom, 2026-07-22, from play):** even with teammates,
+  retreat is a budget, not a lifestyle — three low-hp bots cowering in
+  corners until picked off is the opposite of a fight. A low-hp retreat
+  lasts at most ~3.5s TOTAL, then the bot fights wounded (its archetype's
+  normal game at low hp); only actually healing back above the threshold
+  re-arms the allowance. Break away, pour the font, regroup — then turn.
+- **Top-tier smartening (2026-07-21, after Tom + wife beat Inhuman/Godlike):
+  the brain now reads the snapshot's PROJECTILES** — previously its entire
+  anti-ranged game was windup-reactive, blind to anything in the air. Smart
+  tiers (adept+) evade in-flight shots: feet off the flight line, dash only
+  when impact is imminent, re-assessed per tick so a homing staff orb gets
+  re-dodged as it curves and reflected arrows / second archers finally
+  exist. Plus: **dash-down punish** (punish archetypes surge when the
+  target's dash is cooling — cooldown clocks are public), **focus fire**
+  (Inhuman/Godlike upgrade "nearest" to "weakest": a bot team concentrates
+  kills — most of what makes a duo feel outmatched), and **dash economy**
+  (against a live shooter, the last hop is reserved for dodging, never spent
+  gap-closing). botThink now takes a BotWorld ({players, deployables,
+  projectiles} — a SnapshotMsg satisfies it structurally).
 
 Difficulty is picked in the practice lobby (BUILT 2026-07-20: the BOT SKILL
 4×2 chip grid on PracticeScreen, persisted per device, one expectation-

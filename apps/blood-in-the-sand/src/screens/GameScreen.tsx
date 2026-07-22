@@ -20,6 +20,8 @@ import { BloodField } from "../game/blood";
 import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
 import {
+  asAnnouncerPack,
+  playAnnouncement,
   playSound,
   startCrowdAmbience,
   stopCrowdAmbience,
@@ -349,11 +351,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
                 now,
               );
               const killer = attacker?.name ?? null;
+              // The KILLER's announcer pack voices the call, on every client —
+              // the pack-flex (monetisation.md). Every client resolves the same
+              // roomState row off the same event, so the room stays in unison;
+              // a missing row (seat gone) or unknown pack falls back to default.
+              const pack = asAnnouncerPack(
+                client.roomState?.players.find((p) => p.id === e.attackerId)?.announcer,
+              );
               if (call?.firstBlood) {
-                playSound("firstBlood");
+                playAnnouncement("firstBlood", pack);
                 showAnnounce("FIRST BLOOD", killer && `${killer} gets`);
               } else if (call?.tier) {
-                playSound("multiKill", call.tier);
+                playAnnouncement("multiKill", pack, call.tier);
                 showAnnounce(
                   MULTI_KILL_TEXT[call.tier],
                   killer && `${killer} gets a`,

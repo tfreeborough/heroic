@@ -23,6 +23,7 @@ import {
   type Team,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
+import { getActiveAnnouncer } from "../audio/announcer";
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "rejected";
 
@@ -268,6 +269,9 @@ export class ArenaClient {
       playerName,
       roomName,
       teamSize,
+      // The announcer pack is claimed at seat time (like the name) — read here
+      // rather than passed in, so every screen's create/join carries it.
+      announcer: getActiveAnnouncer(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
     });
   }
@@ -279,6 +283,7 @@ export class ArenaClient {
       v: PROTOCOL_VERSION,
       code: code.trim().toUpperCase(),
       playerName,
+      announcer: getActiveAnnouncer(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
     });
   }

@@ -116,16 +116,28 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * dummy stops being a legal mark, or they walk it out of their own weapon's
  * engagement radius. PlayerSnapshot gains `tauntLeft` (the victim's straw
  * status ring; the aim ring snapping to the dummy carries the rest).
+ * v18 (2026-07-22): announcer packs ride the wire (monetisation.md § announcer
+ * packs — the flex: when YOU take first blood / a multi-kill, YOUR pack's
+ * voice plays to the whole room). `createRoom`/`joinRoom` gain `announcer`
+ * (the sender's pack id) and RoomStatePlayer carries it PUBLICLY — kill
+ * announcements are client-derived from the shared event stream, so all any
+ * client needs is every seat's pack id; each then plays the ATTACKER's voice
+ * and the room stays in unison. Free-form string on the wire (the sim doesn't
+ * know the pack roster; length-capped server-side) — clients fall back to the
+ * default pack on ids they don't recognise, so a newer player's exotic pack
+ * degrades gracefully instead of breaking. Bots/dummies always announce in
+ * the default voice. Entitlements are NOT here — until the store exists any
+ * client may claim any pack.
  */
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 18;
 export const DEFAULT_PORT = 7777;
 
 // ── client → server ────────────────────────────────────────────────────────
 export type ClientMsg =
   /** `teamSize` 1–4 (the host's 1v1/2v2/3v3/4v4 pick) → 2×N seats; absent or
    * off-menu falls back to 1v1 (sanitizeTeamSize). */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number }
-  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string }
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; announcer?: string }
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }
@@ -240,6 +252,10 @@ export interface RoomStatePlayer {
   /** A server-run backfill bot — drives roster markers and the countdown
    * veil's cancel button (only a bot-filled start is cancellable). */
   bot: boolean;
+  /** This player's announcer-pack id — PUBLIC (unlike picks): every client
+   * plays the ATTACKER's voice on their kill calls, so everyone needs
+   * everyone's. Unrecognised ids fall back to the default pack client-side. */
+  announcer: string;
 }
 
 /** A live shot, projected for rendering (the client lerps x/y/angle by id). */

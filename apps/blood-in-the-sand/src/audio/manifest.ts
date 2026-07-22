@@ -17,7 +17,8 @@ import { ANNOUNCER_MANIFEST } from "./announcer";
  *
  * The booming announcer voice (`announce_*`) is NOT here: it's a swappable,
  * sellable PACK, so it lives in `announcer.ts` (its own `announcer/<pack>/`
- * folders) and is spread in below as the active pack's clips.
+ * folders) and is spread in below as EVERY pack's clips under pack-namespaced
+ * names — playSound remaps the catalogue's stable names to the active pack.
  */
 export const AUDIO_MANIFEST: AudioManifest = {
     hit_blade_1: require("../../assets/audio/sfx/hit_blade_1.mp3"),
@@ -81,6 +82,6 @@ export const AUDIO_MANIFEST: AudioManifest = {
 
     crowd_ambience_1: require("../../assets/audio/sfx/crowd_ambience_1.mp3"),
 
-    // The active announcer pack (announcer.ts) — announce_first_blood_1, …
+    // ALL announcer packs (announcer.ts) — `<pack>:announce_first_blood_1`, …
     ...ANNOUNCER_MANIFEST,
 };

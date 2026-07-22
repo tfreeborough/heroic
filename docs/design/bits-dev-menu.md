@@ -91,6 +91,18 @@ strikes/casts fire one on the exact frame the moment lands. Killed-and-smooth
 means haptics need batching/pre-armed generators; choppy either way clears
 them. Added 2026-07-18 on the same iPhone stutter hunt.
 
+## Tool 5 — Announcer pack switcher
+
+`ANNOUNCER ○ DEFAULT / ◉ ELIZA NIGHTSHADE` — cycles the kill-announcement
+voice through every pack in `audio/announcer.ts` and immediately plays the
+new voice's FIRST BLOOD line (the wizard's ear-training move). Unlike every
+other row this one is **persisted** (`bits.announcerPack`, settings.ts,
+applied on launch by App.tsx): it's a real device setting — the future store
+purchase — that simply has no player-facing UI yet, so the dev menu is where
+packs get auditioned. The product shape is LIVE (protocol v18): the KILLER's
+pack voices kill calls on every client in the room — so cycling this row is
+also how you demo the flex (see monetisation.md § announcer packs).
+
 ## Adding future tools
 
 `HomeScreen`'s dev panel is just a column — add a `Pressable` per tool and a

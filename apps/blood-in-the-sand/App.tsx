@@ -12,6 +12,8 @@ import {
   type AbilityId,
 } from "@heroic/blood-in-the-sand-sim";
 import { ArenaClient, DEFAULT_SERVER, resolveServerUrl } from "./src/net/connection";
+import { setAnnouncerPack } from "./src/audio";
+import { loadAnnouncerPack } from "./src/settings";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
 import { GameScreen } from "./src/screens/GameScreen";
@@ -92,6 +94,9 @@ export default function App() {
 
   useEffect(() => {
     void AsyncStorage.getItem(KEY_NAME).then((v) => setPlayerName(v?.trim() ?? ""));
+    // The persisted announcer voice (dev-menu picked) — applied before any
+    // match can play a kill line; matches only exist behind PLAY/PRACTICE.
+    void loadAnnouncerPack().then(setAnnouncerPack);
   }, []);
 
   const saveName = useCallback((name: string) => {

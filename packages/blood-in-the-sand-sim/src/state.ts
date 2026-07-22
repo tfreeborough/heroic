@@ -156,6 +156,11 @@ export interface ArenaPlayer {
   bot: boolean;
   /** Training only: seconds until a dead dummy is replaced; 0 = none pending. */
   respawnLeft: number;
+  /** Announcer-pack id (cosmetic, sim-meaningless — carried like `name` and
+   * broadcast via RoomStatePlayer so every client can play the killer's
+   * voice). "default" unless the seat's client claimed a pack; bots and
+   * dummies keep the default. */
+  announcer: string;
 }
 
 export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
@@ -313,6 +318,7 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   dummy: false,
   bot: false,
   respawnLeft: 0,
+  announcer: "default",
 });
 
 /** Defensive input scrubbing — the sim never trusts the wire. */

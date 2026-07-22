@@ -270,6 +270,34 @@ describe("archetypes", () => {
     expect(mateDown.sx).toBeGreaterThan(0); // a corpse is not a teammate
   });
 
+  test("the flee budget: a few seconds of retreat, then it fights wounded", () => {
+    // A hurt sniper WITH a teammate (so last-stand doesn't apply) retreats —
+    // but only for the budget. Walking the bot (static snapshots trip the
+    // unstick slide), it must flee at first and be heading back INTO the
+    // fight well before 6 seconds have passed. Healing is the only re-arm.
+    const memory = createBotMemory();
+    const pos = { x: 400, y: 100 };
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 100 });
+    const mate = snap({ id: 1, team: 1, x: 100, y: 550 });
+    let firstSx = 0;
+    let lateSx = 0;
+    for (let tick = 0; tick < 180; tick++) {
+      const me = snap({ x: pos.x, y: pos.y, hp: 30, weapon: "bow", abilities: [slot("mirror-guard"), slot("ironhide")] });
+      const d = botThink(memory, me, w([me, mate, enemy]), nav, { difficulty: "godlike" });
+      pos.x = Math.max(30, pos.x + d.sx * 9);
+      pos.y = Math.max(30, Math.min(610, pos.y + d.sy * 9));
+      if (tick === 0) firstSx = d.sx;
+      if (tick === 170) lateSx = d.sx;
+    }
+    expect(firstSx).toBeLessThan(0); // fleeing the enemy at +x
+    expect(memory.fleeSpent).toBe(true); // the allowance burned
+    expect(lateSx).toBeGreaterThan(-0.1); // no longer running away
+    // Healing re-arms: back above threshold, the trackers reset.
+    const healed = snap({ x: pos.x, y: pos.y, hp: 90, weapon: "bow", abilities: [] });
+    botThink(memory, healed, w([healed, mate, enemy]), nav, { difficulty: "godlike" });
+    expect(memory.fleeSpent).toBe(false);
+  });
+
   test("hostile ground repels: a bot standing in an enemy quake steps out", () => {
     const me = snap({ x: 300, y: 300, weapon: "blade", abilities: [] });
     const enemy = snap({ id: 9, team: 2, x: 600, y: 300 });

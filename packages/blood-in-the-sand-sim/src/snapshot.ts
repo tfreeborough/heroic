@@ -126,4 +126,5 @@ export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): Roo
     abilities: p.team === viewerTeam ? [...p.abilities] : null,
     armed: loadoutComplete(p),
     bot: p.bot,
+    announcer: p.announcer,
   }));

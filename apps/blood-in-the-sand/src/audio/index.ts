@@ -18,8 +18,16 @@ import { createSoundScheduler, type SoundConfig, type SoundScheduler } from "@he
 import { devFlags } from "../dev";
 import { AUDIO_MANIFEST } from "./manifest";
 import { SOUND_CATALOGUE, type BitsSoundEvent } from "./catalogue";
+import {
+  announcerPackClips,
+  expandAnnouncerClips,
+  resolveAnnouncerClip,
+  setActiveAnnouncer,
+  type AnnouncerPackId,
+} from "./announcer";
 
 export type { BitsSoundEvent } from "./catalogue";
+export { ANNOUNCER_PACK_IDS, asAnnouncerPack, getActiveAnnouncer, type AnnouncerPackId } from "./announcer";
 
 /** Cap on SIMULTANEOUS one-shots (the Web Audio engine mixes them all; this
  * is a spam guard, not a residency budget — warmed clips stay decoded
@@ -86,7 +94,42 @@ export const playSound = (
   if (devFlags.disableSfx) return;
   const { director, scheduler } = ensure();
   const cmd = scheduler.play(event, qualifier, overrides);
-  if (cmd) director.playSfx(cmd.clip, { volume: cmd.volume * gain, pitchVariance: cmd.pitchVariance });
+  // Announcer lines remap to the active PACK's manifest entry (announcer.ts);
+  // every other clip name passes through unchanged.
+  if (cmd) director.playSfx(resolveAnnouncerClip(cmd.clip), { volume: cmd.volume * gain, pitchVariance: cmd.pitchVariance });
+};
+
+/**
+ * A kill announcement in a SPECIFIC pack's voice — the networked flex
+ * (monetisation.md): GameScreen passes the KILLER's pack (from roomState), so
+ * everyone hears the scorer's announcer, not their own. Rides the normal
+ * scheduler (throttles/volume), only the pack remap is pinned. The local
+ * active pack still covers non-attributed plays (the dev menu's preview).
+ */
+export const playAnnouncement = (
+  event: "firstBlood" | "multiKill",
+  pack: AnnouncerPackId,
+  qualifier?: string,
+): void => {
+  if (devFlags.disableSfx) return;
+  const { director, scheduler } = ensure();
+  const cmd = scheduler.play(event, qualifier);
+  if (cmd) director.playSfx(resolveAnnouncerClip(cmd.clip, pack), { volume: cmd.volume });
+};
+
+/**
+ * Switch the announcer voice (dev menu today, the store later). Sets the
+ * remap target for every future announcer play and — if the director is
+ * already up — warms the new pack's clips so a kill right after switching
+ * doesn't cold-decode. Deliberately does NOT build the director: on a cold
+ * launch this runs before any user gesture (App.tsx applying the persisted
+ * pick), and the first build must ride a gesture; warmCombatAudio covers
+ * pre-match warming in that case.
+ */
+export const setAnnouncerPack = (pack: AnnouncerPackId): void => {
+  setActiveAnnouncer(pack);
+  if (devFlags.disableSfx) return;
+  director?.warm(announcerPackClips(pack));
 };
 
 /**
@@ -137,7 +180,9 @@ export const warmCombatAudio = (): void => {
       for (const clip of bank.clips) names.add(clip);
     }
   }
-  ensure().director.warm([...names]);
+  // The catalogue names announcer lines by their stable names; expand them to
+  // EVERY pack's entries — in a match any seat's voice can boom on a kill.
+  ensure().director.warm(expandAnnouncerClips([...names]));
 };
 
 /**

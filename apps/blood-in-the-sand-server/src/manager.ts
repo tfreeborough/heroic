@@ -33,6 +33,7 @@ import { Room, type ClientData, type Socket } from "./room";
 
 const SWEEP_MS = 60_000;
 const MAX_PLAYER_NAME = 16;
+const MAX_ANNOUNCER_ID = 32;
 
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
@@ -208,7 +209,7 @@ export class RoomManager {
       performance.now(),
     );
     this.rooms.set(code, room);
-    room.seat(ws, playerName, performance.now());
+    room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), performance.now());
     console.log(
       `⚔ room ${code} "${room.meta.name}" (${teamSize}v${teamSize}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
     );
@@ -228,7 +229,7 @@ export class RoomManager {
     if (verdict !== "ok") return this.send(ws, { t: "reject", reason: verdict });
 
     const playerName = sanitizeName(msg.playerName);
-    const id = room.seat(ws, playerName, performance.now());
+    const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), performance.now());
     if (id === null) return this.send(ws, { t: "reject", reason: "room full" });
     console.log(`⚔ ${playerName} joined room ${room.meta.code} as player ${id}`);
   }
@@ -292,3 +293,9 @@ export class RoomManager {
 
 const sanitizeName = (name: unknown): string =>
   ((typeof name === "string" ? name : "").trim().slice(0, MAX_PLAYER_NAME)) || "player";
+
+/** The pack id is a free-form claim (the server doesn't know the pack roster,
+ * and until the store exists there's nothing to entitle) — just keep the wire
+ * honest: a length-capped string, anything else collapses to the default. */
+const sanitizeAnnouncer = (pack: unknown): string =>
+  ((typeof pack === "string" ? pack : "").trim().slice(0, MAX_ANNOUNCER_ID)) || "default";

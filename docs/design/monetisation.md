@@ -20,6 +20,17 @@ One earnable currency (coins), earned from playing and winning matches, spendabl
   - **Blood colour** — thematically perfect. Constraint: blood trails are information
     (you can track a wounded player), so vary hue only — visibility/contrast stays fixed.
   - **Kill signatures** — attach to the existing death blood-cone / 2× death burst.
+  - **Announcer packs** (added 2026-07-22) — swappable kill-announcement voices
+    (`audio/announcer.ts`; free `default` ships, premium personas sold). The product is
+    the flex: when YOU take first blood / a multi-kill, **your pack's voice plays to the
+    whole room** — everyone hears who you hired. BUILT same day (protocol v18): the pack
+    id rides join/create → RoomStatePlayer (public), and every client voices kill calls
+    in the KILLER's pack — announcements stay client-derived, so unison falls out of the
+    shared event stream. Unknown pack ids fall back to the default voice (old clients
+    never break on new packs). Local plumbing: namespaced manifest + play-time remap,
+    dev-menu cycler persisted as a device setting (`bits.announcerPack`); first premium
+    voice recorded (Eliza Nightshade). NOT built: entitlements — until the store exists
+    any client can claim any pack, which is fine while packs are dev-menu-only.
   - Weapon skins/trails, name-tag styles, victory celebrations, emotes.
 
 **Hygiene rules:** no loot boxes / randomised purchases (regulatory + trust). Single

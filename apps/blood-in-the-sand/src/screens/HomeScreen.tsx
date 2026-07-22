@@ -5,8 +5,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Blur, Canvas, Fill, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
-import { playSound, unlockAudio, type BitsSoundEvent } from "../audio";
+import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
+import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import { DUST_EFFECT } from "./dustStorm";
 import { bannerAnchors, buildCrowd, makeHighSunPicture, sceneAnchors, type BannerAnchor } from "./homeScene";
 import { pickDuel, TITLE_SPRITE_SCALE, TITLE_SPRITES } from "./titleSprites";
@@ -303,7 +304,9 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
  * There's also a hidden fourth way in: tapping the title DEV_TAPS times in a
  * row toggles the dev menu, a small panel pinned to the bottom-left corner.
  * Session-only on purpose — it never persists, so a fresh launch is always
- * clean (nothing to stumble into mid-playtest).
+ * clean (nothing to stumble into mid-playtest). One exception: the ANNOUNCER
+ * row drives a real persisted setting (settings.ts) that just has no
+ * player-facing UI yet.
  */
 export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
   const insets = useSafeAreaInsets();
@@ -317,6 +320,13 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, up
   const [hapticsOff, setHapticsOff] = useState(devFlags.disableHaptics);
   const [botArchetype, setBotArchetype] = useState(devFlags.botArchetype);
   const [botDifficulty, setBotDifficulty] = useState(devFlags.botDifficulty);
+  // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
+  // session-only devFlags rows — App.tsx applies it on launch; this label
+  // just needs the same stored value.
+  const [announcer, setAnnouncer] = useState<AnnouncerPackId>("default");
+  useEffect(() => {
+    void loadAnnouncerPack().then(setAnnouncer);
+  }, []);
   const knock = useRef({ count: 0, lastMs: 0 });
 
   const scene = useMemo(() => makeHighSunPicture(width, height), [width, height]);
@@ -395,6 +405,17 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, up
     const next = ring[(ring.indexOf(devFlags.botDifficulty) + 1) % ring.length]!;
     devFlags.botDifficulty = next;
     setBotDifficulty(next);
+  };
+
+  // Cycle the announcer voice — applied live + persisted, then the new pack's
+  // FIRST BLOOD line plays so you hear who you just hired (the same
+  // ear-training move as the wizard's ability-pick SFX).
+  const onCycleAnnouncer = (): void => {
+    const next = ANNOUNCER_PACK_IDS[(ANNOUNCER_PACK_IDS.indexOf(announcer) + 1) % ANNOUNCER_PACK_IDS.length]!;
+    setAnnouncerPack(next);
+    saveAnnouncerPack(next);
+    setAnnouncer(next);
+    playSound("firstBlood");
   };
 
   // Deliberately silent until the fifth tap — a secret shouldn't click.
@@ -536,6 +557,13 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, up
           <Pressable onPress={withTap("uiTap", onCycleBotDifficulty)} style={styles.devButton}>
             <Text style={styles.devButtonText}>
               BOT TIER {botDifficulty ? `◉ ${botDifficulty.toUpperCase()}` : "○ FROM LOBBY"}
+            </Text>
+          </Pressable>
+          {/* The announcer voice — the one PERSISTED row (a real device
+              setting auditioned from here until the store exists). */}
+          <Pressable onPress={withTap("uiTap", onCycleAnnouncer)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              ANNOUNCER {announcer === "default" ? "○ DEFAULT" : `◉ ${announcer.replace(/_/g, " ").toUpperCase()}`}
             </Text>
           </Pressable>
         </View>

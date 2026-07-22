@@ -66,6 +66,12 @@ export interface BotMemory {
   threatApproved: boolean;
   /** Ticks left in a low-tier hesitation freeze (the dither dial). */
   ditherTicks: number;
+  /** The flee budget (Tom, 2026-07-22 — cornered cowards are anti-fun):
+   * ticks spent in the current low-hp retreat, and whether the allowance is
+   * burned. A spent budget means FIGHT WOUNDED; it re-arms only by healing
+   * back above the archetype's threshold (or the round reset's full hp). */
+  fleeTicks: number;
+  fleeSpent: boolean;
   /** The in-flight projectile last rolled against (per-shot episode, like
    * the windup's) and whether that roll passed. */
   shotKey: number | null;
@@ -95,6 +101,8 @@ export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
   threatKey: null,
   threatApproved: false,
   ditherTicks: 0,
+  fleeTicks: 0,
+  fleeSpent: false,
   shotKey: null,
   shotApproved: false,
   weaveSign: 1,
@@ -113,6 +121,10 @@ export interface BotWorld {
 const STALL_TICKS = 240; // 8s at 30Hz
 /** How long an impatience press lasts before re-evaluating. */
 const PRESS_TICKS = 150; // 5s
+/** A low-hp retreat may last this long, TOTAL, before the bot must fight
+ * wounded (Tom, 2026-07-22: three cornered cowards waiting to be picked off
+ * is the opposite of a fight). Healing re-arms it. */
+const FLEE_BUDGET_TICKS = 105; // 3.5s
 
 /** One mulberry32 step on the memory's rng state → [0, 1). */
 const nextRand = (memory: BotMemory): number => {
@@ -269,7 +281,25 @@ export const botThink = (
   // still plays its band/dodge game; only run-away mode is off). In 1v1s
   // every bot is always its team's last, so bots there simply never flee.
   const lastStand = !players.some((p) => p.id !== me.id && p.team === me.team && p.alive);
-  const fleeing = !lastStand && hp < preset.disengageBelow;
+  // …and even WITH teammates, retreat is a budget, not a lifestyle (Tom,
+  // 2026-07-22): a few seconds to break away, pour a font, regroup — then
+  // the bot fights wounded. Only actually healing re-arms the allowance,
+  // so corner-cowering until picked off can't happen.
+  let fleeing = !lastStand && hp < preset.disengageBelow;
+  if (fleeing) {
+    if (memory.fleeSpent) {
+      fleeing = false;
+    } else {
+      memory.fleeTicks += 1;
+      if (memory.fleeTicks > FLEE_BUDGET_TICKS) {
+        memory.fleeSpent = true;
+        fleeing = false;
+      }
+    }
+  } else if (hp >= preset.disengageBelow) {
+    memory.fleeTicks = 0;
+    memory.fleeSpent = false;
+  }
 
   // Impatience: no hp change on either side of this duel for STALL_TICKS →
   // press in (band collapses to a charge, dash becomes a gap-closer) until
