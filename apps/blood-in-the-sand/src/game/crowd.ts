@@ -34,6 +34,16 @@
  * is thinned with clustered gaps (fewer bodies = lower record cost); spectators
  * fitting the whole bowl fall to a single baked still (per-body motion is
  * sub-pixel there).
+ *
+ * PERF v2 (2026-07-23, old-device rec pass) — drawAtlas fixed the DRAW count,
+ * but building fresh Skia.RSXform host objects for every visible body every
+ * frame (torso + head + hair ≈ ~1000+ JSI constructions) was still most of
+ * the crowd's record cost. Now every seat prebuilds its at-rest transforms at
+ * build time and pushes them BY REFERENCE; the ±1px idle bob was cut (frozen
+ * into the layout as POSE_JITTER — imperceptible live at these sizes) so
+ * "at rest" is exact, and only the wave crest's bodies allocate fresh lifted
+ * transforms per frame. The ring was also thinned ~25% (SEAT_SP, GAP_CUTOFF,
+ * FRONT_FULL), weighted into the back rows.
  */
 import {
   BlendMode,
@@ -83,23 +93,31 @@ const LOD_ZOOM = 0.42;
 const BAKE_SCALE = 0.5;
 
 // Base seat spacing ALONG a row at the front (world px). Wider spacing = fewer
-// bodies, which is also the main `rec`-time lever (fewer RSXform builds per
+// bodies, which is also the main `rec`-time lever (fewer transforms per
 // frame). Spacing opens up toward the back with the scale ramp.
-const SEAT_SP = 24;
+// (24 → 27 in the 2026-07-23 perf thin: ~12% fewer seats everywhere.)
+const SEAT_SP = 27;
 // Clustered gaps so the stands read as a REAL crowd — empty patches, aisles,
 // thin spots — not a uniform fill. A coarse value-noise (patches ~GAP_CELL wide)
 // carves seats out, blended with a little per-seat randomness for ragged edges.
 // The cutoff RAMPS with depth: the front row fills solid (people clamber for the
 // pit rail) and every row behind it gets progressively gappier — front-full at
 // the barrier, up to GAP_CUTOFF carved at the very back row.
+// (0.72 → 0.85 cutoff + front band 80 → 70 in the perf thin — the cuts land
+// in the back rows where the mob was densest and least individually read;
+// all told the ring holds ~25% fewer bodies than v1.)
 const GAP_CELL = 95;
-const GAP_CUTOFF = 0.72;
-// World-px past the sand edge kept 100% full — the front couple of rows, before
-// gaps start opening up and ramping toward the sparse back.
-const FRONT_FULL = 80;
+const GAP_CUTOFF = 0.85;
+// World-px past the sand edge kept 100% full — the front rows, before gaps
+// start opening up and ramping toward the sparse back.
+const FRONT_FULL = 70;
 
-// Idle bob + the travelling Mexican wave.
-const BOB_AMP = 1.0;
+// Per-body FROZEN pose scatter (world px, folded into the seat y at build).
+// v2: the live idle bob (a ±1px sinusoid per body) was cut — at these body
+// sizes it was imperceptible, but carrying it meant re-deriving EVERY visible
+// body's transforms every frame, which was most of the crowd's `rec` cost.
+// The frozen scatter keeps rows ragged so the stillness doesn't read uniform.
+const POSE_JITTER = 1.6;
 // The wave is a PHYSICAL bump lapping the bowl — a TIGHT crest of bodies rising
 // then sitting. It is lift ONLY: an earlier version also brightened the crest,
 // which read as an ugly wide white streak. Narrow WIDTH keeps it a localised
@@ -179,13 +197,14 @@ const HAIR = ["#171310", "#2a2118", "#3d2c1c", "#57402a", "#6b5334", "#8a7a4a", 
 
 interface Seat {
   x: number;
-  /** Torso-baseline world y (bob/wave lift are subtracted at draw time). */
+  /** Torso-baseline world y, frozen pose scatter included (the wave lift is
+   * subtracted at draw time for crest bodies only). */
   y: number;
   /** RSXform uniform scale mapping the atlas cell to this body's world size. */
   scale: number;
   /** The head layer's own scale — a much tighter spread than the body's. */
   headScale: number;
-  /** Perspective ramp factor for this seat's row — scales bob + wave lift. */
+  /** Perspective ramp factor for this seat's row — scales the wave lift. */
   lift: number;
   /** This body's build — which torso cell of the atlas to stamp. */
   torso: SkRect;
@@ -194,11 +213,35 @@ interface Seat {
   /** Hair style cell, or null for bald (the hair layer just skips them). */
   mane: SkRect | null;
   maneCol: SkColor | null;
-  phase: number;
-  bobSpeed: number;
   /** Angle around the bowl centre — drives which bodies the wave lifts. */
   angle: number;
+  /** At-rest transforms, built ONCE — pushed by reference every frame. Only
+   * bodies inside the wave crest allocate fresh lifted transforms; this cache
+   * is the crowd v2 perf fix (per-frame Skia.RSXform construction for every
+   * visible body — ~1000+ JSI host objects a frame — was the `rec` cost). */
+  restDst: SkRSXform;
+  restHeadDst: SkRSXform;
 }
+
+/** The torso + head RSXforms for a body at (x, y) — the head anchored so the
+ * chin meets THIS body's torso top whatever their relative scales (RSXform
+ * can only uniform-scale, so the neck offset rides the BODY scale). */
+const bodyXforms = (
+  scale: number,
+  headScale: number,
+  x: number,
+  y: number,
+): [SkRSXform, SkRSXform] => {
+  const dst = Skia.RSXform(scale, 0, x - scale * (CELL / 2), y - scale * (CELL * TORSO_CY));
+  const neckY = y - scale * CELL * (TORSO_CY - HEAD_CY);
+  const head = Skia.RSXform(
+    headScale,
+    0,
+    x - headScale * (CELL / 2),
+    neckY - headScale * (CELL * HEAD_CY),
+  );
+  return [dst, head];
+};
 
 // Stone palette, parsed once.
 const C_STEP_SHADOW = Skia.Color("rgba(0, 0, 0, 0.3)");
@@ -318,20 +361,25 @@ export const buildCrowd = (worldW: number, worldH: number): Crowd => {
         const cloth = shade(CLOTH[(rng() * CLOTH.length) | 0]!, dim * (0.85 + rng() * 0.15));
         const skin = shade(SKIN[(rng() * SKIN.length) | 0]!, dim);
         const maneCol = shade(manePick[(rng() * manePick.length) | 0]!, dim);
+        // The frozen pose: what used to be this body's live bob, baked in.
+        const jy = y - rng() * POSE_JITTER * f;
+        const scale = (size * BODY_SCALE) / CELL;
+        const headScale = (headSize * BODY_SCALE) / CELL;
+        const [restDst, restHeadDst] = bodyXforms(scale, headScale, x, jy);
         seats.push({
           x,
-          y,
-          scale: (size * BODY_SCALE) / CELL,
-          headScale: (headSize * BODY_SCALE) / CELL,
+          y: jy,
+          scale,
+          headScale,
           lift: f,
           torso: SRC_TORSOS[build]!,
           cloth: rgb(cloth),
           skin: rgb(skin),
           mane,
           maneCol: mane ? rgb(maneCol) : null,
-          phase: rng() * Math.PI * 2,
-          bobSpeed: 0.003 + rng() * 0.0035,
-          angle: Math.atan2(y - bcy, x - bcx),
+          angle: Math.atan2(jy - bcy, x - bcx),
+          restDst,
+          restHeadDst,
         });
       }
     }
@@ -495,14 +543,16 @@ export const buildCrowd = (worldW: number, worldH: number): Crowd => {
     return atlas;
   };
 
-  // The animated mob → three drawAtlas calls. Per visible body: one RSXform at
-  // body scale stamps the torso, and a second at headScale stamps the head —
-  // anchored so the chin meets this body's torso top whatever their relative
-  // scales — with the hair layer sharing the head's transform (hair sits on
-  // the head). Position + wave-lift (a physical rise as the crest passes) ride
-  // in the transforms. Colours are the static per-body tints (no per-frame
-  // recolour — the wave is motion, not brightness). Reached only at pit zoom,
-  // so the visible strip is a few hundred bodies.
+  // The animated mob → three drawAtlas calls (torso / head / hair, the hair
+  // layer sharing the head's transform). Crowd v2: nearly every visible body
+  // pushes its PREBUILT at-rest transforms by reference — no math, no JSI
+  // host-object construction (building fresh Skia.RSXforms for the whole
+  // strip, ~1000+ a frame, was the crowd's `rec` cost). Only bodies inside
+  // the wave crest — a tight angular window, often empty in frame — allocate
+  // fresh lifted transforms; the crest's physical rise is the one animation
+  // kept, and the one that reads. Colours are the static per-body tints (no
+  // per-frame recolour — the wave is motion, not brightness). Reached only
+  // at pit zoom, so the visible strip is a few hundred bodies.
   const drawMob = (
     canvas: SkCanvas,
     left: number,
@@ -514,7 +564,10 @@ export const buildCrowd = (worldW: number, worldH: number): Crowd => {
     const img = ensureAtlas();
     if (!img) return;
     const crest = ((nowMs * WAVE_SPEED) % (Math.PI * 2)) - Math.PI;
-    const margin = 12 + (BOB_AMP + WAVE_LIFT) * SCALE_BACK;
+    const margin = 12 + WAVE_LIFT * SCALE_BACK;
+    // Past this angular distance the Gaussian rise is < 0.2% of the lift —
+    // sub-pixel — so the body is honestly at rest and the cache serves.
+    const CREST_NEAR = WAVE_WIDTH * 2.5;
     const dsts: SkRSXform[] = [];
     const headDsts: SkRSXform[] = [];
     const srcsTorso: SkRect[] = [];
@@ -530,19 +583,21 @@ export const buildCrowd = (worldW: number, worldH: number): Crowd => {
       let delta = s.angle - crest;
       while (delta > Math.PI) delta -= Math.PI * 2;
       while (delta < -Math.PI) delta += Math.PI * 2;
-      // A tight crest bump (Gaussian) travelling by angle around the bowl.
-      // Lift rides the perspective ramp: big back-row bodies rise further.
-      const rise = Math.exp(-((delta / WAVE_WIDTH) ** 2));
-      const bob = Math.sin(nowMs * s.bobSpeed + s.phase) * BOB_AMP * s.lift;
-      const yAnim = s.y - bob - rise * WAVE_LIFT * s.lift;
-      // Torso RSXform anchored on the torso centre (CELL/2, CELL*TORSO_CY) →
-      // (x, yAnim). The head's transform is anchored on the HEAD centre, which
-      // is pinned at this BODY's neck height (offset by the body scale, not
-      // the head scale) so different head/body scales still join up.
-      dsts.push(Skia.RSXform(s.scale, 0, s.x - s.scale * (CELL / 2), yAnim - s.scale * (CELL * TORSO_CY)));
-      const hs = s.headScale;
-      const neckY = yAnim - s.scale * CELL * (TORSO_CY - HEAD_CY);
-      const headDst = Skia.RSXform(hs, 0, s.x - hs * (CELL / 2), neckY - hs * (CELL * HEAD_CY));
+      let headDst: SkRSXform;
+      if (Math.abs(delta) < CREST_NEAR) {
+        // A tight crest bump (Gaussian) travelling by angle around the bowl.
+        // Lift rides the perspective ramp: big back-row bodies rise further.
+        const rise = Math.exp(-((delta / WAVE_WIDTH) ** 2));
+        const yAnim = s.y - rise * WAVE_LIFT * s.lift;
+        const [dst, head] = bodyXforms(s.scale, s.headScale, s.x, yAnim);
+        dsts.push(dst);
+        headDst = head;
+      } else {
+        // At rest: the prebuilt transforms, by reference — no math, no
+        // allocation. This branch is ~all of the visible strip, ~all frames.
+        dsts.push(s.restDst);
+        headDst = s.restHeadDst;
+      }
       headDsts.push(headDst);
       srcsTorso.push(s.torso);
       srcsHead.push(SRC_HEAD);
