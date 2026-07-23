@@ -115,8 +115,8 @@ just a bigger one.
 ## 5. Seeping death pools
 
 The kill pool doesn't appear at final size: it spawns at today's size and
-**seeps outward to 2.5× its birth radius over 10 seconds**, ease-out — blood
-runs fast at first, then slows as it soaks into the sand. Free by
+**seeps outward to `POOL_GROWTH`× its birth radius over `POOL_GROW_MS`**,
+ease-out — blood runs fast at first, then slows as it soaks into the sand. Free by
 construction: pools already draw their unit-baked silhouette under
 translate+scale, so growth is one extra multiplier (`poolGrowth`), a pure
 function of the decal's birth time like everything else in the material.
@@ -142,6 +142,44 @@ attenuated like other positional sounds, throttled by the director as usual.
 Catalogue + Forge mirror rows land with this feature; the slot stays silent
 until the clip is forged (standard lights-up-later behaviour).
 
+## 7. Tremor cracks ride the splat map (added 2026-07-23)
+
+The multi-tremor frame drop was the crack system fighting the scar cache:
+every live quake popped a new crack decal each 150ms, every pop bumped the
+epoch, and each 200ms rebuild re-recorded up to 128 crack paths (~10ms
+measured) plus all live blood — sustained for every quake's 4-second life.
+
+Cracks v2 removes cracks from the scar cache entirely:
+
+- **One fracture web per quake** — born with the deployable (GameScreen
+  tracks quake ids; a vanished id settles its web). The web is two paths: a
+  primary skeleton of jagged radial arms (3px stroke) and a fine layer
+  (1.6px) of branches, sub-forks and **broken concentric ring cracks** — the
+  circumferential fractures real shattering has. The cast keeps its separate
+  slam-sized web at the epicentre.
+- **Live webs draw per frame**, outside the cache: a clip-reveal uncovers
+  the web outward over the **zone's full duration** (animation time ==
+  ability time — full radius lands exactly as the quake dies; slams race in
+  `SLAM_EXPAND_MS`), advancing as a linear front mixed with discrete lurches
+  (`LURCH_STEPS`) so the ground jolts open rather than wiping. Ring cracks
+  surface as the front passes their radius, so new structure keeps appearing
+  for the whole quake. When the zone dies the drama fades to the settled
+  alpha over `CRACK_SETTLE_FADE_MS`; a zone that dies early freezes its
+  front and bakes only what it cracked open. Cost: a few drawPath calls —
+  bounded by simultaneous quakes, not accumulated pops.
+- **Settled webs stamp into the splat surface** at exactly the alpha the
+  live pass last drew (invisible handoff, same trick as dried blood) and
+  leave the live list. A spent quake leaves its circle permanently
+  shattered — "arena remembers" now covers earthquakes. The surface is
+  chronological: later blood covers earlier scars and vice versa.
+- The scar cache's dirty signal is now **blood epoch alone**; cracks never
+  trigger a rebuild. If the splat surface can't be created, settled webs
+  slow-fade out over 30s instead of baking (graceful fallback, mirrors
+  blood's).
+- Layering trade-off, accepted: a live web draws over this-second's wet
+  blood (dark strokes over dark red for a few seconds); once baked it sits
+  under everything later.
+
 ## Future / explicitly out of scope now
 
 - **Weapon-flavoured kill sprays** — blade: an arced cast-off slash line;
@@ -166,5 +204,8 @@ until the clip is forged (standard lights-up-later behaviour).
 | `FOOT_STEPS` | 6 | footprints per wet-pool crossing |
 | `FOOT_STEP_PX` | 26 | stride length between stamps |
 | `FOOT_WET_MIN` | 0.25 | pool wetness needed to re-ink feet |
-| `POOL_GROWTH` | 2.5× | death-pool seep: final radius multiple |
-| `POOL_GROW_MS` | 10 000 | seep duration (ease-out; < BLOOD_DRY_MS) |
+| `POOL_GROWTH` | 1.5× | death-pool seep: final radius multiple (Tom's tune) |
+| `POOL_GROW_MS` | 1 200 | seep duration (ease-out; < BLOOD_DRY_MS) |
+| `SLAM_EXPAND_MS` | 450 | cast-slam web reveal (quake webs use zone duration) |
+| `LURCH_STEPS` | 9 | reveal jolts mixed over the linear front |
+| `CRACK_SETTLE_FADE_MS` | 800 | quake death → drama fades to the baked stain |

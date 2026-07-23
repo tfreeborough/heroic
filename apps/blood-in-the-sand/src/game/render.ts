@@ -7,6 +7,7 @@
 import { Platform } from "react-native";
 import {
   BlendMode,
+  ClipOp,
   createPicture,
   FilterMode,
   matchFont,
@@ -50,7 +51,13 @@ import {
   type BloodField,
   type FlyingDrop,
 } from "./blood";
-import { crackAlpha, type CrackDecal } from "./cracks";
+import {
+  CRACK_SETTLE_ALPHA,
+  crackAlpha,
+  crackReveal,
+  type CrackDecal,
+  type CrackField,
+} from "./cracks";
 import { buildCrowd, CROWD_REVEAL } from "./crowd";
 import type { StatusPulses } from "./statusRings";
 
@@ -105,8 +112,9 @@ const hiddenBehind = (
 };
 
 /** How much world fits on screen when following a player. Pulled back from
- * 0.85 (2026-07-12, tester feedback): the old zoom hid approaching enemies. */
-const FOLLOW_ZOOM = 0.71;
+ * 0.85 (2026-07-12, tester feedback): the old zoom hid approaching enemies.
+ * 0.71 → 0.64 (2026-07-23): a little more battlefield awareness again. */
+const FOLLOW_ZOOM = 0.64;
 
 // Palette parsed once (never re-string rgba per frame — floods the colour cache).
 const C_VOID = Skia.Color("#141210");
@@ -319,11 +327,13 @@ export interface ArenaRenderInput {
    *  ones are harvested into the persistent splat surface on its beat, and
    *  in-flight death-spray droplets draw per frame (bits-blood.md). */
   blood: BloodField;
-  /** Tremor's cracked-earth decals — same client-derived floor-layer rule. */
-  cracks: readonly CrackDecal[];
-  /** Sum of the blood + crack fields' epochs (total decals ever added) — the
-   *  scar cache's dirty signal: unchanged → fades step at 1Hz; bumped → the
-   *  new marks land within 200ms. */
+  /** Tremor's crack field: live webs draw per frame OUTSIDE the scar cache
+   *  (one prebuilt path each), settled ones are stamped into the splat
+   *  surface — cracks never ride a scar rebuild (bits-blood.md §7). */
+  cracks: CrackField;
+  /** The blood field's epoch (total decals ever added) — the scar cache's
+   *  dirty signal: unchanged → fades step at 1Hz; bumped → the new marks
+   *  land within 200ms. */
   scarEpoch: number;
   /** Per-player status-ring pulse phases, advanced by the caller per frame. */
   pulses: StatusPulses;
@@ -905,7 +915,7 @@ const drawDeployables = (
       // The earthquake: an honest boundary ring over a dim SHUDDERING
       // interior — high-frequency, low-amplitude (the font breathes on a slow
       // heartbeat; the quake shakes). The ground-giving-way story is told by
-      // the crack pops (GameScreen spawns them; they draw in the floor pass).
+      // the zone's expanding fracture web (cracks v2; drawLiveCracks).
       const shudder = 0.5 + 0.5 * Math.sin((nowMs / 90) * Math.PI * 2 + d.id);
       fill.setColor(C_QUAKE);
       fill.setAlphaf((0.05 + 0.04 * shudder) * a);
@@ -1077,26 +1087,60 @@ const drawSandstormOverlays = (
   stroke.setAlphaf(1);
 };
 
-/** Tremor's cracked earth — floor-layer decals under the blood (fresh blood
- * pools over old fractures). One prebuilt SkPath per crack (built at spawn in
- * cracks.ts), one drawPath here — per-frame path construction was what made
- * a quake's 128 live cracks cost ~10ms of record time. */
-const drawCracks = (
+/** One crack web, both stroke weights (primary skeleton over fine detail) —
+ * shared by the live pass and the splat stamp so the settle→bake handoff
+ * matches exactly. */
+const drawWeb = (canvas: SkCanvas, c: CrackDecal, alpha: number): void => {
+  stroke.setColor(C_CRACK);
+  stroke.setStrokeCap(StrokeCap.Round);
+  stroke.setStrokeJoin(StrokeJoin.Round);
+  stroke.setAlphaf(alpha);
+  stroke.setStrokeWidth(3);
+  canvas.drawPath(c.path, stroke);
+  stroke.setStrokeWidth(1.6);
+  canvas.drawPath(c.finePath, stroke);
+  stroke.setAlphaf(1);
+};
+
+/** drawWeb under the reveal clip while the fracture front is still short of
+ * full radius. Also correct at STAMP time: crackReveal freezes at settleAtMs,
+ * so a zone that died early bakes only what it actually cracked open. */
+const drawWebRevealed = (
+  canvas: SkCanvas,
+  c: CrackDecal,
+  alpha: number,
+  nowMs: number,
+): void => {
+  const reveal = crackReveal(c, nowMs);
+  if (reveal < 1) {
+    canvas.save();
+    const clip = Skia.Path.Make();
+    clip.addCircle(c.x, c.y, Math.max(1, c.r * reveal));
+    canvas.clipPath(clip, ClipOp.Intersect, true);
+    drawWeb(canvas, c, alpha);
+    canvas.restore();
+  } else {
+    drawWeb(canvas, c, alpha);
+  }
+};
+
+/** Tremor's LIVE crack webs — drawn per frame, prebuilt paths only
+ * (bits-blood.md §7): the expanding reveal needs per-frame stepping anyway,
+ * and keeping live cracks out of the scar picture is the whole optimisation —
+ * the old per-pop epoch bumps pinned the cache on its 200ms beat for every
+ * quake's life. Layering trade-off, accepted: a live web draws OVER
+ * this-second's wet blood; once baked it sits under everything later —
+ * chronological, like the splat surface itself. */
+const drawLiveCracks = (
   canvas: SkCanvas,
   cracks: readonly CrackDecal[],
   nowMs: number,
 ): void => {
-  stroke.setColor(C_CRACK);
-  stroke.setStrokeCap(StrokeCap.Round);
-  stroke.setStrokeJoin(StrokeJoin.Round);
-  stroke.setStrokeWidth(2.5);
   for (const c of cracks) {
     const a = crackAlpha(c, nowMs);
     if (a <= 0) continue;
-    stroke.setAlphaf(0.55 * a);
-    canvas.drawPath(c.path, stroke);
+    drawWebRevealed(canvas, c, a, nowMs);
   }
-  stroke.setAlphaf(1);
 };
 
 /**
@@ -1141,7 +1185,7 @@ washPaint.setColor(Skia.Color(`rgba(0, 0, 0, ${WASH_KEEP})`));
 
 const scarLayer = (
   blood: BloodField,
-  cracks: readonly CrackDecal[],
+  cracks: CrackField,
   epoch: number,
   nowMs: number,
 ): SkPicture => {
@@ -1174,6 +1218,14 @@ const scarLayer = (
       canvas.drawRect(FLOOR_RECT, washPaint);
       dirty = true;
     }
+    // Settled crack webs stamp at exactly the alpha (and frozen reveal) the
+    // live pass last drew them with, then leave the live list — the handoff
+    // is invisible (bits-blood.md §7). Stamped before this beat's blood, so
+    // the surface stays chronological.
+    for (const c of cracks.harvestSettled(nowMs)) {
+      drawWebRevealed(canvas, c, CRACK_SETTLE_ALPHA, nowMs);
+      dirty = true;
+    }
     // Stamp each decal at the instant it finished drying — the exact
     // appearance the live pass last drew it with (wetness 0, fade not yet
     // started), so the handoff is invisible.
@@ -1185,10 +1237,10 @@ const scarLayer = (
   }
 
   scarPicture = createPicture((canvas) => {
-    // Baked (ancient, set) blood first: new cracks may fracture old stains,
-    // wet blood covers everything.
+    // The baked splat surface (set blood + settled quake scars,
+    // chronological) under this beat's live wet blood. Live cracks draw per
+    // frame in recordArena, not here.
     if (splatImage) canvas.drawImage(splatImage, 0, 0);
-    drawCracks(canvas, cracks, nowMs);
     drawBlood(canvas, blood.decals, nowMs);
   }, FLOOR_RECT);
   return scarPicture;
@@ -1507,9 +1559,11 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       zoom,
     );
 
-    // Ground scars: the cached world-space picture (cracks under blood),
-    // rebuilt on scarLayer's slow beat — one replayed op per frame here.
+    // Ground scars: the cached world-space picture (splat bake under live wet
+    // blood), rebuilt on scarLayer's slow beat — one replayed op per frame.
     canvas.drawPicture(scarLayer(r.blood, r.cracks, r.scarEpoch, r.nowMs));
+    // Live quake webs ride per frame (expanding reveal), outside the cache.
+    drawLiveCracks(canvas, r.cracks.decals, r.nowMs);
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:

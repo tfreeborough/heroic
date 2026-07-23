@@ -106,7 +106,7 @@ export const POOL_MIN_R = 6;
  * into the sand. Growth finishes before BLOOD_DRY_MS by design, so the splat
  * bake always stamps the final footprint. */
 export const POOL_GROWTH = 1.5;
-export const POOL_GROW_MS = 2_000;
+export const POOL_GROW_MS = 1_200;
 
 /** Current seep multiplier for a decal (1 for everything non-growing). Pure
  * function of decal + clock, same contract as decalAlpha — render.ts applies

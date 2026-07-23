@@ -93,15 +93,6 @@ const SHOUT_CONE_TTL = 380;
 /** Straw Man soaking a blow: the puff of flung straw settles just after the
  * hit ping — long enough to read "that landed on the DUMMY", not on flesh. */
 const STRAW_BURST_TTL = 520;
-/** The quake's ground-giving-way pops: a small crack burst somewhere inside
- * each live zone on this beat (client-derived from the zone's presence in
- * snapshots — the blood-trail rule, never networked). */
-const QUAKE_POP_INTERVAL_MS = 150;
-const QUAKE_POP_RADIUS = 90; // burst arm scale — big bites, most of the circle
-/** Every quake crack — the epicentre AND the pops — persists past the zone
- * and fades over this window (Tom, 2026-07-17 second pass: 20s, and dense
- * enough that a spent quake leaves the whole circle visibly shattered). */
-const QUAKE_CRACK_TTL_MS = 20_000;
 
 interface AgedFx {
   item: FxItem;
@@ -185,9 +176,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const cracks = cracksRef.current;
   // Per-quake last-pop clocks (deployable id → ms) for the ground-giving-way
   // crack bursts; cleared whenever no quake is live (ids never recycle).
-  const quakePopsRef = useRef<Map<number, number> | null>(null);
-  quakePopsRef.current ??= new Map();
-  const quakePops = quakePopsRef.current;
+  // Quake zone ids whose fracture web is already born — a vanished id
+  // settles its web (cracks v2, bits-blood.md §7).
+  const liveQuakesRef = useRef<Set<number> | null>(null);
+  liveQuakesRef.current ??= new Set();
+  const liveQuakes = liveQuakesRef.current;
   const fightBannerUntil = useRef(0);
   // The flavour line for the current round-/match-end is picked ONCE per outcome
   // and latched here (keyed by phase+winner+round count), so the per-frame HUD
@@ -467,11 +460,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               ttlMs: CAST_FLASH_TTL,
             });
             // Tremor fractures the sand at the epicentre — slam-sized, not
-            // zone-sized (the ZONE reads via the ring + the pops) — and the
-            // 4s earthquake bed rolls in UNDER the cast stomp (its own clip;
-            // the cast stays the sharp tell).
+            // zone-sized (the ZONE reads via the ring + its own web) — and
+            // the 4s earthquake bed rolls in UNDER the cast stomp (its own
+            // clip; the cast stays the sharp tell).
             if (e.ability === "tremor") {
-              cracks.add(caster.x, caster.y, 110, now, QUAKE_CRACK_TTL_MS);
+              cracks.addSlam(caster.x, caster.y, 110, now);
               playSound(
                 "quakeRumble",
                 undefined,
@@ -607,26 +600,22 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             blood.crossings.length = 0;
           }
           cracks.update(now);
-          // Quake zones chew the ground while they live: pop a small,
-          // short-lived crack burst at a random spot inside each on a beat.
-          let liveQuakes = 0;
+          // One fracture web per quake (bits-blood.md §7), born with the
+          // zone and settled at its death — the old 150ms crack pops pinned
+          // the scar cache on its fresh beat for every quake's life.
           for (const d of view.deployables) {
-            if (d.kind !== "quake") continue;
-            liveQuakes++;
-            if (now - (quakePops.get(d.id) ?? 0) < QUAKE_POP_INTERVAL_MS)
-              continue;
-            quakePops.set(d.id, now);
-            const popDist = TREMOR.radius * 0.85 * Math.sqrt(Math.random());
-            const popAng = Math.random() * Math.PI * 2;
-            cracks.add(
-              d.x + Math.cos(popAng) * popDist,
-              d.y + Math.sin(popAng) * popDist,
-              QUAKE_POP_RADIUS,
-              now,
-              QUAKE_CRACK_TTL_MS,
-            );
+            if (d.kind !== "quake" || liveQuakes.has(d.id)) continue;
+            liveQuakes.add(d.id);
+            // The web fractures outward for the zone's WHOLE duration —
+            // animation time == ability time, full radius as the quake dies.
+            cracks.addQuake(d.id, d.x, d.y, TREMOR.radius, TREMOR.duration * 1000, now);
           }
-          if (liveQuakes === 0 && quakePops.size > 0) quakePops.clear();
+          for (const id of liveQuakes) {
+            if (!view.deployables.some((d) => d.kind === "quake" && d.id === id)) {
+              liveQuakes.delete(id);
+              cracks.settle(id, now);
+            }
+          }
           pulses.update(view.players, now);
 
           // Death spectator: once we're down, hold on our own corpse for a beat
@@ -688,8 +677,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             insetBottom: insets.bottom,
             fx: fx.map((f) => f.item),
             blood,
-            cracks: cracks.decals,
-            scarEpoch: blood.epoch + cracks.epoch,
+            cracks,
+            scarEpoch: blood.epoch,
             pulses,
             nowMs: now,
             atlas,

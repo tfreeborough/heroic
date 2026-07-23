@@ -210,15 +210,18 @@ Everything else is a moment — big value, once or twice a round.
   *under* a Blood Font's 8/s heal: a quake pressures a font, it doesn't
   negate one) · slow **×0.75** move speed while inside.
 - **Floor + VFX:** the cast still fractures the sand at the epicentre
-  (cracked-earth decals, the blood-trail rule), and while the zone lives,
-  **big crack bursts pop at random points inside it every ~150ms** (~27 over
-  the life — enough to shatter most of the circle) — client-derived from the
-  zone's presence in snapshots. Every quake crack (epicentre + pops)
-  **persists past the zone and fades over ~20s** (Tom, 2026-07-17 second
-  pass; per-decal TTL on `cracks.ts`, decal cap raised to 128 — the draw
-  pass viewport-culls, so only the visible subset costs). An honest boundary
-  ring marks the true edge, with a fast low-amplitude shudder (the font
-  *breathes*; the quake *shakes*).
+  (cracked-earth decals, the blood-trail rule), and the zone births **one
+  zone-sized fracture web** — arms, forks and broken ring cracks — **that
+  lurches outward across the quake's entire 4s** (cracks v2, 2026-07-23 —
+  bits-blood.md §7; replaced the ~27 accumulating 150ms pop decals, whose
+  epoch churn pinned the scar cache on its fast beat and caused the
+  multi-tremor frame drop) — client-derived from the zone's presence in
+  snapshots. The web stays dramatic while the quake shakes, settle-fades
+  when the zone dies, and is then **baked permanently into the splat
+  surface** with the blood — a spent quake leaves the circle visibly
+  shattered for the rest of the match. An honest boundary ring marks the
+  true edge, with a fast low-amplitude shudder (the font *breathes*; the
+  quake *shakes*).
 - **Icon:** unchanged — the stomping boot with cracked-earth rings still fits.
 - **Cast SFX:** the existing sharp stomp stays as the cast tell. The quake
   itself gets its **own clip** (Tom, 2026-07-17): `quake_rumble`, a ~4s
