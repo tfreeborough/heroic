@@ -3,6 +3,7 @@ import { StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadLefty, saveLefty } from "../settings";
+import { runningVersion } from "../updates";
 
 export interface SettingsScreenProps {
   onBack: () => void;
@@ -78,9 +79,17 @@ export const SettingsScreen = ({ onBack, playerName, onRename }: SettingsScreenP
           thumbColor="#f0e8d8"
         />
       </View>
+
+      <View style={styles.version}>
+        <Text style={styles.versionText}>{version.binary}</Text>
+        <Text style={styles.versionText}>{version.bundle}</Text>
+      </View>
     </View>
   );
 };
+
+// Fixed for the life of the JS world — a reload lands in a new one.
+const version = runningVersion();
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
@@ -112,4 +121,6 @@ const styles = StyleSheet.create({
   },
   rowTitle: { color: "#f0e8d8", fontSize: 16, fontWeight: "700" },
   rowHint: { color: "#8a7f70", fontSize: 12 },
+  version: { marginTop: "auto", paddingVertical: 12, alignItems: "center", gap: 2 },
+  versionText: { color: "#564e43", fontSize: 11, letterSpacing: 0.5 },
 });

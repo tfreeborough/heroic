@@ -46,4 +46,7 @@ jobs:
         env:
           # Via env, not inline — commit messages contain quotes and newlines.
           COMMIT_MSG: ${{ github.event.head_commit.message }}
+        # EXPO_PUBLIC_* values come from the app's committed .env.production
+        # — expo export (which eas update runs) loads it automatically.
+        # Nothing to keep in sync here.
         run: eas update --channel production --message "$COMMIT_MSG" --non-interactive

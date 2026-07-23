@@ -48,6 +48,34 @@ async function stageAvailableUpdate(): Promise<void> {
   }
 }
 
+export interface RunningVersion {
+  /** The store binary's identity: app version + update channel. */
+  binary: string;
+  /** The JS actually executing: embedded, or which OTA and when. */
+  bundle: string;
+}
+
+/**
+ * Identity of the code this device is running, for the settings footer.
+ * Debugging aid: a tester report plus these two lines pins down exactly
+ * which store build AND which OTA publish they're on. The short update id
+ * matches the one `eas update:list` prints.
+ */
+export function runningVersion(): RunningVersion {
+  if (!Updates.isEnabled) {
+    return { binary: "dev client", bundle: "Metro bundle" };
+  }
+  const binary = `v${Updates.runtimeVersion ?? "?"} · ${Updates.channel ?? "no channel"}`;
+  if (Updates.isEmbeddedLaunch) {
+    return { binary, bundle: "embedded bundle (no OTA applied)" };
+  }
+  const id = Updates.updateId ? Updates.updateId.slice(0, 8) : "?";
+  const published = Updates.createdAt
+    ? ` · ${Updates.createdAt.toISOString().slice(0, 16).replace("T", " ")} UTC`
+    : "";
+  return { binary, bundle: `OTA ${id}${published}` };
+}
+
 export type UpdateAttempt = "reloading" | "none" | "failed";
 
 /**

@@ -40,7 +40,7 @@
     "build:ios:preview": "eas build --platform ios --profile preview",
     "build:android:preview": "eas build --platform android --profile preview",
     "ship": "eas build --platform all --profile production --auto-submit",
-    "update:ota": "eas update --channel production",
+    "update:ota": "if [ -f .env.local ]; then echo 'refusing to publish: .env.local overrides .env.production during export and would bake local-dev URLs into the OTA bundle — move it aside first (or just push to master; CI publishes)'; exit 1; fi; eas update --channel production",
     "typecheck": "tsc --noEmit"
   },
   "private": true

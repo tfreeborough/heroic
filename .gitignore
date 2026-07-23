@@ -26,8 +26,13 @@ dev.db*
 # misc
 .DS_Store
 *.log
-# env files are never committed — build-time config lives in eas.json / render.yaml-style files
+# env files are never committed, with ONE exception: the BITS client's
+# .env.production holds only EXPO_PUBLIC_* values (public URLs inlined into
+# the shipped app bundle — nothing secret) and is the single source every
+# production bundle is built against (eas update + EAS build). Server-side
+# env (Turso creds etc.) stays ignored.
 .env*
+!apps/blood-in-the-sand/.env.production
 .idea/
 .vscode/
 

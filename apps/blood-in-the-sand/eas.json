@@ -7,26 +7,16 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "APP_VARIANT": "development",
-        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com",
-        "EXPO_PUBLIC_API_URL": "https://blood-in-the-sand-api.onrender.com"
+        "APP_VARIANT": "development"
       },
       "channel": "development"
     },
     "preview": {
       "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com",
-        "EXPO_PUBLIC_API_URL": "https://blood-in-the-sand-api.onrender.com"
-      },
       "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_DEFAULT_SERVER": "blood-in-the-sand-server.onrender.com",
-        "EXPO_PUBLIC_API_URL": "https://blood-in-the-sand-api.onrender.com"
-      },
       "channel": "production"
     }
   },
