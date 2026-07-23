@@ -247,7 +247,21 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   // fixed-step catch-up multiplier (sustained >1× = the loop is fighting to
   // keep up; that catch-up is what the maxSteps clamp below caps).
   const perfOn = devFlags.perfOverlay;
-  const perf = useRef({ simMs: 0, steps: 0, recMs: 0, frames: 0 });
+  // `frame` = avg/max ms BETWEEN rAF callbacks (the real cadence — 16.7 is
+  // 60Hz); `busy` = ms our onRender actually ran. The gap between them is
+  // time the JS thread spent elsewhere (event drain, audio, GC) or waiting
+  // on a late frame tick from a saturated UI/render thread — compare against
+  // the RN perf monitor's UI FPS to split those two.
+  const perf = useRef({
+    simMs: 0,
+    steps: 0,
+    recMs: 0,
+    frames: 0,
+    busyMs: 0,
+    frameMs: 0,
+    frameMaxMs: 0,
+    lastFrame: -1,
+  });
   const [perfText, setPerfText] = useState("");
   useEffect(() => {
     if (!perfOn) {
@@ -255,7 +269,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       return;
     }
     const p = perf.current;
-    p.simMs = p.steps = p.recMs = p.frames = 0;
+    p.simMs = p.steps = p.recMs = p.frames = p.busyMs = p.frameMs = p.frameMaxMs = 0;
+    p.lastFrame = -1;
     let last = performance.now();
     const id = setInterval(() => {
       const now = performance.now();
@@ -264,9 +279,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       const f = Math.max(1, p.frames);
       const fps = elapsed > 0 ? p.frames / elapsed : 0;
       setPerfText(
-        `JS ${fps.toFixed(0)}fps  sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms`,
+        `JS ${fps.toFixed(0)}fps  frame ${(p.frameMs / f).toFixed(1)}/${p.frameMaxMs.toFixed(0)}ms  busy ${(p.busyMs / f).toFixed(1)}ms  sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms`,
       );
-      p.simMs = p.steps = p.recMs = p.frames = 0;
+      p.simMs = p.steps = p.recMs = p.frames = p.busyMs = p.frameMs = p.frameMaxMs = 0;
+      p.lastFrame = -1;
     }, 500);
     return () => clearInterval(id);
   }, [perfOn]);
@@ -574,7 +590,16 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       },
       onRender: () => {
         const now = performance.now();
-        if (perfOn) perf.current.frames += 1;
+        if (perfOn) {
+          const p = perf.current;
+          p.frames += 1;
+          if (p.lastFrame >= 0) {
+            const gap = now - p.lastFrame;
+            p.frameMs += gap;
+            if (gap > p.frameMaxMs) p.frameMaxMs = gap;
+          }
+          p.lastFrame = now;
+        }
         const view = client.buffer.sample(now);
         const { w, h } = layoutRef.current;
 
@@ -666,15 +691,20 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             spectateDeadAt.current = null;
           }
 
+          // Under the render-scale A/B the canvas element is rs× the screen,
+          // so the record targets that smaller viewport (insets shrink with
+          // it); the compositor's upscale restores apparent size.
+          const rs = devFlags.renderScale;
           picture.value = recordArena({
             view,
             config: client.welcome.config,
             myId: client.welcome.playerId,
             spectateId: spectateId.current,
-            screenW: w,
-            screenH: h,
-            insetTop: insets.top,
-            insetBottom: insets.bottom,
+            screenW: w * rs,
+            screenH: h * rs,
+            insetTop: insets.top * rs,
+            insetBottom: insets.bottom * rs,
+            renderScale: rs,
             fx: fx.map((f) => f.item),
             blood,
             cracks,
@@ -825,6 +855,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           hudKey.current = key;
           setHud(next);
         }
+        if (perfOn) perf.current.busyMs += performance.now() - now;
       },
     },
     // Pinned rate (no adaptive tiers), and catch-up capped at 2 steps/frame.
@@ -851,7 +882,26 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         };
       }}
     >
-      <Canvas style={StyleSheet.absoluteFill}>
+      {/* Render-scale A/B (dev.ts): a sub-1 scale lays the canvas out at a
+          fraction of the screen and stretches it back up about its centre —
+          the Skia surface allocates from LAYOUT size, so this is the only way
+          to actually shrink the pixel count (a plain transform wouldn't).
+          recordArena gets the scaled viewport, so the camera fit is
+          unchanged; the compositor's upscale is the whole effect. */}
+      <Canvas
+        style={
+          devFlags.renderScale === 1
+            ? StyleSheet.absoluteFill
+            : {
+                position: "absolute",
+                left: `${((1 - devFlags.renderScale) / 2) * 100}%`,
+                top: `${((1 - devFlags.renderScale) / 2) * 100}%`,
+                width: `${devFlags.renderScale * 100}%`,
+                height: `${devFlags.renderScale * 100}%`,
+                transform: [{ scale: 1 / devFlags.renderScale }],
+              }
+        }
+      >
         <Picture picture={picture} />
       </Canvas>
 

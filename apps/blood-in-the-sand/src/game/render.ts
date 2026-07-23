@@ -342,6 +342,11 @@ export interface ArenaRenderInput {
   /** The zone's tileset atlas (useArenaAtlas). Null while decoding / for a
    *  tileset-less zone → flat pre-tileset floor, props invisible. */
   atlas: SkImage | null;
+  /** The canvas's fraction of the true screen (dev.ts renderScale A/B). The
+   *  fixed follow zoom multiplies by this so the WORLD span in frame stays
+   *  what it is at native res — without it a shrunken canvas magnifies the
+   *  game (the fit-zoom branches adapt on their own). Default 1. */
+  renderScale?: number;
   /** Forge icon art keyed by ability — the cast flash draws from these
    *  (useAbilityIconImages; an icon still decoding just skips its flash). */
   abilityIcons: Partial<Record<AbilityId, SkImage>>;
@@ -1174,6 +1179,16 @@ let splatImage: SkImage | null = null;
 /** The field the surface belongs to — a new room's field wipes the slate. */
 let splatOwner: BloodField | null = null;
 let splatWashMs = 0;
+/** The splat surface is HALF world resolution: dried marks are soft shapes,
+ *  so the 2× linear upscale is invisible — and it QUARTERS the two per-bake
+ *  costs Android feels as periodic frame hitches (2026-07-23 perf hunt): the
+ *  JS-thread snapshot memcpy and the render thread's texture re-upload of
+ *  the new image (~2.5MB vs ~10MB). */
+const SPLAT_SCALE = 0.5;
+const SPLAT_W = Math.ceil(WORLD_W * SPLAT_SCALE);
+const SPLAT_H = Math.ceil(WORLD_H * SPLAT_SCALE);
+const SPLAT_SRC = Skia.XYWHRect(0, 0, SPLAT_W, SPLAT_H);
+const splatPaint = Skia.Paint();
 /** Anti-saturation: multiply the baked layer's alpha down a hair on a slow
  *  beat — invisible at match timescales (half-life ≈ 11½ min), but guards a
  *  marathon room from ending at a solid-red floor. */
@@ -1209,38 +1224,51 @@ const scarLayer = (
     splatSurface?.getCanvas().clear(Skia.Color("rgba(0, 0, 0, 0)"));
     splatWashMs = nowMs;
   }
-  splatSurface ??= Skia.Surface.Make(WORLD_W, WORLD_H); // null → retry next beat
+  if (!splatSurface) {
+    splatSurface = Skia.Surface.Make(SPLAT_W, SPLAT_H); // null → retry next beat
+    // Stamps arrive in world coords; the baked-in matrix maps them to the
+    // half-res surface.
+    splatSurface?.getCanvas().scale(SPLAT_SCALE, SPLAT_SCALE);
+  }
   if (splatSurface) {
     const canvas = splatSurface.getCanvas();
-    let dirty = false;
-    if (splatImage && nowMs - splatWashMs >= WASH_INTERVAL_MS) {
-      splatWashMs = nowMs;
-      canvas.drawRect(FLOOR_RECT, washPaint);
-      dirty = true;
+    const settled = cracks.harvestSettled(nowMs);
+    const dried = blood.harvestDried(nowMs);
+    if (settled.length > 0 || dried.length > 0) {
+      // The anti-saturation wash rides a bake that's happening anyway — a
+      // standalone wash beat paid the snapshot + texture upload for an
+      // invisible 1% fade (one of the Android hitch sources). Applied before
+      // this beat's stamps, so fresh marks aren't washed.
+      if (splatImage && nowMs - splatWashMs >= WASH_INTERVAL_MS) {
+        splatWashMs = nowMs;
+        canvas.drawRect(FLOOR_RECT, washPaint);
+      }
+      // Settled crack webs stamp at exactly the alpha (and frozen reveal)
+      // the live pass last drew them with — the handoff is invisible
+      // (bits-blood.md §7). Before this beat's blood: chronological surface.
+      for (const c of settled) drawWebRevealed(canvas, c, CRACK_SETTLE_ALPHA, nowMs);
+      // Each decal stamps at the instant it finished drying — the exact
+      // appearance the live pass last drew (wetness 0, fade not started).
+      for (const d of dried) drawBlood(canvas, [d], d.bornMs + BLOOD_DRY_MS);
+      splatImage = splatSurface.makeImageSnapshot();
     }
-    // Settled crack webs stamp at exactly the alpha (and frozen reveal) the
-    // live pass last drew them with, then leave the live list — the handoff
-    // is invisible (bits-blood.md §7). Stamped before this beat's blood, so
-    // the surface stays chronological.
-    for (const c of cracks.harvestSettled(nowMs)) {
-      drawWebRevealed(canvas, c, CRACK_SETTLE_ALPHA, nowMs);
-      dirty = true;
-    }
-    // Stamp each decal at the instant it finished drying — the exact
-    // appearance the live pass last drew it with (wetness 0, fade not yet
-    // started), so the handoff is invisible.
-    for (const d of blood.harvestDried(nowMs)) {
-      drawBlood(canvas, [d], d.bornMs + BLOOD_DRY_MS);
-      dirty = true;
-    }
-    if (dirty) splatImage = splatSurface.makeImageSnapshot();
   }
 
   scarPicture = createPicture((canvas) => {
     // The baked splat surface (set blood + settled quake scars,
-    // chronological) under this beat's live wet blood. Live cracks draw per
-    // frame in recordArena, not here.
-    if (splatImage) canvas.drawImage(splatImage, 0, 0);
+    // chronological) under this beat's live wet blood, upscaled 2× with
+    // linear filtering — soft dried marks hide the half-res. Live cracks
+    // draw per frame in recordArena, not here.
+    if (splatImage) {
+      canvas.drawImageRectOptions(
+        splatImage,
+        SPLAT_SRC,
+        FLOOR_RECT,
+        FilterMode.Linear,
+        MipmapMode.None,
+        splatPaint,
+      );
+    }
     drawBlood(canvas, blood.decals, nowMs);
   }, FLOOR_RECT);
   return scarPicture;
@@ -1491,7 +1519,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
           ? view.players.find((p) => p.id === spectateId)
           : undefined;
     if (follow) {
-      zoom = FOLLOW_ZOOM;
+      zoom = FOLLOW_ZOOM * (r.renderScale ?? 1);
       const halfW = viewW / 2 / zoom;
       const halfH = viewH / 2 / zoom;
       // Clamp is relaxed by CROWD_REVEAL past the sand edge, so fighting near a

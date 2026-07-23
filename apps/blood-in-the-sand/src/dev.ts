@@ -16,6 +16,13 @@ export const devFlags = {
   /** Perf A/B: skip all strike/cast haptics — iOS builds a fresh
    * UIImpactFeedbackGenerator per pulse, the other per-moment native cost. */
   disableHaptics: false,
+  /** Perf A/B (the Android fill-rate test): render the match canvas at this
+   * fraction of its layout size and let the compositor upscale — same scene,
+   * ~rs² of the pixels for the GPU to fill (0.75 ≈ half the fill cost). If
+   * dropping this instantly restores 60fps, the cap is raster fill-rate on
+   * the render thread, not the JS loop — and a shipped Android render-scale
+   * tier is the fix. 1 = native. */
+  renderScale: 1 as 1 | 0.75 | 0.6,
   /** Pin EVERY practice bot to one archetype regardless of its loadout —
    * matchup testing (bot-brains.md step 5). null = derive from loadout. */
   botArchetype: null as ArchetypeId | null,
