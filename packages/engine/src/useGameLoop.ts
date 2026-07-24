@@ -20,15 +20,22 @@ export interface GameLoopConfig extends Partial<FixedStepConfig> {
    */
   maxStep?: number;
   /**
-   * Render-rate cap (frames/second, default 60). rAF fires at the DISPLAY's
-   * refresh rate — 120Hz on many Androids — and uncapped, the loop records
-   * and rasters every one of those frames: double the work per second, and a
+   * Target render rate (frames/second, default 60). rAF fires at the
+   * DISPLAY's refresh rate — 60/90/120Hz, and adaptive (LTPO) panels move
+   * between them at runtime — and uncapped, the loop records and rasters
+   * every one of those frames: double the work per second at 120Hz, and a
    * frame costing more than one 8.3ms slot slips to every 2nd/3rd vsync
    * (every 3rd on 120Hz = a hot phone pinned at 40fps — the OnePlus Nord 3
-   * finding, 2026-07-23). Capped, vsyncs past the budget are skipped whole:
-   * the sim accumulator carries the time forward, so sim rate is unaffected.
-   * Trade-off: a 90Hz panel paces to its even divisor (45fps) rather than an
-   * uneven 60. Pass Infinity to uncap.
+   * finding, 2026-07-23).
+   *
+   * The loop measures the live vsync interval and renders every Nth vsync,
+   * N = ceil(panelHz / maxFps) — UNLESS that divisor lands well UNDER the
+   * target (90Hz / 2 = 45), in which case it renders every vsync: a panel
+   * offering only 90 or 45 should give the game 90, not 45 (2026-07-24: an
+   * adaptive panel sitting at 90Hz turned the plain time-threshold cap into
+   * a rock-steady 45fps). So: 60Hz → 60, 90Hz → 90, 120Hz → 60, 144Hz → 72.
+   * Skipped vsyncs are dropped whole; the sim accumulator carries the time,
+   * so sim rate is unaffected. Pass Infinity to render every vsync always.
    */
   maxFps?: number;
 }
@@ -58,9 +65,7 @@ export const useGameLoop = (handlers: GameLoopHandlers, config: GameLoopConfig =
   const baseStep = config.step ?? DEFAULT_STEP;
   const maxSteps = config.maxSteps ?? 5;
   const slowStep = config.maxStep ?? baseStep * 3;
-  // 1.5ms under the target interval so a 60Hz panel's own ~16.7ms cadence
-  // always passes — the cap only bites on faster displays.
-  const minFrameMs = 1000 / (config.maxFps ?? 60) - 1.5;
+  const maxFps = config.maxFps ?? 60;
 
   useEffect(() => {
     // Sim-rate tiers from finest (baseStep) to coarsest (slowStep): 60 → 30 → 20Hz.
@@ -70,22 +75,60 @@ export const useGameLoop = (handlers: GameLoopHandlers, config: GameLoopConfig =
     let rafId = 0;
     let running = true;
     let last: number | null = null;
-    let lastRendered = -Infinity;
     let accumulator = 0;
     let tier = 0; // index into `tiers`; higher = coarser/slower sim
     let behind = 0; // consecutive frames pinned at the step cap
     let ahead = 0; // consecutive comfortable (≤1-step) frames
 
+    // Vsync-aware pacing state (see maxFps doc): a ring of recent callback
+    // intervals estimates the live panel rate (adaptive panels change it at
+    // runtime); the divisor re-derives every RATE_EVERY callbacks. All
+    // preallocated — this path runs at up to 120Hz and must not allocate.
+    const RING = 20;
+    const RATE_EVERY = 30;
+    const deltas = new Float64Array(RING);
+    const sorted = new Float64Array(RING);
+    let deltaCount = 0; // total recorded (ring index = deltaCount % RING)
+    let lastCb = -1;
+    let sinceRate = 0;
+    let skipFactor = 1;
+    let sinceRender = 0; // renders when it reaches skipFactor
+
     const frame = (now: number): void => {
       if (!running) return;
-      // Render-rate cap: skip whole vsyncs that arrive early (120Hz panels).
-      // `last` is deliberately NOT updated on a skip — the next accepted
-      // frame's delta spans the skipped vsyncs, so the sim loses no time.
-      if (now - lastRendered < minFrameMs) {
+      // Track the raw callback cadence — every vsync, skipped or not.
+      if (lastCb >= 0) {
+        const d = now - lastCb;
+        // Ignore pauses/hiccups: a real vsync interval is 4–40ms (240–25Hz).
+        if (d > 4 && d < 40) deltas[deltaCount++ % RING] = d;
+      }
+      lastCb = now;
+      sinceRate += 1;
+      if (sinceRate >= RATE_EVERY && deltaCount >= RING) {
+        sinceRate = 0;
+        // Median via insertion sort into the scratch buffer (20 entries).
+        for (let i = 0; i < RING; i++) {
+          const v = deltas[i]!;
+          let j = i - 1;
+          for (; j >= 0 && sorted[j]! > v; j--) sorted[j + 1] = sorted[j]!;
+          sorted[j + 1] = v;
+        }
+        const hz = 1000 / sorted[RING >> 1]!;
+        // Every Nth vsync to land at ≤ maxFps… unless that undershoots the
+        // target badly (90Hz/2 = 45) — then take the panel rate instead.
+        let n = Math.max(1, Math.ceil(hz / maxFps - 0.05));
+        if (n > 1 && hz / n < maxFps * 0.9) n -= 1;
+        skipFactor = n;
+      }
+      // Skip whole vsyncs between renders. `last` is deliberately NOT
+      // updated on a skip — the next accepted frame's delta spans the
+      // skipped vsyncs, so the sim loses no time.
+      sinceRender += 1;
+      if (sinceRender < skipFactor) {
         rafId = requestAnimationFrame(frame);
         return;
       }
-      lastRendered = now;
+      sinceRender = 0;
       if (last === null) last = now;
       const frameDelta = (now - last) / 1000;
       last = now;
