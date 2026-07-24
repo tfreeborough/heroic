@@ -349,11 +349,6 @@ export interface ArenaRenderInput {
   /** The zone's tileset atlas (useArenaAtlas). Null while decoding / for a
    *  tileset-less zone → flat pre-tileset floor, props invisible. */
   atlas: SkImage | null;
-  /** The canvas's fraction of the true screen (dev.ts renderScale A/B). The
-   *  fixed follow zoom multiplies by this so the WORLD span in frame stays
-   *  what it is at native res — without it a shrunken canvas magnifies the
-   *  game (the fit-zoom branches adapt on their own). Default 1. */
-  renderScale?: number;
   /** Forge icon art keyed by ability — the cast flash draws from these
    *  (useAbilityIconImages; an icon still decoding just skips its flash). */
   abilityIcons: Partial<Record<AbilityId, SkImage>>;
@@ -1532,7 +1527,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
           ? view.players.find((p) => p.id === spectateId)
           : undefined;
     if (follow) {
-      zoom = FOLLOW_ZOOM * (r.renderScale ?? 1);
+      zoom = FOLLOW_ZOOM;
       const halfW = viewW / 2 / zoom;
       const halfH = viewH / 2 / zoom;
       // Clamp is relaxed by CROWD_REVEAL past the sand edge, so fighting near a

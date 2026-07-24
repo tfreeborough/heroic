@@ -742,21 +742,16 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             spectateDeadAt.current = null;
           }
 
-          // Under the render-scale A/B the canvas element is rs× the screen,
-          // so the record targets that smaller viewport (insets shrink with
-          // it); the compositor's upscale restores apparent size.
-          const rs = devFlags.renderScale;
           const prevPic = picture.value;
           picture.value = recordArena({
             view,
             config: client.welcome.config,
             myId: client.welcome.playerId,
             spectateId: spectateId.current,
-            screenW: w * rs,
-            screenH: h * rs,
-            insetTop: insets.top * rs,
-            insetBottom: insets.bottom * rs,
-            renderScale: rs,
+            screenW: w,
+            screenH: h,
+            insetTop: insets.top,
+            insetBottom: insets.bottom,
             fx: fxItems(fx),
             blood,
             cracks,
@@ -938,26 +933,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         };
       }}
     >
-      {/* Render-scale A/B (dev.ts): a sub-1 scale lays the canvas out at a
-          fraction of the screen and stretches it back up about its centre —
-          the Skia surface allocates from LAYOUT size, so this is the only way
-          to actually shrink the pixel count (a plain transform wouldn't).
-          recordArena gets the scaled viewport, so the camera fit is
-          unchanged; the compositor's upscale is the whole effect. */}
-      <Canvas
-        style={
-          devFlags.renderScale === 1
-            ? StyleSheet.absoluteFill
-            : {
-                position: "absolute",
-                left: `${((1 - devFlags.renderScale) / 2) * 100}%`,
-                top: `${((1 - devFlags.renderScale) / 2) * 100}%`,
-                width: `${devFlags.renderScale * 100}%`,
-                height: `${devFlags.renderScale * 100}%`,
-                transform: [{ scale: 1 / devFlags.renderScale }],
-              }
-        }
-      >
+      <Canvas style={StyleSheet.absoluteFill}>
         <Picture picture={picture} />
       </Canvas>
 

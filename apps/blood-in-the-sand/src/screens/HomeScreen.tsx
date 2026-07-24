@@ -322,7 +322,6 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
   const [hapticsOff, setHapticsOff] = useState(devFlags.disableHaptics);
   const [botArchetype, setBotArchetype] = useState(devFlags.botArchetype);
   const [botDifficulty, setBotDifficulty] = useState(devFlags.botDifficulty);
-  const [renderScale, setRenderScale] = useState(devFlags.renderScale);
   // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
   // session-only devFlags rows — App.tsx applies it on launch; this label
   // just needs the same stored value.
@@ -395,14 +394,6 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
   const onToggleHaptics = (): void => {
     devFlags.disableHaptics = !devFlags.disableHaptics;
     setHapticsOff(devFlags.disableHaptics);
-  };
-
-  // The Android fill-rate A/B (dev.ts renderScale): cycle native → 75% → 60%.
-  const onCycleRenderScale = (): void => {
-    const ring = [1, 0.75, 0.6] as const;
-    const next = ring[(ring.indexOf(devFlags.renderScale) + 1) % ring.length]!;
-    devFlags.renderScale = next;
-    setRenderScale(next);
   };
 
   // Matchup testing (bot-brains.md step 5): cycle every practice bot through
@@ -568,13 +559,6 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
               feedback generator per pulse). */}
           <Pressable onPress={withTap("uiTap", onToggleHaptics)} style={styles.devButton}>
             <Text style={styles.devButtonText}>HAPTICS {hapticsOff ? "○ KILLED" : "◉ ON"}</Text>
-          </Pressable>
-          {/* The Android fill-rate A/B: fewer pixels for the GPU, same scene.
-              60fps at 75% = raster-bound, and a shipped scale tier is the fix. */}
-          <Pressable onPress={withTap("uiTap", onCycleRenderScale)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>
-              RENDER SCALE {renderScale === 1 ? "○ NATIVE" : `◉ ${Math.round(renderScale * 100)}%`}
-            </Text>
           </Pressable>
           {/* Bot-brain overrides for practice matchup testing — tap to cycle. */}
           <Pressable onPress={withTap("uiTap", onCycleBotArchetype)} style={styles.devButton}>
