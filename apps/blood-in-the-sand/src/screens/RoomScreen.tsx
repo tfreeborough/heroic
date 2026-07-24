@@ -1331,10 +1331,10 @@ const CountdownVeil = ({
   const n = Math.ceil(left);
   const frac = Math.max(0, Math.min(1, left / LOBBY_COUNTDOWN_SECONDS));
   const color = n <= 3 ? "#d94141" : C_GOLD;
-  const track = Skia.Path.Make();
-  track.addCircle(70, 70, 62);
-  const arc = Skia.Path.Make();
-  arc.addArc({ x: 8, y: 8, width: 124, height: 124 }, -90, 360 * frac);
+  const track = Skia.Path.Circle(70, 70, 62);
+  const arc = Skia.PathBuilder.Make()
+    .addArc({ x: 8, y: 8, width: 124, height: 124 }, -90, 360 * frac)
+    .detach();
   return (
     // box-none, not none: the ✕ must stay pressable while everything else
     // passes touches through.

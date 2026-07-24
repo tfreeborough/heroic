@@ -5,8 +5,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DIFFICULTIES, DIFFICULTY_IDS, type DifficultyId } from "@heroic/blood-in-the-sand-sim";
 import { loadBotDifficulty, saveBotDifficulty } from "../settings";
+import type { PracticeMode } from "../net/practice";
 
 const KEY_NAME = "bits.name";
+
+/** One line of expectation-setting per opponent — swaps with the picker. */
+const OPPONENT_HINTS: Record<PracticeMode, string> = {
+  bot: "an offline bout against bots — you'll arm your weapon and abilities, just like a real match (the bots arm too). above 1v1, bots fight beside you as well as against you",
+  dummies:
+    "the firing range — a line of respawning dummies that never fight back. arm any loadout and learn how every weapon and ability feels",
+};
 
 /** One line of expectation-setting per tier — the picker's caption. */
 const TIER_HINTS: Record<DifficultyId, string> = {
@@ -22,20 +30,23 @@ const TIER_HINTS: Record<DifficultyId, string> = {
 
 export interface PracticeScreenProps {
   onBack: () => void;
-  onStart: (playerName: string, teamSize: number, difficulty: DifficultyId) => void;
+  onStart: (playerName: string, teamSize: number, difficulty: DifficultyId, opponent: PracticeMode) => void;
 }
 
 /**
- * The practice front door: pick a match size and how good the bots are,
- * press play, fight. No picks here — practice runs the SAME arming wizard as
- * real rooms, so the loadout happens where it does in real matches. Above
- * 1v1, bots fill BOTH teams (you get bot allies) — every bot, friend or foe,
- * fights at the picked tier. The tier persists between visits (climbing the
- * ladder shouldn't mean re-picking).
+ * The practice front door: pick your opponents (bots, or the target-dummy
+ * firing range — dev-menu-only until the mode select made it a real feature),
+ * and for bots a match size and skill tier. No loadout picks here — practice
+ * runs the SAME arming wizard as real rooms, so arming happens where it does
+ * in real matches. Above 1v1, bots fill BOTH teams (you get bot allies) —
+ * every bot, friend or foe, fights at the picked tier. The tier persists
+ * between visits (climbing the ladder shouldn't mean re-picking); the range
+ * ignores size and tier entirely (a fixed line of dummies).
  */
 export const PracticeScreen = ({ onBack, onStart }: PracticeScreenProps) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("gladiator");
+  const [opponent, setOpponent] = useState<PracticeMode>("bot");
   const [teamSize, setTeamSize] = useState(1);
   const [difficulty, setDifficulty] = useState<DifficultyId>("skilled");
 
@@ -59,41 +70,55 @@ export const PracticeScreen = ({ onBack, onStart }: PracticeScreenProps) => {
         </Pressable>
         <Text style={styles.title}>PRACTICE</Text>
       </View>
-      <Text style={styles.hint}>
-        an offline bout against bots — you'll arm your weapon and abilities, just like a real match
-        (the bots arm too). above 1v1, bots fight beside you as well as against you
-      </Text>
+      <Text style={styles.hint}>{OPPONENT_HINTS[opponent]}</Text>
 
+      <Text style={styles.sectionLabel}>OPPONENTS</Text>
       <View style={styles.sizeRow}>
-        {[1, 2, 3, 4].map((n) => (
-          <Pressable
-            key={n}
-            onPress={() => setTeamSize(n)}
-            style={[styles.sizeOption, teamSize === n && styles.sizeOptionOn]}
-          >
-            <Text style={[styles.sizeText, teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <Text style={styles.sectionLabel}>BOT SKILL</Text>
-      <View style={styles.tierGrid}>
-        {DIFFICULTY_IDS.map((d) => (
-          <Pressable
-            key={d}
-            onPress={() => pickDifficulty(d)}
-            style={[styles.tierOption, difficulty === d && styles.tierOptionOn]}
-          >
-            <Text style={[styles.tierText, difficulty === d && styles.tierTextOn]}>
-              {DIFFICULTIES[d].name.toUpperCase()}
+        {(["bot", "dummies"] as const).map((o) => (
+          <Pressable key={o} onPress={() => setOpponent(o)} style={[styles.sizeOption, opponent === o && styles.sizeOptionOn]}>
+            <Text style={[styles.sizeText, opponent === o && styles.sizeTextOn]}>
+              {o === "bot" ? "BOTS" : "TARGET DUMMIES"}
             </Text>
           </Pressable>
         ))}
       </View>
-      <Text style={styles.tierHint}>{TIER_HINTS[difficulty]}</Text>
 
-      <Pressable onPress={() => onStart(name, teamSize, difficulty)} style={styles.play}>
-        <Text style={styles.playText}>ARM YOURSELF</Text>
+      {/* The range has no knobs — a fixed line of dummies, no size, no tier. */}
+      {opponent === "bot" && (
+        <>
+          <Text style={styles.sectionLabel}>MATCH SIZE</Text>
+          <View style={styles.sizeRow}>
+            {[1, 2, 3, 4].map((n) => (
+              <Pressable
+                key={n}
+                onPress={() => setTeamSize(n)}
+                style={[styles.sizeOption, teamSize === n && styles.sizeOptionOn]}
+              >
+                <Text style={[styles.sizeText, teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.sectionLabel}>BOT SKILL</Text>
+          <View style={styles.tierGrid}>
+            {DIFFICULTY_IDS.map((d) => (
+              <Pressable
+                key={d}
+                onPress={() => pickDifficulty(d)}
+                style={[styles.tierOption, difficulty === d && styles.tierOptionOn]}
+              >
+                <Text style={[styles.tierText, difficulty === d && styles.tierTextOn]}>
+                  {DIFFICULTIES[d].name.toUpperCase()}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.tierHint}>{TIER_HINTS[difficulty]}</Text>
+        </>
+      )}
+
+      <Pressable onPress={() => onStart(name, teamSize, difficulty, opponent)} style={styles.play}>
+        <Text style={styles.playText}>{opponent === "bot" ? "ARM YOURSELF" : "ENTER THE RANGE"}</Text>
       </Pressable>
       <Text style={styles.playingAs}>{`playing as ${name}`}</Text>
     </View>
@@ -107,7 +132,8 @@ const styles = StyleSheet.create({
   backText: { color: "#8a7f70", fontSize: 15, fontWeight: "800", letterSpacing: 1 },
   title: { color: "#d94141", fontSize: 28, fontWeight: "900", letterSpacing: 3 },
   hint: { color: "#8a7f70", fontSize: 13, marginTop: 10, lineHeight: 19 },
-  sizeRow: { flexDirection: "row", gap: 8, marginTop: 24 },
+  // Every chip row sits under a sectionLabel now — the label owns the gap.
+  sizeRow: { flexDirection: "row", gap: 8 },
   sizeOption: {
     flex: 1,
     backgroundColor: "#221e19",

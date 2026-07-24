@@ -14,8 +14,8 @@ import { bannerAnchors, buildCrowd, makeHighSunPicture, sceneAnchors, type Banne
 import { pickDuel, TITLE_SPRITE_SCALE, TITLE_SPRITES } from "./titleSprites";
 
 export interface HomeScreenProps {
+  /** → the mode select (bits-mode-select.md); Practice lives in there now. */
   onPlay: () => void;
-  onPractice: () => void;
   onSettings: () => void;
   /** Dev menu: start the target-dummy firing range (offline, respawning dummies). */
   onTargetDummies: () => void;
@@ -92,13 +92,12 @@ const BannerRibbon = ({ b, clock }: { b: BannerAnchor; clock: SharedValue<number
     const t = clock.value;
     const topX = (u: number): number => b.x + u * 30;
     const topY = (u: number): number => b.y + u * 2 + Math.sin(t * 0.004 + b.phase + u * 3.2) * u * 3.4;
-    const ribbon = Skia.Path.Make();
+    const ribbon = Skia.PathBuilder.Make();
     ribbon.moveTo(topX(0), topY(0));
     for (let k = 1; k <= 8; k++) ribbon.lineTo(topX(k / 8), topY(k / 8));
     ribbon.lineTo(topX(1) - 6, topY(1) + 2.3); // swallowtail notch
     for (let k = 8; k >= 0; k--) ribbon.lineTo(topX(k / 8), topY(k / 8) + 7 - (k / 8) * 2.5);
-    ribbon.close();
-    return ribbon;
+    return ribbon.close().detach();
   });
   // sun-bleached red riding the wind (the scene's red, kept scarce)
   return <Path path={path} color="#8a3a2e" />;
@@ -299,8 +298,10 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
 /**
  * The front door: the High Sun arena scene (homeScene.ts — static Skia
  * painting; forged gladiator sprites breathe over it) with the title at the
- * top and the three ways in at the bottom. Red is rationed to the banners and
- * PLAY. No server needed to be here — connection concerns start behind Play.
+ * top and the two ways in at the bottom — PLAY opens the mode select
+ * (ranked / casual / practice / story), SETTINGS is the quiet one. Red is
+ * rationed to the banners and PLAY. No server needed to be here —
+ * connection concerns start behind the mode select's gates.
  *
  * There's also a hidden fourth way in: tapping the title DEV_TAPS times in a
  * row toggles the dev menu, a small panel pinned to the bottom-left corner.
@@ -309,7 +310,7 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
  * row drives a real persisted setting (settings.ts) that just has no
  * player-facing UI yet.
  */
-export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
+export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [devOpen, setDevOpen] = useState(false);
@@ -527,9 +528,6 @@ export const HomeScreen = ({ onPlay, onPractice, onSettings, onTargetDummies, up
               <Text style={styles.playText}>PLAY</Text>
             </Pressable>
           </View>
-          <Pressable onPress={withTap("uiConfirm", onPractice)} style={styles.ghost}>
-            <Text style={styles.ghostText}>PRACTICE</Text>
-          </Pressable>
           <Pressable onPress={withTap("uiTap", onSettings)} style={styles.ghost}>
             <Text style={styles.ghostText}>SETTINGS</Text>
           </Pressable>

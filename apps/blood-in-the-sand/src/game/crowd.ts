@@ -398,6 +398,18 @@ export const buildCrowd = (worldW: number, worldH: number): Crowd => {
   const atlasPaint = Skia.Paint();
   atlasPaint.setAntiAlias(true);
 
+  // drawMob's persistent scratch arrays (see the reset block inside it).
+  // The hair layer is a sparser pass — bald bodies simply have no entry.
+  const dsts: SkRSXform[] = [];
+  const headDsts: SkRSXform[] = [];
+  const srcsTorso: SkRect[] = [];
+  const srcsHead: SkRect[] = [];
+  const clothCols: SkColor[] = [];
+  const skinCols: SkColor[] = [];
+  const hairDsts: SkRSXform[] = [];
+  const srcsHair: SkRect[] = [];
+  const hairCols: SkColor[] = [];
+
   // ---- The static bowl, prebuilt as flat band lists (rect + colour) and
   // culled to the viewport at draw time. Every ring is FOUR rects forming a
   // concentric frame, so shading always follows distance-to-sand and the
@@ -568,16 +580,20 @@ export const buildCrowd = (worldW: number, worldH: number): Crowd => {
     // Past this angular distance the Gaussian rise is < 0.2% of the lift —
     // sub-pixel — so the body is honestly at rest and the cache serves.
     const CREST_NEAR = WAVE_WIDTH * 2.5;
-    const dsts: SkRSXform[] = [];
-    const headDsts: SkRSXform[] = [];
-    const srcsTorso: SkRect[] = [];
-    const srcsHead: SkRect[] = [];
-    const clothCols: SkColor[] = [];
-    const skinCols: SkColor[] = [];
-    // The hair layer is a sparser pass — bald bodies simply have no entry.
-    const hairDsts: SkRSXform[] = [];
-    const srcsHair: SkRect[] = [];
-    const hairCols: SkColor[] = [];
+    // The scratch arrays persist (truncated per call, below) — nine fresh
+    // arrays regrown to hundreds of elements 60×/s was pointless GC food
+    // (the hitch-hunt allocation diet). Safe: createPicture records
+    // drawAtlas's data synchronously, so reuse next frame touches nothing
+    // still in flight.
+    dsts.length = 0;
+    headDsts.length = 0;
+    srcsTorso.length = 0;
+    srcsHead.length = 0;
+    clothCols.length = 0;
+    skinCols.length = 0;
+    hairDsts.length = 0;
+    srcsHair.length = 0;
+    hairCols.length = 0;
     for (const s of seats) {
       if (s.x < left - margin || s.x > right + margin || s.y < top - margin || s.y > bottom + margin) continue;
       let delta = s.angle - crest;

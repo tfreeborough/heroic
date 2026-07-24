@@ -56,6 +56,7 @@ export type BitsSoundEvent =
   | "uiConfirm" //      a positive commit (lock in, ready)
   | "uiBack" //         cancel / back
   | "uiError" //        a rejected action
+  | "modeReveal" //     the mode-select stack lands (bits-mode-select.md)
   | "titleGust"; //     a dust squall crosses the title screen
 
 /** Per-weapon IMPACT banks (the thwack into a body). Base `clips` cover a hit
@@ -218,6 +219,9 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   uiConfirm: { clips: ["ui_confirm_1"] },
   uiBack: { clips: ["ui_back_1"], volume: 0.7 },
   uiError: { clips: ["ui_error_1"] },
+  // Owed from the Forge — silent until mode_reveal_1 lands: a low drum hit
+  // with air, played once as the mode-select stack finishes its entrance.
+  modeReveal: { clips: ["mode_reveal_1"], volume: 0.8 },
   // The title screen's dust squall (HomeScreen's DustStorm) — quiet ambience,
   // not a stinger. Note the first gust after a cold launch can land before any
   // tap has unlocked audio; it stays silent and the next one sounds.

@@ -14,7 +14,7 @@
  * exist: live cost is a handful of per-frame drawPath calls, settled cost is
  * zero.
  */
-import { Skia, type SkPath } from "@shopify/react-native-skia";
+import { Skia, type SkPath, type SkPathBuilder } from "@shopify/react-native-skia";
 import type { Vec2 } from "@heroic/core";
 
 // ── Tuning ─────────────────────────────────────────────────────────────────
@@ -172,9 +172,9 @@ export class CrackField {
     settleAtMs: number | null,
     quakeId?: number,
   ): void {
-    const path = Skia.Path.Make();
-    const finePath = Skia.Path.Make();
-    const addPoly = (target: SkPath, pts: Vec2[]): void => {
+    const pathB = Skia.PathBuilder.Make();
+    const fineB = Skia.PathBuilder.Make();
+    const addPoly = (target: SkPathBuilder, pts: Vec2[]): void => {
       target.moveTo(pts[0]!.x, pts[0]!.y);
       for (let i = 1; i < pts.length; i++) target.lineTo(pts[i]!.x, pts[i]!.y);
     };
@@ -184,7 +184,7 @@ export class CrackField {
       const angle = ((i + 0.2 + Math.random() * 0.6) / arms) * Math.PI * 2;
       const length = radius * (0.55 + Math.random() * 0.45);
       const arm = jaggedLine(x, y, angle, length);
-      addPoly(path, arm);
+      addPoly(pathB, arm);
       const branches = 1 + (Math.random() < 0.6 ? 1 : 0);
       for (let b = 0; b < branches; b++) {
         // Fork from partway along the arm, veering off the arm's heading.
@@ -192,11 +192,11 @@ export class CrackField {
         const bAngle = angle + (Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.7);
         const bLen = length * (0.25 + Math.random() * 0.2);
         const branch = jaggedLine(from.x, from.y, bAngle, bLen);
-        addPoly(finePath, branch);
+        addPoly(fineB, branch);
         if (Math.random() < 0.35) {
           const tip = branch[branch.length - 2]!;
           addPoly(
-            finePath,
+            fineB,
             jaggedLine(tip.x, tip.y, bAngle + (Math.random() - 0.5) * 1.4, bLen * 0.5),
           );
         }
@@ -219,7 +219,7 @@ export class CrackField {
           const jr = rr + (Math.random() - 0.5) * 12;
           pts.push({ x: x + Math.cos(a) * jr, y: y + Math.sin(a) * jr });
         }
-        addPoly(finePath, pts);
+        addPoly(fineB, pts);
       }
     }
 
@@ -230,8 +230,8 @@ export class CrackField {
       bornMs: nowMs,
       expandMs,
       settleAtMs,
-      path,
-      finePath,
+      path: pathB.detach(),
+      finePath: fineB.detach(),
       ...(quakeId !== undefined ? { quakeId } : {}),
     });
     if (this.decals.length > MAX_LIVE) this.decals.splice(0, this.decals.length - MAX_LIVE);

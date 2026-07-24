@@ -19,8 +19,14 @@ import type {
 
 export const INTERP_DELAY_TICKS = 2;
 
-/** Keep ~2s of history — plenty for the delay window plus debugging. */
-const MAX_ENTRIES = 64;
+/** History depth. The interpolation delay only needs ~3 ticks; the rest is
+ * slack for late frames. Was 64 (~2s "for debugging") — trimmed 2026-07-24
+ * for the GC hunt: snapshots that live 2s all get promoted to Hermes's old
+ * generation before dying, and a fat old-gen graveyard is what makes the
+ * intermittent full collections (the 30ms frame spikes) expensive. 8 ≈ 267ms
+ * at 30Hz — an order of magnitude past the delay window, an eighth of the
+ * old-gen churn. */
+const MAX_ENTRIES = 8;
 
 export interface InterpolatedView {
   /** The (fractional) server tick this view renders. */
@@ -42,27 +48,62 @@ const lerpNum = (a: number, b: number, t: number): number => a + (b - a) * t;
 /** Shortest-path angle lerp — a raw lerp breaks at the ±π wrap. */
 const lerpAngle = (a: number, b: number, t: number): number => a + angleDiff(b, a) * t;
 
-const lerpPlayer = (a: PlayerSnapshot, b: PlayerSnapshot, t: number): PlayerSnapshot => ({
-  // Discrete fields come from the NEWER snapshot; only continuous ones lerp.
-  ...b,
-  x: lerpNum(a.x, b.x, t),
-  y: lerpNum(a.y, b.y, t),
-  facing: lerpAngle(a.facing, b.facing, t),
-  lockedFacing: lerpAngle(a.lockedFacing, b.lockedFacing, t),
-});
+/** Discrete fields come from the NEWER snapshot; only continuous ones lerp.
+ * Writes into a pooled object — see the GC-diet note on SnapshotBuffer. */
+const lerpPlayerInto = (
+  dst: PlayerSnapshot,
+  a: PlayerSnapshot,
+  b: PlayerSnapshot,
+  t: number,
+): void => {
+  Object.assign(dst, b);
+  dst.x = lerpNum(a.x, b.x, t);
+  dst.y = lerpNum(a.y, b.y, t);
+  dst.facing = lerpAngle(a.facing, b.facing, t);
+  dst.lockedFacing = lerpAngle(a.lockedFacing, b.lockedFacing, t);
+};
 
 /** Same rule as players: lerp by id; a shot new to the pair pops at its newer
  * position (≤ one tick of flight — invisible at our speeds). */
-const lerpProjectile = (a: ProjectileSnapshot, b: ProjectileSnapshot, t: number): ProjectileSnapshot => ({
-  ...b,
-  x: lerpNum(a.x, b.x, t),
-  y: lerpNum(a.y, b.y, t),
-  angle: lerpAngle(a.angle, b.angle, t),
-});
+const lerpProjectileInto = (
+  dst: ProjectileSnapshot,
+  a: ProjectileSnapshot,
+  b: ProjectileSnapshot,
+  t: number,
+): void => {
+  Object.assign(dst, b);
+  dst.x = lerpNum(a.x, b.x, t);
+  dst.y = lerpNum(a.y, b.y, t);
+  dst.angle = lerpAngle(a.angle, b.angle, t);
+};
+
+/** Linear id scan without a per-call closure (an .find() arrow per entity per
+ * frame is real allocation at 60Hz). Snapshot rosters are ≤ ~10 long. */
+const byId = <T extends { id: number }>(arr: readonly T[], id: number): T | undefined => {
+  for (let i = 0; i < arr.length; i++) if (arr[i]!.id === id) return arr[i];
+  return undefined;
+};
 
 export class SnapshotBuffer {
   private entries: Entry[] = [];
   private readonly msPerTick: number;
+
+  // GC diet (2026-07-23): sample() runs every rendered frame AND every event
+  // drain, and fresh per-call clones made it the client's biggest steady
+  // allocator (~700 objects/s in a 4v4 — Hermes was collecting every couple
+  // of frames). The SAME view object is returned from every call, its arrays
+  // and entity objects mutated in place. CONTRACT: a sampled view is valid
+  // only until the next sample() — every current caller reads it within the
+  // frame; a new caller that keeps anything must copy it out.
+  private readonly pooledPlayers: PlayerSnapshot[] = [];
+  private readonly pooledProjectiles: ProjectileSnapshot[] = [];
+  private readonly pooledView: InterpolatedView = {
+    tick: 0,
+    round: undefined as unknown as RoundSnapshot,
+    players: [],
+    projectiles: [],
+    deployables: [],
+  };
 
   constructor(tickRate: number) {
     this.msPerTick = 1000 / tickRate;
@@ -124,16 +165,26 @@ export class SnapshotBuffer {
     const span = newer.tick - older.tick;
     const t = span > 0 ? (target - older.tick) / span : 0;
 
-    const players = newer.players.map((b) => {
-      const a = older.players.find((p) => p.id === b.id) ?? b;
-      return lerpPlayer(a, b, t);
-    });
-
-    const projectiles = newer.projectiles.map((b) => {
-      const a = older.projectiles.find((p) => p.id === b.id) ?? b;
-      return lerpProjectile(a, b, t);
-    });
-
-    return { tick: target, round: newer.round, players, projectiles, deployables: newer.deployables };
+    const view = this.pooledView;
+    view.players.length = newer.players.length;
+    for (let i = 0; i < newer.players.length; i++) {
+      const b = newer.players[i]!;
+      const a = byId(older.players, b.id) ?? b;
+      const dst = (this.pooledPlayers[i] ??= { ...b });
+      lerpPlayerInto(dst, a, b, t);
+      view.players[i] = dst;
+    }
+    view.projectiles.length = newer.projectiles.length;
+    for (let i = 0; i < newer.projectiles.length; i++) {
+      const b = newer.projectiles[i]!;
+      const a = byId(older.projectiles, b.id) ?? b;
+      const dst = (this.pooledProjectiles[i] ??= { ...b });
+      lerpProjectileInto(dst, a, b, t);
+      view.projectiles[i] = dst;
+    }
+    view.tick = target;
+    view.round = newer.round;
+    view.deployables = newer.deployables;
+    return view;
   }
 }

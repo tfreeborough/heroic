@@ -83,6 +83,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "ui_confirm", label: "UI confirm", category: "ui" },
   { id: "ui_back", label: "UI back", category: "ui" },
   { id: "ui_error", label: "UI error", category: "ui" },
+  { id: "mode_reveal", label: "Mode select — stack lands", category: "ui" },
   { id: "title_gust", label: "Title — dust gust", category: "ui" },
 ];
 

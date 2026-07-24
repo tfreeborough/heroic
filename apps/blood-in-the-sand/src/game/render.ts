@@ -251,6 +251,13 @@ const floorImage = (atlas: SkImage): SkImage | null => {
 };
 const FLOOR_RECT = Skia.XYWHRect(0, 0, WORLD_W, WORLD_H);
 
+// Wall geometry is static — two fresh rects per wall per frame was free GC
+// food (the allocation diet).
+const WALL_RECTS = ZONE.walls.map((w) => ({
+  body: Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h),
+  top: Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h),
+}));
+
 /** A transient visual: damage numbers, hit rings, the harpoon's chain flash,
  * the cast flash (an ability icon popping above its caster), the warding
  * shout's cone blast. */
@@ -539,14 +546,15 @@ const drawPlayer = (
       const halfDeg = ((weapon.attack.arcWidth ?? 0) / 2) * (180 / Math.PI);
       const facingDeg = p.lockedFacing * (180 / Math.PI);
       const reach = weapon.attack.reach + r;
-      const wedge = Skia.Path.Make();
-      wedge.moveTo(p.x, p.y);
-      wedge.arcToOval(
-        Skia.XYWHRect(p.x - reach, p.y - reach, reach * 2, reach * 2),
-        facingDeg - halfDeg,
-        halfDeg * 2,
-        false,
-      );
+      const wedge = Skia.PathBuilder.Make()
+        .moveTo(p.x, p.y)
+        .arcToOval(
+          Skia.XYWHRect(p.x - reach, p.y - reach, reach * 2, reach * 2),
+          facingDeg - halfDeg,
+          halfDeg * 2,
+          false,
+        )
+        .detach();
       wedge.close();
       fill.setColor(C_TELEGRAPH);
       fill.setAlphaf(0.12 + 0.28 * progress);
@@ -600,17 +608,18 @@ const drawPlayer = (
       stroke.setAlphaf(0.9 * a);
       stroke.setStrokeCap(StrokeCap.Round);
       for (let i = 0; i < 3; i++) {
-        const arc = Skia.Path.Make();
-        arc.addArc(
-          Skia.XYWHRect(
-            p.x - shieldR - 2,
-            p.y - shieldR - 2,
-            (shieldR + 2) * 2,
-            (shieldR + 2) * 2,
-          ),
-          spin + i * 120,
-          55,
-        );
+        const arc = Skia.PathBuilder.Make()
+          .addArc(
+            Skia.XYWHRect(
+              p.x - shieldR - 2,
+              p.y - shieldR - 2,
+              (shieldR + 2) * 2,
+              (shieldR + 2) * 2,
+            ),
+            spin + i * 120,
+            55,
+          )
+          .detach();
         canvas.drawPath(arc, stroke);
       }
       fill.setAlphaf(1);
@@ -795,14 +804,15 @@ const drawFx = (
       const reach = 30 + (1 - f.life * f.life) * (WARDING_SHOUT.range - 30);
       const halfDeg = (WARDING_SHOUT.halfAngle * 180) / Math.PI;
       const startDeg = (f.angle * 180) / Math.PI - halfDeg;
-      const wedge = Skia.Path.Make();
-      wedge.moveTo(f.x, f.y);
-      wedge.arcToOval(
-        Skia.XYWHRect(f.x - reach, f.y - reach, reach * 2, reach * 2),
-        startDeg,
-        halfDeg * 2,
-        false,
-      );
+      const wedge = Skia.PathBuilder.Make()
+        .moveTo(f.x, f.y)
+        .arcToOval(
+          Skia.XYWHRect(f.x - reach, f.y - reach, reach * 2, reach * 2),
+          startDeg,
+          halfDeg * 2,
+          false,
+        )
+        .detach();
       wedge.close();
       fill.setColor(C_FX_NUM);
       fill.setAlphaf(0.16 * f.life);
@@ -956,8 +966,9 @@ const drawDeployables = (
           stroke.setColor(C_MINE_GLINT);
           stroke.setAlphaf(0.8 * a);
           stroke.setStrokeWidth(2.5);
-          const arc = Skia.Path.Make();
-          arc.addArc(Skia.XYWHRect(d.x - 13, d.y - 13, 26, 26), -90, sweep);
+          const arc = Skia.PathBuilder.Make()
+            .addArc(Skia.XYWHRect(d.x - 13, d.y - 13, 26, 26), -90, sweep)
+            .detach();
           canvas.drawPath(arc, stroke);
         } else {
           stroke.setColor(C_MINE_GLINT);
@@ -983,8 +994,9 @@ const drawDeployables = (
           stroke.setColor(C_MINE_GLINT);
           stroke.setAlphaf(0.35 * a);
           stroke.setStrokeWidth(2);
-          const arc = Skia.Path.Make();
-          arc.addArc(Skia.XYWHRect(d.x - 13, d.y - 13, 26, 26), -90, sweep);
+          const arc = Skia.PathBuilder.Make()
+            .addArc(Skia.XYWHRect(d.x - 13, d.y - 13, 26, 26), -90, sweep)
+            .detach();
           canvas.drawPath(arc, stroke);
         } else if (flash > 0) {
           stroke.setColor(C_MINE_GLINT);
@@ -1079,12 +1091,13 @@ const drawSandstormOverlays = (
       const sweep = 45 + 55 * hash01(seed + 3);
       stroke.setAlphaf((0.22 + 0.3 * hash01(seed + 4)) * a);
       stroke.setStrokeWidth(2 + 2 * hash01(seed + 5));
-      const arc = Skia.Path.Make();
-      arc.addArc(
-        Skia.XYWHRect(d.x - radius, d.y - radius, radius * 2, radius * 2),
-        start % 360,
-        sweep,
-      );
+      const arc = Skia.PathBuilder.Make()
+        .addArc(
+          Skia.XYWHRect(d.x - radius, d.y - radius, radius * 2, radius * 2),
+          start % 360,
+          sweep,
+        )
+        .detach();
       canvas.drawPath(arc, stroke);
     }
   }
@@ -1119,8 +1132,7 @@ const drawWebRevealed = (
   const reveal = crackReveal(c, nowMs);
   if (reveal < 1) {
     canvas.save();
-    const clip = Skia.Path.Make();
-    clip.addCircle(c.x, c.y, Math.max(1, c.r * reveal));
+    const clip = Skia.Path.Circle(c.x, c.y, Math.max(1, c.r * reveal));
     canvas.clipPath(clip, ClipOp.Intersect, true);
     drawWeb(canvas, c, alpha);
     canvas.restore();
@@ -1179,12 +1191,12 @@ let splatImage: SkImage | null = null;
 /** The field the surface belongs to — a new room's field wipes the slate. */
 let splatOwner: BloodField | null = null;
 let splatWashMs = 0;
-/** The splat surface is HALF world resolution: dried marks are soft shapes,
- *  so the 2× linear upscale is invisible — and it QUARTERS the two per-bake
- *  costs Android feels as periodic frame hitches (2026-07-23 perf hunt): the
- *  JS-thread snapshot memcpy and the render thread's texture re-upload of
- *  the new image (~2.5MB vs ~10MB). */
-const SPLAT_SCALE = 0.5;
+/** Splat surface resolution, as a fraction of world px. Half-res was tried
+ *  (2026-07-23) to quarter the per-bake snapshot + texture-upload cost, but
+ *  REVERTED same day: soft blood hid it, crack strokes (1.6–3px) came back
+ *  visibly blurry and the settle→bake handoff popped sharp→soft (Tom). The
+ *  bake cost was never the measured hitch source anyway — GC was. */
+const SPLAT_SCALE = 1;
 const SPLAT_W = Math.ceil(WORLD_W * SPLAT_SCALE);
 const SPLAT_H = Math.ceil(WORLD_H * SPLAT_SCALE);
 const SPLAT_SRC = Skia.XYWHRect(0, 0, SPLAT_W, SPLAT_H);
@@ -1474,11 +1486,12 @@ const drawOffscreenAllies = (
     const py = ax;
     const bcx = ex - ax * ARROW_LEN;
     const bcy = ey - ay * ARROW_LEN;
-    const arrow = Skia.Path.Make();
-    arrow.moveTo(ex, ey);
-    arrow.lineTo(bcx + px * ARROW_HALF, bcy + py * ARROW_HALF);
-    arrow.lineTo(bcx - px * ARROW_HALF, bcy - py * ARROW_HALF);
-    arrow.close();
+    const arrow = Skia.PathBuilder.Make()
+      .moveTo(ex, ey)
+      .lineTo(bcx + px * ARROW_HALF, bcy + py * ARROW_HALF)
+      .lineTo(bcx - px * ARROW_HALF, bcy - py * ARROW_HALF)
+      .close()
+      .detach();
     fill.setColor(teamColor);
     canvas.drawPath(arrow, fill);
     stroke.setColor(C_ARROW_EDGE);
@@ -1596,17 +1609,11 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:
     // the prop sprite is their visual (docs/design/tilesets.md).
-    for (const w of ZONE.walls) {
+    for (const w of WALL_RECTS) {
       fill.setColor(C_WALL);
-      canvas.drawRect(
-        Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h),
-        fill,
-      );
+      canvas.drawRect(w.body, fill);
       fill.setColor(C_WALL_TOP);
-      canvas.drawRect(
-        Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h),
-        fill,
-      );
+      canvas.drawRect(w.top, fill);
     }
 
     if (me) drawMyRangeRing(canvas, me, config.playerRadius);

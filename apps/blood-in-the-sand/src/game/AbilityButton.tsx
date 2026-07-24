@@ -85,16 +85,16 @@ const drawButton = (
     canvas.drawRRect(rrect, fill);
     // Clip to the rounded square so the wedge's corners stay inside the button.
     canvas.save();
-    const clip = Skia.Path.Make();
-    clip.addRRect(rrect);
+    const clip = Skia.PathBuilder.Make().addRRect(rrect).detach();
     canvas.clipPath(clip, ClipOp.Intersect, true);
     // Pie from 12 o'clock (-90°), sweeping clockwise by frac of the circle.
     // Radius reaches past the corners (clip trims it back to the rounded square).
     const r = s;
-    const wedge = Skia.Path.Make();
-    wedge.moveTo(cx, cy);
-    wedge.arcToOval(Skia.XYWHRect(cx - r, cy - r, r * 2, r * 2), -90, frac * 360, false);
-    wedge.close();
+    const wedge = Skia.PathBuilder.Make()
+      .moveTo(cx, cy)
+      .arcToOval(Skia.XYWHRect(cx - r, cy - r, r * 2, r * 2), -90, frac * 360, false)
+      .close()
+      .detach();
     fill.setColor(C_WEDGE);
     canvas.drawPath(wedge, fill);
     canvas.restore();

@@ -30,9 +30,14 @@ export interface FlowField {
    * `{0, 0}` at the source itself and at unreached cells.
    */
   readonly dir: Float32Array;
-  /** Cell indices written by the last compute — reset only these next time, so a
-   *  re-sweep is O(cells flooded), not O(whole grid). (Same trick as SpatialGrid.) */
-  readonly touched: number[];
+  /** Cell indices written by the last compute (first `touchedCount` entries) —
+   *  reset only these next time, so a re-sweep is O(cells flooded), not
+   *  O(whole grid). (Same trick as SpatialGrid.) Preallocated Int32Array, NOT
+   *  a number[]: dynamic arrays truncated with `length = 0` can shed their
+   *  backing store in Hermes, so every sweep re-grew them element by element —
+   *  ~90% of a bot match's total JS allocation (2026-07-24 heap profile). */
+  readonly touched: Int32Array;
+  touchedCount: number;
 }
 
 /** Allocate a field sized to a nav grid (all cells unreached). Reused across sweeps. */
@@ -46,14 +51,17 @@ export const createFlowField = (nav: NavGrid): FlowField => {
     cellSize: nav.cellSize,
     cost,
     dir: new Float32Array(n * 2),
-    touched: [],
+    touched: new Int32Array(n),
+    touchedCount: 0,
   };
 };
 
 // Module-scratch BFS frontiers, reused across computes (floods run sequentially —
-// ground then flying — so sharing is safe and allocation-free after warm-up).
-let frontier: number[] = [];
-let nextFrontier: number[] = [];
+// ground then flying — so sharing is safe). Preallocated typed arrays sized to
+// the largest grid seen, for the same Hermes reason as `touched` above: these
+// buffers can never allocate mid-sweep.
+let frontier = new Int32Array(0);
+let nextFrontier = new Int32Array(0);
 
 // 8-neighbour offsets for the direction pass (orthogonals first, then diagonals).
 const N8 = [
@@ -90,15 +98,20 @@ export const computeFlowField = (
 ): void => {
   const { cols, rows, cellSize, cost, dir, touched } = field;
   const matrix = nav.matrix;
+  const n = cols * rows;
+  if (frontier.length < n) {
+    frontier = new Int32Array(n);
+    nextFrontier = new Int32Array(n);
+  }
 
   // Reset only the cells the last flood wrote.
-  for (let i = 0; i < touched.length; i++) {
+  for (let i = 0; i < field.touchedCount; i++) {
     const idx = touched[i]!;
     cost[idx] = Infinity;
     dir[idx * 2] = 0;
     dir[idx * 2 + 1] = 0;
   }
-  touched.length = 0;
+  field.touchedCount = 0;
 
   // Source cell, nudged to the nearest walkable one (the player may stand in a cell
   // that's inflated-blocked, or off the grid). No walkable source → empty field.
@@ -108,13 +121,14 @@ export const computeFlowField = (
   const maxCost = maxRadius / cellSize;
   const startIdx = src.y * cols + src.x;
   cost[startIdx] = 0;
-  touched.push(startIdx);
-  frontier.length = 0;
-  frontier.push(startIdx);
+  let tc = 0;
+  touched[tc++] = startIdx;
+  let curLen = 0;
+  frontier[curLen++] = startIdx;
 
-  while (frontier.length > 0) {
-    nextFrontier.length = 0;
-    for (let f = 0; f < frontier.length; f++) {
+  while (curLen > 0) {
+    let nextLen = 0;
+    for (let f = 0; f < curLen; f++) {
       const idx = frontier[f]!;
       const nc = cost[idx]! + 1;
       if (nc > maxCost) continue;
@@ -141,14 +155,16 @@ export const computeFlowField = (
           dir[nIdx * 2] = -dx;
           dir[nIdx * 2 + 1] = -dy;
         }
-        touched.push(nIdx);
-        nextFrontier.push(nIdx);
+        touched[tc++] = nIdx;
+        nextFrontier[nextLen++] = nIdx;
       }
     }
     const tmp = frontier;
     frontier = nextFrontier;
     nextFrontier = tmp;
+    curLen = nextLen;
   }
+  field.touchedCount = tc;
 };
 
 /** The cell index for a world point, or -1 if outside the grid. */

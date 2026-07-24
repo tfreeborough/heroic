@@ -143,21 +143,23 @@ const paintScene = (c: SkCanvas, w: number, h: number): void => {
 
   // far wall, sagging slightly toward centre
   const rimY = (x: number): number => rimYAt(w, wallTop, x);
-  const wall = Skia.Path.Make();
-  wall.moveTo(0, wallTop + 7);
-  wall.quadTo(w / 2, wallTop - 7, w, wallTop + 7);
-  wall.lineTo(w, wallBot + 9);
-  wall.quadTo(w / 2, wallBot - 5, 0, wallBot + 9);
-  wall.close();
+  const wall = Skia.PathBuilder.Make()
+    .moveTo(0, wallTop + 7)
+    .quadTo(w / 2, wallTop - 7, w, wallTop + 7)
+    .lineTo(w, wallBot + 9)
+    .quadTo(w / 2, wallBot - 5, 0, wallBot + 9)
+    .close()
+    .detach();
   c.drawPath(wall, fill("#c8ab7d"));
 
   // crowd band on the upper wall
-  const band = Skia.Path.Make();
-  band.moveTo(0, wallTop + 7);
-  band.quadTo(w / 2, wallTop - 7, w, wallTop + 7);
-  band.lineTo(w, wallTop + bandH * 0.55);
-  band.quadTo(w / 2, wallTop + bandH * 0.55 - 6, 0, wallTop + bandH * 0.55);
-  band.close();
+  const band = Skia.PathBuilder.Make()
+    .moveTo(0, wallTop + 7)
+    .quadTo(w / 2, wallTop - 7, w, wallTop + 7)
+    .lineTo(w, wallTop + bandH * 0.55)
+    .quadTo(w / 2, wallTop + bandH * 0.55 - 6, 0, wallTop + bandH * 0.55)
+    .close()
+    .detach();
   c.save();
   c.clipPath(band, ClipOp.Intersect, true);
   c.drawRect(Skia.XYWHRect(0, wallTop - 10, w, bandH), fill("#8a6f47"));
@@ -171,9 +173,10 @@ const paintScene = (c: SkCanvas, w: number, h: number): void => {
   c.restore();
 
   // rim highlight
-  const rim = Skia.Path.Make();
-  rim.moveTo(0, wallTop + 7);
-  rim.quadTo(w / 2, wallTop - 7, w, wallTop + 7);
+  const rim = Skia.PathBuilder.Make()
+    .moveTo(0, wallTop + 7)
+    .quadTo(w / 2, wallTop - 7, w, wallTop + 7)
+    .detach();
   c.drawPath(rim, stroke("rgba(240,224,180,0.7)", 2));
 
   // shaded arches along the lower wall
@@ -182,12 +185,13 @@ const paintScene = (c: SkCanvas, w: number, h: number): void => {
   for (let i = 0; i < 8; i++) {
     const ax = w * (0.06 + i * 0.126);
     const aw = 15;
-    const arch = Skia.Path.Make();
-    arch.moveTo(ax, wallBot + 4);
-    arch.lineTo(ax, wallBot + 4 - archH + aw / 2);
-    arch.arcToOval(Skia.XYWHRect(ax, wallBot + 4 - archH, aw, aw), 180, 180, false);
-    arch.lineTo(ax + aw, wallBot + 4);
-    arch.close();
+    const arch = Skia.PathBuilder.Make()
+      .moveTo(ax, wallBot + 4)
+      .lineTo(ax, wallBot + 4 - archH + aw / 2)
+      .arcToOval(Skia.XYWHRect(ax, wallBot + 4 - archH, aw, aw), 180, 180, false)
+      .lineTo(ax + aw, wallBot + 4)
+      .close()
+      .detach();
     c.drawPath(arch, archPaint);
   }
 

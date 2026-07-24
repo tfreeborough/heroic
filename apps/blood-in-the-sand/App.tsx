@@ -18,6 +18,7 @@ import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updat
 import { PracticeClient } from "./src/net/practice";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+import { ModeSelectScreen } from "./src/screens/ModeSelectScreen";
 import { NameScreen } from "./src/screens/NameScreen";
 import { PracticeScreen } from "./src/screens/PracticeScreen";
 import { RoomListScreen } from "./src/screens/RoomListScreen";
@@ -30,9 +31,11 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  * connection concerns only surface behind the PLAY route.
  *
  * Top-level routes (home is the title screen):
- *   home              → title + PLAY / PRACTICE / SETTINGS
- *   play              → connecting / RoomList / Room (lobby) / Game, by client state
- *   practice          → one-person weapon lobby; PLAY spawns an offline bot match
+ *   home              → title + PLAY / SETTINGS
+ *   modes             → the fork behind PLAY: ranked / casual / practice / story
+ *                       (bits-mode-select.md — connectivity gates live there)
+ *   play              → CASUAL: connecting / RoomList / Room (lobby) / Game, by client state
+ *   practice          → bots-or-dummies front door; an offline sim match
  *   settings          → device settings (lefty mode)
  */
 const SERVER = process.env.EXPO_PUBLIC_AUTO_HOST ?? DEFAULT_SERVER;
@@ -40,7 +43,7 @@ const SERVER = process.env.EXPO_PUBLIC_AUTO_HOST ?? DEFAULT_SERVER;
 /** The same stored "playing as" the rooms + practice screens use. */
 const KEY_NAME = "bits.name";
 
-/** Dummies on the dev menu's firing range (they share the enemy team's seats). */
+/** Dummies on the firing range (they share the enemy team's seats). */
 const RANGE_TEAM_SIZE = 2; // 2×2 seats − you = 3 dummies
 
 /** AUTO_START's random hand — dev convenience only, mirrors the bot script. */
@@ -65,7 +68,7 @@ const confirmLeave = (what: "lobby" | "match", leave: () => void): void => {
   );
 };
 
-type Route = "home" | "play" | "practice" | "settings";
+type Route = "home" | "modes" | "play" | "practice" | "settings";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
@@ -105,15 +108,15 @@ export default function App() {
   }, []);
 
   const endPractice = useCallback(() => {
-    // Bot practice returns to its lobby screen (the route stays "practice");
-    // the dev firing range has no front door of its own — leaving lands home.
-    if (practice?.mode === "dummies") setRoute("home");
+    // Leaving any practice match (bots or the range) lands back on the
+    // practice front door — since the mode select, dummies has one too.
     practice?.close();
     setPractice(null);
   }, [practice]);
 
-  // The dev menu's firing range: offline sim, you vs a line of respawning
-  // target dummies, reusing the whole practice flow (wizard → GameScreen).
+  // The dev menu's shortcut to the firing range: offline sim, you vs a line
+  // of respawning target dummies (the player-facing way in is PRACTICE →
+  // TARGET DUMMIES; this jump just skips the two screens between).
   const startTargetDummies = useCallback(() => {
     setPractice(new PracticeClient(playerName || "gladiator", RANGE_TEAM_SIZE, "dummies"));
     setRoute("practice");
@@ -234,6 +237,9 @@ export default function App() {
       confirmLeave(practice.phase === "lobby" ? "lobby" : "match", endPractice);
     } else if (route === "play" && client?.welcome) {
       confirmLeave(client.phase === "lobby" ? "lobby" : "match", () => client.leaveRoom());
+    } else if (route === "play" || route === "practice") {
+      // Both were entered from the mode select — back retraces that step.
+      setRoute("modes");
     } else {
       setRoute("home");
     }
@@ -255,12 +261,32 @@ export default function App() {
   if (route === "home") {
     screen = (
       <HomeScreen
-        onPlay={() => setRoute("play")}
-        onPractice={() => setRoute("practice")}
+        onPlay={() => setRoute("modes")}
         onSettings={() => setRoute("settings")}
         onTargetDummies={startTargetDummies}
         updateReady={updateReady}
         onApplyUpdate={restartToApply}
+      />
+    );
+  } else if (route === "modes") {
+    // The mode select owns the API probe; the game server's state maps from
+    // the always-warming ArenaClient (a dead client was already nulled by the
+    // health effect above, so null + no mismatch = down).
+    screen = (
+      <ModeSelectScreen
+        onBack={() => setRoute("home")}
+        onCasual={() => setRoute("play")}
+        onPractice={() => setRoute("practice")}
+        server={
+          client?.status === "open"
+            ? "ok"
+            : client?.status === "connecting"
+              ? "checking"
+              : mismatch
+                ? "updateRequired"
+                : "down"
+        }
+        onRetryServer={connect}
       />
     );
   } else if (route === "settings") {
@@ -269,8 +295,14 @@ export default function App() {
     // Practice runs the SAME arming wizard as real rooms before the match.
     screen = !practice ? (
       <PracticeScreen
-        onBack={() => setRoute("home")}
-        onStart={(name, teamSize, difficulty) => setPractice(new PracticeClient(name, teamSize, "bot", difficulty))}
+        onBack={() => setRoute("modes")}
+        onStart={(name, teamSize, difficulty, opponent) =>
+          setPractice(
+            opponent === "dummies"
+              ? new PracticeClient(name, RANGE_TEAM_SIZE, "dummies")
+              : new PracticeClient(name, teamSize, "bot", difficulty),
+          )
+        }
       />
     ) : practice.phase === "lobby" ? (
       <RoomScreen client={practice} onLeave={endPractice} />
@@ -307,13 +339,13 @@ export default function App() {
         ) : (
           <Text style={styles.connecting}>connecting…</Text>
         )}
-        <Pressable onPress={() => setRoute("home")} style={styles.homeLink} hitSlop={10}>
+        <Pressable onPress={() => setRoute("modes")} style={styles.homeLink} hitSlop={10}>
           <Text style={styles.homeLinkText}>‹ BACK</Text>
         </Pressable>
       </View>
     );
   } else if (!client.welcome) {
-    screen = <RoomListScreen client={client} playerName={playerName} onBack={() => setRoute("home")} />;
+    screen = <RoomListScreen client={client} playerName={playerName} onBack={() => setRoute("modes")} />;
   } else if (client.phase === "lobby") {
     // The arming wizard + lobby (and its 10s countdown) all live on RoomScreen.
     screen = <RoomScreen client={client} onLeave={() => client.leaveRoom()} />;

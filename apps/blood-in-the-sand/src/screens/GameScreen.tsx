@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Canvas, Picture } from "@shopify/react-native-skia";
+import { Canvas, Picture, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useKeepAwake } from "expo-keep-awake";
 import { STICK_ZERO, useGameLoop, type StickSample } from "@heroic/engine";
@@ -100,6 +100,15 @@ interface AgedFx {
   ttlMs: number;
 }
 
+// Persistent scratch for the per-frame fx projection (allocation diet — a
+// fresh .map() array 60×/s is GC food). recordArena reads it synchronously.
+const FX_SCRATCH: FxItem[] = [];
+const fxItems = (fx: readonly AgedFx[]): FxItem[] => {
+  FX_SCRATCH.length = 0;
+  for (const f of fx) FX_SCRATCH.push(f.item);
+  return FX_SCRATCH;
+};
+
 interface HudState {
   phase: RoundPhase;
   countdown: number | null;
@@ -157,6 +166,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   // Forge icon art for the cast flash (decodes async; flashes skip until ready).
   const abilityIcons = useAbilityIconImages();
   const picture = useSharedValue(EMPTY_ARENA_PICTURE);
+  // GC diet: recordArena mints a fresh SkPicture every frame; left to the
+  // collector that's 60 native wrappers/s queueing for finalizers. Retired
+  // pictures are disposed deterministically, three frames late, so the UI
+  // thread is guaranteed done replaying them.
+  const retiredPics = useRef<SkPicture[]>([]);
+  useEffect(
+    () => () => {
+      for (const p of retiredPics.current) p.dispose();
+      retiredPics.current.length = 0;
+    },
+    [],
+  );
   // One face per ability slot (pick order = button order). Discrete shared
   // values because hooks can't live in a loop — keep as many as
   // LOADOUT_ABILITY_COUNT (2).
@@ -271,6 +292,26 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
     const p = perf.current;
     p.simMs = p.steps = p.recMs = p.frames = p.busyMs = p.frameMs = p.frameMaxMs = 0;
     p.lastFrame = -1;
+    // Hermes GC visibility — the hitch-hunter's decisive column: `busy` can
+    // never see a GC pause (it lands BETWEEN frames), but the VM counts them.
+    // getInstrumentedStats is an internal API, so every read is defensive: a
+    // Hermes upgrade degrades this to a blank column, never a crash.
+    // js_gcTime accumulates in SECONDS (a double — formatting it as whole ms
+    // is how the first cut showed "0" against 18 collections);
+    // js_totalAllocatedBytes gives the garbage-production rate the diet is
+    // trying to cut.
+    const readGc = (): { n: number; sec: number; bytes: number } | null => {
+      const s = (
+        globalThis as { HermesInternal?: { getInstrumentedStats?: () => Record<string, number> } }
+      ).HermesInternal?.getInstrumentedStats?.();
+      if (!s) return null;
+      return {
+        n: s.js_numGCs ?? 0,
+        sec: s.js_gcTime ?? 0,
+        bytes: s.js_totalAllocatedBytes ?? 0,
+      };
+    };
+    let lastGc = readGc();
     let last = performance.now();
     const id = setInterval(() => {
       const now = performance.now();
@@ -278,8 +319,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       last = now;
       const f = Math.max(1, p.frames);
       const fps = elapsed > 0 ? p.frames / elapsed : 0;
+      const gc = readGc();
+      const gcText =
+        gc && lastGc
+          ? `  gc ${gc.n - lastGc.n}×/${((gc.sec - lastGc.sec) * 1000).toFixed(1)}ms` +
+            `  alloc ${((gc.bytes - lastGc.bytes) / 1048576 / Math.max(0.001, elapsed)).toFixed(1)}MB/s`
+          : "";
+      lastGc = gc;
+      // Two lines so the readout fits a phone in portrait: pacing (how late
+      // are frames) on top, cost buckets (whose fault) underneath.
       setPerfText(
-        `JS ${fps.toFixed(0)}fps  frame ${(p.frameMs / f).toFixed(1)}/${p.frameMaxMs.toFixed(0)}ms  busy ${(p.busyMs / f).toFixed(1)}ms  sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms`,
+        `JS ${fps.toFixed(0)}fps  frame ${(p.frameMs / f).toFixed(1)}/${p.frameMaxMs.toFixed(0)}ms  busy ${(p.busyMs / f).toFixed(1)}ms\n` +
+          `sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms${gcText}`,
       );
       p.simMs = p.steps = p.recMs = p.frames = p.busyMs = p.frameMs = p.frameMaxMs = 0;
       p.lastFrame = -1;
@@ -695,6 +746,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // so the record targets that smaller viewport (insets shrink with
           // it); the compositor's upscale restores apparent size.
           const rs = devFlags.renderScale;
+          const prevPic = picture.value;
           picture.value = recordArena({
             view,
             config: client.welcome.config,
@@ -705,7 +757,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             insetTop: insets.top * rs,
             insetBottom: insets.bottom * rs,
             renderScale: rs,
-            fx: fx.map((f) => f.item),
+            fx: fxItems(fx),
             blood,
             cracks,
             scarEpoch: blood.epoch,
@@ -714,6 +766,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             atlas,
             abilityIcons,
           });
+          if (prevPic !== EMPTY_ARENA_PICTURE) {
+            retiredPics.current.push(prevPic);
+            if (retiredPics.current.length > 3) retiredPics.current.shift()!.dispose();
+          }
 
           // Ability buttons: name them from the snapshot's slot list (pick
           // order), re-record a face only when its clock or state moved.
@@ -1155,6 +1211,7 @@ const styles = StyleSheet.create({
     left: 12,
     color: "rgba(120, 255, 170, 0.9)",
     fontSize: 11,
+    lineHeight: 15,
     fontVariant: ["tabular-nums"],
   },
   quitChip: {

@@ -53,6 +53,21 @@ const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => 
 };
 
 /**
+ * Reachability probe for the mode-select gate (bits-mode-select.md) — GET /
+ * is the API's health check (Render pings the same route). This is the ONE
+ * place API reachability is surfaced to the player; every other call in this
+ * file keeps degrading silently.
+ */
+export const probeApi = async (): Promise<boolean> => {
+  if (!API_URL) return false;
+  try {
+    return (await apiFetch("/")).ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * The stored identity, registering silently if this device has none yet.
  * Null when the API is unconfigured or unreachable AND nothing is stored —
  * callers treat that as "wallet features off", never as an error the player

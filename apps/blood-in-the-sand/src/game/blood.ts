@@ -144,14 +144,13 @@ const blobPath = (
     xs.push(cx + Math.cos(a) * rr);
     ys.push(cy + Math.sin(a) * rr);
   }
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   path.moveTo((xs[0]! + xs[N - 1]!) / 2, (ys[0]! + ys[N - 1]!) / 2);
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
     path.quadTo(xs[i]!, ys[i]!, (xs[i]! + xs[j]!) / 2, (ys[i]! + ys[j]!) / 2);
   }
-  path.close();
-  return path;
+  return path.close().detach();
 };
 
 /** A flung droplet: rounded fat back at (x,y) tapering to a point at
@@ -172,14 +171,14 @@ const teardropPath = (
   const tipy = y + dy;
   const bkx = x - ux * r * 1.15;
   const bky = y - uy * r * 1.15;
-  const path = Skia.Path.Make();
-  path.moveTo(tipx, tipy);
-  path.quadTo(x + nx * r * 1.05, y + ny * r * 1.05, x + nx * r, y + ny * r);
-  path.quadTo(bkx + nx * r * 0.55, bky + ny * r * 0.55, bkx, bky);
-  path.quadTo(bkx - nx * r * 0.55, bky - ny * r * 0.55, x - nx * r, y - ny * r);
-  path.quadTo(x - nx * r * 1.05, y - ny * r * 1.05, tipx, tipy);
-  path.close();
-  return path;
+  return Skia.PathBuilder.Make()
+    .moveTo(tipx, tipy)
+    .quadTo(x + nx * r * 1.05, y + ny * r * 1.05, x + nx * r, y + ny * r)
+    .quadTo(bkx + nx * r * 0.55, bky + ny * r * 0.55, bkx, bky)
+    .quadTo(bkx - nx * r * 0.55, bky - ny * r * 0.55, x - nx * r, y - ny * r)
+    .quadTo(x - nx * r * 1.05, y - ny * r * 1.05, tipx, tipy)
+    .close()
+    .detach();
 };
 
 /** Current opacity of a decal (0 once expired). */
