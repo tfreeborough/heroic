@@ -19,3 +19,16 @@ export const processIcon = async (raw: Buffer, size: number): Promise<Buffer> =>
     .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png({ palette: true, quality: 80, dither: 1.0, effort: 10, compressionLevel: 9 })
     .toBuffer();
+
+/**
+ * Full-bleed scene art (mode cards): centre cover-crop to the target frame —
+ * no letterboxing, the game renders these edge-to-edge — then the same
+ * palette quantization. Quality floor is higher than the icons' 80: a big
+ * gradient sky is where 8-bit banding shows first, and the mode cards hide
+ * their left third under a scrim gradient the art must blend under.
+ */
+export const processScene = async (raw: Buffer, width: number, height: number): Promise<Buffer> =>
+  sharp(raw)
+    .resize(width, height, { fit: "cover", position: "centre" })
+    .png({ palette: true, quality: 90, dither: 1.0, effort: 10, compressionLevel: 9 })
+    .toBuffer();

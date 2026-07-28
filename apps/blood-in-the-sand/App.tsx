@@ -32,9 +32,9 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  *
  * Top-level routes (home is the title screen):
  *   home              → title + PLAY / SETTINGS
- *   modes             → the fork behind PLAY: ranked / casual / practice / story
+ *   modes             → the fork behind PLAY: ranked / skirmish / practice / story
  *                       (bits-mode-select.md — connectivity gates live there)
- *   play              → CASUAL: connecting / RoomList / Room (lobby) / Game, by client state
+ *   play              → SKIRMISH: connecting / RoomList / Room (lobby) / Game, by client state
  *   practice          → bots-or-dummies front door; an offline sim match
  *   settings          → device settings (lefty mode)
  */
@@ -269,24 +269,13 @@ export default function App() {
       />
     );
   } else if (route === "modes") {
-    // The mode select owns the API probe; the game server's state maps from
-    // the always-warming ArenaClient (a dead client was already nulled by the
-    // health effect above, so null + no mismatch = down).
+    // Connectivity-blind on purpose: Skirmish routes into the play flow,
+    // whose connect screen already owns the down/update states.
     screen = (
       <ModeSelectScreen
         onBack={() => setRoute("home")}
-        onCasual={() => setRoute("play")}
+        onSkirmish={() => setRoute("play")}
         onPractice={() => setRoute("practice")}
-        server={
-          client?.status === "open"
-            ? "ok"
-            : client?.status === "connecting"
-              ? "checking"
-              : mismatch
-                ? "updateRequired"
-                : "down"
-        }
-        onRetryServer={connect}
       />
     );
   } else if (route === "settings") {

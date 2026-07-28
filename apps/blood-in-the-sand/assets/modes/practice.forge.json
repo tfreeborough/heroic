@@ -1,0 +1,19 @@
+{
+  "type": "mode-bits",
+  "subject": "an empty training yard at pale dawn — a row of straw target dummies on sun-split wooden posts standing on the right in freshly raked sand, practice weapons leaning on a rack, long soft morning shadows, cool bone-pale light; the left side is a quiet empty dawn sky over a low adobe wall",
+  "prompt": "an empty training yard at pale dawn — a row of straw target dummies on sun-split wooden posts standing on the right in freshly raked sand, practice weapons leaning on a rack, long soft morning shadows, cool bone-pale light; the left side is a quiet empty dawn sky over a low adobe wall. A wide painted scene for a grim dark-fantasy gladiator arena game set in a scorched desert. Hand-inked woodcut illustration: heavy black ink linework, rough expressive hatching, deep pooled black shadows anchoring every form — it reads as dark inked woodcut, never photorealistic, never a clean flat vector. Sun-bleached bone (#f0e8d8) highlights carve shapes out of the dark; scorched sand-ochre (#b39763) midtones like heat-baked dust; dried-blood red (#a32c22) rationed to banners, cloth and wounds; a burnt-gold (#e8c87a) glow only where the light source earns it. Composition is strict: all focal detail and figures sit in the RIGHT two thirds of the frame; the LEFT third is quiet, low-detail atmosphere (sky, wall, drifting dust) with no figures and no focal shapes — interface text will sit over it. The horizon and all key elements sit in the vertical middle of the frame: the top quarter is only sky and the bottom quarter only ground, both safe to crop away. The paint fills the whole frame edge-to-edge with no border, no vignette, no frame line. Grim, sun-scoured, blood-and-sand mood. No text, no lettering, no banners with writing.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1536x1024",
+    "quality": "medium",
+    "background": "opaque",
+    "savedWidth": 900,
+    "savedHeight": 360
+  },
+  "files": [
+    "practice.png"
+  ],
+  "created": "2026-07-28T20:52:42.276Z",
+  "updated": "2026-07-28T20:52:42.276Z"
+}

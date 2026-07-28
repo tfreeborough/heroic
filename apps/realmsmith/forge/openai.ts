@@ -10,13 +10,17 @@ const IMAGE_ENDPOINT = "https://api.openai.com/v1/images/generations";
 
 export const IMAGE_MODEL_ID = "gpt-image-1";
 
-/** Canvas shapes gpt-image-1 accepts that we use: square (icons) and portrait
+/** Canvas shapes gpt-image-1 accepts that we use: square (icons), portrait
  * (full-figure sprites — a standing human fits a portrait frame natively, so
- * the model stops cropping to fill a square). */
-export type ImageSize = "1024x1024" | "1024x1536";
+ * the model stops cropping to fill a square) and landscape (mode-card scenes). */
+export type ImageSize = "1024x1024" | "1024x1536" | "1536x1024";
+
+/** Cut-out assets (icons, sprites) generate transparent; full-bleed scenes
+ * must be opaque — asking for alpha invites the model to leave holes. */
+export type ImageBackground = "transparent" | "opaque";
 
 /**
- * One transparent PNG from gpt-image-1. Transparency matters: icons land on
+ * One PNG from gpt-image-1. Transparency matters for cut-outs: icons land on
  * dark cards, roster rows AND the reveal overlay — never on a fixed ground.
  * Callers run several of these in parallel for a candidate spread.
  */
@@ -24,6 +28,7 @@ export const generateImage = async (
   apiKey: string,
   prompt: string,
   size: ImageSize = "1024x1024",
+  background: ImageBackground = "transparent",
 ): Promise<Buffer> => {
   const res = await fetch(IMAGE_ENDPOINT, {
     method: "POST",
@@ -34,7 +39,7 @@ export const generateImage = async (
       n: 1,
       size,
       quality: "medium",
-      background: "transparent",
+      background,
       output_format: "png",
     }),
     // Image generation regularly takes 30–90s — well past the chat timeout.

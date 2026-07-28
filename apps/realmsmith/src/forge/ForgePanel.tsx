@@ -7,12 +7,13 @@ import type {
   GenerateResponse,
   SaveResponse,
 } from "../../forge/protocol";
-import { ICON, SPRITE } from "../../forge/styleBible";
+import { ICON, MODE, SPRITE } from "../../forge/styleBible";
 import { buildIconSet, type IconSetEntry } from "./iconSet";
+import { buildModeSet, type ModeSetEntry } from "./modeSet";
 import { buildSoundSet, type SoundCategory, type SoundSetEntry } from "./soundSet";
 import { buildSpriteSet, type SpriteSetEntry } from "./spriteSet";
 
-type ForgeType = "sfx-bits" | "icon-bits" | "sprite-bits" | "sfx";
+type ForgeType = "sfx-bits" | "icon-bits" | "sprite-bits" | "mode-bits" | "sfx";
 
 /**
  * The Asset Forge panel (docs/design/asset-forge.md): sentence → (optional LLM
@@ -75,6 +76,7 @@ export const ForgePanel = ({ onClose }: Props) => {
   const [iconId, setIconId] = useState<string | null>(null);
   const [soundId, setSoundId] = useState<string | null>(null);
   const [spriteId, setSpriteId] = useState<string | null>(null);
+  const [modeId, setModeId] = useState<string | null>(null);
 
   const [subject, setSubject] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -100,8 +102,9 @@ export const ForgePanel = ({ onClose }: Props) => {
 
   const isIcon = type === "icon-bits";
   const isSprite = type === "sprite-bits";
-  /** Both gpt-image-1 flows: one candidate kept, saved as `<id>.png`. */
-  const isImage = isIcon || isSprite;
+  const isMode = type === "mode-bits";
+  /** All gpt-image-1 flows: one candidate kept, saved as `<id>.png`. */
+  const isImage = isIcon || isSprite || isMode;
   const isBits = type === "sfx-bits"; // the SFX type with a done-tick sound manifest
   // The set comes from the game's own tables; the server only says which files exist.
   const icons = useMemo(buildIconSet, []);
@@ -114,6 +117,11 @@ export const ForgePanel = ({ onClose }: Props) => {
   const spriteDone = (id: string): boolean => (status?.spriteFiles ?? []).includes(`${id}.png`);
   const spriteDoneCount = sprites.filter((e) => spriteDone(e.id)).length;
 
+  // The mode-card set — the checked-in MODE_KEYS list (modeSet.ts), same pattern.
+  const modes = useMemo(buildModeSet, []);
+  const modeDone = (id: string): boolean => (status?.modeFiles ?? []).includes(`${id}.png`);
+  const modeDoneCount = modes.filter((e) => modeDone(e.id)).length;
+
   // The sound set — same derive-from-the-sim pattern; a bank is done when any
   // `<id>_<n>.mp3` exists in the destination.
   const sounds = useMemo(buildSoundSet, []);
@@ -125,9 +133,11 @@ export const ForgePanel = ({ onClose }: Props) => {
     ? (iconId ?? "")
     : isSprite
       ? (spriteId ?? "")
-      : nameEdited
-        ? name
-        : slug(subject);
+      : isMode
+        ? (modeId ?? "")
+        : nameEdited
+          ? name
+          : slug(subject);
   const kept = takes.filter((t) => t.keep);
   const sfxReady = status?.keys.elevenlabs === true;
   const openaiReady = status?.keys.openai === true;
@@ -148,6 +158,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     setIconId(null);
     setSoundId(null);
     setSpriteId(null);
+    setModeId(null);
     setName("");
     setNameEdited(false);
     resetWork();
@@ -161,6 +172,12 @@ export const ForgePanel = ({ onClose }: Props) => {
 
   const pickSprite = (entry: SpriteSetEntry): void => {
     setSpriteId(entry.id);
+    setSubject(entry.subject);
+    resetWork();
+  };
+
+  const pickMode = (entry: ModeSetEntry): void => {
+    setModeId(entry.id);
     setSubject(entry.subject);
     resetWork();
   };
@@ -203,7 +220,9 @@ export const ForgePanel = ({ onClose }: Props) => {
         ? prompt.trim() || ICON.template(subject.trim(), iconEntry?.category ?? "weapon")
         : isSprite
           ? prompt.trim() || SPRITE.template(subject.trim())
-          : prompt.trim() || undefined;
+          : isMode
+            ? prompt.trim() || MODE.template(subject.trim())
+            : prompt.trim() || undefined;
       const data = await post<GenerateResponse>("/forge/generate", {
         type,
         subject: subject.trim(),
@@ -219,7 +238,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     } finally {
       setBusy(null);
     }
-  }, [type, isIcon, isSprite, isImage, iconId, subject, prompt, durationSeconds, influence]);
+  }, [type, isIcon, isSprite, isMode, isImage, iconId, subject, prompt, durationSeconds, influence]);
 
   const save = useCallback(async () => {
     setBusy("save");
@@ -350,6 +369,31 @@ export const ForgePanel = ({ onClose }: Props) => {
         </div>
       )}
 
+      {isMode && (
+        <div className="icon-manifest">
+          <div className="icon-manifest-head">
+            The mode cards — {modeDoneCount} of {modes.length} done
+          </div>
+          <div className="icon-cat-row">
+            <span className="icon-cat icon-cat-mode">card</span>
+            <div className="icon-chips">
+              {modes.map((e) => (
+                <button
+                  key={e.id}
+                  className={`icon-chip${e.id === modeId ? " active" : ""}${modeDone(e.id) ? " done" : ""}`}
+                  onClick={() => pickMode(e)}
+                  title={e.missingSubject ? "no art subject yet — add one to MODE_SUBJECTS in forge/styleBible.ts" : e.subject}
+                >
+                  {modeDone(e.id) ? "✓ " : ""}
+                  {e.name}
+                  {e.missingSubject ? " ⚠" : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isSprite && (
         <div className="icon-manifest">
           <div className="icon-manifest-head">
@@ -380,9 +424,11 @@ export const ForgePanel = ({ onClose }: Props) => {
           ? "Icon subject (from the manifest — edit freely)"
           : isSprite
             ? "Sprite subject (from the manifest — edit freely)"
-            : isBits
-              ? "Sound brief (from the manifest — edit freely)"
-              : "Describe the sound"}
+            : isMode
+              ? "Scene subject (from the manifest — edit freely)"
+              : isBits
+                ? "Sound brief (from the manifest — edit freely)"
+                : "Describe the sound"}
         <textarea
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
@@ -391,9 +437,11 @@ export const ForgePanel = ({ onClose }: Props) => {
               ? "pick an icon above, or describe one"
               : isSprite
                 ? "pick a sprite above, or describe one"
-                : isBits
-                  ? "pick a sound above, or describe one"
-                  : "a heavy sword striking a wooden shield"
+                : isMode
+                  ? "pick a mode card above, or describe a scene"
+                  : isBits
+                    ? "pick a sound above, or describe one"
+                    : "a heavy sword striking a wooden shield"
           }
           rows={2}
         />
@@ -420,7 +468,7 @@ export const ForgePanel = ({ onClose }: Props) => {
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={
             isImage
-              ? `leave blank — the style bible's ${isSprite ? "sprite" : "icon"} template carries the brand language`
+              ? `leave blank — the style bible's ${isSprite ? "sprite" : isMode ? "mode-card" : "icon"} template carries the brand language`
               : "dozens of chitinous spider legs skittering over stone as a nest collapses…"
           }
           rows={4}
@@ -517,17 +565,36 @@ export const ForgePanel = ({ onClose }: Props) => {
             {takes.map((t) => (
               <button
                 key={t.id}
-                className={`icon-candidate${isSprite ? " sprite" : ""}${t.keep ? " keep" : ""}`}
+                className={`icon-candidate${isSprite ? " sprite" : ""}${isMode ? " mode" : ""}${t.keep ? " keep" : ""}`}
                 onClick={() => keepOne(t.id)}
               >
-                <img className="icon-full" src={`data:${t.mime};base64,${t.b64}`} alt={`candidate ${t.id + 1}`} />
+                {isMode ? (
+                  // The in-game verify: the card's 5:2 crop with its real
+                  // scrim gradient and a stand-in title over the left third —
+                  // if the title fights the art here, it will in the game.
+                  <div className="mode-frame">
+                    <img className="icon-full" src={`data:${t.mime};base64,${t.b64}`} alt={`candidate ${t.id + 1}`} />
+                    <div className="mode-frame-scrim" />
+                    <span className="mode-frame-title">{(modeId ?? "mode").toUpperCase()}</span>
+                  </div>
+                ) : (
+                  <img className="icon-full" src={`data:${t.mime};base64,${t.b64}`} alt={`candidate ${t.id + 1}`} />
+                )}
                 <div className="icon-small-row">
-                  <img
-                    className={isSprite ? "sprite-small" : "icon-small"}
-                    src={`data:${t.mime};base64,${t.b64}`}
-                    alt=""
-                  />
-                  <span>{isSprite ? "~title-screen size, on sand — reads well?" : "32px — still readable?"}</span>
+                  {!isMode && (
+                    <img
+                      className={isSprite ? "sprite-small" : "icon-small"}
+                      src={`data:${t.mime};base64,${t.b64}`}
+                      alt=""
+                    />
+                  )}
+                  <span>
+                    {isMode
+                      ? "card crop + scrim — does the title read over the left third?"
+                      : isSprite
+                        ? "~title-screen size, on sand — reads well?"
+                        : "32px — still readable?"}
+                  </span>
                 </div>
               </button>
             ))}
@@ -537,7 +604,11 @@ export const ForgePanel = ({ onClose }: Props) => {
             className="primary"
             onClick={save}
             disabled={busy !== null || kept.length !== 1 || !baseName}
-            title={baseName ? `saves as ${baseName}.png` : `pick a manifest ${isSprite ? "sprite" : "icon"} to name the file`}
+            title={
+              baseName
+                ? `saves as ${baseName}.png`
+                : `pick a manifest ${isSprite ? "sprite" : isMode ? "mode card" : "icon"} to name the file`
+            }
           >
             {busy === "save"
               ? "Processing & saving…"
@@ -553,7 +624,9 @@ export const ForgePanel = ({ onClose }: Props) => {
           <div>
             Saved <strong>{saved.files.join(", ")}</strong>
             {isImage
-              ? ` (${isSprite ? SPRITE.savedSize : ICON.savedSize}px, transparent).`
+              ? isMode
+                ? ` (${MODE.savedWidth}×${MODE.savedHeight}, opaque 5:2 crop).`
+                : ` (${isSprite ? SPRITE.savedSize : ICON.savedSize}px, transparent).`
               : " (trimmed + loudness-normalized)."}
           </div>
           <div>
@@ -561,9 +634,11 @@ export const ForgePanel = ({ onClose }: Props) => {
               ? "Paste into src/loadout/icons.tsx when switching to image icons:"
               : isSprite
                 ? "Require-map line for the consuming screen (title screen, when built):"
-                : isBits
-                  ? "Paste into src/audio/manifest.ts:"
-                  : "Paste into src/game/audio/manifest.ts:"}
+                : isMode
+                  ? "Paste into MODE_ART in src/screens/ModeSelectScreen.tsx (replaces image: null):"
+                  : isBits
+                    ? "Paste into src/audio/manifest.ts:"
+                    : "Paste into src/game/audio/manifest.ts:"}
           </div>
           <pre>{saved.manifestLines.join("\n")}</pre>
           <button onClick={copyLines}>{copied ? "Copied ✓" : "Copy manifest lines"}</button>

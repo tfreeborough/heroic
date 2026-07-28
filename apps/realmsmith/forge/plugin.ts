@@ -20,18 +20,20 @@ import { loadEnv, type Plugin } from "vite";
 import {
   EXPANDER_MODEL,
   ICON,
+  MODE,
   SFX,
   SFX_BITS,
   SPRITE,
   expanderSystem,
   type IconSpec,
+  type ModeSpec,
   type SfxSpec,
   type SpriteSpec,
 } from "./styleBible";
 import { SFX_MODEL_ID, generateSfx } from "./elevenlabs";
 import { IMAGE_MODEL_ID, expandPrompt, generateImage } from "./openai";
 import { processSfx } from "./audio";
-import { processIcon } from "./images";
+import { processIcon, processScene } from "./images";
 import type {
   Candidate,
   ExpandRequest,
@@ -52,12 +54,13 @@ const ICON_NAME_RE = /^[a-z][a-z0-9-]*$/;
 const sfxSpec = (type: string): SfxSpec | null =>
   type === SFX.id ? SFX : type === SFX_BITS.id ? SFX_BITS : null;
 
-/** The two gpt-image-1 types share a pipeline — size/destination/template differ. */
-const imageSpec = (type: string): IconSpec | SpriteSpec | null =>
-  type === ICON.id ? ICON : type === SPRITE.id ? SPRITE : null;
+/** The gpt-image-1 types share a pipeline — canvas/destination/template differ. */
+type ImageSpec = IconSpec | SpriteSpec | ModeSpec;
+const imageSpec = (type: string): ImageSpec | null =>
+  type === ICON.id ? ICON : type === SPRITE.id ? SPRITE : type === MODE.id ? MODE : null;
 
 /** Seed prompt when only a bare subject arrives (curl/testing — the panel builds its own). */
-const imageTemplate = (spec: IconSpec | SpriteSpec, subject: string): string =>
+const imageTemplate = (spec: ImageSpec, subject: string): string =>
   spec.id === ICON.id ? spec.template(subject, "weapon") : spec.template(subject);
 
 const json = (res: ServerResponse, code: number, body: unknown): void => {
@@ -109,22 +112,25 @@ export const forgePlugin = (): Plugin => {
       const abs = join(repoRoot, dir);
       return existsSync(abs) ? (await readdir(abs)).filter((f) => f.endsWith(ext)) : [];
     };
-    const [iconFiles, sfxFiles, spriteFiles] = await Promise.all([
+    const [iconFiles, sfxFiles, spriteFiles, modeFiles] = await Promise.all([
       listDir(ICON.destination, ".png"),
       listDir(SFX_BITS.destination, ".mp3"),
       listDir(SPRITE.destination, ".png"),
+      listDir(MODE.destination, ".png"),
     ]);
     return {
       types: [
         { id: SFX_BITS.id, label: SFX_BITS.label, provider: SFX_BITS.provider, candidates: SFX_BITS.candidates },
         { id: ICON.id, label: ICON.label, provider: ICON.provider, candidates: ICON.candidates },
         { id: SPRITE.id, label: SPRITE.label, provider: SPRITE.provider, candidates: SPRITE.candidates },
+        { id: MODE.id, label: MODE.label, provider: MODE.provider, candidates: MODE.candidates },
         { id: SFX.id, label: SFX.label, provider: SFX.provider, candidates: SFX.candidates },
       ],
       keys: { elevenlabs: elevenKey.length > 0, openai: openaiKey.length > 0 },
       iconFiles,
       sfxFiles,
       spriteFiles,
+      modeFiles,
     };
   };
 
@@ -150,11 +156,12 @@ export const forgePlugin = (): Plugin => {
     json(res, 200, { prompt } satisfies ExpandResponse);
   };
 
-  /** Image generation (icons + sprites): N transparent PNGs. The panel builds
-   * the prompt (it owns the sets) and sends it verbatim; the bare subject
-   * fallback below only serves curl/testing. */
+  /** Image generation (icons, sprites, mode cards): N PNGs — transparent
+   * cut-outs or opaque scenes per the spec. The panel builds the prompt (it
+   * owns the sets) and sends it verbatim; the bare subject fallback below
+   * only serves curl/testing. */
   const generateImages = async (
-    spec: IconSpec | SpriteSpec,
+    spec: ImageSpec,
     body: GenerateRequest,
     res: ServerResponse,
   ): Promise<void> => {
@@ -169,7 +176,9 @@ export const forgePlugin = (): Plugin => {
     const prompt = explicit || imageTemplate(spec, subject);
 
     const settled = await Promise.allSettled(
-      Array.from({ length: spec.candidates }, () => generateImage(openaiKey, prompt, spec.size)),
+      Array.from({ length: spec.candidates }, () =>
+        generateImage(openaiKey, prompt, spec.size, "background" in spec ? spec.background : "transparent"),
+      ),
     );
     const candidates: Candidate[] = [];
     for (const r of settled) {
@@ -219,10 +228,10 @@ export const forgePlugin = (): Plugin => {
     json(res, 200, { prompt, candidates } satisfies GenerateResponse);
   };
 
-  /** Image save (icons + sprites): one PNG per id, overwritten on regeneration;
-   * sidecar refreshed. */
+  /** Image save (icons, sprites, mode cards): one PNG per id, overwritten on
+   * regeneration; sidecar refreshed. */
   const saveImage = async (
-    spec: IconSpec | SpriteSpec,
+    spec: ImageSpec,
     body: SaveRequest,
     res: ServerResponse,
   ): Promise<void> => {
@@ -239,7 +248,12 @@ export const forgePlugin = (): Plugin => {
     const dir = join(repoRoot, spec.destination);
     await mkdir(dir, { recursive: true });
     const file = `${id}.png`;
-    await writeFile(join(dir, file), await processIcon(raw, spec.savedSize));
+    // Cut-outs letterbox into a square; scenes cover-crop to their frame.
+    const processed =
+      "savedWidth" in spec
+        ? await processScene(raw, spec.savedWidth, spec.savedHeight)
+        : await processIcon(raw, spec.savedSize);
+    await writeFile(join(dir, file), processed);
 
     // Sidecar: keep `created` across regenerations, refresh everything else.
     const sidecarPath = join(dir, `${id}.forge.json`);
@@ -259,7 +273,14 @@ export const forgePlugin = (): Plugin => {
       prompt: body.prompt ?? "",
       provider: spec.provider,
       model: IMAGE_MODEL_ID,
-      params: { size: spec.size, quality: "medium", background: "transparent", savedSize: spec.savedSize },
+      params: {
+        size: spec.size,
+        quality: "medium",
+        background: "background" in spec ? spec.background : "transparent",
+        ...("savedWidth" in spec
+          ? { savedWidth: spec.savedWidth, savedHeight: spec.savedHeight }
+          : { savedSize: spec.savedSize }),
+      },
       files: [file],
       created,
       updated: now,
@@ -269,8 +290,13 @@ export const forgePlugin = (): Plugin => {
     json(res, 200, {
       files: [file],
       sidecar: `${spec.destination}/${id}.forge.json`,
-      // The require-map line for the consuming module (one src/ level deep).
-      manifestLines: [`  "${id}": require("${spec.manifestDir}/${file}"),`],
+      // The require-map line for the consuming module (one src/ level deep);
+      // specs with a bespoke paste target (mode cards) own their own line.
+      manifestLines: [
+        "manifestLine" in spec
+          ? spec.manifestLine(id, file)
+          : `  "${id}": require("${spec.manifestDir}/${file}"),`,
+      ],
     } satisfies SaveResponse);
   };
 

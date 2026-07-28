@@ -353,6 +353,110 @@ export const SPRITE: SpriteSpec = {
     "cast shadow, no dust at the feet, no backdrop, no glow. No text.",
 };
 
+// ── Blood in the Sand mode cards ───────────────────────────────────────────
+// Full-bleed landscape scene art for the mode select's stacked cards
+// (bits-mode-select.md): the same woodcut world as the icons/sprites, but
+// SCENE language — a painted place, not a cut-out subject. Two hard layout
+// facts drive the template: the card lays its title/pitch/status over the
+// LEFT third behind a dark scrim (so that third must stay quiet), and the
+// save cover-crops the 1536×1024 canvas to a 5:2 letterbox (so the top and
+// bottom quarters are sacrificial).
+
+/** The mode-select cards, in screen order. modeSet.ts derives the checklist
+ * from this — a future fifth mode appears there by adding a key + subject. */
+export const MODE_KEYS = ["ranked", "skirmish", "practice", "story"] as const;
+
+/**
+ * Art subjects per mode card. Each brief owns the PLACE and the LIGHT (the
+ * template owns brand + composition): ranked burns at high sun, skirmish glows
+ * at dusk, practice waits at dawn, story broods under storm light — four
+ * times of day so the stack reads as four different promises at a glance.
+ */
+export const MODE_SUBJECTS: Record<string, string> = {
+  ranked:
+    "the packed heart of a colosseum at brutal high sun — tiers of roaring crowd rising on " +
+    "the right, tattered blood-red banners streaming, heat-haze over raked fighting sand, " +
+    "a lone armoured gladiator small at the arena's centre-right with arms spread to the " +
+    "mob; the left side is empty scorched sky above a quiet sun-bleached arena wall",
+  skirmish:
+    "a gladiators' camp at dusk outside the arena walls — fighters at ease around a " +
+    "crackling campfire on the right, one pair lazily sparring behind them, weapon racks " +
+    "and drink, warm orange firelight against deep blue evening; the left side is a quiet " +
+    "twilight sky over a low shadowed wall",
+  practice:
+    "an empty training yard at pale dawn — a row of straw target dummies on sun-split " +
+    "wooden posts standing on the right in freshly raked sand, practice weapons leaning on " +
+    "a rack, long soft morning shadows, cool bone-pale light; the left side is a quiet " +
+    "empty dawn sky over a low adobe wall",
+  story:
+    "a lone cloaked gladiator seen from behind, walking away into a vast storm-lit desert " +
+    "on the right toward a colossal ruined arena on the far horizon, wind dragging sand off " +
+    "the dune crests; the left side is a quiet dark brooding sky",
+};
+
+export interface ModeSpec {
+  id: "mode-bits";
+  label: string;
+  provider: "openai-image";
+  candidates: number;
+  /** Saved frame — the 5:2 card crop, cover-cropped from the 3:2 canvas,
+   * never letterboxed. 900 wide ≈ 2.2× density at the biggest phone render
+   * (card height ~162pt × 2.5 aspect ≈ 405pt): deliberately shy of full 3×
+   * — this is background art under a scrim, and the woodcut hatching hides
+   * the softness, so pixel-perfect wasn't worth ~80% more bytes (Tom,
+   * 2026-07-28). Bump toward 1200 if a surface ever shows the art bare. */
+  savedWidth: number;
+  savedHeight: number;
+  /** Generation canvas: LANDSCAPE, the widest gpt-image-1 offers. 3:2 is
+   * taller than the card — the save keeps the middle band, so the template
+   * declares the top/bottom quarters sacrificial. */
+  size: "1536x1024";
+  /** Full-bleed scenes are opaque — asking for alpha invites holes in the sky. */
+  background: "opaque";
+  destination: string;
+  /** Prefix of the require() path handed back after save (consumer-module relative). */
+  manifestDir: string;
+  /** The paste line targets MODE_ART in ModeSelectScreen.tsx (an `image:`
+   * field per mode key), not a `"id": require(...)` manifest map. */
+  manifestLine: (id: string, file: string) => string;
+  template: (subject: string) => string;
+}
+
+export const MODE: ModeSpec = {
+  id: "mode-bits",
+  label: "Mode card (Blood in the Sand)",
+  provider: "openai-image",
+  candidates: 2,
+  savedWidth: 900,
+  savedHeight: 360,
+  size: "1536x1024",
+  background: "opaque",
+  destination: "apps/blood-in-the-sand/assets/modes",
+  manifestDir: "../../assets/modes",
+  manifestLine: (id, file) =>
+    `  image: require("../../assets/modes/${file}"), // → MODE_ART.${id}, replacing image: null`,
+  // Same brand attributes as the icon/sprite templates (never the game's
+  // name); differences are all scene-fit: painted full-bleed ground instead
+  // of a cut-out, composition stated as thirds (the scrim lesson: say where
+  // the QUIET is, not just where the subject is), and the letterbox crop
+  // declared so nothing vital lives in the top/bottom quarters.
+  template: (subject) =>
+    `${subject}. A wide painted scene for a grim dark-fantasy gladiator arena game set in a ` +
+    "scorched desert. Hand-inked woodcut illustration: heavy black ink linework, rough " +
+    "expressive hatching, deep pooled black shadows anchoring every form — it reads as dark " +
+    "inked woodcut, never photorealistic, never a clean flat vector. Sun-bleached bone " +
+    "(#f0e8d8) highlights carve shapes out of the dark; scorched sand-ochre (#b39763) " +
+    "midtones like heat-baked dust; dried-blood red (#a32c22) rationed to banners, cloth " +
+    "and wounds; a burnt-gold (#e8c87a) glow only where the light source earns it. " +
+    "Composition is strict: all focal detail and figures sit in the RIGHT two thirds of the " +
+    "frame; the LEFT third is quiet, low-detail atmosphere (sky, wall, drifting dust) with " +
+    "no figures and no focal shapes — interface text will sit over it. The horizon and all " +
+    "key elements sit in the vertical middle of the frame: the top quarter is only sky and " +
+    "the bottom quarter only ground, both safe to crop away. The paint fills the whole " +
+    "frame edge-to-edge with no border, no vignette, no frame line. Grim, sun-scoured, " +
+    "blood-and-sand mood. No text, no lettering, no banners with writing.",
+};
+
 /**
  * The prompt expander: an LLM rewrites the user's rough sentence into a
  * provider-shaped SFX prompt — concrete sources/textures, an explicit sonic

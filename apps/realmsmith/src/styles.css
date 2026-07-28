@@ -708,3 +708,47 @@ body {
   height: 32px;
   object-fit: contain;
 }
+
+/* ── Forge: Blood in the Sand mode cards ────────────────────────────────── */
+
+.forge .icon-cat-mode { color: #e8c87a; }
+
+/* Two 5:2 cards side-by-side would render tiny — stack mode candidates. */
+.forge .icon-candidates:has(.mode) {
+  flex-direction: column;
+}
+
+/* The in-game verify: the candidate wears the card's exact 5:2 crop, the
+   ModeSelectScreen scrim gradient (same stops) and a stand-in title — if the
+   title fights the art here, it will on the phone. */
+.forge .mode-frame {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.forge .icon-candidate.mode .icon-full {
+  display: block;
+  aspect-ratio: 1536 / 614;
+  object-fit: cover;
+}
+
+.forge .mode-frame-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(10, 6, 4, 0.85) 0%, rgba(10, 6, 4, 0.55) 42%, rgba(10, 6, 4, 0) 72%);
+  pointer-events: none;
+}
+
+.forge .mode-frame-title {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #f5ede0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}

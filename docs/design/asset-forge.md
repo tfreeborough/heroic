@@ -132,6 +132,20 @@ Sizes are per-type defaults in the style bible, editable in one place. `class-po
 - **Music beds** — ElevenLabs Music exists, but seamless *loops* (what beds need) are a separate
   problem; current beds are sourced manually.
 
+**Added 2026-07-23 — `mode-bits` (Blood in the Sand mode cards).** The forge's first FULL-BLEED
+SCENE type (bits-mode-select.md): landscape 1536×1024 generation (the first non-square-or-portrait
+canvas, and the first `background: "opaque"` — cut-out types stay transparent), saved as an
+opaque 900×360 (5:2, ~2.2× density at the largest phone render — scrim-covered background art
+doesn't earn full 3×) centre cover-crop via `processScene` (no letterboxing; palette-quantized at
+a 90 quality floor because gradient skies band before woodcut linework does). The set is the
+checked-in `MODE_KEYS` list (ranked/skirmish/practice/story — no sim derivation; modes are product
+decisions), destination `apps/blood-in-the-sand/assets/modes/`. The template bakes in the card's
+two layout facts: focal detail in the RIGHT two thirds (the left third sits under the title
+scrim), key elements in the vertical middle (the crop discards the top/bottom quarters). The
+panel's verify composite wears the card's real scrim gradient plus a stand-in title over the left
+third, and the save hands back the `image: require(...)` line for `MODE_ART` in
+ModeSelectScreen.tsx.
+
 ## The style bible
 
 `apps/realmsmith/src/forge/styleBible.ts` — checked in, so brand language is versioned and diffable.

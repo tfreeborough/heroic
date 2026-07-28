@@ -3,10 +3,14 @@
 Status: **designed + BUILT 2026-07-23.** Decisions locked same day: RANKED
 label (not COMPETITIVE); Ranked v1 ships gated with its own "Season I —
 opening soon" flavour (queue server is a later project); title screen
-collapses to PLAY + SETTINGS (PRACTICE button absorbed into mode select).
-Owed: the four card-art PNGs (Tom, spec below — placeholder gradients paint
-the cards until `MODE_ART` in ModeSelectScreen.tsx gets its `require`s), the
-`mode_reveal` Forge clip, and an on-device feel pass. Sits between the title screen and
+collapses to PLAY + SETTINGS (PRACTICE button absorbed into mode select);
+the rooms mode is **SKIRMISH** (renamed from Casual same day — Quickplay was
+considered and parked: it implies instant matchmaking, which is Ranked's
+shape, not a room browser's; it stays available for a future one-tap-join).
+Owed: the four card-art PNGs (generate via the Forge's `mode-bits` type,
+added 2026-07-23 — placeholder gradients paint the cards until `MODE_ART` in
+ModeSelectScreen.tsx gets its `require`s), the `mode_reveal` Forge clip, and
+an on-device feel pass. Sits between the title screen and
 everything else. Companion docs: `pvp-loadout-flow.md` (what happens after a
 mode is chosen), `bits-audio.md` (UI sound conventions), `monetisation.md`
 (glory framing).
@@ -37,7 +41,7 @@ Four cards, stacked vertically, filling the safe area under a slim header
 │    Queue against the ladder. │
 │    ◈ Glory on victory        │
 ├──────────────────────────────┤
-│ ▓▓ CASUAL ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │  art: campfire / training yard
+│ ▓▓ SKIRMISH ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │  art: campfire / training yard
 │    Your rooms, your rules.   │
 │    ◈ Glory when earned       │
 ├──────────────────────────────┤
@@ -66,8 +70,10 @@ Each card is a rounded-rect (matching existing 10–14px radii) with:
    - Mode name — `DISPLAY_FONT` (Copperplate/serif), letter-spaced, bone
      `#f5ede0`.
    - One-line pitch (copy above).
-   - **Status row** — small caps, contextual: glory tag when available,
-     reason line when disabled (see states).
+   - ~~Status row~~ — shipped v1, **cut 2026-07-28** (Tom): the contextual
+     small-caps line (glory tag / "CONNECTING…" / reason copy) read as
+     clutter; cards are title + pitch only. State now communicates purely
+     visually — greyscale for locked, dark + RETRY chip for unreachable.
 4. **Press feedback** — scale to 0.98 + scrim darkens slightly; `uiConfirm`
    via the existing `withTap` wrapper; light haptic (`impactLight`) — first
    use of haptics outside the match, deliberate: choosing a mode is a
@@ -75,9 +81,12 @@ Each card is a rounded-rect (matching existing 10–14px radii) with:
 
 ### Art spec (for generation)
 
-- One landscape PNG per mode, **card aspect ~5:2** (e.g. 1600×640) so four
-  cards + header fit a tall phone without scrolling; art is `cover`-cropped so
-  overscan ~10% on each edge.
+- One landscape PNG per mode, **saved 5:2 at 900×360** (the forge generates
+  1536×1024 and centre cover-crops; background art under a scrim doesn't
+  earn full-density saves). On screen the art plainly `cover`-fills the
+  card — the flex-filled cards are near enough 5:2 that the centre crop
+  trims a few percent per edge. (A measured right-anchored crop was tried
+  2026-07-28 and rendered wrong on device — keep it dumb.)
 - **Right two-thirds carries the subject** — the left third sits under the
   scrim and text, so keep it low-detail (sky, wall, sand).
 - Style-bible consistent with the icon set (dark-fantasy woodcut palette:
@@ -92,15 +101,22 @@ Each card is a rounded-rect (matching existing 10–14px radii) with:
 |---|---|---|
 | **Available** | connectivity ok (or mode is offline) | full colour, gold hairline, glory tag |
 | **Checking** | app just opened / retry in flight | full colour but muted hairline; status row shows a subtle "Connecting…" shimmer; taps queue nothing (no-op with `uiTap`, not `uiConfirm`) |
-| **Unavailable** | server/API unreachable | art desaturated + darkened (single `saturation(0)`+opacity overlay — no second asset), no glory tag, status row in muted red: "Can't reach the arena — check your connection", plus a small RETRY affordance on the card |
-| **Coming soon** | Story, hardcoded | same desaturated treatment + a diagonal "COMING SOON" ribbon in gold on parchment; tap gives a soft thud (`uiTap`) and a 4px shake — acknowledged, not dead |
+| **Unavailable** | server/API unreachable | art darkened (overlay), no glory tag, status row in muted red: "Can't reach the arena — check your connection", plus a small RETRY affordance on the card |
+| **Locked** | Ranked pre-season + Story, hardcoded | art drained to greyscale (Skia ColorMatrix) and faded harder than the live cards' 0.8 base opacity — no ribbon (a "COMING SOON" ribbon shipped v1, cut 2026-07-28: the grey drain says it quieter); tap gives a soft thud (`uiTap`) and a 4px shake — acknowledged, not dead |
 
 Unavailable and coming-soon cards keep full text so players know what they're
 missing — that's the sell.
 
 ## Connectivity model
 
-Ranked and Casual require **both** the game WebSocket server and the glory
+> **CUT 2026-07-28 (Tom): the mode select is connectivity-blind.** The
+> `useApiHealth` hook, `probeApi`, the server prop, and the
+> checking/down card states were all removed — cards are just `live` or
+> `locked`. Skirmish always routes into the play flow, whose existing
+> connect/error/UPDATE-REQUIRED screen is the real gate, one tap later.
+> The section below is kept for the record of what v1 shipped.
+
+Ranked and Skirmish require **both** the game WebSocket server and the glory
 API. Practice never checks anything (fully on-device).
 
 New hook `useConnectivity()` in `src/net/`:
@@ -120,11 +136,11 @@ New hook `useConnectivity()` in `src/net/`:
 
 ## Per-mode behaviour on tap
 
-- **RANKED** — v1 ships gated: full-colour card but tapping gives the
-  denied shake + `uiTap`, status row reads "Season 1 — opening soon" (gold,
-  distinct from the red connectivity message). The matchmaking queue is a
-  later server project; when it lands the card flips to navigable.
-- **CASUAL** — `setRoute("play")`: the existing NameScreen gate →
+- **RANKED** — v1 ships locked (greyscale + faded like Story): tapping gives
+  the denied shake + `uiTap`, status row reads "Season I — opening soon"
+  (gold, distinct from the red connectivity message). The matchmaking queue
+  is a later server project; when it lands the card flips to live colour.
+- **SKIRMISH** — `setRoute("play")`: the existing NameScreen gate →
   RoomListScreen → RoomScreen wizard, untouched. Glory-earning conditions
   ("sometimes, provided conditions are met" — e.g. no bots / full-human room)
   are an economy question for `monetisation.md`, not this screen; the card
@@ -155,6 +171,6 @@ New hook `useConnectivity()` in `src/net/`:
 
 ## Open questions
 
-1. Casual glory conditions — economy design, tracked in `monetisation.md`.
+1. Skirmish glory conditions — economy design, tracked in `monetisation.md`.
 2. Does dummies mode need team-size exposure, or keep the fixed
    `RANGE_TEAM_SIZE = 2` line-up? (Lean: keep fixed — it's a range, not a match.)

@@ -27,6 +27,9 @@ export interface ForgeStatus {
   /** PNGs already in the sprite destination folder — done-ticks for the sprite
    * set (which is the checked-in SPRITE_SUBJECTS list, not a sim derivation). */
   spriteFiles: string[];
+  /** PNGs already in the mode-card destination folder — done-ticks for the
+   * mode set (the checked-in MODE_KEYS/MODE_SUBJECTS list). */
+  modeFiles: string[];
 }
 
 export interface ExpandRequest {
