@@ -73,6 +73,34 @@ export interface RoomStateInfo {
   hostId: number;
 }
 
+/** One seat's settlement from the post-match `rankedResult` broadcast. */
+export interface RankedResultRow {
+  playerId: number;
+  before: number;
+  after: number;
+  delta: number;
+  tier: string;
+  glory: number;
+  /** Non-null while that player is still placing — show "match N of 10",
+   * never the rating movement. */
+  placement: { number: number; of: number } | null;
+}
+
+export interface RankedResultInfo {
+  matchId: string;
+  bracket: string;
+  winnerTeam: Team;
+  results: RankedResultRow[];
+}
+
+/** One bracket's queue population (queueStatus) — `waitedSec` present only
+ * on brackets THIS socket is queued in. */
+export interface BracketQueueStatus {
+  bracket: string;
+  size: number;
+  waitedSec?: number;
+}
+
 /**
  * The slice of client GameScreen actually consumes — satisfied by ArenaClient
  * (a real networked match) and PracticeClient (the offline bot match, which
@@ -85,6 +113,9 @@ export interface GameClient {
   roomState: RoomStateInfo | null;
   onEvents: ((events: ArenaEvent[]) => void) | null;
   readonly myWeapon: WeaponId | null;
+  /** The post-match settlement in a RANKED room (rating deltas + Glory) —
+   * absent/null everywhere else; practice never sets it. */
+  readonly rankedResult?: RankedResultInfo | null;
   /** `casts` indexed by ability slot (= pick = button order). */
   sendInput(sx: number, sy: number, casts: boolean[]): void;
 }
@@ -142,6 +173,23 @@ export class ArenaClient {
   notice: Notice | null = null;
   /** Round phase from the newest snapshot — drives screen routing. */
   phase: RoundPhase = "lobby";
+
+  // ── ranked (bits-ranked.md) ──────────────────────────────────────────────
+  /** Per-bracket queue populations — refreshed by queueInfo and every matcher
+   * beat while queued. RankedScreen renders straight from this. */
+  queueStatus: BracketQueueStatus[] = [];
+  /** True while this socket holds a place in line. */
+  queued = false;
+  /** Set at matchFound — the current (or just-ended) room is a ranked one.
+   * Cleared when the seat drops. */
+  rankedMatch: { bracket: string } | null = null;
+  /** The last match's settlement — survives the room closing so RankedScreen
+   * can keep showing the ceremony; cleared on the next queue entry. */
+  rankedResult: RankedResultInfo | null = null;
+  /** My side of that settlement, resolved WHILE the seat still existed (the
+   * result rows are keyed by in-room seat id, which means nothing once
+   * welcome is gone). RankedScreen reads this after the room closes. */
+  lastSettlement: { won: boolean; mine: RankedResultRow; theirs: RankedResultRow | null } | null = null;
 
   /** Fired on status / room / phase changes (drive React re-renders). */
   onChange: (() => void) | null = null;
@@ -230,12 +278,13 @@ export class ArenaClient {
       case "left":
         return;
       case "roomClosed":
-        // Kicked because the host left / is gone. Drop the seat and fall back to
-        // the room list, surfacing the reason there.
+        // Kicked (host gone / ranked room over or voided). Drop the seat and
+        // fall back — to the room list or RankedScreen — showing the reason.
         this.welcome = null;
         this.roomState = null;
         this.phase = "lobby";
         this.lastError = msg.reason;
+        this.rankedMatch = null;
         this.buffer.reset();
         this.listRooms();
         this.onChange?.();
@@ -245,8 +294,46 @@ export class ArenaClient {
         if (events.length > 0) this.onEvents?.(events);
         if (msg.round.phase !== this.phase) {
           this.phase = msg.round.phase; // lobby ↔ match transitions re-route the UI
+          // A ranked room has no post-match lobby: once the settlement is in
+          // and the sim returns to "lobby", leave at once (beating the
+          // server's own close) so the player lands back on RankedScreen
+          // without a flash of the arming wizard.
+          if (this.phase === "lobby" && this.rankedMatch && this.rankedResult) {
+            this.rankedMatch = null;
+            this.leaveRoom();
+            return;
+          }
           this.onChange?.();
         }
+        return;
+      }
+      case "queueStatus":
+        this.queueStatus = msg.brackets;
+        this.queued = msg.brackets.some((b) => b.waitedSec !== undefined);
+        this.onChange?.();
+        return;
+      case "queueLeft":
+        this.queued = false;
+        this.onChange?.();
+        return;
+      case "matchFound":
+        this.queued = false;
+        this.rankedMatch = { bracket: msg.bracket };
+        // The server seats us itself — the welcome follows on this socket.
+        this.onChange?.();
+        return;
+      case "rankedResult": {
+        this.rankedResult = msg;
+        const myId = this.welcome?.playerId;
+        const mine = msg.results.find((r) => r.playerId === myId);
+        if (mine && this.welcome) {
+          this.lastSettlement = {
+            won: this.welcome.team === msg.winnerTeam,
+            mine,
+            theirs: msg.results.find((r) => r.playerId !== myId) ?? null,
+          };
+        }
+        this.onChange?.();
         return;
       }
       case "reject":
@@ -261,8 +348,35 @@ export class ArenaClient {
     }
   }
 
+  /** Enter the ranked queue (bits-ranked.md). `token` is the persistence
+   * bearer secret from ensureIdentity(); the server derives who we are from
+   * it — no claimed id rides the wire. */
+  queueRanked(playerName: string, token: string, brackets: string[] = ["1v1"]): void {
+    this.lastError = null;
+    this.rankedResult = null; // a fresh campaign — the old ceremony is done
+    this.lastSettlement = null;
+    this.send({
+      t: "queueJoin",
+      v: PROTOCOL_VERSION,
+      token,
+      playerName,
+      brackets,
+      announcer: getActiveAnnouncer(),
+    });
+  }
+
+  queueLeave(): void {
+    this.send({ t: "queueLeave" });
+  }
+
+  /** Unauthenticated queue-size read — RankedScreen's population display. */
+  refreshQueueInfo(): void {
+    this.send({ t: "queueInfo" });
+  }
+
   createRoom(playerName: string, roomName: string, pass: string, teamSize: number): void {
     this.lastError = null;
+    this.queued = false; // entering the skirmish flow leaves the queue server-side
     this.send({
       t: "createRoom",
       v: PROTOCOL_VERSION,
@@ -278,6 +392,7 @@ export class ArenaClient {
 
   joinRoom(playerName: string, code: string, pass: string): void {
     this.lastError = null;
+    this.queued = false; // ditto createRoom
     this.send({
       t: "joinRoom",
       v: PROTOCOL_VERSION,

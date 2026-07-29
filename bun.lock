@@ -45,6 +45,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@heroic/blood-in-the-sand-persistence": "workspace:*",
+        "@heroic/blood-in-the-sand-sim": "workspace:*",
         "hono": "^4.8.0",
       },
     },
@@ -52,6 +53,7 @@
       "name": "blood-in-the-sand-server",
       "version": "0.0.0",
       "dependencies": {
+        "@heroic/blood-in-the-sand-persistence": "workspace:*",
         "@heroic/blood-in-the-sand-sim": "workspace:*",
         "@heroic/core": "workspace:*",
       },

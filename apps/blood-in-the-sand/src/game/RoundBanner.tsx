@@ -58,6 +58,9 @@ export interface RoundBannerProps {
   subtitle: string;
   /** [mine, theirs] — only shown on match-end. */
   score: [number, number];
+  /** Ranked match-end only (bits-ranked.md): the settlement line — rating
+   * movement + tier + Glory — riding under the score. */
+  rankedLine?: string | null;
 }
 
 export const RoundBanner = ({
@@ -65,6 +68,7 @@ export const RoundBanner = ({
   title,
   subtitle,
   score,
+  rankedLine = null,
 }: RoundBannerProps) => {
   const look = LOOK[kind];
   // One driver for the plate (opacity + scale + rule sweep), one delayed driver
@@ -229,6 +233,17 @@ export const RoundBanner = ({
               <Animated.Text style={styles.scoreNum}>{score[1]}</Animated.Text>
             </Animated.View>
           ) : null}
+
+          {look.big && rankedLine ? (
+            <Animated.Text
+              style={[
+                styles.rankedLine,
+                { opacity: subOpacity, transform: [{ translateY: subRise }] },
+              ]}
+            >
+              {rankedLine}
+            </Animated.Text>
+          ) : null}
         </Animated.View>
       </View>
     </View>
@@ -257,6 +272,17 @@ const styles = StyleSheet.create({
   titleWrap: { alignItems: "center", justifyContent: "center" },
   // The glow copy is layered exactly over the crisp title.
   titleGlow: { position: "absolute" },
+  rankedLine: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#e8c87a",
+    letterSpacing: 1.5,
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   subtitle: {
     marginTop: 4,
     fontSize: 15,

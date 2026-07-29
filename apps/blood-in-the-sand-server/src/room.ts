@@ -28,6 +28,7 @@ import {
   DIFFICULTIES,
   SnapshotHistory,
   forceStartMatch,
+  loadoutComplete,
   makeClientConfig,
   markDisconnected,
   nextHost,
@@ -62,6 +63,9 @@ const BOT_NAMES = ["Priscus", "Verus", "Tetraites", "Flamma", "Carpophorus", "At
 export interface ClientData {
   roomCode: string | null;
   playerId: number | null;
+  /** The token-verified persistence player id — set by the first successful
+   * queueJoin on this socket, null until then (skirmish never needs it). */
+  accountId: string | null;
 }
 
 export type Socket = ServerWebSocket<ClientData>;
@@ -73,11 +77,47 @@ export interface RoomMeta {
   hostId: number;
 }
 
+/** One matched player's persistent identity, captured at seating (a rejoin
+ * reclaims the same seat id, so the map holds for the room's life). */
+export interface RankedSeatAccount {
+  accountId: string;
+  name: string;
+  announcer: string;
+  /** Bracket rating at queue time — rides along for a void's re-queue. */
+  rating: number;
+  /** Original queue-entry time — a void's re-queue keeps the wait earned. */
+  joinedMs: number;
+}
+
+/** What makes a room ranked (bits-ranked.md) — set by the manager right after
+ * construction for queue-born rooms; null = a normal skirmish room. Ranked
+ * rooms are unlisted, unjoinable from outside (rejoin excepted), hostless in
+ * behaviour (no forceStart/cancelStart/switchTeam), and settle to the DB. */
+export interface RankedContext {
+  bracket: string;
+  /** Server-minted uuid — the settlement's idempotency root. */
+  matchId: string;
+  accounts: Map<number, RankedSeatAccount>;
+  /** The sim's matchEnd fired (the settle is underway or done). */
+  ended: boolean;
+  /** The settlement batch landed (or conclusively failed) — the manager may
+   * close the room once the sim returns to lobby. */
+  settled: boolean;
+}
+
 export class Room {
   readonly meta: RoomMeta;
   readonly sim: ArenaSim;
   /** When the last connected player left, for the GC sweep. Null while occupied. */
   emptySinceMs: number | null;
+  /** Construction time — the ranked arm deadline counts from here. */
+  readonly createdAtMs: number;
+  /** Ranked context, or null for skirmish. Assigned by the manager. */
+  ranked: RankedContext | null = null;
+  /** Assigned by the manager on ranked rooms — fires exactly once, on the
+   * sim's matchEnd event (the settle + rankedResult broadcast live there;
+   * the room stays transport). */
+  onRankedMatchEnd: ((winnerTeam: Team) => void) | null = null;
 
   private readonly server: Server<ClientData>;
   private readonly seats = new Map<number, Socket>();
@@ -117,6 +157,7 @@ export class Room {
     this.meta = meta;
     this.sim = createSim(ARENA_00, seed, teamSize);
     this.nav = createBotNav(this.sim.zone);
+    this.createdAtMs = nowMs;
     this.emptySinceMs = nowMs; // occupied the moment the creator is seated
   }
 
@@ -327,6 +368,7 @@ export class Room {
    * turning full-and-armed — the server never starts a match;
    * pvp-loadout-flow.md). During that countdown any seated player may cancel. */
   forceStart(playerId: number, nowMs: number): void {
+    if (this.ranked) return; // no host powers in ranked — the queue filled the room
     if (playerId !== this.meta.hostId) return;
     if (this.sim.state.round.phase !== "lobby") return;
 
@@ -363,6 +405,7 @@ export class Room {
    * bots stand down, the countdown stops, and a notice names the canceller —
    * social pressure is the v1 anti-grief mechanism. */
   cancelStart(playerId: number, nowMs: number): void {
+    if (this.ranked) return; // ranked never has a bot-filled start to veto
     const player = this.sim.state.players[playerId];
     if (!player || player.bot) return;
     if (cancelStart(this.sim)) {
@@ -375,7 +418,26 @@ export class Room {
 
   /** SWITCH SIDE — the sim validates (lobby only, free seat across the sand). */
   switchTeam(playerId: number, nowMs: number): void {
+    if (this.ranked) return; // sides are the matchmaking's to assign
     if (switchTeam(this.sim, playerId)) this.syncRoomState(nowMs);
+  }
+
+  /** The seated socket for a player id — the manager re-queues a voided
+   * ranked match's innocent party through this. */
+  socketOf(playerId: number): Socket | undefined {
+    return this.seats.get(playerId);
+  }
+
+  /** Seat ids still short of a full loadout — the arm-deadline's dodgers. */
+  unarmedSeatIds(): number[] {
+    return seatedPlayers(this.sim.state)
+      .filter((p) => !loadoutComplete(p))
+      .map((p) => p.id);
+  }
+
+  /** Room-topic broadcast for manager-composed messages (rankedResult). */
+  publish(msg: ServerMsg): void {
+    this.broadcast(msg);
   }
 
   /** A fresh arena name not already on the roster (sim-rng, deterministic). */
@@ -525,7 +587,13 @@ export class Room {
       const tag = `[${this.meta.code}]`;
       if (e.type === "roundStart") console.log(`${tag} — round ${e.roundNumber} —`);
       else if (e.type === "roundEnd") console.log(`${tag} round to team ${e.winnerTeam} · ${e.wins[0]}–${e.wins[1]}`);
-      else if (e.type === "matchEnd") console.log(`${tag} ★ MATCH to team ${e.winnerTeam} ★`);
+      else if (e.type === "matchEnd") {
+        console.log(`${tag} ★ MATCH to team ${e.winnerTeam} ★`);
+        if (this.ranked && !this.ranked.ended) {
+          this.ranked.ended = true;
+          this.onRankedMatchEnd?.(e.winnerTeam);
+        }
+      }
     }
   }
 

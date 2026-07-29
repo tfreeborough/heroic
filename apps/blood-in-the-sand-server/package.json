@@ -7,9 +7,11 @@
     "dev": "bun --watch src/main.ts",
     "start": "bun src/main.ts",
     "bot": "bun scripts/bot.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@heroic/blood-in-the-sand-persistence": "workspace:*",
     "@heroic/blood-in-the-sand-sim": "workspace:*",
     "@heroic/core": "workspace:*"
   }

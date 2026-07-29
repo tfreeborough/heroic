@@ -21,6 +21,8 @@ export interface ModeSelectScreenProps {
   onBack: () => void;
   /** Skirmish → the existing online flow (name gate → room list → wizard). */
   onSkirmish: () => void;
+  /** Ranked → the ranked home (bits-ranked.md): standing + queue. */
+  onRanked: () => void;
   /** Practice → the bots-or-dummies front door. */
   onPractice: () => void;
 }
@@ -236,7 +238,7 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index }: ModeC
  * connectivity checks here: Skirmish always routes into the play flow, whose
  * connect screen already owns down/update states.
  */
-export const ModeSelectScreen = ({ onBack, onSkirmish, onPractice }: ModeSelectScreenProps) => {
+export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice }: ModeSelectScreenProps) => {
   const insets = useSafeAreaInsets();
   const entrance = useRef(new Animated.Value(0)).current;
 
@@ -289,7 +291,8 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onPractice }: ModeSelectS
           mode="ranked"
           title="RANKED"
           pitch="Win ultimate glory in the arena."
-          state="locked"
+          state="live"
+          onEnter={onRanked}
           entrance={entrance}
           index={2}
         />

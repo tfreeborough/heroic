@@ -128,9 +128,35 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * degrades gracefully instead of breaking. Bots/dummies always announce in
  * the default voice. Entitlements are NOT here — until the store exists any
  * client may claim any pack.
+ * v19 (2026-07-29): the ranked queue (bits-ranked.md). NEW client msgs:
+ * `queueJoin` (bearer token + brackets — the FIRST authenticated message on
+ * this socket; the server verifies against the shared DB, never the API),
+ * `queueLeave`, `queueInfo` (unauthenticated queue-size read for the ranked
+ * screen). NEW server msgs: `queueStatus` (per-bracket sizes + your wait),
+ * `queueLeft`, `matchFound` (informational — the server SEATS you itself; the
+ * standard `welcome` follows on the same socket, no joinRoom round-trip), and
+ * `rankedResult` (the post-match settlement: rating deltas + tier + Glory,
+ * broadcast into the room so the ceremony needs no API poll). `brackets` is
+ * an array on the wire from day one so multi-queue (queue several brackets,
+ * first match wins) is additive later; Season I clients always send ["1v1"].
+ * Ranked rooms reject forceStart/cancelStart/switchTeam and outside joins.
+ * Amended 2026-07-30 (still unshipped, folded in): rankedResult rows carry
+ * `placement` ({number, of} while the player is in their placement matches,
+ * null once placed) — during placements the client hides rank and rating
+ * everywhere and shows placement progress instead (Tom, 2026-07-30).
  */
-export const PROTOCOL_VERSION = 18;
+export const PROTOCOL_VERSION = 19;
 export const DEFAULT_PORT = 7777;
+
+/** The ranked formats (bits-ranked.md § brackets). A bracket key names a
+ * ladder — per-subject ratings are keyed by it — and maps to the room shape
+ * its matches run. Season I ships 1v1 only; future entries (2v2, premade
+ * variants) are additive. */
+export const RANKED_BRACKETS = {
+  "1v1": { teamSize: 1 },
+} as const;
+
+export type RankedBracket = keyof typeof RANKED_BRACKETS;
 
 // ── client → server ────────────────────────────────────────────────────────
 export type ClientMsg =
@@ -161,7 +187,16 @@ export type ClientMsg =
    * streams input). Any inbound message counts as alive; this is the one a
    * seated-but-idle client sends on its own timer (HEARTBEAT_INTERVAL_MS). */
   | { t: "ping" }
-  | { t: "input"; seq: number; sx: number; sy: number; casts: boolean[] };
+  | { t: "input"; seq: number; sx: number; sy: number; casts: boolean[] }
+  /** Enter the ranked queue (bits-ranked.md). `token` is the persistence
+   * bearer secret — verified server-side against the shared DB; a bad token
+   * (or an unreachable DB) rejects, ranked being the one honestly
+   * connectivity-gated mode. `brackets` always ["1v1"] in Season I. */
+  | { t: "queueJoin"; v: number; token: string; playerName: string; brackets: string[]; announcer?: string }
+  | { t: "queueLeave" }
+  /** Unauthenticated queue-size read — the ranked screen's population display
+   * before the player commits to queueing. Answered with `queueStatus`. */
+  | { t: "queueInfo" };
 
 // ── server → client ────────────────────────────────────────────────────────
 
@@ -340,4 +375,34 @@ export type ServerMsg =
    * client drops its seat and returns to the list showing `reason`. */
   | { t: "roomClosed"; reason: string }
   | SnapshotMsg
-  | { t: "reject"; reason: string };
+  | { t: "reject"; reason: string }
+  /** Per-bracket queue populations; `waitedSec` present only on YOUR queued
+   * brackets. Sent on queueInfo, on queue entry, and every matcher beat. */
+  | { t: "queueStatus"; brackets: { bracket: string; size: number; waitedSec?: number }[] }
+  /** You left the queue (queueLeave, or a lockout bounced your join). */
+  | { t: "queueLeft" }
+  /** A pairing landed. Informational — the server seats you itself and the
+   * standard `welcome` follows on this socket; no joinRoom round-trip, no
+   * code entry (ranked rooms are unlisted and unjoinable from outside). */
+  | { t: "matchFound"; bracket: string; code: string }
+  /** The settlement, broadcast into the ranked room after matchEnd: each
+   * seat's rating movement + tier + Glory. `playerId` is the in-room seat id;
+   * the client shows its own row as the ceremony and the opponent's as the
+   * epilogue line. `placement` is non-null while that player is still in
+   * their placement matches — the client then shows progress ("match 3 of
+   * 10") and hides the rating movement. */
+  | {
+      t: "rankedResult";
+      matchId: string;
+      bracket: string;
+      winnerTeam: Team;
+      results: {
+        playerId: number;
+        before: number;
+        after: number;
+        delta: number;
+        tier: string;
+        glory: number;
+        placement: { number: number; of: number } | null;
+      }[];
+    };

@@ -109,8 +109,15 @@ GET  /                    → { ok: true }               (health check)
   `registerPlayer` / `findPlayerByToken` (sha256 token hashes), `gloryBalance` /
   `recordGlory` (INSERT OR IGNORE on the idempotency key). Tested against `:memory:`.
 - `apps/blood-in-the-sand-api` — Hono on Bun, port **7780** (game server owns 7777).
-  Env: `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`; unset falls back to local
-  `file:dev.db` (gitignored) so local dev needs no credentials.
+  Env: `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`; unset falls back to the local
+  shared `<repo>/db/dev.db` (gitignored) so local dev needs no credentials.
+  ⚠ The fallback path is **repo-anchored via `import.meta.dir`, never
+  cwd-relative** (2026-07-29): a relative `file:` URL resolves against wherever
+  the process was launched, which once left the API and game server silently
+  writing two different dev.dbs — tokens minted by one were unknown to the
+  other. Both services log the absolute DB path at boot. Client-side,
+  `revalidateIdentity` self-heals a stored identity the backend answers 401 to
+  (a dev DB reset) by re-registering; network failures never touch it.
 - Client — `src/net/api.ts`: `EXPO_PUBLIC_API_URL` (same convention as
   `EXPO_PUBLIC_DEFAULT_SERVER`; unset = wallet features off), silent register on
   first title-screen mount, identity in **expo-secure-store** (⚠️ new native module —

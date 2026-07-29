@@ -7,6 +7,7 @@
  * 60s sweep collects rooms that have sat empty past the grace window. The
  * decision logic (codes, join rules, GC policy) is pure in the sim package.
  */
+import { randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { advanceFixed } from "@heroic/core";
 import {
@@ -16,6 +17,7 @@ import {
   LOADOUT_ABILITY_COUNT,
   MAX_ROOMS,
   PROTOCOL_VERSION,
+  RANKED_BRACKETS,
   TICK_DT,
   TICK_RATE,
   WEAPONS,
@@ -24,22 +26,47 @@ import {
   sanitizePasscode,
   sanitizeRoomName,
   sanitizeTeamSize,
+  seatedPlayers,
   shouldCollect,
   type ClientMsg,
   type RoomListing,
   type ServerMsg,
+  type Team,
 } from "@heroic/blood-in-the-sand-sim";
-import { Room, type ClientData, type Socket } from "./room";
+import {
+  PLACEMENT_MATCHES,
+  findPlayerByToken,
+  getRating,
+  recordRankedMatch,
+  type Db,
+} from "@heroic/blood-in-the-sand-persistence";
+import { Room, type ClientData, type RankedSeatAccount, type Socket } from "./room";
+import {
+  ARM_DEADLINE_MS,
+  MATCHER_INTERVAL_MS,
+  RankedQueue,
+  SEASON,
+  type QueueEntry,
+  type QueueMatch,
+} from "./ranked";
 
 const SWEEP_MS = 60_000;
 const MAX_PLAYER_NAME = 16;
 const MAX_ANNOUNCER_ID = 32;
+/** DB settlement retries — the batch is idempotent, so retrying is free. */
+const SETTLE_ATTEMPTS = 3;
+const SETTLE_BACKOFF_MS = 1_000;
 
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
+  private readonly queue = new RankedQueue(Object.keys(RANKED_BRACKETS));
   private server: Server<ClientData> | null = null;
   private accumulator = 0;
   private lastMs = 0;
+
+  /** `db` null = ranked is off (no creds / DB unreachable at boot): skirmish
+   * runs untouched and queueJoin rejects honestly. */
+  constructor(private readonly db: Db | null = null) {}
 
   start(server: Server<ClientData>): void {
     this.server = server;
@@ -49,6 +76,7 @@ export class RoomManager {
     setInterval(() => this.tick(), 1000 / TICK_RATE);
     setInterval(() => this.sweep(), SWEEP_MS);
     setInterval(() => this.heartbeat(), HEARTBEAT_SWEEP_MS);
+    setInterval(() => this.rankedBeat(), MATCHER_INTERVAL_MS);
   }
 
   roomCount(): number {
@@ -129,10 +157,19 @@ export class RoomManager {
         if (id !== null) this.roomOf(ws)?.input(id, msg);
         return;
       }
+      case "queueJoin":
+        return this.onQueueJoin(ws, msg);
+      case "queueLeave": {
+        if (this.queue.removeSocket(ws)) this.send(ws, { t: "queueLeft" });
+        return;
+      }
+      case "queueInfo":
+        return this.send(ws, { t: "queueStatus", brackets: this.queue.statusFor(ws, performance.now()) });
     }
   }
 
   close(ws: Socket): void {
+    this.queue.removeSocket(ws); // a dead socket can't hold a place in line
     const room = this.roomOf(ws);
     room?.dropSocket(ws, performance.now());
     // A host who drops in the LOBBY frees their seat here → the crown hands off
@@ -162,6 +199,13 @@ export class RoomManager {
   /** Reconcile ONE room's host: migrate the crown (with a lobby notice) if its
    * holder is gone, or close the room if the last player left. */
   private reconcileHost(room: Room, nowMs: number): void {
+    // Ranked rooms are hostless in behaviour — no crown to migrate, no
+    // handoff notices. Their lifecycle (voids, post-match close) lives in
+    // tendRankedRooms; the one shared rule is "deserted = dead".
+    if (room.ranked) {
+      if (room.isDeserted()) this.closeRoom(room, "everyone left the room");
+      return;
+    }
     const result = room.reassignHost(nowMs);
     if (result === "empty") {
       // Nobody connected to hold the crown. Close only if the room is truly
@@ -190,7 +234,9 @@ export class RoomManager {
 
   private onCreate(ws: Socket, msg: Extract<ClientMsg, { t: "createRoom" }>): void {
     if (!this.versionOk(ws, msg.v) || this.leaveFirst(ws)) return;
-    if (this.rooms.size >= MAX_ROOMS) {
+    // Ranked rooms don't spend the skirmish budget — their count is bounded
+    // by the queue's population, not by players deciding to open rooms.
+    if ([...this.rooms.values()].filter((r) => !r.ranked).length >= MAX_ROOMS) {
       return this.send(ws, { t: "reject", reason: "the server is at its room limit — try again soon" });
     }
     const playerName = sanitizeName(msg.playerName);
@@ -219,9 +265,15 @@ export class RoomManager {
     if (!this.versionOk(ws, msg.v) || this.leaveFirst(ws)) return;
     const room = this.rooms.get((msg.code ?? "").trim().toUpperCase());
     if (!room) return this.send(ws, { t: "reject", reason: "no such room" });
+    // A ranked room admits exactly the matched pair. The one outside door is
+    // the rejoin: a disconnected seat may be reclaimed (the client knows its
+    // code from the welcome), so "the rejoin window stands" holds for ranked.
+    if (room.ranked && !room.hasDisconnectedSeat()) {
+      return this.send(ws, { t: "reject", reason: "that match can't be joined" });
+    }
 
     const verdict = canJoin({
-      freeSeatInLobby: room.hasFreeSeatInLobby(),
+      freeSeatInLobby: room.ranked ? false : room.hasFreeSeatInLobby(),
       disconnectedSeat: room.hasDisconnectedSeat(),
       passcode: room.meta.passcode,
       offeredPass: typeof msg.pass === "string" ? msg.pass.trim() : null,
@@ -242,12 +294,236 @@ export class RoomManager {
   }
 
   private sendRooms(ws: Socket): void {
-    const rooms: RoomListing[] = [...this.rooms.values()].map((r) => r.listing());
+    // Ranked rooms never appear in the browser — unlisted by design.
+    const rooms: RoomListing[] = [...this.rooms.values()].filter((r) => !r.ranked).map((r) => r.listing());
     this.send(ws, { t: "rooms", rooms });
   }
 
-  /** A socket already in a room must leave it before creating/joining another. */
+  // ── ranked (bits-ranked.md) ──────────────────────────────────────────────
+
+  private onQueueJoin(ws: Socket, msg: Extract<ClientMsg, { t: "queueJoin" }>): void {
+    if (!this.versionOk(ws, msg.v)) return;
+    if (!this.db) return this.send(ws, { t: "reject", reason: "ranked is unavailable on this server" });
+    const brackets = Array.isArray(msg.brackets)
+      ? [...new Set(msg.brackets.filter((b): b is string => typeof b === "string" && b in RANKED_BRACKETS))]
+      : [];
+    if (brackets.length === 0) return this.send(ws, { t: "reject", reason: "no such bracket" });
+    if (typeof msg.token !== "string" || msg.token.length === 0 || msg.token.length > 128) {
+      return this.send(ws, { t: "reject", reason: "ranked sign-in failed — restart the app" });
+    }
+    this.leaveFirst(ws);
+    const name = sanitizeName(msg.playerName);
+    const announcer = sanitizeAnnouncer(msg.announcer);
+    // Token verification + rating loads are async; the socket handler is not.
+    // Everything after the awaits re-checks the socket's world before acting.
+    void this.verifyAndEnqueue(ws, msg.token, name, announcer, brackets).catch((err) => {
+      console.error("queueJoin failed:", err);
+      this.trySend(ws, { t: "reject", reason: "ranked is unreachable right now — try again" });
+    });
+  }
+
+  private async verifyAndEnqueue(
+    ws: Socket,
+    token: string,
+    name: string,
+    announcer: string,
+    brackets: string[],
+  ): Promise<void> {
+    const db = this.db!;
+    // The verified identity sticks to the socket — re-queues skip the lookup.
+    const accountId = ws.data.accountId ?? (await findPlayerByToken(db, token));
+    if (!accountId) {
+      return this.trySend(ws, { t: "reject", reason: "ranked sign-in failed — restart the app" });
+    }
+    ws.data.accountId = accountId;
+    const lockLeft = this.queue.lockoutLeft(accountId, performance.now());
+    if (lockLeft > 0) {
+      return this.trySend(ws, { t: "reject", reason: `queue lockout — try again in ${lockLeft}s` });
+    }
+    const ratings = new Map<string, number>();
+    for (const bracket of brackets) {
+      ratings.set(bracket, (await getRating(db, accountId, SEASON, bracket)).rating);
+    }
+    // The awaits are behind us — only now touch the queue, and only if the
+    // socket didn't close or wander into a room while we were away.
+    if (ws.readyState !== 1 || ws.data.roomCode !== null) return;
+    const now = performance.now();
+    for (const bracket of brackets) {
+      this.queue.enqueue(bracket, { ws, accountId, name, announcer, rating: ratings.get(bracket)!, joinedMs: now });
+    }
+    this.trySend(ws, { t: "queueStatus", brackets: this.queue.statusFor(ws, now) });
+  }
+
+  /** The slow beat: tend ranked-room lifecycles, run the matcher, refresh
+   * every queued client's status. */
+  private rankedBeat(): void {
+    const now = performance.now();
+    this.tendRankedRooms(now);
+    for (const match of this.queue.match(now)) this.createRankedRoom(match, now);
+    for (const ws of this.queue.queuedSockets()) {
+      this.trySend(ws, { t: "queueStatus", brackets: this.queue.statusFor(ws, now) });
+    }
+  }
+
+  private createRankedRoom(match: QueueMatch, now: number): void {
+    // A socket can die between beats — never build a room around a corpse;
+    // the survivor goes straight back in line.
+    if (match.a.ws.readyState !== 1 || match.b.ws.readyState !== 1) {
+      for (const e of [match.a, match.b]) if (e.ws.readyState === 1) this.queue.enqueue(match.bracket, e);
+      return;
+    }
+    const teamSize = RANKED_BRACKETS[match.bracket as keyof typeof RANKED_BRACKETS].teamSize;
+    const code = generateRoomCode(new Set(this.rooms.keys()), Math.random);
+    const room = new Room(
+      this.server!,
+      { code, name: `Ranked ${match.bracket}`, passcode: null, hostId: 0 },
+      Date.now() >>> 0,
+      teamSize,
+      now,
+    );
+    room.ranked = { bracket: match.bracket, matchId: randomUUID(), accounts: new Map(), ended: false, settled: false };
+    room.onRankedMatchEnd = (winnerTeam) => void this.settleRanked(room, winnerTeam);
+    this.rooms.set(code, room);
+    for (const entry of [match.a, match.b]) {
+      this.trySend(entry.ws, { t: "matchFound", bracket: match.bracket, code });
+      const id = room.seat(entry.ws, entry.name, entry.announcer, now);
+      if (id === null) continue; // two seats, two players — can't happen
+      room.ranked.accounts.set(id, {
+        accountId: entry.accountId,
+        name: entry.name,
+        announcer: entry.announcer,
+        rating: entry.rating,
+        joinedMs: entry.joinedMs,
+      });
+    }
+    console.log(
+      `⚔ ranked ${match.bracket} room ${code}: ${match.a.name} (${match.a.rating}) vs ${match.b.name} (${match.b.rating})`,
+    );
+  }
+
+  /** Ranked-room lifecycle, one pass per beat: close settled rooms whose sim
+   * returned to lobby, and void arming rooms that lost a player or blew the
+   * deadline. Mid-match rooms are left entirely alone — the arena's own laws
+   * (idling bodies, rejoin, natural wipes) already cover them. */
+  private tendRankedRooms(now: number): void {
+    for (const room of [...this.rooms.values()]) {
+      const ctx = room.ranked;
+      if (!ctx) continue;
+      const phase = room.sim.state.round.phase;
+      if (ctx.ended) {
+        // The sim holds matchEnd for the victory ceremony (rankedResult rides
+        // that window), returns to lobby — and then the room's life is over.
+        if (phase === "lobby" && ctx.settled) this.closeRoom(room, "match complete");
+        continue;
+      }
+      if (phase !== "lobby") continue;
+      const seated = seatedPlayers(room.sim.state);
+      const someoneGone = seated.length < room.sim.state.players.length || seated.some((p) => !p.connected);
+      if (someoneGone) {
+        const present = new Set(seated.filter((p) => p.connected).map((p) => p.id));
+        this.voidRanked(room, now, (seatId) => !present.has(seatId));
+      } else if (now - room.createdAtMs > ARM_DEADLINE_MS) {
+        const unarmed = new Set(room.unarmedSeatIds());
+        this.voidRanked(room, now, (seatId) => unarmed.has(seatId));
+      }
+    }
+  }
+
+  /** Call an unstarted ranked match off: `dodged` picks the seats at fault
+   * (they eat the queue lockout); everyone else still connected goes straight
+   * back in line with their original wait — a void never costs the innocent
+   * party their place. */
+  private voidRanked(room: Room, now: number, dodged: (seatId: number) => boolean): void {
+    const ctx = room.ranked!;
+    ctx.ended = true; // no settle will ever run for this match id
+    ctx.settled = true;
+    const requeue: QueueEntry[] = [];
+    for (const [seatId, account] of ctx.accounts) {
+      if (dodged(seatId)) {
+        this.queue.lockout(account.accountId, now);
+        console.log(`[${room.meta.code}] ranked void — ${account.name} dodged (lockout)`);
+        continue;
+      }
+      const ws = room.socketOf(seatId);
+      if (ws && ws.readyState === 1) {
+        requeue.push({
+          ws,
+          accountId: account.accountId,
+          name: account.name,
+          announcer: account.announcer,
+          rating: account.rating,
+          joinedMs: account.joinedMs,
+        });
+      }
+    }
+    const bracket = ctx.bracket;
+    this.closeRoom(room, "the match was called off"); // detaches every socket first…
+    for (const entry of requeue) {
+      this.queue.enqueue(bracket, entry); // …then the innocents rejoin the line
+      this.trySend(entry.ws, { t: "queueStatus", brackets: this.queue.statusFor(entry.ws, now) });
+    }
+  }
+
+  /** The recorder (bits-ranked.md § result recording): Elo + history + Glory
+   * land in one idempotent batch keyed on the match id, then the settlement
+   * broadcasts into the room as `rankedResult` so the ceremony needs no API
+   * poll. Retries are free; a conclusive failure is logged loudly and the
+   * room is still allowed to close. */
+  private async settleRanked(room: Room, winnerTeam: Team): Promise<void> {
+    const ctx = room.ranked!;
+    try {
+      const seated = seatedPlayers(room.sim.state);
+      const winner = seated.find((p) => p.team === winnerTeam);
+      const loser = seated.find((p) => p.team !== winnerTeam);
+      const winnerAccount = winner && ctx.accounts.get(winner.id);
+      const loserAccount = loser && ctx.accounts.get(loser.id);
+      if (!winner || !loser || !winnerAccount || !loserAccount) {
+        console.error(`[${room.meta.code}] ranked settle: seats/accounts missing — match ${ctx.matchId} unrecorded`);
+        return;
+      }
+      const input = {
+        matchId: ctx.matchId,
+        season: SEASON,
+        bracket: ctx.bracket,
+        winnerId: winnerAccount.accountId,
+        loserId: loserAccount.accountId,
+        winnerLoadout: { weapon: winner.weapon, abilities: winner.abilities },
+        loserLoadout: { weapon: loser.weapon, abilities: loser.abilities },
+      };
+      for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt++) {
+        try {
+          const result = await recordRankedMatch(this.db!, input);
+          if (result) {
+            room.publish({
+              t: "rankedResult",
+              matchId: ctx.matchId,
+              bracket: ctx.bracket,
+              winnerTeam,
+              results: [
+                { playerId: winner.id, ...sideResult(result.winner) },
+                { playerId: loser.id, ...sideResult(result.loser) },
+              ],
+            });
+            console.log(
+              `[${room.meta.code}] ranked settled: ${winnerAccount.name} ${result.winner.before}→${result.winner.after} (+${result.winner.glory}g), ${loserAccount.name} ${result.loser.before}→${result.loser.after} (+${result.loser.glory}g)`,
+            );
+          }
+          return; // null = already settled (a replay) — nothing more to do
+        } catch (err) {
+          console.error(`[${room.meta.code}] ranked settle attempt ${attempt}/${SETTLE_ATTEMPTS} failed:`, err);
+          if (attempt < SETTLE_ATTEMPTS) await Bun.sleep(SETTLE_BACKOFF_MS * attempt);
+        }
+      }
+      console.error(`[${room.meta.code}] ranked match ${ctx.matchId} LOST to the ledger — every settle attempt failed`);
+    } finally {
+      ctx.settled = true; // the room may close either way
+    }
+  }
+
+  /** A socket already in a room must leave it before creating/joining another
+   * — and entering a room always leaves the queue (one place at a time). */
   private leaveFirst(ws: Socket): boolean {
+    this.queue.removeSocket(ws);
     const room = this.roomOf(ws);
     room?.dropSocket(ws, performance.now());
     if (room) this.reconcileHost(room, performance.now()); // a host who hops hands off the room they left
@@ -289,7 +565,36 @@ export class RoomManager {
   private send(ws: Socket, msg: ServerMsg): void {
     ws.send(JSON.stringify(msg));
   }
+
+  /** For sends after an await or on another socket's behalf — the target may
+   * have died in the meantime, and that must never take the caller down. */
+  private trySend(ws: Socket, msg: ServerMsg): void {
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      // the close handler reaps the socket
+    }
+  }
 }
+
+/** One side of a settlement, shaped for the rankedResult wire rows. */
+const sideResult = (side: {
+  before: number;
+  after: number;
+  delta: number;
+  tier: string;
+  glory: number;
+  matchesPlayed: number;
+}) => ({
+  before: side.before,
+  after: side.after,
+  delta: side.delta,
+  tier: side.tier,
+  glory: side.glory,
+  // Still placing → the client shows "match N of 10" and hides the rating.
+  placement:
+    side.matchesPlayed <= PLACEMENT_MATCHES ? { number: side.matchesPlayed, of: PLACEMENT_MATCHES } : null,
+});
 
 const sanitizeName = (name: unknown): string =>
   ((typeof name === "string" ? name : "").trim().slice(0, MAX_PLAYER_NAME)) || "player";

@@ -65,6 +65,9 @@ export interface RoomScreenProps {
   /** ArenaClient for real rooms; PracticeClient drives the same flow offline. */
   client: LobbyClient;
   onLeave: () => void;
+  /** A queue-born room (bits-ranked.md): no host powers, no side switching,
+   * no shareable code — the wizard and countdown run exactly the same. */
+  ranked?: boolean;
 }
 
 // The wizard walks one slot per screen: slot 0 = the weapon, then one per
@@ -128,7 +131,7 @@ const slotComplete = (picks: Picks, i: number): boolean =>
 const allComplete = (picks: Picks): boolean =>
   picks.weapon !== null && picks.hand.length === LOADOUT_ABILITY_COUNT;
 
-export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
+export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
   const welcome = client.welcome;
@@ -432,6 +435,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
   const unarmed = players.filter((p) => !p.armed);
   const emptySeats = capacity - players.length;
   const forceCond =
+    !ranked && // no host powers in ranked — seat 0 is a seat, not a crown
     client.isHost &&
     meArmed &&
     players.every((p) => p.connected) &&
@@ -506,6 +510,7 @@ export const RoomScreen = ({ client, onLeave }: RoomScreenProps) => {
           myTeam={myTeam}
           capacity={capacity}
           picks={picks}
+          ranked={ranked}
           roomName={welcome.roomName}
           roomCode={welcome.roomCode}
           socketRefs={socketRefs}
@@ -1107,6 +1112,9 @@ interface LobbyViewProps {
   /** Total seats (2 × teamSize) — empty-seat rows pad each side to half this. */
   capacity: number;
   picks: Picks;
+  /** Ranked mode: static badge instead of the copyable code, no side switch,
+   * no host crowns (the server owns the room). */
+  ranked: boolean;
   roomName: string;
   roomCode: string;
   socketRefs: React.MutableRefObject<(View | null)[]>;
@@ -1121,7 +1129,7 @@ interface LobbyViewProps {
 }
 
 const LobbyView = (props: LobbyViewProps) => {
-  const { client, players, myId, myTeam, capacity, picks, roomName, roomCode } = props;
+  const { client, players, myId, myTeam, capacity, picks, ranked, roomName, roomCode } = props;
   const teamNames = client.welcome?.teamNames ?? ["Team 1", "Team 2"];
   // Short screens (iPhone SE) can't fit a 4v4 roster at full size — tighten
   // everything and collapse the open-seat padding into single rows.
@@ -1154,12 +1162,14 @@ const LobbyView = (props: LobbyViewProps) => {
   // join assignment seats the next joiner opposite you either way. The
   // control only means something once there's someone to be across from.
   const switchSide =
-    client.switchTeam && players.length > 1 && theirs.length < teamCap
+    !ranked && client.switchTeam && players.length > 1 && theirs.length < teamCap
       ? () => {
           playSound("uiTap");
           client.switchTeam?.();
         }
       : undefined;
+  // The server owns a ranked room — nobody wears a crown.
+  const crownId = ranked ? null : client.hostId;
   const lastMatch =
     props.lastWinner !== 0
       ? `last match: ${props.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...props.wins)}–${Math.min(...props.wins)}`
@@ -1169,9 +1179,14 @@ const LobbyView = (props: LobbyViewProps) => {
     <View style={styles.lobby}>
       <View style={[styles.lobbyHead, compact && tight.lobbyHead]}>
         <Text style={[styles.roomName, compact && tight.roomName]}>{roomName}</Text>
-        <Pressable onPress={copyCode} hitSlop={10}>
-          <Text style={styles.roomCode}>{codeCopied ? "COPIED ✓" : roomCode}</Text>
-        </Pressable>
+        {ranked ? (
+          // Nothing to share — ranked rooms are unlisted and unjoinable.
+          <Text style={styles.roomCode}>SEASON I</Text>
+        ) : (
+          <Pressable onPress={copyCode} hitSlop={10}>
+            <Text style={styles.roomCode}>{codeCopied ? "COPIED ✓" : roomCode}</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Faction names are the absolute identity; colour is the allegiance
@@ -1179,12 +1194,12 @@ const LobbyView = (props: LobbyViewProps) => {
           match (bits-bot-backfill.md § team identity). */}
       <TeamHeader label={teamNames[myTeam - 1]} color={C_FRIEND} you compact={compact} />
       {mine.map((p) => (
-        <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={client.hostId} own compact={compact} />
+        <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={crownId} own compact={compact} />
       ))}
       <OpenSeats count={teamCap - mine.length} compact={compact} />
       <TeamHeader label={teamNames[2 - myTeam]} color={C_FOE} compact={compact} />
       {theirs.map((p) => (
-        <PlayerRow key={p.id} p={p} isMe={false} hostId={client.hostId} own={false} compact={compact} />
+        <PlayerRow key={p.id} p={p} isMe={false} hostId={crownId} own={false} compact={compact} />
       ))}
       <OpenSeats count={teamCap - theirs.length} compact={compact} onSwitch={switchSide} />
 
@@ -1220,7 +1235,9 @@ const LobbyView = (props: LobbyViewProps) => {
           </Pressable>
         ) : (
           <Text style={[styles.waitingText, compact && tight.waitingText]}>
-            waiting for every gladiator to arm…
+            {ranked
+              ? "arm up — the match starts the moment both gladiators are ready"
+              : "waiting for every gladiator to arm…"}
           </Text>
         )}
       </View>

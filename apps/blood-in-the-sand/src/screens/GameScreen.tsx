@@ -123,6 +123,10 @@ interface HudState {
     title: string;
     subtitle: string;
     score: [number, number];
+    /** Ranked match-end settlement line (rating + Glory), or null. Arrives a
+     * beat after the plate (the server settles to the DB first) — the HUD
+     * key diff picks it up when it lands. */
+    rankedLine: string | null;
   } | null;
   lost: boolean;
   /** We're down this round — hide the controls and show the spectator chip. */
@@ -848,12 +852,25 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           }
           const mine = myTeam === 1 ? round.wins[0] : round.wins[1];
           const theirs = myTeam === 1 ? round.wins[1] : round.wins[0];
+          // The ranked settlement (bits-ranked.md): my row of the broadcast,
+          // composed into one gold line under the score.
+          const myRanked =
+            phase === "matchEnd"
+              ? client.rankedResult?.results.find((r) => r.playerId === client.welcome?.playerId)
+              : undefined;
           outcome = {
             key,
             kind,
             title: outcomeRef.current.title,
             subtitle: outcomeRef.current.subtitle,
             score: [mine, theirs],
+            // Placements hide the rating everywhere (bits-ranked.md) — the
+            // plate shows progress instead of the Elo movement.
+            rankedLine: myRanked
+              ? myRanked.placement
+                ? `PLACEMENT MATCH ${myRanked.placement.number} OF ${myRanked.placement.of}  ·  +${myRanked.glory} GLORY`
+                : `${myRanked.before} → ${myRanked.after} (${myRanked.delta >= 0 ? "+" : ""}${myRanked.delta})  ·  +${myRanked.glory} GLORY`
+              : null,
           };
         } else if (phase === "active" && now < fightBannerUntil.current)
           banner = "FIGHT";
@@ -991,6 +1008,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           title={hud.outcome.title}
           subtitle={hud.outcome.subtitle}
           score={hud.outcome.score}
+          rankedLine={hud.outcome.rankedLine}
         />
       ) : hud.banner ? (
         <View style={styles.centre} pointerEvents="none">

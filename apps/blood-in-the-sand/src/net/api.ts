@@ -96,6 +96,64 @@ export const fetchGlory = async (identity: Identity): Promise<number | null> => 
 };
 
 /**
+ * Self-heal a stored identity the backend no longer recognises (a dev
+ * database reset, a wiped row). Anonymous identity has no second factor, so
+ * an unknown token is unrecoverable BY DESIGN — the only path forward is a
+ * fresh registration. Wipes and re-mints ONLY when the API affirmatively
+ * answers 401; any network failure keeps the stored identity untouched
+ * (offline must never cost a player their wallet).
+ */
+export const revalidateIdentity = async (identity: Identity): Promise<Identity | null> => {
+  if (!API_URL) return identity;
+  try {
+    const res = await apiFetch("/wallet", {
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    if (res.status !== 401) return identity; // ok — or server trouble that isn't ours
+  } catch {
+    return identity; // unreachable — keep what we have
+  }
+  await Promise.all([
+    SecureStore.deleteItemAsync(KEY_PLAYER_ID),
+    SecureStore.deleteItemAsync(KEY_TOKEN),
+  ]);
+  return ensureIdentity();
+};
+
+/** One bracket's standing from GET /ranked/me — tier is computed server-side
+ * (the client renders, never re-implements the bands). */
+export interface RankedBracketStanding {
+  bracket: string;
+  rating: number;
+  tier: string;
+  wins: number;
+  losses: number;
+  /** > 0 = still in placement matches — rank and rating stay hidden and the
+   * UI shows placement progress instead. */
+  placementsLeft: number;
+}
+
+export interface RankedMe {
+  season: number;
+  brackets: RankedBracketStanding[];
+}
+
+/** The caller's ranked standing; null = unavailable (offline / no API). */
+export const fetchRankedMe = async (identity: Identity): Promise<RankedMe | null> => {
+  if (!API_URL) return null;
+  try {
+    const res = await apiFetch("/ranked/me", {
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    if (!res.ok) return null;
+    const me = (await res.json()) as RankedMe;
+    return Array.isArray(me.brackets) ? me : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
  * The title screen's wallet: registers if needed, then loads the balance.
  * Stays null (render nothing) until a real number arrives — the scene
  * shouldn't show an error state for a feature the player never asked for.

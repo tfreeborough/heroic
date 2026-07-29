@@ -21,6 +21,7 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { ModeSelectScreen } from "./src/screens/ModeSelectScreen";
 import { NameScreen } from "./src/screens/NameScreen";
 import { PracticeScreen } from "./src/screens/PracticeScreen";
+import { RankedScreen } from "./src/screens/RankedScreen";
 import { RoomListScreen } from "./src/screens/RoomListScreen";
 import { RoomScreen } from "./src/screens/RoomScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
@@ -35,6 +36,9 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  *   modes             → the fork behind PLAY: ranked / skirmish / practice / story
  *                       (bits-mode-select.md — connectivity gates live there)
  *   play              → SKIRMISH: connecting / RoomList / Room (lobby) / Game, by client state
+ *   ranked            → RANKED: connecting / RankedScreen (queue) / Room / Game
+ *                       (bits-ranked.md — matchFound seats us server-side, so the
+ *                       same client-state routing carries the whole flow)
  *   practice          → bots-or-dummies front door; an offline sim match
  *   settings          → device settings (lefty mode)
  */
@@ -68,7 +72,7 @@ const confirmLeave = (what: "lobby" | "match", leave: () => void): void => {
   );
 };
 
-type Route = "home" | "modes" | "play" | "practice" | "settings";
+type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
@@ -235,10 +239,11 @@ export default function App() {
       ]);
     } else if (route === "practice" && practice) {
       confirmLeave(practice.phase === "lobby" ? "lobby" : "match", endPractice);
-    } else if (route === "play" && client?.welcome) {
+    } else if ((route === "play" || route === "ranked") && client?.welcome) {
       confirmLeave(client.phase === "lobby" ? "lobby" : "match", () => client.leaveRoom());
-    } else if (route === "play" || route === "practice") {
-      // Both were entered from the mode select — back retraces that step.
+    } else if (route === "play" || route === "ranked" || route === "practice") {
+      // All were entered from the mode select — back retraces that step.
+      if (route === "ranked" && client?.queued) client.queueLeave();
       setRoute("modes");
     } else {
       setRoute("home");
@@ -255,7 +260,7 @@ export default function App() {
   // RoomScreen owns the lobby (the arming wizard lives there); the rest is match.
   const inMatch =
     (practice !== null && practice.phase !== "lobby") ||
-    (route === "play" && client?.welcome != null && client.phase !== "lobby");
+    ((route === "play" || route === "ranked") && client?.welcome != null && client.phase !== "lobby");
 
   let screen;
   if (route === "home") {
@@ -275,6 +280,7 @@ export default function App() {
       <ModeSelectScreen
         onBack={() => setRoute("home")}
         onSkirmish={() => setRoute("play")}
+        onRanked={() => setRoute("ranked")}
         onPractice={() => setRoute("practice")}
       />
     );
@@ -334,10 +340,17 @@ export default function App() {
       </View>
     );
   } else if (!client.welcome) {
-    screen = <RoomListScreen client={client} playerName={playerName} onBack={() => setRoute("modes")} />;
+    // No seat yet: the ranked route idles on its home (queue + standing);
+    // skirmish browses rooms. matchFound → welcome flips both into RoomScreen.
+    screen =
+      route === "ranked" ? (
+        <RankedScreen client={client} playerName={playerName} onBack={() => setRoute("modes")} />
+      ) : (
+        <RoomListScreen client={client} playerName={playerName} onBack={() => setRoute("modes")} />
+      );
   } else if (client.phase === "lobby") {
     // The arming wizard + lobby (and its 10s countdown) all live on RoomScreen.
-    screen = <RoomScreen client={client} onLeave={() => client.leaveRoom()} />;
+    screen = <RoomScreen client={client} onLeave={() => client.leaveRoom()} ranked={client.rankedMatch !== null} />;
   } else {
     screen = <GameScreen client={client} onLeave={() => client.leaveRoom()} />;
   }
