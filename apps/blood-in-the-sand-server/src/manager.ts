@@ -583,14 +583,20 @@ const sideResult = (side: {
   after: number;
   delta: number;
   tier: string;
+  division: 1 | 2 | 3 | null;
   glory: number;
+  peak: number;
+  newBest: boolean;
   matchesPlayed: number;
 }) => ({
   before: side.before,
   after: side.after,
   delta: side.delta,
   tier: side.tier,
+  division: side.division,
   glory: side.glory,
+  peak: side.peak,
+  newBest: side.newBest,
   // Still placing → the client shows "match N of 10" and hides the rating.
   placement:
     side.matchesPlayed <= PLACEMENT_MATCHES ? { number: side.matchesPlayed, of: PLACEMENT_MATCHES } : null,

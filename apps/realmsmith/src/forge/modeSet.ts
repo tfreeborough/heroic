@@ -20,10 +20,13 @@ export interface ModeSetEntry {
 export const buildModeSet = (): ModeSetEntry[] =>
   MODE_KEYS.map((id) => {
     const subject = MODE_SUBJECTS[id];
+    // "bracket-1v1" → "1v1 bracket card" (the ranked screen's cards ride
+    // this same scene pipeline — see MODE_KEYS in forge/styleBible.ts).
+    const name = id.startsWith("bracket-") ? `${id.slice("bracket-".length)} bracket card` : `${id} card`;
     return {
       id,
-      name: `${id} card`,
-      subject: subject ?? `a wide desert arena scene for the ${id} mode card`,
+      name,
+      subject: subject ?? `a wide desert arena scene for the ${name}`,
       missingSubject: subject === undefined,
     };
   });

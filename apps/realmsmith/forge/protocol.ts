@@ -30,6 +30,9 @@ export interface ForgeStatus {
   /** PNGs already in the mode-card destination folder — done-ticks for the
    * mode set (the checked-in MODE_KEYS/MODE_SUBJECTS list). */
   modeFiles: string[];
+  /** PNGs already in the rank-badge destination folder — done-ticks for the
+   * badge set (the checked-in BADGE_KEYS/BADGE_SUBJECTS list). */
+  badgeFiles: string[];
 }
 
 export interface ExpandRequest {

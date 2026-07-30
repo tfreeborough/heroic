@@ -362,9 +362,12 @@ export const SPRITE: SpriteSpec = {
 // save cover-crops the 1536×1024 canvas to a 5:2 letterbox (so the top and
 // bottom quarters are sacrificial).
 
-/** The mode-select cards, in screen order. modeSet.ts derives the checklist
- * from this — a future fifth mode appears there by adding a key + subject. */
-export const MODE_KEYS = ["ranked", "skirmish", "practice", "story"] as const;
+/** The mode-select cards in screen order, then the ranked screen's bracket
+ * cards (bits-ranked.md § the ranked screen — same 900×360 scene pipeline,
+ * different paste target: BRACKET_ART in RankedScreen.tsx). modeSet.ts
+ * derives the checklist from this — a future mode or bracket appears there
+ * by adding a key + subject. */
+export const MODE_KEYS = ["ranked", "skirmish", "practice", "story", "bracket-1v1", "bracket-2v2"] as const;
 
 /**
  * Art subjects per mode card. Each brief owns the PLACE and the LIGHT (the
@@ -392,6 +395,19 @@ export const MODE_SUBJECTS: Record<string, string> = {
     "a lone cloaked gladiator seen from behind, walking away into a vast storm-lit desert " +
     "on the right toward a colossal ruined arena on the far horizon, wind dragging sand off " +
     "the dune crests; the left side is a quiet dark brooding sky",
+  // The ranked screen's bracket cards. 1v1 must read differently from the
+  // ranked MODE card above (that one sells the crowd/occasion; this one sells
+  // THE DUEL): two fighters, nobody else on the sand.
+  "bracket-1v1":
+    "two lone gladiators circling each other at high sun in an empty arena, weapons drawn " +
+    "and low, coiled an instant before the clash, long hard shadows on raked sand, heat " +
+    "haze — both figures in the right two thirds; the left side is quiet scorched sky over " +
+    "a sun-bleached arena wall",
+  "bracket-2v2":
+    "two gladiators standing back to back on empty arena sand at dusk, weapons ready, " +
+    "waiting for opponents who have not yet stepped from the shadowed gate on the far " +
+    "right, cool blue evening light with a torch-lit gate glow; the left side is a quiet " +
+    "darkening sky over a low wall",
 };
 
 export interface ModeSpec {
@@ -434,7 +450,9 @@ export const MODE: ModeSpec = {
   destination: "apps/blood-in-the-sand/assets/modes",
   manifestDir: "../../assets/modes",
   manifestLine: (id, file) =>
-    `  image: require("../../assets/modes/${file}"), // → MODE_ART.${id}, replacing image: null`,
+    id.startsWith("bracket-")
+      ? `  "${id.slice("bracket-".length)}": require("../../assets/modes/${file}"), // → BRACKET_ART in RankedScreen.tsx, replacing null`
+      : `  image: require("../../assets/modes/${file}"), // → MODE_ART.${id}, replacing image: null`,
   // Same brand attributes as the icon/sprite templates (never the game's
   // name); differences are all scene-fit: painted full-bleed ground instead
   // of a cut-out, composition stated as thirds (the scrim lesson: say where
@@ -455,6 +473,99 @@ export const MODE: ModeSpec = {
     "the bottom quarter only ground, both safe to crop away. The paint fills the whole " +
     "frame edge-to-edge with no border, no vignette, no frame line. Grim, sun-scoured, " +
     "blood-and-sand mood. No text, no lettering, no banners with writing.",
+};
+
+// ── Blood in the Sand rank badges ──────────────────────────────────────────
+// The ranked ladder's tier badges (bits-ranked.md § tiers): square emblem
+// cut-outs in the icon family — same die-cut bone outline, they sit on the
+// same near-black UI — but HERALDIC language: a medallion crest per tier,
+// material grandeur escalating up the ladder. Division numerals (III/II/I)
+// composite client-side, so badges carry no numbers and no text.
+
+/**
+ * One badge per tier — a hand-mirror of TIERS in
+ * packages/blood-in-the-sand-persistence/src/elo.ts (a product decision that
+ * changes about as often as the mode list; 8→6 re-cut 2026-07-30). Keys are
+ * the kebab-case tier names — the client derives its lookup the same way.
+ */
+export const BADGE_KEYS = [
+  "initiate",
+  "pit-fighter",
+  "gladiator",
+  "champion",
+  "warlord",
+  "immortal",
+] as const;
+
+/** Art subjects per badge — each brief owns the emblem + its material rung
+ * on the ladder (rough wood → iron → bronze → gilded → dread → radiant). */
+export const BADGE_SUBJECTS: Record<string, string> = {
+  initiate:
+    "a rough-hewn wooden practice shield on a frayed rope loop, one fresh sword notch " +
+    "scarring its face — humble, unproven, still sap-pale at the cut",
+  "pit-fighter":
+    "a battered iron buckler crossed behind two chipped gladius swords, dented and " +
+    "rivet-studded, wrapped at the grips with cracked leather",
+  gladiator:
+    "a proud bronze galea helmet with a horsehair crest, small laurel sprigs crossed " +
+    "beneath its chin guard — the arena's true rank, earned",
+  champion:
+    "a gilded laurel wreath ringing a rising bronze sun disc, rays hammered and sharp, " +
+    "a single drop of dried blood at the wreath's tie",
+  warlord:
+    "a horned bronze war-helm above two crossed blood-red war banners, torn cloth and " +
+    "notched hafts, dreadful and commanding",
+  immortal:
+    "an upright golden gladius blazing inside a sunburst halo, ray tips drawn like " +
+    "spearpoints, deathless radiance breaking through black",
+};
+
+export interface BadgeSpec {
+  id: "badge-bits";
+  label: string;
+  provider: "openai-image";
+  candidates: number;
+  /** Saved size — the standing panel renders ~56pt → 168px at 3×; 256 covers. */
+  savedSize: number;
+  size: "1024x1024";
+  destination: string;
+  /** Prefix of the require() path handed back after save (consumer-module relative). */
+  manifestDir: string;
+  manifestLine: (id: string, file: string) => string;
+  template: (subject: string) => string;
+}
+
+export const BADGE: BadgeSpec = {
+  id: "badge-bits",
+  label: "Rank badge (Blood in the Sand)",
+  provider: "openai-image",
+  candidates: 2,
+  savedSize: 256,
+  size: "1024x1024",
+  destination: "apps/blood-in-the-sand/assets/ranks",
+  manifestDir: "../../assets/ranks",
+  manifestLine: (id, file) =>
+    `  "${id}": require("../../assets/ranks/${file}"), // → RANK_BADGES in RankedScreen.tsx, replacing null`,
+  // The icon template's brand + isolation lessons verbatim (die-cut bone
+  // outline, carve-in-bone-not-black, state what surrounds the subject);
+  // differences are emblem-craft: heraldic medallion composition, burnt-gold
+  // accent fixed across the set (rank is the gold system), and an explicit
+  // no-numerals line — the game composites III/II/I itself.
+  template: (subject) =>
+    `${subject}. A rank badge emblem for a brutal gladiator arena game set in a scorched ` +
+    "desert — a compact heraldic medallion crest, the mark of a ladder rank. Hand-inked " +
+    "woodcut illustration: one bold central emblem filling about 80% of the frame, heavy " +
+    "black ink, rough expressive hatching, sun-bleached bone (#f0e8d8) highlights carving " +
+    "the shape out of the dark, scorched sand-ochre (#b39763) midtones like heat-baked dust " +
+    "settled on every surface, and a burnt-gold (#e8c87a) accent burning on the focal " +
+    "element. Gladiatorial desert materials: hammered bronze, cracked leather, sun-split " +
+    "wood, rust and dried blood. A rough aged-bone die-cut outline traces the whole " +
+    "silhouette, like a woodcut poster cut from pale paper — it separates the shape from a " +
+    "near-black UI. Grim, sun-scoured, blood-and-sand mood — never cute, never " +
+    "photorealistic, never a clean flat vector. Chunky shapes that stay readable at 32 " +
+    "pixels. The cut-out floats alone on a fully transparent background — no backdrop, no " +
+    "glow, no vignette; every pixel outside the cut line is transparent. No text, no " +
+    "letters, no numerals — the emblem carries no writing of any kind.",
 };
 
 /**

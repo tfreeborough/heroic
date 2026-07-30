@@ -120,12 +120,25 @@ export const revalidateIdentity = async (identity: Identity): Promise<Identity |
   return ensureIdentity();
 };
 
-/** One bracket's standing from GET /ranked/me — tier is computed server-side
- * (the client renders, never re-implements the bands). */
+/** One bracket's standing from GET /ranked/me — everything band-shaped
+ * (display tier with its sticky-badge grace, division, rung floors) is
+ * computed server-side; the client renders, never re-implements the bands. */
 export interface RankedBracketStanding {
   bracket: string;
   rating: number;
   tier: string;
+  /** Division inside the tier (3 = entry, 1 = top); null in the single-rung
+   * end tiers (Initiate, Immortal). */
+  division: 1 | 2 | 3 | null;
+  /** Floor of the DISPLAYED rung — the progress bar's left edge (Initiate
+   * gets a synthetic 1150; below rankFloor the bar hides entirely). */
+  rankFloor: number;
+  /** The rung above the displayed one; null at the summit. */
+  nextRank: { tier: string; division: 1 | 2 | 3 | null; floor: number } | null;
+  /** Season-high rating — monotonic, the hoverer's "you're still climbing". */
+  peak: number;
+  /** Last ≤10 results, oldest → newest — true = won (the form-dots row). */
+  form: boolean[];
   wins: number;
   losses: number;
   /** > 0 = still in placement matches — rank and rating stay hidden and the
@@ -137,6 +150,11 @@ export interface RankedMe {
   season: number;
   brackets: RankedBracketStanding[];
 }
+
+/** "Gladiator" + 2 → "Gladiator II" — the one place numerals are spelled.
+ * Divisions count down toward the next tier (3 = entry, 1 = top). */
+export const rankName = (tier: string, division: 1 | 2 | 3 | null): string =>
+  division === null ? tier : `${tier} ${["", "I", "II", "III"][division]}`;
 
 /** The caller's ranked standing; null = unavailable (offline / no API). */
 export const fetchRankedMe = async (identity: Identity): Promise<RankedMe | null> => {

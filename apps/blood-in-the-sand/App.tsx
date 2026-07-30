@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Alert, BackHandler, StyleSheet, Text, View } from "react-native";
-import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
+import { Alert, BackHandler, StyleSheet } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useKeepAwake } from "expo-keep-awake";
@@ -11,11 +11,13 @@ import {
   WEAPON_IDS,
   type AbilityId,
 } from "@heroic/blood-in-the-sand-sim";
-import { ArenaClient, DEFAULT_SERVER, resolveServerUrl } from "./src/net/connection";
+import { DEFAULT_SERVER } from "./src/net/connection";
+import { useArenaConnection } from "./src/net/useArenaConnection";
 import { setAnnouncerPack } from "./src/audio";
 import { loadAnnouncerPack } from "./src/settings";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
+import { ConnectScreen } from "./src/screens/ConnectScreen";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { ModeSelectScreen } from "./src/screens/ModeSelectScreen";
@@ -28,8 +30,9 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
 
 /**
  * The app always talks to ONE server (EXPO_PUBLIC_DEFAULT_SERVER, or the
- * AUTO_HOST dev override) — it connects on launch so PLAY is instant, but
- * connection concerns only surface behind the PLAY route.
+ * AUTO_HOST dev override) — useArenaConnection dials on launch so PLAY is
+ * instant, silently redials when the socket dies (phones kill sockets on
+ * every sleep), and only surfaces trouble behind the PLAY route.
  *
  * Top-level routes (home is the title screen):
  *   home              → title + PLAY / SETTINGS
@@ -76,13 +79,12 @@ type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
-  const [client, setClient] = useState<ArenaClient | null>(null);
+  // The connection lifecycle (dial / silent redial / visible failure) lives in
+  // the manager; App just renders its snapshot and pokes wake() on route entry.
+  const conn = useArenaConnection(SERVER || null);
+  const client = conn.client;
   // The offline bot match — while set, the practice route shows the game.
   const [practice, setPractice] = useState<PracticeClient | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // The server refused our PROTOCOL_VERSION — the player's JS is behind the
-  // arena. Routes the connect screen to the update flow instead of RETRY.
-  const [mismatch, setMismatch] = useState(false);
   // Feedback from the UPDATE NOW attempt ("none" → store nudge, "failed" → retry).
   const [updateHint, setUpdateHint] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -137,22 +139,6 @@ export default function App() {
     };
   }, [practice]);
 
-  const connect = useCallback(() => {
-    setError(null);
-    setMismatch(false);
-    setUpdateHint(null);
-    if (!SERVER) {
-      setError("no server configured — set EXPO_PUBLIC_DEFAULT_SERVER");
-      return;
-    }
-    setClient(new ArenaClient(resolveServerUrl(SERVER)));
-  }, []);
-
-  useEffect(() => {
-    connect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
-  }, []);
-
   // UPDATE NOW on the mismatch screen. If the fix is already staged, restart
   // into it; otherwise fetch it live. Success never returns (JS reloads).
   const applyUpdate = useCallback(async () => {
@@ -170,29 +156,6 @@ export default function App() {
       setUpdateHint("Couldn't reach the update server — check your connection and try again.");
     }
   }, [updateReady]);
-
-  useEffect(() => {
-    if (!client) return;
-    // A dead connection drops the play route back to its connect screen.
-    const check = (): void => {
-      if (client.status === "closed" || client.status === "rejected") {
-        setError(client.rejectReason ?? "connection lost");
-        // "rejected" is only ever the protocol gate (connection.ts) — route
-        // the connect screen to the update flow instead of a doomed RETRY.
-        setMismatch(client.status === "rejected");
-        client.close();
-        setClient(null);
-      }
-    };
-    client.onChange = () => {
-      force();
-      check();
-    };
-    check();
-    return () => {
-      client.onChange = null;
-    };
-  }, [client]);
 
   // Simulator-loop conveniences: AUTO_JOIN=first hops into the first open
   // room; AUTO_START arms this client with a random loadout (the server's
@@ -275,12 +238,20 @@ export default function App() {
     );
   } else if (route === "modes") {
     // Connectivity-blind on purpose: Skirmish routes into the play flow,
-    // whose connect screen already owns the down/update states.
+    // whose connect screen already owns the down/update states. wake() makes
+    // entry itself the redial trigger — a socket that died while the phone
+    // slept reconnects invisibly instead of showing its stale corpse.
     screen = (
       <ModeSelectScreen
         onBack={() => setRoute("home")}
-        onSkirmish={() => setRoute("play")}
-        onRanked={() => setRoute("ranked")}
+        onSkirmish={() => {
+          conn.wake();
+          setRoute("play");
+        }}
+        onRanked={() => {
+          conn.wake();
+          setRoute("ranked");
+        }}
         onPractice={() => setRoute("practice")}
       />
     );
@@ -308,36 +279,21 @@ export default function App() {
     // First time through PLAY: claim a name before anything else (the
     // connection keeps warming up behind this screen).
     screen = <NameScreen onSubmit={saveName} />;
-  } else if (!client || client.status === "connecting" || playerName === null) {
+  } else if (conn.state !== "online" || !client || playerName === null) {
+    // The whole not-connected surface (quiet dial / down / update / dev
+    // fallback) is ConnectScreen's; the manager keeps redialing underneath.
     screen = (
-      <View style={styles.centre}>
-        <Text style={styles.logo}>BLOOD{"\n"}IN THE SAND</Text>
-        {mismatch ? (
-          <>
-            <Text style={styles.updateTitle}>UPDATE REQUIRED</Text>
-            <Text style={styles.updateBody}>
-              Your game is a version behind the arena, so live matches are off until you update.
-              Practice still works offline.
-            </Text>
-            <Pressable onPress={() => void applyUpdate()} style={styles.retry} disabled={updating}>
-              <Text style={styles.retryText}>{updating ? "UPDATING…" : "UPDATE NOW"}</Text>
-            </Pressable>
-            {updateHint && <Text style={styles.updateHint}>{updateHint}</Text>}
-          </>
-        ) : error ? (
-          <>
-            <Text style={styles.error}>{error}</Text>
-            <Pressable onPress={connect} style={styles.retry}>
-              <Text style={styles.retryText}>RETRY</Text>
-            </Pressable>
-          </>
-        ) : (
-          <Text style={styles.connecting}>connecting…</Text>
-        )}
-        <Pressable onPress={() => setRoute("modes")} style={styles.homeLink} hitSlop={10}>
-          <Text style={styles.homeLinkText}>‹ BACK</Text>
-        </Pressable>
-      </View>
+      <ConnectScreen
+        state={conn.state === "online" ? "connecting" : conn.state}
+        offline={conn.offline}
+        retryIn={conn.retryIn}
+        updating={updating}
+        updateHint={updateHint}
+        onRetry={conn.wake}
+        onUpdate={() => void applyUpdate()}
+        onPractice={() => setRoute("practice")}
+        onBack={() => setRoute("modes")}
+      />
     );
   } else if (!client.welcome) {
     // No seat yet: the ranked route idles on its home (queue + standing);
@@ -368,22 +324,4 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210" },
-  centre: { flex: 1, backgroundColor: "#141210", alignItems: "center", justifyContent: "center", padding: 24 },
-  logo: {
-    color: "#d94141",
-    fontSize: 40,
-    fontWeight: "900",
-    textAlign: "center",
-    letterSpacing: 2,
-    marginBottom: 24,
-  },
-  connecting: { color: "#8a7f70", fontSize: 15 },
-  error: { color: "#e0503c", fontSize: 14, textAlign: "center", marginBottom: 16 },
-  updateTitle: { color: "#e8c87a", fontSize: 16, fontWeight: "900", letterSpacing: 3, marginBottom: 10 },
-  updateBody: { color: "#b0a493", fontSize: 14, textAlign: "center", lineHeight: 21, marginBottom: 18, maxWidth: 300 },
-  updateHint: { color: "#8a7f70", fontSize: 12, textAlign: "center", marginTop: 14, maxWidth: 300, lineHeight: 18 },
-  retry: { backgroundColor: "#8c2f2f", borderRadius: 8, paddingVertical: 12, paddingHorizontal: 36 },
-  retryText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1 },
-  homeLink: { marginTop: 28 },
-  homeLinkText: { color: "#8a7f70", fontSize: 14, fontWeight: "800", letterSpacing: 1 },
 });

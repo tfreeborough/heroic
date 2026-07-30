@@ -18,6 +18,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { loadEnv, type Plugin } from "vite";
 import {
+  BADGE,
   EXPANDER_MODEL,
   ICON,
   MODE,
@@ -25,6 +26,7 @@ import {
   SFX_BITS,
   SPRITE,
   expanderSystem,
+  type BadgeSpec,
   type IconSpec,
   type ModeSpec,
   type SfxSpec,
@@ -55,9 +57,9 @@ const sfxSpec = (type: string): SfxSpec | null =>
   type === SFX.id ? SFX : type === SFX_BITS.id ? SFX_BITS : null;
 
 /** The gpt-image-1 types share a pipeline — canvas/destination/template differ. */
-type ImageSpec = IconSpec | SpriteSpec | ModeSpec;
+type ImageSpec = IconSpec | SpriteSpec | ModeSpec | BadgeSpec;
 const imageSpec = (type: string): ImageSpec | null =>
-  type === ICON.id ? ICON : type === SPRITE.id ? SPRITE : type === MODE.id ? MODE : null;
+  type === ICON.id ? ICON : type === SPRITE.id ? SPRITE : type === MODE.id ? MODE : type === BADGE.id ? BADGE : null;
 
 /** Seed prompt when only a bare subject arrives (curl/testing — the panel builds its own). */
 const imageTemplate = (spec: ImageSpec, subject: string): string =>
@@ -112,11 +114,12 @@ export const forgePlugin = (): Plugin => {
       const abs = join(repoRoot, dir);
       return existsSync(abs) ? (await readdir(abs)).filter((f) => f.endsWith(ext)) : [];
     };
-    const [iconFiles, sfxFiles, spriteFiles, modeFiles] = await Promise.all([
+    const [iconFiles, sfxFiles, spriteFiles, modeFiles, badgeFiles] = await Promise.all([
       listDir(ICON.destination, ".png"),
       listDir(SFX_BITS.destination, ".mp3"),
       listDir(SPRITE.destination, ".png"),
       listDir(MODE.destination, ".png"),
+      listDir(BADGE.destination, ".png"),
     ]);
     return {
       types: [
@@ -124,6 +127,7 @@ export const forgePlugin = (): Plugin => {
         { id: ICON.id, label: ICON.label, provider: ICON.provider, candidates: ICON.candidates },
         { id: SPRITE.id, label: SPRITE.label, provider: SPRITE.provider, candidates: SPRITE.candidates },
         { id: MODE.id, label: MODE.label, provider: MODE.provider, candidates: MODE.candidates },
+        { id: BADGE.id, label: BADGE.label, provider: BADGE.provider, candidates: BADGE.candidates },
         { id: SFX.id, label: SFX.label, provider: SFX.provider, candidates: SFX.candidates },
       ],
       keys: { elevenlabs: elevenKey.length > 0, openai: openaiKey.length > 0 },
@@ -131,6 +135,7 @@ export const forgePlugin = (): Plugin => {
       sfxFiles,
       spriteFiles,
       modeFiles,
+      badgeFiles,
     };
   };
 

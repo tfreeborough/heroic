@@ -72,6 +72,7 @@ const applySchema = async (db: Db): Promise<void> => {
         rating INTEGER NOT NULL,
         wins INTEGER NOT NULL DEFAULT 0,
         losses INTEGER NOT NULL DEFAULT 0,
+        peak_rating INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
         PRIMARY KEY (subject_id, season, bracket)
       )`,
@@ -99,4 +100,17 @@ const applySchema = async (db: Db): Promise<void> => {
     ],
     "write",
   );
+  // Additive columns for tables that predate them (SQLite has no ADD COLUMN
+  // IF NOT EXISTS — the duplicate-column error IS the "already applied"
+  // signal). Readers treat peak_rating 0 as "no recorded peak" and fall back
+  // to the live rating, so old rows need no backfill.
+  await addColumnIfMissing(db, "ranked_ratings", "peak_rating INTEGER NOT NULL DEFAULT 0");
+};
+
+const addColumnIfMissing = async (db: Db, table: string, columnDdl: string): Promise<void> => {
+  try {
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${columnDdl}`);
+  } catch (err) {
+    if (!String((err as Error).message).includes("duplicate column")) throw err;
+  }
 };

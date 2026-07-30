@@ -16,6 +16,7 @@ import {
   type RoundPhase,
 } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
+import { rankName } from "../net/api";
 import { BloodField } from "../game/blood";
 import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
@@ -869,7 +870,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             rankedLine: myRanked
               ? myRanked.placement
                 ? `PLACEMENT MATCH ${myRanked.placement.number} OF ${myRanked.placement.of}  ·  +${myRanked.glory} GLORY`
-                : `${myRanked.before} → ${myRanked.after} (${myRanked.delta >= 0 ? "+" : ""}${myRanked.delta})  ·  +${myRanked.glory} GLORY`
+                : `${myRanked.before} → ${myRanked.after} (${myRanked.delta >= 0 ? "+" : ""}${myRanked.delta})  ·  ${rankName(myRanked.tier, myRanked.division).toUpperCase()}  ·  +${myRanked.glory} GLORY${myRanked.newBest ? "  ·  NEW BEST" : ""}`
               : null,
           };
         } else if (phase === "active" && now < fightBannerUntil.current)

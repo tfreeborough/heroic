@@ -17,12 +17,15 @@ import {
   PLACEMENT_MATCHES,
   RATING_START,
   createDb,
+  displayFloorOf,
+  displayRungFor,
   ensureSchema,
   findPlayerByToken,
   gloryBalance,
   rankedSummary,
+  recentForm,
   registerPlayer,
-  tierFor,
+  rungAbove,
 } from "@heroic/blood-in-the-sand-persistence";
 
 // Local fallback: the ONE repo-anchored file every service shares — never a
@@ -69,29 +72,47 @@ app.get("/wallet", async (c) => {
 const SEASON = 1;
 
 /**
- * The caller's ranked standing (bits-ranked.md): one row per bracket, unplayed
- * brackets synthesized at the 1500 default so the client never special-cases
- * a fresh player. Tier names are computed here — the client renders, never
- * re-implements the bands.
+ * The caller's ranked standing (bits-ranked.md § display v2): one row per
+ * bracket, unplayed brackets synthesized at the 1500 default so the client
+ * never special-cases a fresh player. Everything band-shaped is computed
+ * here — display tier (sticky-badge grace), the tier's floor, the next tier
+ * up — the client renders progress, never re-implements the bands.
  */
 app.get("/ranked/me", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
   const rows = await rankedSummary(db, playerId, SEASON);
-  const brackets = Object.keys(RANKED_BRACKETS).map((bracket) => {
-    const row = rows.find((r) => r.bracket === bracket);
-    const played = (row?.wins ?? 0) + (row?.losses ?? 0);
-    return {
-      bracket,
-      rating: row?.rating ?? RATING_START,
-      tier: tierFor(row?.rating ?? RATING_START),
-      wins: row?.wins ?? 0,
-      losses: row?.losses ?? 0,
-      // > 0 = still placing: the client hides rank + rating and shows
-      // placement progress instead (Tom, 2026-07-30).
-      placementsLeft: Math.max(0, PLACEMENT_MATCHES - played),
-    };
-  });
+  const brackets = await Promise.all(
+    Object.keys(RANKED_BRACKETS).map(async (bracket) => {
+      const row = rows.find((r) => r.bracket === bracket);
+      const played = (row?.wins ?? 0) + (row?.losses ?? 0);
+      const rating = row?.rating ?? RATING_START;
+      const peak = row?.peak ?? RATING_START;
+      const rung = displayRungFor(rating, peak);
+      const next = rungAbove(rung);
+      return {
+        bracket,
+        rating,
+        tier: rung.tier,
+        division: rung.division,
+        // Initiate gets a synthetic display floor (1150) — the client hides
+        // the progress bar entirely while rating < rankFloor.
+        rankFloor: displayFloorOf(rung),
+        // null at the top of the ladder — the client shows summit copy
+        // instead of a progress target.
+        nextRank: next,
+        peak,
+        // Last 10 results, oldest → newest — the form-dots row. Skipped for
+        // never-played brackets (no row, nothing to query).
+        form: row ? await recentForm(db, playerId, SEASON, bracket) : [],
+        wins: row?.wins ?? 0,
+        losses: row?.losses ?? 0,
+        // > 0 = still placing: the client hides rank + rating and shows
+        // placement progress instead (Tom, 2026-07-30).
+        placementsLeft: Math.max(0, PLACEMENT_MATCHES - played),
+      };
+    }),
+  );
   return c.json({ season: SEASON, brackets });
 });
 

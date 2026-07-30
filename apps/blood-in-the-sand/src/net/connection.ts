@@ -79,8 +79,15 @@ export interface RankedResultRow {
   before: number;
   after: number;
   delta: number;
+  /** Display tier — the sticky-badge grace is applied server-side. */
   tier: string;
+  /** Division inside the tier (3 entry → 1 top); null in Initiate/Immortal. */
+  division: 1 | 2 | 3 | null;
   glory: number;
+  /** Season-high rating after this settle; `newBest` = this match set it —
+   * the ceremony's celebration hook. */
+  peak: number;
+  newBest: boolean;
   /** Non-null while that player is still placing — show "match N of 10",
    * never the rating movement. */
   placement: { number: number; of: number } | null;

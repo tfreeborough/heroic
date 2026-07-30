@@ -11,15 +11,25 @@
  * gradient fallback until the PNGs land.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Canvas, LinearGradient, RadialGradient, Rect, vec } from "@shopify/react-native-skia";
+import {
+  Canvas,
+  ColorMatrix,
+  Image as SkiaImage,
+  LinearGradient,
+  RadialGradient,
+  Rect,
+  useImage,
+  vec,
+} from "@shopify/react-native-skia";
 import { playSound, unlockAudio } from "../audio";
 import { GloryPill } from "../components/GloryPill";
 import {
   ensureIdentity,
   fetchRankedMe,
+  rankName,
   revalidateIdentity,
   type Identity,
   type RankedBracketStanding,
@@ -34,6 +44,46 @@ export interface RankedScreenProps {
 
 const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
 
+/**
+ * Forged bracket-card art (the Forge's mode-bits type, `bracket-<key>` ids,
+ * 900×360) — null until a PNG lands in assets/modes; the painted gradient in
+ * BracketArt is the fallback. The Forge's save step hands back the exact
+ * replacement line.
+ */
+const BRACKET_ART: Record<string, number | null> = {
+  "1v1": null,
+  "2v2": null,
+};
+
+/**
+ * Forged tier badges (the Forge's badge-bits type, 256px transparent
+ * cut-outs), keyed by kebab-case tier name — null until forged; the standing
+ * panel simply shows no crest. Division numerals composite in text beside
+ * the badge, never inside the art.
+ */
+const RANK_BADGES: Record<string, number | null> = {
+  initiate: null,
+  "pit-fighter": null,
+  gladiator: null,
+  champion: null,
+  warlord: null,
+  immortal: null,
+};
+
+const badgeFor = (tier: string): number | null =>
+  RANK_BADGES[tier.toLowerCase().replace(/\s+/g, "-")] ?? null;
+
+// Rec. 709 luma — the locked card's art drains to greyscale (Skia; RN Image
+// can't colour-filter), same treatment as the locked mode cards.
+// prettier-ignore
+const GREYSCALE = [
+  0.2126, 0.7152, 0.0722, 0, 0,
+  0.2126, 0.7152, 0.0722, 0, 0,
+  0.2126, 0.7152, 0.0722, 0, 0,
+  0, 0, 0, 1, 0,
+];
+const LOCKED_ART_OPACITY = 0.28;
+
 /** How often to refresh the population display while NOT queued (the server
  * pushes queueStatus every matcher beat once we are). */
 const QUEUE_INFO_POLL_MS = 5000;
@@ -41,26 +91,46 @@ const QUEUE_INFO_POLL_MS = 5000;
 const formatWait = (sec: number): string =>
   `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
-/** The painted stand-in until the Forge delivers bracket art — the same
- * ramp+glow language as the pre-art mode cards. */
-const BracketArt = ({ w, h, locked }: { w: number; h: number; locked: boolean }) => (
-  <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-    <Rect x={0} y={0} width={w} height={h}>
-      <LinearGradient
-        start={vec(0, h)}
-        end={vec(w, 0)}
-        colors={locked ? ["#1a1512", "#241c14", "#2c2318"] : ["#3a1c12", "#6e2f1a", "#a35a26"]}
-      />
-    </Rect>
-    <Rect x={0} y={0} width={w} height={h}>
-      <RadialGradient
-        c={vec(w * 0.8, h * 0.2)}
-        r={w * 0.5}
-        colors={[locked ? "rgba(232,200,122,0.08)" : "rgba(255,214,140,0.45)", "rgba(0,0,0,0)"]}
-      />
-    </Rect>
-  </Canvas>
-);
+/** The forged card art (BRACKET_ART), or the painted stand-in until the
+ * Forge delivers it — the same ramp+glow language as the pre-art mode cards.
+ * Locked cards drain forged art to faded greyscale (the mode-select
+ * treatment: waiting in the dark). */
+const BracketArt = ({ art, w, h, locked }: { art: number | null; w: number; h: number; locked: boolean }) => {
+  // Unconditional hook; only locked cards with art pay the Skia decode.
+  const skiaArt = useImage(locked ? art : null);
+  if (art !== null && locked) {
+    return (
+      <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+        {skiaArt && (
+          <SkiaImage image={skiaArt} x={0} y={0} width={w} height={h} fit="cover" opacity={LOCKED_ART_OPACITY}>
+            <ColorMatrix matrix={GREYSCALE} />
+          </SkiaImage>
+        )}
+      </Canvas>
+    );
+  }
+  if (art !== null) {
+    return <Image source={art} style={StyleSheet.absoluteFill} resizeMode="cover" />;
+  }
+  return (
+    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Rect x={0} y={0} width={w} height={h}>
+        <LinearGradient
+          start={vec(0, h)}
+          end={vec(w, 0)}
+          colors={locked ? ["#1a1512", "#241c14", "#2c2318"] : ["#3a1c12", "#6e2f1a", "#a35a26"]}
+        />
+      </Rect>
+      <Rect x={0} y={0} width={w} height={h}>
+        <RadialGradient
+          c={vec(w * 0.8, h * 0.2)}
+          r={w * 0.5}
+          colors={[locked ? "rgba(232,200,122,0.08)" : "rgba(255,214,140,0.45)", "rgba(0,0,0,0)"]}
+        />
+      </Rect>
+    </Canvas>
+  );
+};
 
 export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) => {
   const insets = useSafeAreaInsets();
@@ -185,23 +255,46 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
           panel sells the reveal instead of showing a meaningless 1500. */}
       {placing ? (
         <View style={styles.standing}>
-          <View style={styles.standingLeft}>
-            <Text style={styles.tier}>PLACEMENTS</Text>
-            <Text style={styles.record}>
-              {standing
-                ? `${standing.placementsLeft} match${standing.placementsLeft === 1 ? "" : "es"} until your rank is forged · 1v1`
-                : "1v1"}
-            </Text>
+          <View style={styles.standingTop}>
+            <View style={styles.standingLeft}>
+              <Text style={styles.tier}>PLACEMENTS</Text>
+              <Text style={styles.record}>
+                {standing
+                  ? `${standing.placementsLeft} match${standing.placementsLeft === 1 ? "" : "es"} until your rank is forged · 1v1`
+                  : "1v1"}
+              </Text>
+            </View>
+            <Text style={styles.rating}>{standing ? `${played}/${played + standing.placementsLeft}` : "—"}</Text>
           </View>
-          <Text style={styles.rating}>{standing ? `${played}/${played + standing.placementsLeft}` : "—"}</Text>
         </View>
       ) : (
         <View style={styles.standing}>
-          <View style={styles.standingLeft}>
-            <Text style={styles.tier}>{standing!.tier.toUpperCase()}</Text>
-            <Text style={styles.record}>{`${standing!.wins}W · ${standing!.losses}L · 1v1`}</Text>
+          <View style={styles.standingTop}>
+            {/* The forged tier crest — absent until its PNG lands. */}
+            {badgeFor(standing!.tier) !== null && (
+              <Image source={badgeFor(standing!.tier)!} style={styles.badge} resizeMode="contain" />
+            )}
+            <View style={styles.standingLeft}>
+              <Text style={styles.tier}>{rankName(standing!.tier, standing!.division).toUpperCase()}</Text>
+              <Text style={styles.record}>{`${standing!.wins}W · ${standing!.losses}L · 1v1`}</Text>
+              {standing!.form.length > 0 && (
+                <View style={styles.formRow}>
+                  {standing!.form.map((won, i) => (
+                    <View key={i} style={[styles.formDot, won ? styles.formDotW : styles.formDotL]} />
+                  ))}
+                </View>
+              )}
+            </View>
+            <View style={styles.ratingCol}>
+              <Text style={styles.rating}>{standing!.rating}</Text>
+              {/* The monotonic number: your best only ever rises, and being AT
+                  it is worth saying in gold. */}
+              <Text style={[styles.peak, standing!.rating >= standing!.peak && styles.peakAtBest]}>
+                {standing!.rating >= standing!.peak ? "AT SEASON BEST" : `SEASON BEST ${standing!.peak}`}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.rating}>{standing!.rating}</Text>
+          <TierProgress standing={standing!} />
         </View>
       )}
 
@@ -214,8 +307,11 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
           <Text style={styles.settleLine}>
             {settlement.mine.placement
               ? `PLACEMENT ${settlement.mine.placement.number} OF ${settlement.mine.placement.of} · +${settlement.mine.glory} GLORY`
-              : `${settlement.mine.before} → ${settlement.mine.after} (${settlement.mine.delta >= 0 ? "+" : ""}${settlement.mine.delta}) · ${settlement.mine.tier.toUpperCase()} · +${settlement.mine.glory} GLORY`}
+              : `${settlement.mine.before} → ${settlement.mine.after} (${settlement.mine.delta >= 0 ? "+" : ""}${settlement.mine.delta}) · ${rankName(settlement.mine.tier, settlement.mine.division).toUpperCase()} · +${settlement.mine.glory} GLORY`}
           </Text>
+          {!settlement.mine.placement && settlement.mine.newBest && (
+            <Text style={styles.settleBest}>NEW SEASON BEST</Text>
+          )}
         </View>
       )}
 
@@ -226,6 +322,7 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
         <View style={styles.card} onLayout={() => {}}>
           <CardBody
             locked={false}
+            art={BRACKET_ART["1v1"]}
             aside={
               queueSize > 0 ? (
                 <View style={styles.queueBadge}>
@@ -260,7 +357,7 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
 
         {/* Future brackets — closed doors are part of the sell. */}
         <View style={[styles.card, styles.cardLocked]}>
-          <CardBody locked>
+          <CardBody locked art={BRACKET_ART["2v2"]}>
             <Text style={[styles.cardTitle, styles.cardTitleDim]}>2v2</Text>
             <Text style={[styles.cardPitch, styles.cardPitchDim]}>A future season. Bring a friend.</Text>
           </CardBody>
@@ -275,15 +372,48 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
   );
 };
 
+/** The climb inside the current rung (bits-ranked.md § display v2 +
+ * divisions): a filled bar plus "N TO <NEXT RUNG>" — the next goal is always
+ * visible, counted in points, and rarely more than a handful of wins away.
+ * The summit (Immortal) has no ceiling, so the full gold bar becomes the
+ * trophy. All ladder math arrives from /ranked/me (rankFloor / nextRank) —
+ * the client never re-implements the rungs. */
+const TierProgress = ({ standing }: { standing: RankedBracketStanding }) => {
+  const next = standing.nextRank;
+  // Under the displayed rank's floor there is no honest progress to draw —
+  // deep in bottomless Initiate (rankFloor is a synthetic 1150 there) or
+  // dipped below a grace-held badge — so the row disappears rather than
+  // show a hollow bar (Tom, 2026-07-30). Rating, season best, and the form
+  // dots still carry the panel.
+  if (standing.rating < standing.rankFloor) return null;
+  const frac = next
+    ? Math.min(1, Math.max(0, (standing.rating - standing.rankFloor) / (next.floor - standing.rankFloor)))
+    : 1;
+  return (
+    <View style={styles.progress}>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${frac * 100}%` }]} />
+      </View>
+      <Text style={styles.progressLabel}>
+        {next
+          ? `${next.floor - standing.rating} TO ${rankName(next.tier, next.division).toUpperCase()}`
+          : "TOP OF THE LADDER"}
+      </Text>
+    </View>
+  );
+};
+
 /** Measured wrapper so the painted art always fills the card. `aside` renders
  * as its own column beside the copy (the queue count) — real layout, so the
  * two can never overlap. */
 const CardBody = ({
   locked,
+  art = null,
   aside = null,
   children,
 }: {
   locked: boolean;
+  art?: number | null;
   aside?: React.ReactNode;
   children: React.ReactNode;
 }) => {
@@ -293,7 +423,7 @@ const CardBody = ({
       style={styles.cardFill}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
     >
-      {box && <BracketArt w={box.w} h={box.h} locked={locked} />}
+      {box && <BracketArt art={art} w={box.w} h={box.h} locked={locked} />}
       {box && (
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
           <Rect x={0} y={0} width={box.w} height={box.h}>
@@ -333,9 +463,6 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
   },
   standing: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "#8a6d44",
     borderRadius: 14,
@@ -343,10 +470,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginBottom: 12,
+    gap: 12,
   },
+  standingTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  badge: { width: 52, height: 52, marginRight: 12, flexShrink: 0 },
   // flex: 1 so the long placement copy wraps INSIDE the panel instead of
   // shoving the number out of the row; the number never shrinks.
   standingLeft: { gap: 3, flex: 1, paddingRight: 14 },
+  ratingCol: { alignItems: "flex-end", flexShrink: 0, gap: 2 },
+  peak: { color: "#8a7f70", fontSize: 11, fontWeight: "800", letterSpacing: 1 },
+  peakAtBest: { color: "#e8c87a" },
+  formRow: { flexDirection: "row", gap: 4, marginTop: 4 },
+  formDot: { width: 9, height: 9, borderRadius: 2 },
+  formDotW: { backgroundColor: "#e8c87a" },
+  formDotL: { backgroundColor: "#54312b" },
+  progress: { gap: 6 },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: "#2a2118", overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 3, backgroundColor: "#e8c87a" },
+  progressLabel: { color: "#d9cbb4", fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
   tier: {
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
@@ -370,6 +511,7 @@ const styles = StyleSheet.create({
   settleTitleWin: { color: "#e8c87a" },
   settleTitleLoss: { color: "#c96a5a" },
   settleLine: { color: "#d9cbb4", fontSize: 13, fontWeight: "700", letterSpacing: 0.5 },
+  settleBest: { color: "#e8c87a", fontSize: 12, fontWeight: "900", letterSpacing: 2 },
   cards: { flex: 1, gap: 12 },
   card: {
     flex: 1,

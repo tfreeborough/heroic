@@ -46,16 +46,17 @@ export const updateRating = ({ rating, opponent, matchesPlayed, won }: RatingUpd
 // ── tiers ──────────────────────────────────────────────────────────────────
 
 /** Bands over the number, presentation only — no gameplay effect, no
- * promotion matches (bits-ranked.md § Tiers). Ordered by ascending floor. */
+ * promotion matches (bits-ranked.md § Tiers). Ordered by ascending floor.
+ * Six tiers (revised 2026-07-30 from eight): the middle four are 150 wide so
+ * their thirds — the divisions — are a uniform 50 points, ~5 net wins each
+ * (Tom: 33-pt divisions promoted in 2 wins, which felt cheap). */
 export const TIERS = [
   { name: "Initiate", floor: 0 },
   { name: "Pit Fighter", floor: 1300 },
-  { name: "Blooded", floor: 1400 },
-  { name: "Gladiator", floor: 1500 },
-  { name: "Veteran", floor: 1600 },
-  { name: "Champion", floor: 1700 },
-  { name: "Warlord", floor: 1850 },
-  { name: "Immortal", floor: 2000 },
+  { name: "Gladiator", floor: 1450 },
+  { name: "Champion", floor: 1600 },
+  { name: "Warlord", floor: 1750 },
+  { name: "Immortal", floor: 1900 },
 ] as const;
 
 export type TierName = (typeof TIERS)[number]["name"];
@@ -64,6 +65,96 @@ export const tierFor = (rating: number): TierName => {
   let tier: TierName = TIERS[0].name;
   for (const t of TIERS) if (rating >= t.floor) tier = t.name;
   return tier;
+};
+
+export const tierFloorOf = (tier: TierName): number => TIERS.find((t) => t.name === tier)!.floor;
+
+/** The tier above `tier`, or null at the top of the ladder. */
+export const nextTierAbove = (tier: TierName): { name: TierName; floor: number } | null => {
+  const i = TIERS.findIndex((t) => t.name === tier);
+  const next = TIERS[i + 1];
+  return next ? { name: next.name, floor: next.floor } : null;
+};
+
+// ── divisions ──────────────────────────────────────────────────────────────
+
+/** One rung of the 20-step ladder (bits-ranked.md § divisions): a tier plus
+ * a division inside it — 3 is the entry division, 1 sits just under the next
+ * tier. The open-ended tiers (Initiate, Immortal) are single rungs, so
+ * `division` is null there. */
+export interface Rung {
+  tier: TierName;
+  division: 1 | 2 | 3 | null;
+  floor: number;
+}
+
+/** The full ladder, ascending — derived from TIERS so the tier bands stay
+ * the single source of truth: each middle tier splits evenly into III/II/I
+ * (Tom, 2026-07-30: division rank-ups every ~5 net wins keep the climb
+ * visible without feeling cheap). 1 + 4×3 + 1 = 14. */
+export const RUNGS: readonly Rung[] = TIERS.flatMap((t, i): Rung[] => {
+  const next = TIERS[i + 1];
+  if (i === 0 || !next) return [{ tier: t.name, division: null, floor: t.floor }];
+  const span = next.floor - t.floor;
+  return [3, 2, 1].map((division, j) => ({
+    tier: t.name,
+    division: division as 1 | 2 | 3,
+    floor: t.floor + Math.round((span * j) / 3),
+  }));
+});
+
+export const rungFor = (rating: number): Rung => {
+  let rung: Rung = RUNGS[0]!;
+  for (const r of RUNGS) if (rating >= r.floor) rung = r;
+  return rung;
+};
+
+/** The rung above, or null at the summit. */
+export const rungAbove = (rung: Rung): Rung | null => {
+  const i = RUNGS.findIndex((r) => r.tier === rung.tier && r.division === rung.division);
+  return RUNGS[i + 1] ?? null;
+};
+
+/**
+ * The floor the progress bar measures from. Initiate's true floor is 0 (the
+ * rung is bottomless), which would render a nearly-full bar that barely moves
+ * — so its DISPLAY floor sits one division-width stack (150, a tier's span)
+ * under Pit Fighter. Below that the client hides the bar entirely rather
+ * than show an empty one (Tom, 2026-07-30): no progress claims while the
+ * rating sits under the displayed rank's floor.
+ */
+export const displayFloorOf = (rung: Rung): number =>
+  rung.floor > 0 ? rung.floor : RUNGS[1]!.floor - 150;
+
+/** How far a displayed tier stretches below its floor before it lets go. */
+export const TIER_GRACE = 50;
+
+/**
+ * The tier we SHOW (bits-ranked.md § display v2): an earned tier — one the
+ * season peak actually reached — sticks until the rating falls TIER_GRACE
+ * below its floor, so a player bouncing across a boundary never watches
+ * their title flap. The rating shown beside it stays the honest number;
+ * only the title is sticky, and only downward.
+ */
+export const displayTierFor = (rating: number, peak: number): TierName => {
+  let tier: TierName = TIERS[0].name;
+  for (const t of TIERS) {
+    if (rating >= t.floor || (peak >= t.floor && rating >= t.floor - TIER_GRACE)) tier = t.name;
+  }
+  return tier;
+};
+
+/**
+ * The rung we SHOW. Grace is a TIER-level mercy only: the badge is the
+ * emotional boundary, so it sticks (displayTierFor), while divisions inside
+ * a tier move freely in both directions — frequent movement is their whole
+ * job. While grace holds a tier the raw rating has slipped under, the rung
+ * shown is that tier's entry division.
+ */
+export const displayRungFor = (rating: number, peak: number): Rung => {
+  const tier = displayTierFor(rating, peak);
+  if (tierFor(rating) === tier) return rungFor(rating);
+  return RUNGS.find((r) => r.tier === tier)!;
 };
 
 // ── Glory payouts ──────────────────────────────────────────────────────────

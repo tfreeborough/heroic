@@ -144,6 +144,12 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * `placement` ({number, of} while the player is in their placement matches,
  * null once placed) — during placements the client hides rank and rating
  * everywhere and shows placement progress instead (Tom, 2026-07-30).
+ * Amended again 2026-07-30 (display v2, bits-ranked.md): rows also carry
+ * `peak` (season-high rating after the settle) and `newBest` (this match set
+ * it) — the ceremony's celebration hook; `tier` is now the DISPLAY tier with
+ * the sticky-badge grace applied, not the raw band. Same day (divisions):
+ * rows carry `division` — the middle six tiers split into III/II/I for a
+ * 20-rung ladder; null in the single-rung end tiers.
  */
 export const PROTOCOL_VERSION = 19;
 export const DEFAULT_PORT = 7777;
@@ -401,8 +407,15 @@ export type ServerMsg =
         before: number;
         after: number;
         delta: number;
+        /** Display tier (sticky-badge grace applied server-side). */
         tier: string;
+        /** Division inside the tier (3 entry → 1 top); null in the
+         * single-rung end tiers (Initiate, Immortal). */
+        division: 1 | 2 | 3 | null;
         glory: number;
+        /** Season-high rating after this settle; `newBest` = set just now. */
+        peak: number;
+        newBest: boolean;
         placement: { number: number; of: number } | null;
       }[];
     };

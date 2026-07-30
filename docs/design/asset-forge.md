@@ -146,6 +146,19 @@ panel's verify composite wears the card's real scrim gradient plus a stand-in ti
 third, and the save hands back the `image: require(...)` line for `MODE_ART` in
 ModeSelectScreen.tsx.
 
+**Added 2026-07-30 — bracket cards ride `mode-bits`, and `badge-bits` (rank badges).** The ranked
+screen's bracket cards (bits-ranked.md) are the same 900×360 scene pipeline, so they're extra
+`MODE_KEYS` entries (`bracket-1v1`, `bracket-2v2`) rather than a new type — the save's paste line
+branches on the `bracket-` prefix to target `BRACKET_ART` in RankedScreen.tsx (locked brackets
+drain forged art to greyscale, the mode-select treatment). `badge-bits` is a new cut-out type in
+the icon family (1024² transparent, saved 256px) with HERALDIC language: one medallion crest per
+tier, material grandeur escalating rung by rung (wood → iron → bronze → gilded → dread →
+radiant), burnt-gold accent across the set, and an explicit no-numerals line — divisions (III/II/I)
+composite client-side so six badges cover fourteen rungs. The set is the checked-in `BADGE_KEYS`
+list — a hand-mirror of the persistence package's `TIERS` (6 since the 2026-07-30 re-cut) —
+destination `apps/blood-in-the-sand/assets/ranks/`, paste target `RANK_BADGES` in
+RankedScreen.tsx.
+
 ## The style bible
 
 `apps/realmsmith/src/forge/styleBible.ts` — checked in, so brand language is versioned and diffable.

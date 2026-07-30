@@ -8,7 +8,7 @@
  * the database.
  */
 import type { Db } from "./db";
-import { RATING_START, loserGlory, tierFor, updateRating, winnerGlory, type TierName } from "./elo";
+import { RATING_START, displayRungFor, loserGlory, tierFor, updateRating, winnerGlory, type TierName } from "./elo";
 
 export interface RankedRating {
   subjectId: string;
@@ -17,6 +17,10 @@ export interface RankedRating {
   rating: number;
   wins: number;
   losses: number;
+  /** Season-high rating — monotonic (bits-ranked.md § display v2). Stored
+   * peak_rating 0 means "predates the column"; readers fall back to the live
+   * rating so the peak can never read below it. */
+  peak: number;
 }
 
 const freshRating = (subjectId: string, season: number, bracket: string): RankedRating => ({
@@ -26,6 +30,7 @@ const freshRating = (subjectId: string, season: number, bracket: string): Ranked
   rating: RATING_START,
   wins: 0,
   losses: 0,
+  peak: RATING_START,
 });
 
 /** The subject's ladder row, or the unwritten 1500 default — reads never
@@ -37,19 +42,21 @@ export const getRating = async (
   bracket: string,
 ): Promise<RankedRating> => {
   const result = await db.execute({
-    sql: `SELECT rating, wins, losses FROM ranked_ratings
+    sql: `SELECT rating, wins, losses, peak_rating FROM ranked_ratings
           WHERE subject_id = ? AND season = ? AND bracket = ?`,
     args: [subjectId, season, bracket],
   });
   const row = result.rows[0];
   if (!row) return freshRating(subjectId, season, bracket);
+  const rating = Number(row["rating"]);
   return {
     subjectId,
     season,
     bracket,
-    rating: Number(row["rating"]),
+    rating,
     wins: Number(row["wins"]),
     losses: Number(row["losses"]),
+    peak: Math.max(rating, Number(row["peak_rating"])),
   };
 };
 
@@ -71,8 +78,17 @@ export interface RankedSideResult {
   before: number;
   after: number;
   delta: number;
+  /** Display tier WITH the sticky-badge grace applied (displayRungFor) —
+   * the client renders titles, never re-implements the bands. */
   tier: TierName;
+  /** Division inside the tier (3 = entry, 1 = top); null in the single-rung
+   * end tiers (Initiate, Immortal). */
+  division: 1 | 2 | 3 | null;
   glory: number;
+  /** Season peak after this match settled. */
+  peak: number;
+  /** This match set a new season peak — the ceremony's celebration hook. */
+  newBest: boolean;
   /** Season matches in this bracket AFTER this one settled — callers derive
    * placement presentation from it (≤ PLACEMENT_MATCHES = still placing,
    * where rank and rating stay hidden client-side). */
@@ -116,16 +132,19 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
   });
   const winnerPay = winnerGlory(winner.rating, loser.rating);
   const loserPay = loserGlory();
+  const winnerPeak = Math.max(winner.peak, winnerAfter);
+  const loserPeak = Math.max(loser.peak, loserAfter);
 
-  const upsert = (r: RankedRating, after: number, won: boolean) => ({
-    sql: `INSERT INTO ranked_ratings (subject_id, season, bracket, rating, wins, losses, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+  const upsert = (r: RankedRating, after: number, peak: number, won: boolean) => ({
+    sql: `INSERT INTO ranked_ratings (subject_id, season, bracket, rating, wins, losses, peak_rating, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
           ON CONFLICT (subject_id, season, bracket) DO UPDATE SET
             rating = excluded.rating,
             wins = excluded.wins,
             losses = excluded.losses,
+            peak_rating = excluded.peak_rating,
             updated_at = excluded.updated_at`,
-    args: [r.subjectId, r.season, r.bracket, after, r.wins + (won ? 1 : 0), r.losses + (won ? 0 : 1)],
+    args: [r.subjectId, r.season, r.bracket, after, r.wins + (won ? 1 : 0), r.losses + (won ? 0 : 1), peak],
   });
   const gloryRow = (playerId: string, amount: number) => ({
     sql: `INSERT OR IGNORE INTO glory_ledger (player_id, amount, source, idempotency_key)
@@ -135,8 +154,8 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
 
   await db.batch(
     [
-      upsert(winner, winnerAfter, true),
-      upsert(loser, loserAfter, false),
+      upsert(winner, winnerAfter, winnerPeak, true),
+      upsert(loser, loserAfter, loserPeak, false),
       {
         sql: `INSERT OR IGNORE INTO ranked_matches (
                 id, season, bracket, winner_id, loser_id,
@@ -166,24 +185,30 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
 
   return {
     matchId: input.matchId,
-    winner: {
-      subjectId: input.winnerId,
-      before: winner.rating,
-      after: winnerAfter,
-      delta: winnerAfter - winner.rating,
-      tier: tierFor(winnerAfter),
-      glory: winnerPay,
-      matchesPlayed: winner.wins + winner.losses + 1,
-    },
-    loser: {
-      subjectId: input.loserId,
-      before: loser.rating,
-      after: loserAfter,
-      delta: loserAfter - loser.rating,
-      tier: tierFor(loserAfter),
-      glory: loserPay,
-      matchesPlayed: loser.wins + loser.losses + 1,
-    },
+    winner: sideOf(input.winnerId, winner, winnerAfter, winnerPeak, winnerPay),
+    loser: sideOf(input.loserId, loser, loserAfter, loserPeak, loserPay),
+  };
+};
+
+const sideOf = (
+  subjectId: string,
+  prior: RankedRating,
+  after: number,
+  peak: number,
+  glory: number,
+): RankedSideResult => {
+  const rung = displayRungFor(after, peak);
+  return {
+    subjectId,
+    before: prior.rating,
+    after,
+    delta: after - prior.rating,
+    tier: rung.tier,
+    division: rung.division,
+    glory,
+    peak,
+    newBest: after > prior.peak,
+    matchesPlayed: prior.wins + prior.losses + 1,
   };
 };
 
@@ -219,16 +244,41 @@ export const leaderboard = async (
 /** Every bracket the subject has rows in this season — the /ranked/me read. */
 export const rankedSummary = async (db: Db, subjectId: string, season: number): Promise<RankedRating[]> => {
   const result = await db.execute({
-    sql: `SELECT bracket, rating, wins, losses FROM ranked_ratings
+    sql: `SELECT bracket, rating, wins, losses, peak_rating FROM ranked_ratings
           WHERE subject_id = ? AND season = ? ORDER BY bracket`,
     args: [subjectId, season],
   });
-  return result.rows.map((row) => ({
-    subjectId,
-    season,
-    bracket: String(row["bracket"]),
-    rating: Number(row["rating"]),
-    wins: Number(row["wins"]),
-    losses: Number(row["losses"]),
-  }));
+  return result.rows.map((row) => {
+    const rating = Number(row["rating"]);
+    return {
+      subjectId,
+      season,
+      bracket: String(row["bracket"]),
+      rating,
+      wins: Number(row["wins"]),
+      losses: Number(row["losses"]),
+      peak: Math.max(rating, Number(row["peak_rating"])),
+    };
+  });
+};
+
+/**
+ * The subject's last `limit` results in a bracket, oldest → newest (reading
+ * order for the form-dots row) — true = won. Straight off ranked_matches;
+ * rowid breaks created_at's whole-second ties in insertion order.
+ */
+export const recentForm = async (
+  db: Db,
+  subjectId: string,
+  season: number,
+  bracket: string,
+  limit = 10,
+): Promise<boolean[]> => {
+  const result = await db.execute({
+    sql: `SELECT winner_id FROM ranked_matches
+          WHERE season = ? AND bracket = ? AND (winner_id = ? OR loser_id = ?)
+          ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+    args: [season, bracket, subjectId, subjectId, limit],
+  });
+  return result.rows.map((row) => String(row["winner_id"]) === subjectId).reverse();
 };

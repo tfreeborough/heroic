@@ -1,10 +1,11 @@
 # Blood in the Sand — Ranked, Ratings & the Queue
 
-Status: **designed 2026-07-28 · revised 2026-07-29 · M1+M2+M3 BUILT 2026-07-29**
-(rating core + schema + server queue/ranked rooms/recorder + client — protocol
-v19; on-device pass + M4 ladder polish pending) ·
+Status: **designed 2026-07-28 · revised 2026-07-29 · M1+M2+M3 BUILT 2026-07-29 ·
+display v2 + 14-rung divisions BUILT 2026-07-30** (rating core + schema + server
+queue/ranked rooms/recorder + client — protocol v19; on-device pass + M4 ladder
+polish pending) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-29
+Last decided: 2026-07-30
 
 > Season I: solo-queue 1v1 ranked with Elo ratings, tier badges, and Glory payouts
 > scaled by opponent difficulty — reached through a dedicated ranked screen built to
@@ -78,25 +79,94 @@ in one match.)*
 
 ### Tiers
 
-Bands over the rating number, arena-flavoured — 8 tiers *(revised 2026-07-29: rebanded
-around the 1500 start, deeper ladder)*. Badge + name are presentation only — no
-gameplay effect, no promotion matches (the number is the truth). Tiers are per-bracket,
-same bands everywhere.
+Bands over the rating number, arena-flavoured — 6 tiers *(revised 2026-07-30 from
+eight: with divisions carrying the fine-grained climb, fewer names each carry more
+weight — see § Divisions)*. Badge + name are presentation only — no gameplay effect,
+no promotion matches (the number is the truth). Tiers are per-bracket, same bands
+everywhere.
 
 | Tier | Rating |
 | --- | --- |
 | **Initiate** | < 1300 |
-| **Pit Fighter** | 1300–1399 |
-| **Blooded** | 1400–1499 |
-| **Gladiator** | 1500–1599 |
-| **Veteran** | 1600–1699 |
-| **Champion** | 1700–1849 |
-| **Warlord** | 1850–1999 |
-| **Immortal** | 2000+ |
+| **Pit Fighter** | 1300–1449 |
+| **Gladiator** | 1450–1599 |
+| **Champion** | 1600–1749 |
+| **Warlord** | 1750–1899 |
+| **Immortal** | 1900+ |
 
-A fresh player starts mid-table as a Gladiator-in-waiting (1500 sits at the Gladiator
-floor) — placements sort them fast. Tier art + a `rank_up` moment are owed to the Forge
-(see Audio & art owed).
+A fresh player starts mid-table in Gladiator II (1500 sits mid-tier; hidden until
+placements are done anyway) — placements sort them fast. Tier art + a `rank_up`
+moment are owed to the Forge (see Audio & art owed).
+
+#### Divisions — the 14-rung ladder *(decided + built 2026-07-30, re-cut same day)*
+
+Tom wanted many more ranks so rank-ups happen often enough to chase. Rather than a
+pile of named tiers (new names + badge arts, and "Warlord" means less as one of
+twenty), the **middle four tiers split into divisions III → II → I** — the LoL
+convention, Roman numerals fitting the arena. The open-ended tiers stay single
+rungs: Initiate is the "climb out of here" bin, Immortal the summit.
+`1 + 4×3 + 1 = 14` rungs.
+
+First cut kept the 8 tiers (20 rungs), but 100-wide tiers made 33-point divisions —
+a promotion every ~2–3 wins, which Tom flagged as feeling cheap (and the fresh
+post-placement K=40 tail moved a division per win). Re-cut same day: **every middle
+tier is 150 wide, so every division is exactly 50 points ≈ 5 net wins settled** —
+Blooded and Veteran retired, Immortal now 1900+ (attainable for grinders per the
+expected-range note above, still rare).
+
+Division floors are **derived** from the tier bands (each middle tier splits evenly
+in three, `RUNGS` in elo.ts — TIERS stays the single source of truth):
+Pit Fighter III 1300 · II 1350 · I 1400 · Gladiator III 1450 · II 1500 · I 1550 ·
+Champion III 1600 · II 1650 · I 1700 · Warlord III 1750 · II 1800 · I 1850.
+
+- **Grace stays TIER-level only**: the badge is the emotional boundary, so it sticks
+  (50 under the tier floor, as display v2 decided); divisions inside a tier move
+  freely both ways — frequent movement is their whole job. While grace holds a tier
+  the rating has slipped under, the shown rung is that tier's entry division (III).
+- The progress bar + "N TO <RUNG>" now target the **next rung**, not the next tier.
+- **The bottomless rung and the missing bar** *(Tom, 2026-07-30)*: Initiate's true
+  floor is 0, which would draw a nearly-full bar that barely moves — so it gets a
+  **synthetic display floor of 1150** (one tier-width under Pit Fighter,
+  `displayFloorOf`), making the bar span 1150→1300 and move like everywhere else.
+  Below the displayed rank's floor — deep Initiate, or dipped under a grace-held
+  badge — the client **hides the progress row entirely** rather than show a hollow
+  bar: no progress claims we can't honestly draw; rating, season best, and the form
+  dots still carry the panel. Per the distribution sim (skill σ=150), <0.5% of
+  players ever sink under 1150.
+- Badge art stays **one piece per tier (6)** — the division numeral/pips render over the tier badge
+  (numeral composition is the one presentation the client owns: `rankName()`).
+- Wire/API: `division: 1|2|3|null` beside every `tier`; `/ranked/me` sends
+  `rankFloor` + `nextRank {tier, division, floor}|null` (replacing display v2's
+  short-lived `tierFloor`/`nextTier`).
+
+### Display v2 — progress you can feel *(decided + built 2026-07-30)*
+
+The problem: Elo is zero-sum, so a mid-table regular sees the same number all month
+and reads "no progress". The display pairs the honest rating with numbers that only
+ever go up, without touching the math (Tom, 2026-07-30):
+
+- **Progress-to-next-rank**: the standing panel carries a filled bar across the
+  current rung plus **"27 TO GLADIATOR I"** — the next goal is always visible and
+  counted in points *(same day: targets the next division rung, see § Divisions)*.
+  Immortal (no ceiling) shows a full gold bar + "TOP OF THE LADDER". Ladder math
+  (`rankFloor`, `nextRank`) is computed server-side in `/ranked/me`; the client
+  renders, never re-implements the bands.
+- **Season peak** ("SEASON BEST 1682"): monotonic per bracket — `peak_rating` on
+  `ranked_ratings`, maintained in the settle batch (initial peak = the 1500 start).
+  Shown under the rating; gold "AT SEASON BEST" when the live rating IS the peak.
+  The settle result carries `peak` + `newBest`, and the settlement banner celebrates
+  "NEW SEASON BEST" — reframes a plateau as "below your best", not "what you are".
+- **Sticky tier badges (grace)**: an *earned* tier — one the season peak actually
+  reached — keeps its badge until the rating falls **50 below its floor**
+  (`TIER_GRACE`, `displayTierFor(rating, peak)`), so a player bouncing 1495↔1505
+  never watches their Gladiator title flap. The rating beside it stays honest; only
+  the title is sticky, only downward, and it chains one band at a time (a 1900 peak
+  at 1660 shows Champion, not Warlord, not Veteran). All wire/API `tier` fields are
+  display tiers now.
+- **Form dots**: the last ≤10 results as W/L pips (oldest → newest) under the record
+  — streaks made visible. Read off `ranked_matches` (`recentForm`), no new state.
+- **Considered, deferred**: season-wins milestones paying Glory (a pure-progress
+  track) — economy territory, owned by monetisation.md if taken up.
 
 ## Glory payouts
 
@@ -262,7 +332,10 @@ ranked_matches   id (text pk, server-minted uuid) · season · bracket
 
 ```
 GET /ranked/me                     → { season, brackets: [{ bracket, rating, tier,
-                                       wins, losses }] }                  (bearer)
+                                       division: 1|2|3|null, rankFloor,
+                                       nextRank: {tier, division, floor} | null,
+                                       peak, form: boolean[], wins, losses,
+                                       placementsLeft }] }                (bearer)
 GET /ranked/leaderboard?bracket=   → { season, bracket, top: [{name?, rating, tier}] }
                                                               (public, cached 60 s)
 ```
@@ -283,8 +356,9 @@ persisted display name column is a fast follow decided at build time.)
   on entry, every matcher beat), `queueLeft`, `matchFound { bracket, code }`
   (informational — the server SEATS both players itself and the standard `welcome`
   follows on the same socket; no joinRoom round-trip), `rankedResult { matchId,
-  bracket, winnerTeam, results[] }` after matchEnd. Matched accounts auto-leave
-  their other queues (first match wins).
+  bracket, winnerTeam, results[] }` after matchEnd — rows carry `peak` + `newBest`,
+  a display-grace `tier`, and `division` since display v2 + divisions (folded into
+  v19, unshipped). Matched accounts auto-leave their other queues (first match wins).
 - Ranked rooms reject `forceStart` / `cancelStart` / `switchTeam` / outside
   `joinRoom` (the mid-match rejoin of a disconnected seat is the one exception).
 
@@ -336,7 +410,11 @@ persisted display name column is a fast follow decided at build time.)
 
 - `queue_match_found` sting · `rank_up` fanfare · `rank_down` (subtle, non-punishing)
   · Glory payout tick on the post-match ceremony.
-- Tier badge art ×8 (dark-fantasy woodcut set, style bible).
+- Tier badge art ×6 (dark-fantasy woodcut set, style bible; division numerals composite
+  client-side). **Forge-ready 2026-07-30**: `badge-bits` type + BADGE_SUBJECTS checklist in the
+  panel; paste target `RANK_BADGES` in RankedScreen.tsx is pre-wired (null until forged).
 - **Bracket card art:** `1v1` live card + locked future-bracket cards (mode-bits type,
   900×360, right-anchored crop — same pipeline as the mode cards, 2026-07-28).
+  **Forge-ready 2026-07-30**: `bracket-1v1` / `bracket-2v2` entries on the mode-bits checklist;
+  paste target `BRACKET_ART` in RankedScreen.tsx is pre-wired (locked cards greyscale the art).
 - RANKED mode card already forged (2026-07-28) — it just unlocks.
