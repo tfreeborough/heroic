@@ -78,6 +78,11 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "round_draw", label: "Round draw", category: "flow" },
   { id: "match_win", label: "Match won", category: "flow" },
   { id: "match_loss", label: "Match lost", category: "flow" },
+  // ranked (bits-ranked.md § audio owed)
+  { id: "queue_match_found", label: "Ranked — match found", category: "flow" },
+  { id: "rank_up", label: "Ranked — rank up fanfare", category: "flow" },
+  { id: "rank_down", label: "Ranked — rank down (subtle)", category: "flow" },
+  { id: "glory_earned", label: "Ranked — Glory earned (choral swell)", category: "flow" },
   // UI
   { id: "ui_tap", label: "UI tap", category: "ui" },
   { id: "ui_confirm", label: "UI confirm", category: "ui" },

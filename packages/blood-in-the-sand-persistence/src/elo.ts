@@ -157,6 +157,22 @@ export const displayRungFor = (rating: number, peak: number): Rung => {
   return RUNGS.find((r) => r.tier === tier)!;
 };
 
+/**
+ * Did the DISPLAYED rank move between two rating/peak states? Compares
+ * display rungs (grace included), so a dip a sticky badge absorbs is `null`
+ * — no demotion moment fires for a badge that never visibly changed. Drives
+ * the `rankChange` field on settle results (rank_up / rank_down audio).
+ */
+export const rankChangeBetween = (
+  before: { rating: number; peak: number },
+  after: { rating: number; peak: number },
+): "up" | "down" | null => {
+  const idx = (r: Rung): number => RUNGS.findIndex((x) => x.tier === r.tier && x.division === r.division);
+  const a = idx(displayRungFor(before.rating, before.peak));
+  const b = idx(displayRungFor(after.rating, after.peak));
+  return b > a ? "up" : b < a ? "down" : null;
+};
+
 // ── Glory payouts ──────────────────────────────────────────────────────────
 
 /** Floor-plus-bonus, never a visible penalty: a stomp pays the bare floor, an

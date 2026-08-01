@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a rank promotion fanfare — a bright rising brass flourish over a ringing struck-shield tone, proud and earned, about two seconds",
+  "prompt": "Close-mic'd sun-baked brass flourish: bright, heroic trumpet climb layered over a resonant struck bronze shield tone; starts intimate, swells into proud, ringing peak, then decays into warm metallic sustain and dusty air — roughly five seconds.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 5,
+    "promptInfluence": 0.5,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "rank_up_1.mp3"
+  ],
+  "created": "2026-08-01T09:39:01.775Z",
+  "updated": "2026-08-01T09:39:01.775Z"
+}

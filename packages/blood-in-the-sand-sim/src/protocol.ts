@@ -412,6 +412,9 @@ export type ServerMsg =
         /** Division inside the tier (3 entry → 1 top); null in the
          * single-rung end tiers (Initiate, Immortal). */
         division: 1 | 2 | 3 | null;
+        /** The DISPLAYED rank moved this match (server-computed, grace
+         * included) — the client's rank_up / rank_down audio cue. */
+        rankChange: "up" | "down" | null;
         glory: number;
         /** Season-high rating after this settle; `newBest` = set just now. */
         peak: number;

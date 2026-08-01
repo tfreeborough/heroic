@@ -24,6 +24,7 @@ export {
   rungAbove,
   displayRungFor,
   displayFloorOf,
+  rankChangeBetween,
   winnerGlory,
   loserGlory,
   type Rung,

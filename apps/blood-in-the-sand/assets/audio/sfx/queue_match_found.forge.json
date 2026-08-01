@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a ranked match-found summons — three sharp metallic gong clang with a taut rising snap, urgent and commanding, short",
+  "prompt": "Close-mic'd trio of sun-baked bronze gongs struck in rapid succession: each hit a bright metallic clang with a taut rising snap, layered with dusty air whoosh and faint distant arena roar; urgent, commanding three-tone sequence, ~3 seconds total.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 3,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "queue_match_found_1.mp3"
+  ],
+  "created": "2026-08-01T09:34:03.224Z",
+  "updated": "2026-08-01T09:34:03.224Z"
+}

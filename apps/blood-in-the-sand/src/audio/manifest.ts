@@ -58,7 +58,6 @@ export const AUDIO_MANIFEST: AudioManifest = {
     match_win_1: require("../../assets/audio/sfx/match_win_1.mp3"),
     match_loss_1: require("../../assets/audio/sfx/match_loss_1.mp3"),
 
-
     ui_tap_1: require("../../assets/audio/sfx/ui_tap_1.mp3"),
     ui_confirm_1: require("../../assets/audio/sfx/ui_confirm_1.mp3"),
     ui_back_1: require("../../assets/audio/sfx/ui_back_1.mp3"),
@@ -85,6 +84,10 @@ export const AUDIO_MANIFEST: AudioManifest = {
 
     //Play Page
     mode_reveal_1: require("../../assets/audio/sfx/mode_reveal_1.mp3"),
+    queue_match_found_1: require("../../assets/audio/sfx/queue_match_found_1.mp3"),
+    rank_up_1: require("../../assets/audio/sfx/rank_up_1.mp3"),
+    rank_down_1: require("../../assets/audio/sfx/rank_down_1.mp3"),
+    glory_earned_1: require("../../assets/audio/sfx/glory_earned_1.mp3"),
 
     // ALL announcer packs (announcer.ts) — `<pack>:announce_first_blood_1`, …
     ...ANNOUNCER_MANIFEST,

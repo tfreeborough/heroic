@@ -44,8 +44,10 @@ describe("recordRankedMatch", () => {
     expect(result!.loser.delta).toBe(-20);
     expect(result!.winner.tier).toBe("Gladiator");
     expect(result!.winner.division).toBe(2); // 1520 sits in Gladiator II (1500–1549)
+    expect(result!.winner.rankChange).toBeNull(); // 1500 → 1520 stays inside Gladiator II
     expect(result!.loser.tier).toBe("Gladiator");
     expect(result!.loser.division).toBe(3); // 1480 is honestly Gladiator III (floor 1450)
+    expect(result!.loser.rankChange).toBe("down"); // II → III — divisions have no grace
     expect(result!.winner.matchesPlayed).toBe(1); // both mid-placements
     expect(result!.loser.matchesPlayed).toBe(1);
     // Even-fight payouts: 23 / 5.

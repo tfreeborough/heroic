@@ -17,6 +17,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
 import { rankName } from "../net/api";
+import { badgeFor } from "../components/rankBadges";
 import { BloodField } from "../game/blood";
 import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
@@ -124,10 +125,12 @@ interface HudState {
     title: string;
     subtitle: string;
     score: [number, number];
-    /** Ranked match-end settlement line (rating + Glory), or null. Arrives a
-     * beat after the plate (the server settles to the DB first) — the HUD
-     * key diff picks it up when it lands. */
-    rankedLine: string | null;
+    /** Ranked match-end settlement (line + Glory for the count-up), or null.
+     * Arrives a beat after the plate (the server settles to the DB first) —
+     * the HUD key diff picks it up when it lands. */
+    ranked: { line: string; glory: number; newBest: boolean } | null;
+    /** The displayed rank moved this match — the rank_up/rank_down visual. */
+    rankCallout: { direction: "up" | "down"; label: string; badge: number | null } | null;
   } | null;
   lost: boolean;
   /** We're down this round — hide the controls and show the spectator chip. */
@@ -219,6 +222,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   } | null>(null);
   // Last countdown digit sounded, so 3·2·1 ticks fire once each (null between rounds).
   const lastCountdown = useRef<number | null>(null);
+  // Which match's ranked settlement has made its noise (the broadcast lands a
+  // beat after matchEnd; the per-frame HUD rebuild would replay it forever).
+  const settleSounded = useRef<string | null>(null);
   // Audio needs a user gesture to start (web/iOS); unlock on the first touch.
   const audioUnlocked = useRef(false);
   const stickRef = useRef<StickSample>(STICK_ZERO);
@@ -859,6 +865,16 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             phase === "matchEnd"
               ? client.rankedResult?.results.find((r) => r.playerId === client.welcome?.playerId)
               : undefined;
+          // The settle sounds fire ONCE as the broadcast lands on the plate:
+          // the Glory tick always, the rank moment only when the badge
+          // visibly moved (rankChange is server-computed, grace included —
+          // and placements have no rank to move).
+          if (myRanked && client.rankedResult && settleSounded.current !== client.rankedResult.matchId) {
+            settleSounded.current = client.rankedResult.matchId;
+            playSound("gloryEarned");
+            if (!myRanked.placement && myRanked.rankChange === "up") playSound("rankUp");
+            if (!myRanked.placement && myRanked.rankChange === "down") playSound("rankDown");
+          }
           outcome = {
             key,
             kind,
@@ -867,11 +883,27 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             score: [mine, theirs],
             // Placements hide the rating everywhere (bits-ranked.md) — the
             // plate shows progress instead of the Elo movement.
-            rankedLine: myRanked
-              ? myRanked.placement
-                ? `PLACEMENT MATCH ${myRanked.placement.number} OF ${myRanked.placement.of}  ·  +${myRanked.glory} GLORY`
-                : `${myRanked.before} → ${myRanked.after} (${myRanked.delta >= 0 ? "+" : ""}${myRanked.delta})  ·  ${rankName(myRanked.tier, myRanked.division).toUpperCase()}  ·  +${myRanked.glory} GLORY${myRanked.newBest ? "  ·  NEW BEST" : ""}`
+            // When the rank moved, the callout owns the rank name — the line
+            // keeps just the movement so the plate never says the rank
+            // twice. Glory rides separately: RoundBanner counts it up over
+            // the glory_earned swell.
+            ranked: myRanked
+              ? {
+                  line: myRanked.placement
+                    ? `PLACEMENT MATCH ${myRanked.placement.number} OF ${myRanked.placement.of}`
+                    : `${myRanked.before} → ${myRanked.after} (${myRanked.delta >= 0 ? "+" : ""}${myRanked.delta})${myRanked.rankChange ? "" : `  ·  ${rankName(myRanked.tier, myRanked.division).toUpperCase()}`}`,
+                  glory: myRanked.glory,
+                  newBest: !myRanked.placement && myRanked.newBest,
+                }
               : null,
+            rankCallout:
+              myRanked && !myRanked.placement && myRanked.rankChange
+                ? {
+                    direction: myRanked.rankChange,
+                    label: rankName(myRanked.tier, myRanked.division).toUpperCase(),
+                    badge: badgeFor(myRanked.tier),
+                  }
+                : null,
           };
         } else if (phase === "active" && now < fightBannerUntil.current)
           banner = "FIGHT";
@@ -1009,7 +1041,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           title={hud.outcome.title}
           subtitle={hud.outcome.subtitle}
           score={hud.outcome.score}
-          rankedLine={hud.outcome.rankedLine}
+          ranked={hud.outcome.ranked}
+          rankCallout={hud.outcome.rankCallout}
         />
       ) : hud.banner ? (
         <View style={styles.centre} pointerEvents="none">

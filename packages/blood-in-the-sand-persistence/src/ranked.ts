@@ -8,7 +8,16 @@
  * the database.
  */
 import type { Db } from "./db";
-import { RATING_START, displayRungFor, loserGlory, tierFor, updateRating, winnerGlory, type TierName } from "./elo";
+import {
+  RATING_START,
+  displayRungFor,
+  loserGlory,
+  rankChangeBetween,
+  tierFor,
+  updateRating,
+  winnerGlory,
+  type TierName,
+} from "./elo";
 
 export interface RankedRating {
   subjectId: string;
@@ -84,6 +93,9 @@ export interface RankedSideResult {
   /** Division inside the tier (3 = entry, 1 = top); null in the single-rung
    * end tiers (Initiate, Immortal). */
   division: 1 | 2 | 3 | null;
+  /** The DISPLAYED rank moved this match (grace included — a dip a sticky
+   * badge absorbs is null). Drives the rank_up / rank_down audio moment. */
+  rankChange: "up" | "down" | null;
   glory: number;
   /** Season peak after this match settled. */
   peak: number;
@@ -205,6 +217,7 @@ const sideOf = (
     delta: after - prior.rating,
     tier: rung.tier,
     division: rung.division,
+    rankChange: rankChangeBetween({ rating: prior.rating, peak: prior.peak }, { rating: after, peak }),
     glory,
     peak,
     newBest: after > prior.peak,

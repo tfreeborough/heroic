@@ -584,6 +584,7 @@ const sideResult = (side: {
   delta: number;
   tier: string;
   division: 1 | 2 | 3 | null;
+  rankChange: "up" | "down" | null;
   glory: number;
   peak: number;
   newBest: boolean;
@@ -594,6 +595,7 @@ const sideResult = (side: {
   delta: side.delta,
   tier: side.tier,
   division: side.division,
+  rankChange: side.rankChange,
   glory: side.glory,
   peak: side.peak,
   newBest: side.newBest,

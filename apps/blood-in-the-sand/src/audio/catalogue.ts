@@ -51,6 +51,11 @@ export type BitsSoundEvent =
   | "roundEnd" //       a round resolves              (qualifier: win|loss|draw)
   | "matchEnd" //       the match resolves            (qualifier: win|loss)
   | "startCancelled" // a bot-filled start vetoed — the veil collapses (bits-bot-backfill.md)
+  // ── Ranked (bits-ranked.md § audio owed) ──────────────────────────────────
+  | "queueMatchFound" //the matcher paired you — the summons (ranked room mount)
+  | "rankUp" //         the displayed rank climbed (server-computed rankChange)
+  | "rankDown" //       …or slipped — deliberately subtle, never punishing
+  | "gloryEarned" //    the Glory payout lands on the ceremony plate
   // ── UI ────────────────────────────────────────────────────────────────────
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
@@ -213,6 +218,20 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // Owed from the Forge — silent until start_cancelled_1 lands (the missing-
   // manifest rule); a deflating "stand down" beat, not a defeat sting.
   startCancelled: { clips: ["start_cancelled_1"] },
+
+  // ── Ranked (all four owed from the Forge — silent until their clips land;
+  // the settle sounds fire off the server's rankedResult, never client math) ─
+  queueMatchFound: { clips: ["queue_match_found_1"] },
+  // The promotion fanfare — a ~5-net-win event since divisions, so it can
+  // afford to be BIG. Layers after the match_win sting by arrival order.
+  rankUp: { clips: ["rank_up_1"] },
+  // Deliberately subtle (bits-ranked.md: "subtle, non-punishing") — losing
+  // already stings; the badge slipping shouldn't twist it.
+  rankDown: { clips: ["rank_down_1"], volume: 0.6 },
+  // A low wordless choral swell — the legend growing. Deliberately NOT a
+  // coin sound (Tom, 2026-08-01): Glory is renown, and players must never
+  // read it as money. The one human-voice texture outside the announcer.
+  gloryEarned: { clips: ["glory_earned_1"], volume: 0.8 },
 
   // ── UI ──────────────────────────────────────────────────────────────────
   uiTap: { clips: ["ui_tap_1"], volume: 0.7 },

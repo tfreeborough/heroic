@@ -83,6 +83,9 @@ export interface RankedResultRow {
   tier: string;
   /** Division inside the tier (3 entry → 1 top); null in Initiate/Immortal. */
   division: 1 | 2 | 3 | null;
+  /** The displayed rank moved this match (server-computed, grace included) —
+   * the rank_up / rank_down audio cue. */
+  rankChange: "up" | "down" | null;
   glory: number;
   /** Season-high rating after this settle; `newBest` = this match set it —
    * the ceremony's celebration hook. */

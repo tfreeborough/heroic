@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a low wordless male choir hum that swells warm and reverent then fades — a legend growing, mythic and human, no words and no melody, about a second and a half",
+  "prompt": "Close-mic'd low male choir hum: warm, breathy, clustered voices building from a single gritty drone into a reverent four-second swell (1.5s rise), weighty, sun-baked harmonic warmth, then a grounded dusty fade into distant sand-echoes.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 4,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "glory_earned_1.mp3"
+  ],
+  "created": "2026-08-01T13:24:50.196Z",
+  "updated": "2026-08-01T13:24:50.196Z"
+}

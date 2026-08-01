@@ -95,8 +95,10 @@ everywhere.
 | **Immortal** | 1900+ |
 
 A fresh player starts mid-table in Gladiator II (1500 sits mid-tier; hidden until
-placements are done anyway) — placements sort them fast. Tier art + a `rank_up`
-moment are owed to the Forge (see Audio & art owed).
+placements are done anyway) — placements sort them fast. Tier art landed 2026-08-01,
+and the `rank_up` moment is BUILT (see Audio & art owed): on the match-end plate the
+new crest pops in under "RANK UP" in step with the fanfare; demotions get one muted
+warm-grey line ("RANK DOWN · <rank>"), no crest, no ceremony.
 
 #### Divisions — the 14-rung ladder *(decided + built 2026-07-30, re-cut same day)*
 
@@ -417,7 +419,14 @@ persisted display name column is a fast follow decided at build time.)
 ## Audio & art owed (Forge done-tick, per bits-audio.md)
 
 - `queue_match_found` sting · `rank_up` fanfare · `rank_down` (subtle, non-punishing)
-  · Glory payout tick on the post-match ceremony.
+  · Glory payout tick on the post-match ceremony. **WIRED 2026-08-01, clips owed**: all
+  four are on the sfx-bits checklist + catalogue (`queueMatchFound` on ranked-room
+  mount = the seat IS the match-found moment; `rankUp`/`rankDown` off the settle
+  broadcast's server-computed `rankChange` — display-rung compare, so a grace-absorbed
+  dip is silent and placements never fire it; `gloryEarned` with every settlement —
+  a low wordless CHORAL SWELL, deliberately never a coin sound: Glory is renown and
+  must not read as money (Tom, 2026-08-01; a forged coin-chink take was cut for it)).
+  Silent until forged (missing-manifest rule).
 - ~~Tier badge art ×6~~ **FORGED + wired 2026-08-01** (`badge-bits`, shield anchor + per-tier
   dominant-colour system — asset-forge.md; `RANK_BADGES` in RankedScreen.tsx). Division
   numerals composite client-side. Squint-verified at 28px on the void: the colour ramp names

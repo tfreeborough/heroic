@@ -238,6 +238,14 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
     if (timer <= 0) lastTick.current = 0;
   }, [timer, timerCeil]);
 
+  // The match-found summons: a ranked room only ever appears because the
+  // matcher seated you (bits-ranked.md — the welcome IS the "match found"
+  // moment), so the sting plays once on mount. Skirmish rooms stay silent.
+  useEffect(() => {
+    if (ranked) playSound("queueMatchFound");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
+  }, []);
+
   // A bot-filled countdown that collapses while we're STILL in the lobby was
   // vetoed (cancelStart, or a joiner over the bots) — a normal completion
   // leaves the lobby phase and never trips this. The notice says who; the

@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a soft rank demotion beat — one low muted drum thud with a short falling breath of air, quiet, brief and gentle",
+  "prompt": "Close-mic'd low leather drum thud, sun-baked wooden resonance, immediate muted impact, then a short dry falling whoosh of hot sandy air and a faint exhale of leather—three-second decay: hit, breath swells down, dust settles.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 3,
+    "promptInfluence": 0.5,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "rank_down_1.mp3"
+  ],
+  "created": "2026-08-01T09:40:03.984Z",
+  "updated": "2026-08-01T09:40:03.984Z"
+}

@@ -6,6 +6,7 @@ import {
   displayFloorOf,
   displayRungFor,
   displayTierFor,
+  rankChangeBetween,
   expectedScore,
   kFactor,
   loserGlory,
@@ -120,6 +121,18 @@ describe("divisions (the 14-rung ladder)", () => {
     expect(displayFloorOf(rungFor(900))).toBe(1150); // one tier-width under Pit Fighter
     expect(displayFloorOf(rungFor(1500))).toBe(1500);
     expect(displayFloorOf(rungFor(2000))).toBe(1900);
+  });
+
+  test("rankChange compares DISPLAY rungs — grace-absorbed dips are silent", () => {
+    // Climbing a division inside a tier.
+    expect(rankChangeBetween({ rating: 1540, peak: 1540 }, { rating: 1553, peak: 1553 })).toBe("up");
+    // Movement inside one rung.
+    expect(rankChangeBetween({ rating: 1510, peak: 1510 }, { rating: 1520, peak: 1520 })).toBeNull();
+    // Crossing a tier boundary.
+    expect(rankChangeBetween({ rating: 1595, peak: 1595 }, { rating: 1601, peak: 1601 })).toBe("up");
+    // An honest demotion…
+    expect(rankChangeBetween({ rating: 1605, peak: 1605 }, { rating: 1595, peak: 1605 })).toBeNull(); // grace holds Champion
+    expect(rankChangeBetween({ rating: 1555, peak: 1560 }, { rating: 1545, peak: 1560 })).toBe("down"); // divisions have no grace
   });
 
   test("grace holds the tier at its entry division; divisions inside a tier move freely", () => {

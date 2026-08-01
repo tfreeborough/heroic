@@ -690,7 +690,7 @@ export const ForgePanel = ({ onClose }: Props) => {
                     ? "Paste into BRACKET_ART in src/screens/RankedScreen.tsx (replaces null):"
                     : "Paste into MODE_ART in src/screens/ModeSelectScreen.tsx (replaces image: null):"
                   : isBadge
-                    ? "Paste into RANK_BADGES in src/screens/RankedScreen.tsx (replaces null):"
+                    ? "Paste into RANK_BADGES in src/components/rankBadges.ts (replaces null):"
                     : isBits
                       ? "Paste into src/audio/manifest.ts:"
                       : "Paste into src/game/audio/manifest.ts:"}

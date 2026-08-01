@@ -137,6 +137,16 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   round_draw: "a neutral round-over sting — a flat gong tap with an ambiguous crowd hum",
   match_win: "a triumphant match-won fanfare — a full brass flourish and a roaring victorious crowd",
   match_loss: "a somber match-lost motif — a low mournful horn fading under a dying crowd",
+  // ── Ranked ────────────────────────────────────────────────────────────────
+  queue_match_found:
+    "a ranked match-found summons — one sharp metallic gong clang with a taut rising snap, urgent and commanding, short",
+  rank_up:
+    "a rank promotion fanfare — a bright rising brass flourish over a ringing struck-shield tone, proud and earned, about two seconds",
+  rank_down:
+    "a soft rank demotion beat — one low muted drum thud with a short falling breath of air, quiet, brief and gentle",
+  glory_earned:
+    "a low wordless male choir hum that swells warm and reverent then fades — a legend growing, mythic and human, " +
+    "no words and no melody, about a second and a half",
   // ── UI ────────────────────────────────────────────────────────────────────
   ui_tap: "a soft dry UI tap — a quick muted wooden or leather tick, understated",
   ui_confirm: "a confident UI confirm — a firm metallic clack-thunk with a short bright ring, committing",
@@ -574,7 +584,7 @@ export const BADGE: BadgeSpec = {
   destination: "apps/blood-in-the-sand/assets/ranks",
   manifestDir: "../../assets/ranks",
   manifestLine: (id, file) =>
-    `  "${id}": require("../../assets/ranks/${file}"), // → RANK_BADGES in RankedScreen.tsx, replacing null`,
+    `  "${id}": require("../../assets/ranks/${file}"), // → RANK_BADGES in src/components/rankBadges.ts, replacing null`,
   // The icon template's brand + isolation lessons verbatim (die-cut bone
   // outline, state what surrounds the subject); differences are the rank
   // system: the shield ANCHOR baked in structurally (one object family,
