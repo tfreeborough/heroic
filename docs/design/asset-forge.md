@@ -151,10 +151,18 @@ screen's bracket cards (bits-ranked.md) are the same 900×360 scene pipeline, so
 `MODE_KEYS` entries (`bracket-1v1`, `bracket-2v2`) rather than a new type — the save's paste line
 branches on the `bracket-` prefix to target `BRACKET_ART` in RankedScreen.tsx (locked brackets
 drain forged art to greyscale, the mode-select treatment). `badge-bits` is a new cut-out type in
-the icon family (1024² transparent, saved 256px) with HERALDIC language: one medallion crest per
-tier, material grandeur escalating rung by rung (wood → iron → bronze → gilded → dread →
-radiant), burnt-gold accent across the set, and an explicit no-numerals line — divisions (III/II/I)
-composite client-side so six badges cover fourteen rungs. The set is the checked-in `BADGE_KEYS`
+the icon family (1024² transparent, saved 256px) built around ONE anchor object: every badge is
+a round gladiator SHIELD face-on (Tom, 2026-07-31 — helmets were tried and dropped), the anchor
+baked into the template itself. **The legibility rule (Tom, same day): rank must read at a
+glance at tiny sizes, so each tier owns a DOMINANT COLOUR** (`BADGE_ACCENTS` — tan → iron grey
+→ bronze → silver → blood-crimson → radiant gold, chosen to differ in lightness as well as hue
+against the near-black UI) that floods the shield face — the template drops the icon family's
+fixed ochre-midtone/gold-accent wash for a per-tier accent parameter (the ICON_ACCENTS pattern,
+per tier instead of per category) and states the colour must stay pure, never muddied toward
+bronze. Decoration still escalates (notched wood → bare rivets → crested-galea boss → gilded
+laurel → spiked gold trim → sunburst rays), but colour carries the rank; an explicit
+no-numerals line stays — divisions (III/II/I) composite client-side so six badges cover
+fourteen rungs. The set is the checked-in `BADGE_KEYS`
 list — a hand-mirror of the persistence package's `TIERS` (6 since the 2026-07-30 re-cut) —
 destination `apps/blood-in-the-sand/assets/ranks/`, paste target `RANK_BADGES` in
 RankedScreen.tsx.

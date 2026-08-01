@@ -51,8 +51,8 @@ const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
  * replacement line.
  */
 const BRACKET_ART: Record<string, number | null> = {
-  "1v1": null,
-  "2v2": null,
+  "1v1": require("../../assets/modes/bracket-1v1.png"),
+  "2v2": require("../../assets/modes/bracket-2v2.png"),
 };
 
 /**
@@ -62,12 +62,12 @@ const BRACKET_ART: Record<string, number | null> = {
  * the badge, never inside the art.
  */
 const RANK_BADGES: Record<string, number | null> = {
-  initiate: null,
-  "pit-fighter": null,
-  gladiator: null,
-  champion: null,
-  warlord: null,
-  immortal: null,
+  "initiate": require("../../assets/ranks/initiate.png"),
+  "pit-fighter": require("../../assets/ranks/pit-fighter.png"),
+  "gladiator": require("../../assets/ranks/gladiator.png"),
+  "champion": require("../../assets/ranks/champion.png"),
+  "warlord": require("../../assets/ranks/warlord.png"),
+  "immortal": require("../../assets/ranks/immortal.png"),
 };
 
 const badgeFor = (tier: string): number | null =>
@@ -91,6 +91,15 @@ const QUEUE_INFO_POLL_MS = 5000;
 const formatWait = (sec: number): string =>
   `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
+/** The forged bracket art is a 900×360 band (ART_ASPECT 2.5:1) with its
+ * focal scene composed into the RIGHT two thirds and a quiet left third for
+ * copy. RN's `cover` centre-crops, so on a card taller than 2.5:1 it showed
+ * a slice of empty mid-sky and lost the duel entirely (Tom, 2026-08-01) —
+ * instead the art is laid out by hand: full card height, its own aspect,
+ * pinned to the RIGHT edge. Whatever the card can't fit is the quiet left,
+ * which the copy scrim covers anyway. */
+const ART_ASPECT = 900 / 360;
+
 /** The forged card art (BRACKET_ART), or the painted stand-in until the
  * Forge delivers it — the same ramp+glow language as the pre-art mode cards.
  * Locked cards drain forged art to faded greyscale (the mode-select
@@ -98,11 +107,23 @@ const formatWait = (sec: number): string =>
 const BracketArt = ({ art, w, h, locked }: { art: number | null; w: number; h: number; locked: boolean }) => {
   // Unconditional hook; only locked cards with art pay the Skia decode.
   const skiaArt = useImage(locked ? art : null);
+  // Right-anchored at exact aspect; if the card is wider than the band
+  // (short locked cards), grow to full width and crop vertically instead.
+  const artW = Math.max(h * ART_ASPECT, w);
+  const artH = artW / ART_ASPECT;
   if (art !== null && locked) {
     return (
       <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
         {skiaArt && (
-          <SkiaImage image={skiaArt} x={0} y={0} width={w} height={h} fit="cover" opacity={LOCKED_ART_OPACITY}>
+          <SkiaImage
+            image={skiaArt}
+            x={w - artW}
+            y={(h - artH) / 2}
+            width={artW}
+            height={artH}
+            fit="fill"
+            opacity={LOCKED_ART_OPACITY}
+          >
             <ColorMatrix matrix={GREYSCALE} />
           </SkiaImage>
         )}
@@ -110,7 +131,13 @@ const BracketArt = ({ art, w, h, locked }: { art: number | null; w: number; h: n
     );
   }
   if (art !== null) {
-    return <Image source={art} style={StyleSheet.absoluteFill} resizeMode="cover" />;
+    return (
+      <Image
+        source={art}
+        style={{ position: "absolute", right: 0, top: (h - artH) / 2, width: artW, height: artH }}
+        resizeMode="stretch"
+      />
+    );
   }
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -269,30 +296,45 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
         </View>
       ) : (
         <View style={styles.standing}>
+          {/* Row 1 is deliberately sparse — badge, title block, rating and
+              NOTHING else, so "PIT FIGHTER III" never fights a second column
+              for width on a small screen (it auto-shrinks before wrapping). */}
           <View style={styles.standingTop}>
             {/* The forged tier crest — absent until its PNG lands. */}
             {badgeFor(standing!.tier) !== null && (
               <Image source={badgeFor(standing!.tier)!} style={styles.badge} resizeMode="contain" />
             )}
             <View style={styles.standingLeft}>
-              <Text style={styles.tier}>{rankName(standing!.tier, standing!.division).toUpperCase()}</Text>
+              <Text style={styles.tier} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {rankName(standing!.tier, standing!.division).toUpperCase()}
+              </Text>
               <Text style={styles.record}>{`${standing!.wins}W · ${standing!.losses}L · 1v1`}</Text>
-              {standing!.form.length > 0 && (
+            </View>
+            <View style={styles.ratingCol}>
+              <Text style={styles.rating}>{standing!.rating}</Text>
+              <Text style={styles.ratingLabel}>RATING</Text>
+            </View>
+          </View>
+          {/* Row 2: recent form and the monotonic season best. Deliberately
+              NO "at season best" state (Tom, 2026-08-01) — telling a player
+              they're at their peak invites quitting while ahead; the muted
+              number just sits there either way. */}
+          <View style={styles.standingMeta}>
+            {standing!.form.length > 0 ? (
+              <View style={styles.formWrap}>
+                <Text style={styles.formLabel}>
+                  {`LAST ${standing!.form.length} GAME${standing!.form.length === 1 ? "" : "S"}`}
+                </Text>
                 <View style={styles.formRow}>
                   {standing!.form.map((won, i) => (
                     <View key={i} style={[styles.formDot, won ? styles.formDotW : styles.formDotL]} />
                   ))}
                 </View>
-              )}
-            </View>
-            <View style={styles.ratingCol}>
-              <Text style={styles.rating}>{standing!.rating}</Text>
-              {/* The monotonic number: your best only ever rises, and being AT
-                  it is worth saying in gold. */}
-              <Text style={[styles.peak, standing!.rating >= standing!.peak && styles.peakAtBest]}>
-                {standing!.rating >= standing!.peak ? "AT SEASON BEST" : `SEASON BEST ${standing!.peak}`}
-              </Text>
-            </View>
+              </View>
+            ) : (
+              <View />
+            )}
+            <Text style={styles.peak}>{`SEASON BEST ${standing!.peak}`}</Text>
           </View>
           <TierProgress standing={standing!} />
         </View>
@@ -319,7 +361,7 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
         {/* 1v1 — Season I's one live bracket. A populated queue is the card's
             best advert: the count sits big beside the copy (its own layout
             column — never overlapping). An empty queue advertises nothing. */}
-        <View style={styles.card} onLayout={() => {}}>
+        <View style={[styles.card, styles.cardLive]}>
           <CardBody
             locked={false}
             art={BRACKET_ART["1v1"]}
@@ -372,9 +414,15 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
   );
 };
 
+/** How many rating points a win is worth, roughly — K=20 post-placements
+ * against an even opponent pays ~10. Presentation heuristic only (the real
+ * number swings with the matchup); it exists because "80 TO CHAMPION III"
+ * speaks in rating points and players think in WINS (Tom, 2026-08-01). */
+const RATING_PER_WIN = 10;
+
 /** The climb inside the current rung (bits-ranked.md § display v2 +
- * divisions): a filled bar plus "N TO <NEXT RUNG>" — the next goal is always
- * visible, counted in points, and rarely more than a handful of wins away.
+ * divisions): a filled bar running INTO the next rank's crest (small,
+ * dimmed — the goal is a visible thing, not a name), labelled in wins.
  * The summit (Immortal) has no ceiling, so the full gold bar becomes the
  * trophy. All ladder math arrives from /ranked/me (rankFloor / nextRank) —
  * the client never re-implements the rungs. */
@@ -389,14 +437,29 @@ const TierProgress = ({ standing }: { standing: RankedBracketStanding }) => {
   const frac = next
     ? Math.min(1, Math.max(0, (standing.rating - standing.rankFloor) / (next.floor - standing.rankFloor)))
     : 1;
+  const winsAway = next ? Math.max(1, Math.ceil((next.floor - standing.rating) / RATING_PER_WIN)) : 0;
+  // The endcap shows what actually CHANGES at the next rung. Within a tier
+  // the crest is identical to the one you already wear (six badges cover
+  // fourteen rungs), so a badge endcap just mirrored your own — instead the
+  // bar ends in the next DIVISION numeral, and the dimmed crest is saved
+  // for rungs that cross into a new tier (the real new-shield moment).
+  const crossesTier = next !== null && next.tier !== standing.tier;
+  const nextBadge = crossesTier ? badgeFor(next.tier) : null;
   return (
     <View style={styles.progress}>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${frac * 100}%` }]} />
+      <View style={styles.progressRow}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${frac * 100}%` }]} />
+        </View>
+        {nextBadge !== null ? (
+          <Image source={nextBadge} style={styles.progressBadge} resizeMode="contain" />
+        ) : next !== null ? (
+          <Text style={styles.progressNumeral}>{["", "I", "II", "III"][next.division ?? 0]}</Text>
+        ) : null}
       </View>
       <Text style={styles.progressLabel}>
         {next
-          ? `${next.floor - standing.rating} TO ${rankName(next.tier, next.division).toUpperCase()}`
+          ? `NEXT RANK · ~${winsAway} WIN${winsAway === 1 ? "" : "S"} TO ${rankName(next.tier, next.division).toUpperCase()}`
           : "TOP OF THE LADDER"}
       </Text>
     </View>
@@ -476,27 +539,46 @@ const styles = StyleSheet.create({
   badge: { width: 52, height: 52, marginRight: 12, flexShrink: 0 },
   // flex: 1 so the long placement copy wraps INSIDE the panel instead of
   // shoving the number out of the row; the number never shrinks.
-  standingLeft: { gap: 3, flex: 1, paddingRight: 14 },
-  ratingCol: { alignItems: "flex-end", flexShrink: 0, gap: 2 },
-  peak: { color: "#8a7f70", fontSize: 11, fontWeight: "800", letterSpacing: 1 },
-  peakAtBest: { color: "#e8c87a" },
-  formRow: { flexDirection: "row", gap: 4, marginTop: 4 },
-  formDot: { width: 9, height: 9, borderRadius: 2 },
+  standingLeft: { gap: 3, flex: 1, paddingRight: 12 },
+  ratingCol: { alignItems: "flex-end", flexShrink: 0, gap: 1 },
+  ratingLabel: { color: "#8a7f70", fontSize: 9, fontWeight: "800", letterSpacing: 2 },
+  // Row 2: labelled dots left, season best right — moved OUT of the top row
+  // so the tier title never fights a second column for width on small screens.
+  standingMeta: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  peak: { color: "#8a7f70", fontSize: 10, fontWeight: "800", letterSpacing: 1 },
+  formWrap: { gap: 4 },
+  formLabel: { color: "#8a7f70", fontSize: 9, fontWeight: "800", letterSpacing: 2 },
+  formRow: { flexDirection: "row", gap: 4 },
+  formDot: { width: 8, height: 8, borderRadius: 2 },
   formDotW: { backgroundColor: "#e8c87a" },
   formDotL: { backgroundColor: "#54312b" },
   progress: { gap: 6 },
-  progressTrack: { height: 6, borderRadius: 3, backgroundColor: "#2a2118", overflow: "hidden" },
+  progressRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // Dimmed: it's the goal, not an owned rank — full colour is earned. The
+  // numeral shares the badge's slot width so the bar never shifts between
+  // within-tier and tier-crossing rungs.
+  progressBadge: { width: 26, height: 26, opacity: 0.5, flexShrink: 0 },
+  progressNumeral: {
+    fontFamily: DISPLAY_FONT,
+    color: "#9c8a68",
+    fontSize: 17,
+    fontWeight: "900",
+    width: 26,
+    textAlign: "center",
+    flexShrink: 0,
+  },
+  progressTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: "#2a2118", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 3, backgroundColor: "#e8c87a" },
-  progressLabel: { color: "#d9cbb4", fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
+  progressLabel: { color: "#d9cbb4", fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
   tier: {
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "900",
-    letterSpacing: 3,
+    letterSpacing: 2,
   },
-  record: { color: "#8a7f70", fontSize: 12, fontWeight: "700", letterSpacing: 1 },
-  rating: { color: "#e8c87a", fontSize: 34, fontWeight: "900", letterSpacing: 1, flexShrink: 0 },
+  record: { color: "#8a7f70", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  rating: { color: "#e8c87a", fontSize: 27, fontWeight: "900", letterSpacing: 1, flexShrink: 0 },
   settle: {
     borderWidth: 1,
     borderRadius: 12,
@@ -521,6 +603,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#1d1712",
   },
+  // Capped so the card's aspect stays near the 2.5:1 art band — uncapped it
+  // grew near-square and even a right-anchored crop lost most of the scene.
+  cardLive: { maxHeight: 230 },
   cardLocked: { borderColor: "#4a3b26", maxHeight: 110 },
   cardFill: { flex: 1 },
   cardCopy: {

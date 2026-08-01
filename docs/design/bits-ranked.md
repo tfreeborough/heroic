@@ -145,17 +145,25 @@ The problem: Elo is zero-sum, so a mid-table regular sees the same number all mo
 and reads "no progress". The display pairs the honest rating with numbers that only
 ever go up, without touching the math (Tom, 2026-07-30):
 
-- **Progress-to-next-rank**: the standing panel carries a filled bar across the
-  current rung plus **"27 TO GLADIATOR I"** — the next goal is always visible and
-  counted in points *(same day: targets the next division rung, see § Divisions)*.
-  Immortal (no ceiling) shows a full gold bar + "TOP OF THE LADDER". Ladder math
-  (`rankFloor`, `nextRank`) is computed server-side in `/ranked/me`; the client
-  renders, never re-implements the bands.
+- **Progress-to-next-rank** *(re-languaged 2026-08-01 — Tom: "80 TO CHAMPION III"
+  conveyed nothing)*: the bar runs INTO a small dimmed endcap showing what CHANGES
+  at the next rung — the next division's Roman numeral within a tier, the next
+  tier's crest when the rung crosses a tier boundary (six badges cover fourteen
+  rungs, so a same-tier crest endcap just mirrored the player's own badge) — and
+  the label speaks in the player's unit:
+  **"NEXT RANK · ~2 WINS TO CHAMPION III"** (`RATING_PER_WIN ≈ 10`, a client-side
+  presentation heuristic off K=20). Immortal (no ceiling) shows a full gold bar +
+  "TOP OF THE LADDER". Ladder math (`rankFloor`, `nextRank`) is computed server-side
+  in `/ranked/me`; the client renders, never re-implements the bands. The rating
+  number carries a small "RATING" cap, and the form dots a "LAST N GAMES" cap —
+  every element on the panel names itself.
 - **Season peak** ("SEASON BEST 1682"): monotonic per bracket — `peak_rating` on
   `ranked_ratings`, maintained in the settle batch (initial peak = the 1500 start).
-  Shown under the rating; gold "AT SEASON BEST" when the live rating IS the peak.
-  The settle result carries `peak` + `newBest`, and the settlement banner celebrates
-  "NEW SEASON BEST" — reframes a plateau as "below your best", not "what you are".
+  Shown muted on the panel's meta row. *(Revised 2026-08-01: the gold "AT SEASON
+  BEST" state was CUT — Tom's call, loss aversion: telling a player they're at
+  their peak invites quitting while ahead.)* The settle result carries `peak` +
+  `newBest`, and the settlement banner celebrates "NEW SEASON BEST" — reframes a
+  plateau as "below your best", not "what you are".
 - **Sticky tier badges (grace)**: an *earned* tier — one the season peak actually
   reached — keeps its badge until the rating falls **50 below its floor**
   (`TIER_GRACE`, `displayTierFor(rating, peak)`), so a player bouncing 1495↔1505
@@ -410,11 +418,11 @@ persisted display name column is a fast follow decided at build time.)
 
 - `queue_match_found` sting · `rank_up` fanfare · `rank_down` (subtle, non-punishing)
   · Glory payout tick on the post-match ceremony.
-- Tier badge art ×6 (dark-fantasy woodcut set, style bible; division numerals composite
-  client-side). **Forge-ready 2026-07-30**: `badge-bits` type + BADGE_SUBJECTS checklist in the
-  panel; paste target `RANK_BADGES` in RankedScreen.tsx is pre-wired (null until forged).
-- **Bracket card art:** `1v1` live card + locked future-bracket cards (mode-bits type,
-  900×360, right-anchored crop — same pipeline as the mode cards, 2026-07-28).
-  **Forge-ready 2026-07-30**: `bracket-1v1` / `bracket-2v2` entries on the mode-bits checklist;
-  paste target `BRACKET_ART` in RankedScreen.tsx is pre-wired (locked cards greyscale the art).
+- ~~Tier badge art ×6~~ **FORGED + wired 2026-08-01** (`badge-bits`, shield anchor + per-tier
+  dominant-colour system — asset-forge.md; `RANK_BADGES` in RankedScreen.tsx). Division
+  numerals composite client-side. Squint-verified at 28px on the void: the colour ramp names
+  the rank; Warlord is the darkest of the set (gold trim carries it) — the one candidate for
+  a brightness re-roll if on-device testing frowns.
+- ~~Bracket card art~~ **FORGED + wired 2026-07-31** (`bracket-1v1` + `bracket-2v2` on the
+  mode-bits pipeline; `BRACKET_ART` in RankedScreen.tsx, locked cards greyscale the art).
 - RANKED mode card already forged (2026-07-28) — it just unlocks.

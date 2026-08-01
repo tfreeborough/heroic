@@ -30,6 +30,7 @@ export const AUDIO_MANIFEST: AudioManifest = {
     hit_generic_1: require("../../assets/audio/sfx/hit_generic_1.mp3"),
     player_hurt_1: require("../../assets/audio/sfx/player_hurt_1.mp3"),
     death_1: require("../../assets/audio/sfx/death_1.mp3"),
+    blood_squelch_1: require("../../assets/audio/sfx/blood_squelch_1.mp3"),
 
     cast_sandtrap_1: require("../../assets/audio/sfx/cast_sandtrap_1.mp3"),
     cast_tremor_1: require("../../assets/audio/sfx/cast_tremor_1.mp3"),
@@ -81,6 +82,9 @@ export const AUDIO_MANIFEST: AudioManifest = {
     crowd_jeer_4: require("../../assets/audio/sfx/crowd_jeer_4.mp3"),
 
     crowd_ambience_1: require("../../assets/audio/sfx/crowd_ambience_1.mp3"),
+
+    //Play Page
+    mode_reveal_1: require("../../assets/audio/sfx/mode_reveal_1.mp3"),
 
     // ALL announcer packs (announcer.ts) — `<pack>:announce_first_blood_1`, …
     ...ANNOUNCER_MANIFEST,

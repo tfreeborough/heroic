@@ -128,6 +128,7 @@ export const ForgePanel = ({ onClose }: Props) => {
   // The rank-badge set — the checked-in BADGE_KEYS tier list (badgeSet.ts).
   const badges = useMemo(buildBadgeSet, []);
   const badgeDone = (id: string): boolean => (status?.badgeFiles ?? []).includes(`${id}.png`);
+  const badgeEntry = badges.find((e) => e.id === badgeId) ?? null;
   const badgeDoneCount = badges.filter((e) => badgeDone(e.id)).length;
 
   // The sound set — same derive-from-the-sim pattern; a bank is done when any
@@ -240,7 +241,7 @@ export const ForgePanel = ({ onClose }: Props) => {
           : isMode
             ? prompt.trim() || MODE.template(subject.trim())
             : isBadge
-              ? prompt.trim() || BADGE.template(subject.trim())
+              ? prompt.trim() || BADGE.template(subject.trim(), badgeEntry?.accent)
               : prompt.trim() || undefined;
       const data = await post<GenerateResponse>("/forge/generate", {
         type,
@@ -257,7 +258,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     } finally {
       setBusy(null);
     }
-  }, [type, isIcon, isSprite, isMode, isBadge, isImage, iconId, subject, prompt, durationSeconds, influence]);
+  }, [type, isIcon, isSprite, isMode, isBadge, isImage, iconId, badgeId, subject, prompt, durationSeconds, influence]);
 
   const save = useCallback(async () => {
     setBusy("save");

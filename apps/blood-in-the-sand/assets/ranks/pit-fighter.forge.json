@@ -1,0 +1,18 @@
+{
+  "type": "badge-bits",
+  "subject": "a dented round iron buckler face-on, bare hammered steel plates and rivets, a plain undecorated boss, scuffed battle-worn rim",
+  "prompt": "a dented round iron buckler face-on, bare hammered steel plates and rivets, a plain undecorated boss, scuffed battle-worn rim. A rank badge emblem for a brutal gladiator arena game set in a scorched desert. The emblem is a single round gladiator shield shown face-on — the ladder's one anchor object; no other objects share the frame. The shield's dominant material colour is cold hammered iron grey (#9aa3ad): it floods the whole shield face and rim, unmistakable at a glance — this colour IS the rank, so it must stay pure and saturated, never muddied toward brown or bronze by dust or shadow. Hand-inked woodcut illustration: one bold central emblem filling about 80% of the frame, heavy black ink, rough expressive hatching, sun-bleached bone (#f0e8d8) highlights carving the shape out of the dark. A rough aged-bone die-cut outline traces the whole silhouette, like a woodcut poster cut from pale paper — it separates the shape from a near-black UI. Grim, sun-scoured, blood-and-sand mood — never cute, never photorealistic, never a clean flat vector. Chunky shapes: at 24 pixels the shield must still read, and its colour must still name the rank. The cut-out floats alone on a fully transparent background — no backdrop, no glow, no vignette; every pixel outside the cut line is transparent. No text, no letters, no numerals — the emblem carries no writing of any kind.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1024",
+    "quality": "medium",
+    "background": "transparent",
+    "savedSize": 256
+  },
+  "files": [
+    "pit-fighter.png"
+  ],
+  "created": "2026-07-31T08:44:12.510Z",
+  "updated": "2026-08-01T08:46:30.228Z"
+}
