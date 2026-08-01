@@ -12,10 +12,13 @@
  */
 import type { Server, ServerWebSocket } from "bun";
 import {
+  ABILITY_IDS,
   ARENA_00,
+  LOADOUT_ABILITY_COUNT,
   PROTOCOL_VERSION,
   SNAPSHOT_DIVISOR,
   TICK_DT,
+  WEAPON_IDS,
   addBot,
   addPlayer,
   armingComplete,
@@ -47,6 +50,7 @@ import {
   type BotMemory,
   type BotNav,
   type ClientMsg,
+  type DifficultyId,
   type PlayerInput,
   type RoomListing,
   type ServerMsg,
@@ -87,6 +91,10 @@ export interface RankedSeatAccount {
   rating: number;
   /** Original queue-entry time — a void's re-queue keeps the wait earned. */
   joinedMs: number;
+  /** A backfill bot's seat (bits-ranked-bots.md): its accountId is a
+   * throwaway `bot:<uuid>` subject and settleRanked takes the one-sided
+   * writer. Never broadcast — server bookkeeping only. */
+  bot?: boolean;
 }
 
 /** What makes a room ranked (bits-ranked.md) — set by the manager right after
@@ -118,6 +126,11 @@ export class Room {
    * sim's matchEnd event (the settle + rankedResult broadcast live there;
    * the room stays transport). */
   onRankedMatchEnd: ((winnerTeam: Team) => void) | null = null;
+  /** Ranked only: the matchEnd ceremony has run its course. The room stops
+   * stepping the sim here — a ranked room NEVER returns to lobby (the lobby
+   * return frees bot seats mid-plate; bits-ranked-bots.md § match end) — and
+   * the manager closes it once the settlement has landed. */
+  ceremonyOver = false;
 
   private readonly server: Server<ClientData>;
   private readonly seats = new Map<number, Socket>();
@@ -139,7 +152,11 @@ export class Room {
    * map only holds what thinks for them — reaped whenever a seat stops being
    * a bot. The brain itself is a black-box sim import, exactly as the app's
    * practice mode runs it. */
-  private readonly botSeats = new Map<number, { memory: BotMemory }>();
+  private readonly botSeats = new Map<number, { memory: BotMemory; difficulty: DifficultyId; seq: number }>();
+  /** Ranked bot seats waiting to arm (bits-ranked-bots.md): seat id → the
+   * moment the loadout gets drafted. Humans take a beat to pick; a bot that
+   * arms on the same tick it sits down is a tell. */
+  private readonly pendingBotArms = new Map<number, number>();
   /** Wall-aware routing shared by every bot brain — built once per arena. */
   private readonly nav: BotNav;
   /** Snapshot ring the difficulty layer reads — each bot acts on the world
@@ -380,7 +397,7 @@ export class Room {
       // No archetype stored: the brain derives it from the loadout the force
       // sweep is about to draft (and re-derives if the bot ever re-arms).
       // Seed by seat so same-tier bots don't roll their dice in lockstep.
-      this.botSeats.set(bot.id, { memory: createBotMemory(0x9e3779b9 ^ bot.id) });
+      this.botSeats.set(bot.id, { memory: createBotMemory(0x9e3779b9 ^ bot.id), difficulty: DEFAULT_DIFFICULTY, seq: 0 });
       // The tier's speed multiplier (1 at the default tier today; a room
       // difficulty picker would set it here).
       bot.moveFactor = DIFFICULTIES[DEFAULT_DIFFICULTY].speedFactor;
@@ -412,6 +429,47 @@ export class Room {
       this.dismissBotBrains();
       this.notice(`${player.name} cancelled the start — the bots stand down.`);
       console.log(`[${this.meta.code}] ${player.name} cancelled the bot-filled start`);
+      this.syncRoomState(nowMs);
+    }
+  }
+
+  /**
+   * Seat a ranked backfill bot (bits-ranked-bots.md): the production addBot
+   * path, styled as a player. Human stats at every band — moveFactor pinned
+   * to 1, never the tier's speedFactor (inhuman/godlike carry 1.05/1.10;
+   * decided 2026-08-01: a super-human run speed is both a tell and unfair
+   * where Elo is at stake — difficulty stays brain-only in ranked). The bot
+   * arms 2–8 s in, off the sim rng.
+   */
+  seatRankedBot(name: string, difficulty: DifficultyId, nowMs: number): number | null {
+    const bot = addBot(this.sim, name);
+    if (!bot) return null;
+    bot.announcer = "default";
+    bot.moveFactor = 1;
+    this.botSeats.set(bot.id, { memory: createBotMemory(0x9e3779b9 ^ bot.id), difficulty, seq: 0 });
+    this.pendingBotArms.set(bot.id, nowMs + 2_000 + this.sim.rng.next() * 6_000);
+    this.syncRoomState(nowMs);
+    return bot.id;
+  }
+
+  /** Draft loadouts for ranked bots whose arming moment has come — the same
+   * sim-rng sweep forceStartMatch runs for stragglers. Once both seats are
+   * armed the sim's own countdown fires; no other plumbing. */
+  private armPendingBots(nowMs: number): void {
+    for (const [id, at] of this.pendingBotArms) {
+      if (at > nowMs) continue;
+      this.pendingBotArms.delete(id);
+      const p = this.sim.state.players[id];
+      if (!p || !p.bot) continue;
+      if (p.weapon === null) {
+        setPlayerWeapon(this.sim, id, WEAPON_IDS[Math.floor(this.sim.rng.next() * WEAPON_IDS.length)]!);
+      }
+      const hand = [...p.abilities];
+      while (hand.length < LOADOUT_ABILITY_COUNT) {
+        const pool = ABILITY_IDS.filter((a) => !hand.includes(a));
+        hand.push(pool[Math.floor(this.sim.rng.next() * pool.length)]!);
+      }
+      setPlayerAbilities(this.sim, id, hand);
       this.syncRoomState(nowMs);
     }
   }
@@ -456,6 +514,7 @@ export class Room {
         this.botSeats.delete(id);
         this.inputs.delete(id);
         this.castLatch.delete(id);
+        this.pendingBotArms.delete(id);
       }
     }
   }
@@ -486,15 +545,26 @@ export class Room {
     // to — the gate holds and the machine starts it this tick) or a match on.
     // Any OTHER lobby state means the start died some way cancelStart didn't
     // see — a leaver, a heartbeat drop — and the squatters stand down so real
-    // players can take the seats back.
+    // players can take the seats back. Ranked is exempt: its bot is seated
+    // for the whole arming lobby by design (bits-ranked-bots.md), and this
+    // exact condition holds the entire time the human is picking a loadout.
     const { round } = this.sim.state;
-    if (round.phase === "lobby" && round.timer <= 0 && !armingComplete(this.sim)) {
+    if (!this.ranked && round.phase === "lobby" && round.timer <= 0 && !armingComplete(this.sim)) {
       for (const p of seatedPlayers(this.sim.state)) if (p.bot) removePlayer(this.sim, p.id);
       this.dismissBotBrains();
     }
+    if (this.pendingBotArms.size > 0) this.armPendingBots(nowMs);
     this.thinkBots();
     const noCasts: boolean[] = [];
     for (let i = 0; i < steps; i++) {
+      // Ceremony hold (bits-ranked-bots.md § match end): never step a ranked
+      // sim past matchEnd — the lobby return would free the bot seat while
+      // the plate is still up. The room holds the final frame; the manager
+      // closes it (roomClosed is the authoritative "match over" signal).
+      if (this.ranked && this.sim.state.round.phase === "matchEnd" && this.sim.state.round.timer <= TICK_DT) {
+        this.ceremonyOver = true;
+        break;
+      }
       const stepInputs = new Map<number, PlayerInput>();
       for (const [id, input] of this.inputs) {
         // The latch fires on the first catch-up step only — one press, one cast.
@@ -527,12 +597,15 @@ export class Room {
   private thinkBots(): void {
     if (this.botSeats.size === 0 || this.lastSnap === null) return;
     if (this.sim.state.round.phase === "lobby") return;
-    const world = this.history.stale(DIFFICULTIES[DEFAULT_DIFFICULTY].reactionTicks) ?? this.lastSnap;
     for (const [id, seat] of this.botSeats) {
-      // Stale WORLD, current self (bot-brains.md step 4).
+      // Stale WORLD, current self (bot-brains.md step 4) — each seat reads
+      // the world its own tier's reaction time behind.
+      const world = this.history.stale(DIFFICULTIES[seat.difficulty].reactionTicks) ?? this.lastSnap;
       const snap = this.lastSnap.players.find((p) => p.id === id);
-      const decision = botThink(seat.memory, snap, world, this.nav);
-      const input = sanitizeInput({ seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
+      const decision = botThink(seat.memory, snap, world, this.nav, { difficulty: seat.difficulty });
+      // A climbing seq — a seat frozen at 0 forever reads as a bot on the
+      // wire (bits-ranked-bots.md § anti-tell).
+      const input = sanitizeInput({ seq: ++seat.seq, sx: decision.sx, sy: decision.sy, casts: decision.casts });
       this.inputs.set(id, input);
       if (input.casts.some(Boolean)) {
         const latch = this.castLatch.get(id) ?? input.casts.map(() => false);
@@ -575,9 +648,13 @@ export class Room {
   }
 
   private roomStateFor(viewerTeam: Team | 0): ServerMsg {
+    const players = toRoomStatePlayers(this.sim.state, viewerTeam);
     return {
       t: "roomState",
-      players: toRoomStatePlayers(this.sim.state, viewerTeam),
+      // The disguise (bits-ranked-bots.md): a ranked roster never carries a
+      // bot marker — masked for EVERY viewer, so the field can't leak through
+      // a watcher view either. The sim stays pure; this is presentation.
+      players: this.ranked ? players.map((p) => ({ ...p, bot: false })) : players,
       hostId: this.meta.hostId,
     };
   }

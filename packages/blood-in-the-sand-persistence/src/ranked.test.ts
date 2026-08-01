@@ -3,7 +3,7 @@ import { createDb, ensureSchema, type Db } from "./db";
 import { registerPlayer } from "./players";
 import { gloryBalance } from "./glory";
 import { RATING_START } from "./elo";
-import { getRating, leaderboard, rankedSummary, recentForm, recordRankedMatch } from "./ranked";
+import { getRating, leaderboard, rankedSummary, recentForm, recordRankedBotMatch, recordRankedMatch } from "./ranked";
 
 let db: Db;
 let alice: string;
@@ -92,6 +92,82 @@ describe("recordRankedMatch", () => {
     const rows = await db.execute("SELECT winner_loadout, loser_loadout FROM ranked_matches");
     expect(JSON.parse(String(rows.rows[0]!["winner_loadout"]))).toEqual({ weapon: "sword" });
     expect(rows.rows[0]!["loser_loadout"]).toBeNull();
+  });
+});
+
+describe("recordRankedBotMatch", () => {
+  const botMatch = (matchId: string, humanWon: boolean, botRating = RATING_START) => ({
+    matchId,
+    season: 1,
+    bracket: "1v1",
+    humanId: alice,
+    humanWon,
+    botId: "bot:0000-test",
+    botRating,
+  });
+
+  test("settles the human exactly like an even human match", async () => {
+    const result = await recordRankedBotMatch(db, botMatch("m1", true));
+    expect(result).not.toBeNull();
+    expect(result!.winner.subjectId).toBe(alice);
+    expect(result!.winner.after).toBe(1520); // placement K=40, even ratings
+    expect(result!.winner.matchesPlayed).toBe(1);
+    expect(result!.winner.glory).toBe(23);
+    expect(await gloryBalance(db, alice)).toBe(23);
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1520);
+    expect(await recentForm(db, alice, 1, "1v1")).toEqual([true]);
+  });
+
+  test("a human loss settles the other way", async () => {
+    const result = await recordRankedBotMatch(db, botMatch("m1", false));
+    expect(result!.loser.subjectId).toBe(alice);
+    expect(result!.loser.after).toBe(1480);
+    expect(result!.loser.glory).toBe(5);
+    expect(result!.winner.subjectId).toBe("bot:0000-test");
+    expect(await gloryBalance(db, alice)).toBe(5);
+    expect(await recentForm(db, alice, 1, "1v1")).toEqual([false]);
+  });
+
+  test("the fabricated bot side is settled-K and never in placements", async () => {
+    const result = await recordRankedBotMatch(db, botMatch("m1", true, 1520));
+    const bot = result!.loser;
+    expect(bot.subjectId).toBe("bot:0000-test");
+    expect(bot.before).toBe(1520);
+    expect(bot.matchesPlayed).toBe(20); // > PLACEMENT_MATCHES → placement: null upstream
+    expect(bot.after).toBeLessThan(1520); // settled K=20 loss
+    expect(bot.before - bot.after).toBeLessThanOrEqual(20);
+    expect(bot.peak).toBe(1520);
+  });
+
+  test("the bot never touches ranked_ratings or glory_ledger", async () => {
+    await recordRankedBotMatch(db, botMatch("m1", true));
+    await recordRankedBotMatch(db, botMatch("m2", false));
+    const ratings = await db.execute("SELECT subject_id FROM ranked_ratings");
+    expect(ratings.rows.map((r) => String(r["subject_id"]))).toEqual([alice]);
+    const glory = await db.execute("SELECT player_id FROM glory_ledger");
+    expect(glory.rows.map((r) => String(r["player_id"]))).toEqual([alice, alice]);
+    const top = await leaderboard(db, 1, "1v1");
+    expect(top.map((e) => e.subjectId)).toEqual([alice]);
+  });
+
+  test("a replayed match id is a no-op", async () => {
+    expect(await recordRankedBotMatch(db, botMatch("m1", true))).not.toBeNull();
+    expect(await recordRankedBotMatch(db, botMatch("m1", true))).toBeNull();
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1520);
+    expect(await gloryBalance(db, alice)).toBe(23);
+  });
+
+  test("the history row carries the bot id and both loadouts", async () => {
+    await recordRankedBotMatch(db, {
+      ...botMatch("m1", true),
+      humanLoadout: { weapon: "sword" },
+      botLoadout: { weapon: "bow" },
+    });
+    const rows = await db.execute("SELECT winner_id, loser_id, winner_loadout, loser_loadout FROM ranked_matches");
+    expect(String(rows.rows[0]!["winner_id"])).toBe(alice);
+    expect(String(rows.rows[0]!["loser_id"])).toBe("bot:0000-test");
+    expect(JSON.parse(String(rows.rows[0]!["winner_loadout"]))).toEqual({ weapon: "sword" });
+    expect(JSON.parse(String(rows.rows[0]!["loser_loadout"]))).toEqual({ weapon: "bow" });
   });
 });
 

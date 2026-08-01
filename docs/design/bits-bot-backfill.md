@@ -13,6 +13,10 @@ partial room, **every empty seat is filled by a bot**. Combined with
 play, not just practice-mode sparring partners — two humans can field a full
 4v4 with bot teammates on both sides.
 
+Since 2026-08-01 bots also backfill the **ranked** queue — a different beast
+entirely (disguised as players, one-sided Elo settlement, env kill switch):
+see [bits-ranked-bots](./bits-ranked-bots.md).
+
 ## The flow
 
 1. Host creates a 4v4 → the room lists with 1/8 players (bots never appear in

@@ -290,10 +290,14 @@ export class ArenaClient {
       case "roomClosed":
         // Kicked (host gone / ranked room over or voided). Drop the seat and
         // fall back — to the room list or RankedScreen — showing the reason.
+        // EXCEPT the settled ranked close: the server now ends every ranked
+        // match with roomClosed (the ceremony hold — bits-ranked-bots.md
+        // § match end), and "match complete" under the settlement plate
+        // would read as an error. The plate IS the message there.
         this.welcome = null;
         this.roomState = null;
         this.phase = "lobby";
-        this.lastError = msg.reason;
+        this.lastError = this.rankedMatch && this.rankedResult ? null : msg.reason;
         this.rankedMatch = null;
         this.buffer.reset();
         this.listRooms();
@@ -307,7 +311,10 @@ export class ArenaClient {
           // A ranked room has no post-match lobby: once the settlement is in
           // and the sim returns to "lobby", leave at once (beating the
           // server's own close) so the player lands back on RankedScreen
-          // without a flash of the arming wizard.
+          // without a flash of the arming wizard. Belt-and-braces against a
+          // pre-ceremony-hold server — the current server never steps a
+          // ranked sim back to lobby (roomClosed lands first); deletable once
+          // every server is on the hold.
           if (this.phase === "lobby" && this.rankedMatch && this.rankedResult) {
             this.rankedMatch = null;
             this.leaveRoom();
@@ -342,6 +349,16 @@ export class ArenaClient {
             mine,
             theirs: msg.results.find((r) => r.playerId !== myId) ?? null,
           };
+        }
+        // The settlement outran the phase flip (a pre-ceremony-hold server
+        // whose sim already returned to lobby): the snapshot handler's
+        // leave-at-once was a one-shot on the transition, so fire it here or
+        // the player sits in a ghost arming lobby. Same rollout note as the
+        // snapshot-side guard — dead code against the current server.
+        if (this.phase === "lobby" && this.rankedMatch) {
+          this.rankedMatch = null;
+          this.leaveRoom();
+          return;
         }
         this.onChange?.();
         return;

@@ -37,6 +37,10 @@ export interface QueueEntry {
   rating: number;
   /** Queue-entry time; survives a void's re-queue so waiting is never lost. */
   joinedMs: number;
+  /** When this entry becomes bot-backfill-eligible (bits-ranked-bots.md) —
+   * jittered per entry; a re-queue gets a FRESH deadline (earned wait stays,
+   * an instant bot pop never happens). Absent = backfill off. */
+  botAtMs?: number;
 }
 
 /** How far apart two ratings may be, given how long each has waited. */
@@ -169,6 +173,28 @@ export class RankedQueue {
       const i = queue.findIndex((e) => e.accountId === accountId);
       if (i >= 0) queue.splice(i, 1);
     }
+  }
+
+  /**
+   * Entries whose bot deadline has passed (bits-ranked-bots.md) — runs AFTER
+   * the pairing pass each beat, so a human match always wins. Claims each
+   * taken account from every bracket, mirroring match()'s
+   * first-match-wins rule for the multi-queued.
+   */
+  takeOverdue(nowMs: number, brackets: readonly string[]): { bracket: string; entry: QueueEntry }[] {
+    const taken: { bracket: string; entry: QueueEntry }[] = [];
+    for (const bracket of brackets) {
+      const queue = this.queues.get(bracket);
+      if (!queue) continue;
+      // Iterate a snapshot — the claim splices the live arrays under us.
+      for (const entry of [...queue]) {
+        if (entry.botAtMs === undefined || entry.botAtMs > nowMs) continue;
+        if (!queue.includes(entry)) continue; // claimed via another bracket this pass
+        taken.push({ bracket, entry });
+        this.removeAccount(entry.accountId);
+      }
+    }
+    return taken;
   }
 
   /** Every socket with at least one live queue entry (the status audience). */

@@ -1,8 +1,25 @@
 # Blood in the Sand — Ranked Bot Backfill (Implementation Plan)
 
-Status: **agreed direction 2026-08-01 — NOT YET BUILT, this doc is the build plan** ·
+Status: **BUILT 2026-08-01** (steps 1–7 including the ceremony hold + client
+touches; on-device pass owed — see § verification) ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-01
+
+Build-time deviations (all minor):
+
+- Persistence: the SQL snippet builders (`ratingUpsert`/`gloryInsert`/
+  `matchInsert`) were hoisted to module level so both writers share them —
+  no behavior change. The bot's fictional prior is wins 10 / losses 9
+  (19 played → settled K; `sideOf` then reports matchesPlayed 20).
+- Manager: a `requeued()` helper stamps the fresh `botAtMs` on BOTH requeue
+  paths (void + dead-socket) and strips it when the switch is off.
+- Fuzz rides a shared `queueStatusFor()` wrapper covering all four
+  queueStatus sends, not per-payload edits.
+- The bot side's fabricated `rankedResult` glory is the real formula's value
+  (not 0) — a wire inspector sees a plausible payout.
+- The existing ranked-flow test suite is pinned to a kill-switch-off config
+  (it asserts honest queue numbers); the lifecycle test now asserts the
+  ceremonyOver close + "match complete" roomClosed.
 
 > "when a player enters the ranked 1v1 queue we try to match them with a player
 > if there is one in the queue to match with, but if there isn't maybe we could
@@ -70,6 +87,11 @@ average · `1350–1449` experienced · `1450–1599` skilled (start rating 1500
 lands here) · `1600–1749` adept · `1750–1899` masterful · `1900–2049`
 inhuman · `≥2050` godlike.
 
+Note: these are a standalone 8-way split, NOT the `elo.ts` TIERS (six tiers,
+floors 1300/1450/1600/1750/1900) — four cut points coincide, the rest don't.
+In ranked the top two bands lose their practice-mode speed edge (see
+`seatRankedBot` below), so they differ from practice inhuman/godlike.
+
 ### Bot's reported rating
 
 `clamp(humanRating + uniform(±50), RATING_FLOOR…)`, frozen at room creation.
@@ -102,6 +124,34 @@ live-rooms in-use set — no "same stranger twice in 10 minutes".
 - Queue-size fuzz applies to `queueStatus` AND the unauthenticated
   `queueInfo` (RankedScreen shows sizes before queueing — the two must
   agree). Slow-varying plausible baseline; dead when the kill switch is off.
+- **Accepted risk** (Tom, 2026-08-01): the HTTP root's `"${roomCount()}
+  room(s) open"` (`main.ts:45`) counts ranked rooms and can contradict the
+  fuzzed queue numbers for anyone polling it. Deliberately NOT fuzzed —
+  cross-checking an unauthenticated status endpoint is beyond the audience
+  this disguise targets, and soft disclosure covers discovery. Don't "fix"
+  this during the build.
+
+### Match end: server closes the room — ranked rooms never return to lobby
+
+(decided 2026-08-01) The sim's matchEnd→lobby transition frees every bot
+seat in the same tick it flips phase (`round.ts:230-234`) — right for casual
+(a rematch re-seats fresh bots), but in ranked the defeated "player" would
+evaporate from the roster. Today the client dodges this by leaving the room
+itself when it sees the phase flip (`connection.ts:311-314`) — a
+client-inferred flow with a real race: the leave is gated on `rankedResult`
+having already arrived and is a one-shot on the transition, so a slow settle
+strands the player in a ghost arming lobby facing an empty seat
+(pre-existing bug for human ranked matches too; late `rankedResult` never
+re-triggers the leave).
+
+Fix at the source, server-authoritative: a ranked room never steps the sim
+past the ceremony. When `phase === "matchEnd"` and the timer would expire
+this tick, the room holds the final frame instead (`ceremonyOver`); the
+lobby return — and its bot-nulling — simply never executes in ranked (sim
+package untouched). The manager closes the room once settled, and that
+`roomClosed` broadcast IS the "match over, leave" signal for every client.
+`lastSettlement` survives room close by design (`connection.ts:196-201`), so
+the client lands on RankedScreen with the plate intact.
 
 ## Implementation steps
 
@@ -160,13 +210,26 @@ ever appear in `ranked_ratings`/`glory_ledger`, `leaderboard()` unaffected.
 - `RankedSeatAccount.bot?: boolean`.
 - New `seatRankedBot(name, difficulty, nowMs): number | null` — `addBot`
   (production addPlayer path, sim `sim.ts:186`) → announcer `"default"` →
-  `moveFactor = DIFFICULTIES[difficulty].speedFactor` → brain entry →
+  `moveFactor = 1` — **never** `DIFFICULTIES[difficulty].speedFactor`
+  (decided 2026-08-01): inhuman/godlike carry 1.05/1.10, a 5–10 %
+  super-human run speed that is measurable off snapshot positions AND
+  unfair where Elo is at stake. Ranked bots play with human stats at every
+  band; difficulty is brain-only (the original even-stats rule). Practice
+  and casual keep their speedFactor tuning untouched. → brain entry →
   `pendingBotArms.set(id, now + 2000 + rand*6000)`.
 - In `step()`:
   - Gate the lobby bot-reaper (:491-494) on `!this.ranked` — it currently
     dismisses bots whenever `phase==="lobby" && timer<=0 && !armingComplete`,
     which is true the whole time the human is arming; an un-gated reaper
-    removes the ranked bot on the next tick.
+    removes the ranked bot on the next tick. (Post-match this gate is moot —
+    see the ceremony hold below — but the pre-match arming lobby is a real
+    lobby phase and still needs it.)
+  - **Ceremony hold** (§ match end above): before stepping the sim, if
+    `this.ranked && round.phase === "matchEnd"` and the timer would expire
+    this tick, skip the sim step and set `ceremonyOver = true` (public
+    readonly for the manager). The room keeps broadcasting the frozen final
+    frame; the sim never reaches lobby, so `round.ts:230-234` never nulls
+    the bot seat mid-plate.
   - Drain `pendingBotArms` past-deadline by drafting a loadout from the sim
     rng exactly like `forceStartMatch`'s sweep (`round.ts:124-133`). Once
     both seats are armed, the sim's own `armingComplete` → 5 s countdown
@@ -206,8 +269,33 @@ ever appear in `ranked_ratings`/`glory_ledger`, `leaderboard()` unaffected.
   both-humans-bail gap).
 - Queue-size fuzz in the `queueStatus`/`queueInfo` payload assembly, gated on
   the kill switch.
-- `tendRankedRooms` needs NO change: the bot seat is `connected: true`, and
-  the bot arms ≤8 s so the 60 s arm deadline only ever catches the human.
+- `tendRankedRooms` close condition (:413-418): replace
+  `phase === "lobby" && ctx.settled` with `room.ceremonyOver && ctx.settled`
+  — load-bearing, not optional: ranked rooms no longer reach lobby (ceremony
+  hold), so the old condition would leak every ended room. Worst case the
+  plate holds a frozen frame ≤2 s longer (one matcher beat) or until the
+  settle retry loop resolves (`settled` is set in the finally either way).
+  The arm-deadline / someone-gone branches are unchanged: the bot seat is
+  `connected: true`, and the bot arms ≤8 s so the 60 s arm deadline only
+  ever catches the human.
+
+### Step 5b — client: `roomClosed` lands the ceremony
+
+`apps/blood-in-the-sand/src/net/connection.ts` — two small touches, OTA-able:
+
+- `roomClosed` handler (:296): when a ranked settlement is in hand
+  (`rankedResult` set for this match), do NOT surface the close reason via
+  `lastError` — RankedScreen renders `lastError` as an error line
+  (`RankedScreen.tsx:396`), and under the server-close design EVERY ranked
+  match now ends with `roomClosed`, so "match complete" would render as an
+  error under the plate, every match. Route to RankedScreen with the plate,
+  quietly.
+- Keep the phase-flip leave (:311-314) as belt-and-braces for rollout
+  ordering (an old server still steps ranked sims to lobby), and mirror its
+  guard into the `rankedResult` case (:335): if the settlement arrives when
+  `phase` is already `"lobby"` in a ranked room, leave then — closes the
+  ghost-lobby race against old servers. Against the new server both paths
+  are dead code; delete once the server is deployed everywhere.
 
 ### Step 6 — docs
 
@@ -232,6 +320,10 @@ with injected tiny-wait config:
 - Lobby-leaver eats the dodge lockout (the reconcileHost fix).
 - 60 s arm-deadline void; fresh `botAtMs` on requeue; distinct bot names
   across consecutive matches.
+- Ceremony hold: after `matchEnd`, a ranked room never broadcasts a
+  `round.phase === "lobby"` snapshot; the bot seat is present in every
+  snapshot through the ceremony; `roomClosed` is sent only after
+  `rankedResult`, and the room is removed from the manager (no leak).
 
 ## Edge cases
 
@@ -240,7 +332,13 @@ with injected tiny-wait config:
 - **Multi-queue**: `takeOverdue` claims the account from every bracket
   (first-match-wins preserved).
 - **`db === null`**: ranked (and therefore backfill) already off.
-- **Settle failure**: existing 3× retry + `settled = true` in finally.
+- **Settle failure**: existing 3× retry + `settled = true` in finally. With
+  the ceremony hold the room just keeps the frozen final frame until the
+  retry loop resolves, then closes — a few extra seconds on a static plate.
+- **Human leaves during the ceremony**: the match is already ended and
+  settled (or settling) — `reconcileHost`'s deserted-close applies; the
+  voidRanked fix targets un-ended lobby-phase rooms only, so no lockout for
+  leaving after the result.
 - **Future fair-matching mode** (`MATCH_ANYONE=false`): two mutually
   out-of-window humans can each draw a bot — acceptable; they survived the
   pairing pass by definition.
@@ -269,4 +367,6 @@ Population-aware thresholds are v2 (env hook left in `rankedBeat`).
 - ToS/FAQ disclosure copy ("matches may include AI opponents during
   low-population periods") — website/store listing, outside this repo.
 - Population-aware trigger (v2).
-- Client-side changes: none — the disguise is entirely server-side.
+- Client-side changes: the *disguise* is entirely server-side; the only
+  client work is Step 5b's two `connection.ts` touches (roomClosed error
+  suppression + belt-and-braces leave), both OTA-able.

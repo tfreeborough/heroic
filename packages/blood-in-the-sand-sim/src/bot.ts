@@ -13,6 +13,13 @@
  * the whole drafted hand is live via the per-ability cast rules
  * (botCasts.ts). Dash decides here because it IS movement. The wall-unstick
  * shuffle survives only as a counted last-resort fallback behind nav.
+ *
+ * v3 humanization (docs/design/bot-humanization.md): the MOTOR layer gets
+ * human texture at EVERY tier — stick inertia, committed hazard detours
+ * with a personal margin (no more machine-perfect zone orbiting), greed
+ * while diving, sloppy hysteretic band edges, micro-pauses. Texture, not
+ * difficulty: mistakes stay tier-gated in DIFFICULTIES; reactive survival
+ * moves (dodges, evasion, unstick) bypass the smoothing and stay sharp.
  */
 import { ARCHETYPES, deriveArchetype, focusTarget, resolveBand, type ArchetypeId } from "./botArchetypes";
 import { dashDown, decideCasts, incomingShot, rangedWeapon, windupThreat } from "./botCasts";
@@ -80,6 +87,26 @@ export interface BotMemory {
    * ticks until the next irregular flip. */
   weaveSign: number;
   weaveTicks: number;
+  /** Motor smoothing (bot-humanization.md M1): the heading the thumb is
+   * actually holding (unit vector; 0,0 = never moved) and its magnitude. */
+  headX: number;
+  headY: number;
+  headMag: number;
+  /** Committed hazard detour (M2): the zone being skirted, the side picked,
+   * the personal margin rolled for this episode, and the ticks left in the
+   * late-notice flinch. One decision, held — like a person. */
+  detourZoneId: number | null;
+  detourSign: number;
+  detourMargin: number;
+  flinchTicks: number;
+  /** Sloppy band-keeping (M4): the fuzz multiplier on band edges, its
+   * re-roll countdown, and the hysteretic state (1 advance / 0 hold /
+   * -1 back) — band flips need a real overshoot, not a pixel. */
+  bandFuzz: number;
+  bandFuzzTicks: number;
+  bandState: number;
+  /** Micro-pause ticks left (M5) — feet only, hands stay live. */
+  pauseTicks: number;
 }
 
 export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
@@ -107,6 +134,17 @@ export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
   shotApproved: false,
   weaveSign: 1,
   weaveTicks: 0,
+  headX: 0,
+  headY: 0,
+  headMag: 0,
+  detourZoneId: null,
+  detourSign: 1,
+  detourMargin: 0,
+  flinchTicks: 0,
+  bandFuzz: 1,
+  bandFuzzTicks: 0,
+  bandState: 0,
+  pauseTicks: 0,
 });
 
 /** Everything the brain reads about the match — the three snapshot arrays a
@@ -125,6 +163,70 @@ const PRESS_TICKS = 150; // 5s
  * wounded (Tom, 2026-07-22: three cornered cowards waiting to be picked off
  * is the opposite of a fight). Healing re-arms it. */
 const FLEE_BUDGET_TICKS = 105; // 3.5s
+
+/** Motor-layer texture (docs/design/bot-humanization.md) — applied at EVERY
+ * tier: these make the feet read as a thumb on a stick, not an optimizer.
+ * Mistakes stay tier-gated in DIFFICULTIES; nothing here touches stats. */
+const HUMANIZE = {
+  /** M1: heading turn cap, rad per tick (≈7 rad/s at 30Hz — a thumb, not a
+   * teleport), the stick-magnitude ease rates, and the speed floor while
+   * swinging through a big reversal. */
+  turnPerTick: 0.233,
+  ramp: 0.15,
+  release: 0.3,
+  reversalFloor: 0.35,
+  /** M2: px beyond a zone's radius where a detour commits; the personal
+   * margin roll (radius + min + rng*range); the late-notice flinch length. */
+  detourNotice: 110,
+  detourMarginMin: 30,
+  detourMarginRange: 70,
+  flinchTicks: 9,
+  /** M3: hazard damping while diving/pressing — tank the trap for the kill. */
+  greedScale: 0.3,
+  /** M4: ± band-edge fuzz, its re-roll cadence (ticks), and the px a band
+   * boundary must be overshot before the advance/hold/back state flips. */
+  bandFuzz: 0.12,
+  bandFuzzMinTicks: 120,
+  bandFuzzRangeTicks: 120,
+  hysteresis: 25,
+  /** M5: rare micro-pause odds/length (feet only), and the whim strafe flip. */
+  pauseChance: 1 / 600,
+  pauseMin: 5,
+  pauseRange: 5,
+  whimFlip: 0.006,
+} as const;
+
+/**
+ * M1 stick inertia: turn the held heading toward the desired direction at a
+ * human thumb rate and ease the magnitude — a big reversal swings through a
+ * slowed middle instead of teleporting 180°. A bot that has never moved
+ * snaps straight to the first intent (walking off the spawn line decisively
+ * is human too); reactive overrides bypass this entirely (the caller snaps
+ * the heading afterwards). Mutates `memory`.
+ */
+const smoothHeading = (memory: BotMemory, desired: { x: number; y: number }, desiredMag: number): void => {
+  if (desiredMag <= 0) {
+    memory.headMag = Math.max(0, memory.headMag - HUMANIZE.release);
+    return;
+  }
+  if (memory.headX === 0 && memory.headY === 0) {
+    memory.headX = desired.x;
+    memory.headY = desired.y;
+    memory.headMag = desiredMag;
+    return;
+  }
+  const cur = Math.atan2(memory.headY, memory.headX);
+  const want = Math.atan2(desired.y, desired.x);
+  let diff = want - cur;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  const a = cur + Math.max(-HUMANIZE.turnPerTick, Math.min(HUMANIZE.turnPerTick, diff));
+  memory.headX = Math.cos(a);
+  memory.headY = Math.sin(a);
+  const swing = Math.abs(diff);
+  const target = desiredMag * (swing > 0.6 ? Math.max(HUMANIZE.reversalFloor, 1 - (swing - 0.6) / 1.8) : 1);
+  memory.headMag += Math.max(-HUMANIZE.ramp, Math.min(HUMANIZE.ramp, target - memory.headMag));
+};
 
 /** One mulberry32 step on the memory's rng state → [0, 1). */
 const nextRand = (memory: BotMemory): number => {
@@ -181,19 +283,26 @@ const unstick = (
 };
 
 /** The strafe direction, orbit-flipping (debounced) when it runs against
- * geometry so an orbiting bot swings round the other way, never grinds. */
+ * geometry so an orbiting bot swings round the other way, never grinds.
+ * Legs are irregular and occasionally flip on a whim (humanization M5) —
+ * a metronome orbit is a machine tell. */
 const strafeDir = (
   memory: BotMemory,
   nav: BotNav,
   mePos: { x: number; y: number },
   toward: { x: number; y: number },
 ): { x: number; y: number } => {
-  if (memory.orbitHoldTicks > 0) memory.orbitHoldTicks -= 1;
+  if (memory.orbitHoldTicks > 0) {
+    memory.orbitHoldTicks -= 1;
+  } else if (nextRand(memory) < HUMANIZE.whimFlip) {
+    memory.orbitSign = -memory.orbitSign;
+    memory.orbitHoldTicks = 14 + Math.floor(nextRand(memory) * 16);
+  }
   let dir = { x: -toward.y * memory.orbitSign, y: toward.x * memory.orbitSign };
   const slid = openDirection(nav, mePos, dir);
   if (slid !== dir && memory.orbitHoldTicks === 0) {
     memory.orbitSign = -memory.orbitSign;
-    memory.orbitHoldTicks = 20;
+    memory.orbitHoldTicks = 14 + Math.floor(nextRand(memory) * 16);
     dir = { x: -toward.y * memory.orbitSign, y: toward.x * memory.orbitSign };
   }
   return dir;
@@ -301,6 +410,21 @@ export const botThink = (
     memory.fleeSpent = false;
   }
 
+  // The live telegraph, read once — the dodge roll consumes it below, and
+  // the micro-pause must never fire under a raised weapon.
+  const threat = windupThreat(me, players);
+
+  // M5 micro-pause: now and then, at EVERY tier, the feet just stop for a
+  // beat — the human sizing-up-the-ground stutter. Distinct from low-tier
+  // dither (longer, freezes the hands too, a mistake); this is texture.
+  // Never under a telegraph, mid-flee, or at grips.
+  if (memory.pauseTicks > 0) {
+    memory.pauseTicks -= 1;
+  } else if (threat === null && !fleeing && dist > 240 && nextRand(memory) < HUMANIZE.pauseChance) {
+    memory.pauseTicks = HUMANIZE.pauseMin + Math.floor(nextRand(memory) * HUMANIZE.pauseRange);
+    memory.stuckTicks = 0; // deliberate stillness is not a wedge
+  }
+
   // Impatience: no hp change on either side of this duel for STALL_TICKS →
   // press in (band collapses to a charge, dash becomes a gap-closer) until
   // something bleeds. Rounds have no clock; the bot supplies the urgency a
@@ -325,6 +449,28 @@ export const botThink = (
   const diving = preset.diveBelow !== undefined && targetHp < preset.diveBelow;
   const band = diving || pressing ? null : resolveBand(preset, me.weapon);
 
+  // M4 sloppy bands: the edges wear a personal fuzz (re-rolled every few
+  // seconds) and the advance/hold/back state flips only on a real overshoot
+  // — a human drifts in and out of range; a machine vibrates at the pixel.
+  let bandNear = 0;
+  let bandFar = 0;
+  if (band !== null) {
+    memory.bandFuzzTicks -= 1;
+    if (memory.bandFuzzTicks <= 0) {
+      memory.bandFuzz = 1 + (nextRand(memory) * 2 - 1) * HUMANIZE.bandFuzz;
+      memory.bandFuzzTicks = HUMANIZE.bandFuzzMinTicks + Math.floor(nextRand(memory) * HUMANIZE.bandFuzzRangeTicks);
+    }
+    bandNear = band.near * memory.bandFuzz;
+    bandFar = band.far * memory.bandFuzz;
+    const h = HUMANIZE.hysteresis;
+    if (dist > bandFar + h) memory.bandState = 1;
+    else if (dist < bandNear - h) memory.bandState = -1;
+    else if (memory.bandState === 1 && dist < bandFar - h) memory.bandState = 0;
+    else if (memory.bandState === -1 && dist > bandNear + h) memory.bandState = 0;
+  } else {
+    memory.bandState = 0;
+  }
+
   let vx = 0;
   let vy = 0;
   const add = (d: { x: number; y: number }, w: number): void => {
@@ -345,14 +491,14 @@ export const botThink = (
     add(away, 1.4);
   } else if (punishing) {
     add(toward, 1);
-  } else if (band === null || dist > band.far) {
+  } else if (band === null || memory.bandState === 1) {
     add(toward, preset.engage);
-  } else if (dist < band.near) {
+  } else if (memory.bandState === -1) {
     add(away, 1);
   }
   // Strafe while holding position (banded brains in the band; contact brains
   // angle their approach with it).
-  const holding = !fleeing && !punishing && (band === null || (dist >= band.near && dist <= band.far));
+  const holding = !fleeing && !punishing && (band === null || memory.bandState === 0);
   if (holding && preset.strafe > 0) add(strafeDir(memory, nav, mePos, toward), preset.strafe);
 
   // Weave: closing on a SHOOTER in a straight line means every arrow lands
@@ -362,7 +508,7 @@ export const botThink = (
   // they were. Applies whenever there's real ground to close — CONTACT
   // brains most of all (they're the exploit's usual victims) — never at
   // grips, and never for a banded brain already holding its range.
-  const approaching = !fleeing && dist > 160 && (band === null || dist > band.far);
+  const approaching = !fleeing && dist > 160 && (band === null || memory.bandState === 1);
   if (tier.weave > 0 && approaching && rangedWeapon(target)) {
     memory.weaveTicks -= 1;
     if (memory.weaveTicks <= 0) {
@@ -406,14 +552,79 @@ export const botThink = (
     }
   }
 
-  // Refuse hostile ground.
-  for (const d of deployables) {
-    if (d.team === me.team) continue;
-    const radius = hostileZoneRadius(d);
-    if (radius === null) continue;
-    const zoneDist = Math.hypot(d.x - me.x, d.y - me.y) || 1;
-    if (zoneDist < radius + 40) {
-      add({ x: (me.x - d.x) / zoneDist, y: (me.y - d.y) / zoneDist }, 1.5);
+  // Hostile ground (humanization M2/M3) — the old standing radial push made
+  // the feet orbit a zone's exact edge like a machine. Instead: a COMMITTED
+  // DETOUR episode (pick a side once, roll a personal margin, arc around and
+  // stick with it), a late-notice flinch, and greed — a diving or pressing
+  // bot damps its avoidance and tanks the trap for the kill, exactly the
+  // trade a human makes.
+  const hazardScale = diving || pressing ? HUMANIZE.greedScale : 1;
+  const axis = memory.headMag > 0.2 ? { x: memory.headX, y: memory.headY } : fleeing ? away : toward;
+  // Greed drops the detour planning outright — a bot chasing a kill walks
+  // the straight line and eats the ground; only the shell below still nudges.
+  if (hazardScale < 1) memory.detourZoneId = null;
+  // Keep or retire the running episode.
+  let detour: DeployableSnapshot | undefined;
+  if (hazardScale === 1 && memory.detourZoneId !== null) {
+    detour = deployables.find((d) => d.id === memory.detourZoneId && d.team !== me.team && hostileZoneRadius(d) !== null);
+    if (detour) {
+      const zd = Math.hypot(detour.x - me.x, detour.y - me.y) || 1;
+      const behind = (detour.x - me.x) * axis.x + (detour.y - me.y) * axis.y < 0;
+      if (zd > memory.detourMargin + 140 || behind) detour = undefined;
+    }
+    if (!detour) memory.detourZoneId = null;
+  }
+  // Or commit a new one: the first zone blocking the corridor ahead.
+  if (!detour && hazardScale === 1) {
+    for (const d of deployables) {
+      if (d.team === me.team) continue;
+      const radius = hostileZoneRadius(d);
+      if (radius === null) continue;
+      const zx = d.x - me.x;
+      const zy = d.y - me.y;
+      const zd = Math.hypot(zx, zy) || 1;
+      if (zd > radius + HUMANIZE.detourNotice) continue;
+      if ((zx * axis.x + zy * axis.y) / zd < 0.3) continue; // not in my way
+      memory.detourZoneId = d.id;
+      // Pass on the side the feet already favour; rng breaks a dead-centre tie.
+      const side = zy * axis.x - zx * axis.y;
+      memory.detourSign = Math.abs(side) < zd * 0.05 ? (nextRand(memory) < 0.5 ? 1 : -1) : side > 0 ? 1 : -1;
+      memory.detourMargin = radius + HUMANIZE.detourMarginMin + nextRand(memory) * HUMANIZE.detourMarginRange;
+      // Noticed it late (placed mid-stride — the tier's stale world makes
+      // this happen naturally) → the "oh crap" swerve before the arc.
+      if (zd < radius + 20) memory.flinchTicks = HUMANIZE.flinchTicks;
+      detour = d;
+      break;
+    }
+  }
+  if (detour) {
+    const zd = Math.hypot(detour.x - me.x, detour.y - me.y) || 1;
+    const off = { x: (me.x - detour.x) / zd, y: (me.y - detour.y) / zd };
+    if (memory.flinchTicks > 0) {
+      memory.flinchTicks -= 1;
+      add(off, 2.5);
+    } else {
+      // Arc along the committed side, correcting toward the personal margin.
+      const tangent = { x: -off.y * memory.detourSign, y: off.x * memory.detourSign };
+      const correct = Math.max(-0.6, Math.min(1.2, (memory.detourMargin - zd) / 60));
+      const ax = tangent.x + off.x * correct;
+      const ay = tangent.y + off.y * correct;
+      const alen = Math.hypot(ax, ay) || 1;
+      add({ x: ax / alen, y: ay / alen }, 1.6);
+    }
+  }
+  // The emergency shell: LOITERING inside a zone is never acceptable — full
+  // scale throws an idle bot out, and a pressing bot keeps a damped lean.
+  // A DIVE is exempt entirely: the dive is the deliberate acceptance of the
+  // ground (a rim-equilibrium here would just re-create the machine orbit
+  // this pass exists to kill).
+  if (!diving) {
+    for (const d of deployables) {
+      if (d.team === me.team) continue;
+      const radius = hostileZoneRadius(d);
+      if (radius === null) continue;
+      const zd = Math.hypot(d.x - me.x, d.y - me.y) || 1;
+      if (zd < radius) add({ x: (me.x - d.x) / zd, y: (me.y - d.y) / zd }, 3 * hazardScale);
     }
   }
 
@@ -425,14 +636,34 @@ export const botThink = (
     const a = Math.atan2(desired.y, desired.x) + (nextRand(memory) * 2 - 1) * tier.wobble;
     desired = { x: Math.cos(a), y: Math.sin(a) };
   }
-  let intent =
-    mag > 0.05 ? (unstick(memory, me, desired) ?? openDirection(nav, mePos, desired)) : desired;
+
+  // M1 stick inertia: blend → smooth → wall-resolve. The heading turns at a
+  // thumb rate and the magnitude eases (a pause releases it); the resolved
+  // intent below is emitted at the heading's magnitude. Reactive overrides
+  // further down snap straight past all of this.
+  smoothHeading(memory, desired, mag > 0.05 && memory.pauseTicks === 0 ? 1 : 0);
+  const heading = { x: memory.headX, y: memory.headY };
+  let intent: { x: number; y: number };
+  let snapped = false;
+  if (memory.headMag > 0.05) {
+    // A paused bot is standing still ON PURPOSE — don't let the wedge
+    // counter read the stillness as being stuck.
+    const slide = memory.pauseTicks === 0 ? unstick(memory, me, heading) : null;
+    if (slide !== null) {
+      intent = slide;
+      snapped = true; // the unstick slide is a survival reflex — full stick
+    } else {
+      intent = openDirection(nav, mePos, heading);
+    }
+  } else {
+    intent = { x: 0, y: 0 };
+  }
 
   // One dodge roll per swing: a new telegraph episode (new attacker, or the
   // threat lapsing and returning) rolls against the tier's dodge odds; the
   // result stands for that whole swing — this tier either answers it or eats
-  // it, and the NEXT swing rolls fresh.
-  const threat = windupThreat(me, players);
+  // it, and the NEXT swing rolls fresh. (`threat` was read above, before the
+  // micro-pause gate.)
   if (threat === null) {
     memory.threatKey = null;
   } else if (threat.id !== memory.threatKey) {
@@ -488,6 +719,19 @@ export const botThink = (
     }
   }
 
+  // Reactive overrides bypass the M1 smoothing — survival reflexes are fast
+  // in humans too. Sync the heading so the recovery curves out of the dodge
+  // line instead of teleporting back.
+  if (snapped || dodgeNow || evading) {
+    if (intent.x !== 0 || intent.y !== 0) {
+      memory.headX = intent.x;
+      memory.headY = intent.y;
+    }
+    memory.headMag = 1;
+    memory.pauseTicks = 0;
+    snapped = true;
+  }
+
   // Dash economy: against a live shooter, the smart tiers keep a charge in
   // reserve for dodging — the LAST hop is never spent closing a gap.
   const rangedEnemyAlive = players.some((p) => p.team !== me.team && p.alive && rangedWeapon(p));
@@ -520,8 +764,8 @@ export const botThink = (
     memory.castHoldTicks = Math.max(memory.castHoldTicks, 24 + tier.castHoldExtra);
   }
   return {
-    sx: intent.x,
-    sy: intent.y,
+    sx: intent.x * (snapped ? 1 : memory.headMag),
+    sy: intent.y * (snapped ? 1 : memory.headMag),
     casts: me.abilities.map((s) => (s.id === "dash" ? dash : s.id === pick)),
   };
 };

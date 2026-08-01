@@ -113,6 +113,54 @@ export interface RankedMatchResult {
   loser: RankedSideResult;
 }
 
+const ratingUpsert = (r: RankedRating, after: number, peak: number, won: boolean) => ({
+  sql: `INSERT INTO ranked_ratings (subject_id, season, bracket, rating, wins, losses, peak_rating, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+        ON CONFLICT (subject_id, season, bracket) DO UPDATE SET
+          rating = excluded.rating,
+          wins = excluded.wins,
+          losses = excluded.losses,
+          peak_rating = excluded.peak_rating,
+          updated_at = excluded.updated_at`,
+  args: [r.subjectId, r.season, r.bracket, after, r.wins + (won ? 1 : 0), r.losses + (won ? 0 : 1), peak],
+});
+
+const gloryInsert = (matchId: string, playerId: string, amount: number) => ({
+  sql: `INSERT OR IGNORE INTO glory_ledger (player_id, amount, source, idempotency_key)
+        VALUES (?, ?, ?, ?)`,
+  args: [playerId, amount, `ranked:${matchId}`, `ranked:${matchId}:${playerId}`],
+});
+
+const matchInsert = (
+  input: { matchId: string; season: number; bracket: string; winnerLoadout?: unknown; loserLoadout?: unknown },
+  winnerId: string,
+  loserId: string,
+  winnerBefore: number,
+  winnerAfter: number,
+  loserBefore: number,
+  loserAfter: number,
+) => ({
+  sql: `INSERT OR IGNORE INTO ranked_matches (
+          id, season, bracket, winner_id, loser_id,
+          winner_rating_before, winner_rating_after,
+          loser_rating_before, loser_rating_after,
+          winner_loadout, loser_loadout)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  args: [
+    input.matchId,
+    input.season,
+    input.bracket,
+    winnerId,
+    loserId,
+    winnerBefore,
+    winnerAfter,
+    loserBefore,
+    loserAfter,
+    input.winnerLoadout === undefined ? null : JSON.stringify(input.winnerLoadout),
+    input.loserLoadout === undefined ? null : JSON.stringify(input.loserLoadout),
+  ],
+});
+
 /**
  * Settle a ranked match: both Elo updates, the history row, and both Glory
  * ledger rows in ONE write batch (a libsql batch is a transaction). Returns
@@ -147,50 +195,13 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
   const winnerPeak = Math.max(winner.peak, winnerAfter);
   const loserPeak = Math.max(loser.peak, loserAfter);
 
-  const upsert = (r: RankedRating, after: number, peak: number, won: boolean) => ({
-    sql: `INSERT INTO ranked_ratings (subject_id, season, bracket, rating, wins, losses, peak_rating, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
-          ON CONFLICT (subject_id, season, bracket) DO UPDATE SET
-            rating = excluded.rating,
-            wins = excluded.wins,
-            losses = excluded.losses,
-            peak_rating = excluded.peak_rating,
-            updated_at = excluded.updated_at`,
-    args: [r.subjectId, r.season, r.bracket, after, r.wins + (won ? 1 : 0), r.losses + (won ? 0 : 1), peak],
-  });
-  const gloryRow = (playerId: string, amount: number) => ({
-    sql: `INSERT OR IGNORE INTO glory_ledger (player_id, amount, source, idempotency_key)
-          VALUES (?, ?, ?, ?)`,
-    args: [playerId, amount, `ranked:${input.matchId}`, `ranked:${input.matchId}:${playerId}`],
-  });
-
   await db.batch(
     [
-      upsert(winner, winnerAfter, winnerPeak, true),
-      upsert(loser, loserAfter, loserPeak, false),
-      {
-        sql: `INSERT OR IGNORE INTO ranked_matches (
-                id, season, bracket, winner_id, loser_id,
-                winner_rating_before, winner_rating_after,
-                loser_rating_before, loser_rating_after,
-                winner_loadout, loser_loadout)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          input.matchId,
-          input.season,
-          input.bracket,
-          input.winnerId,
-          input.loserId,
-          winner.rating,
-          winnerAfter,
-          loser.rating,
-          loserAfter,
-          input.winnerLoadout === undefined ? null : JSON.stringify(input.winnerLoadout),
-          input.loserLoadout === undefined ? null : JSON.stringify(input.loserLoadout),
-        ],
-      },
-      gloryRow(input.winnerId, winnerPay),
-      gloryRow(input.loserId, loserPay),
+      ratingUpsert(winner, winnerAfter, winnerPeak, true),
+      ratingUpsert(loser, loserAfter, loserPeak, false),
+      matchInsert(input, input.winnerId, input.loserId, winner.rating, winnerAfter, loser.rating, loserAfter),
+      gloryInsert(input.matchId, input.winnerId, winnerPay),
+      gloryInsert(input.matchId, input.loserId, loserPay),
     ],
     "write",
   );
@@ -199,6 +210,100 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
     matchId: input.matchId,
     winner: sideOf(input.winnerId, winner, winnerAfter, winnerPeak, winnerPay),
     loser: sideOf(input.loserId, loser, loserAfter, loserPeak, loserPay),
+  };
+};
+
+export interface RankedBotMatchInput {
+  /** Server-minted uuid — the idempotency root, exactly like a human match. */
+  matchId: string;
+  season: number;
+  bracket: string;
+  humanId: string;
+  humanWon: boolean;
+  /** Throwaway `bot:<uuid>` subject — lands ONLY in ranked_matches. */
+  botId: string;
+  /** The bot's advertised rating, frozen at room creation. */
+  botRating: number;
+  humanLoadout?: unknown;
+  botLoadout?: unknown;
+}
+
+/**
+ * Settle a ranked match against a backfill bot (bits-ranked-bots.md): the
+ * HUMAN's side only — their rating upsert, the history row, and their Glory —
+ * in one batch. The bot never gets a ranked_ratings or glory_ledger row (no
+ * ladder contamination, nothing for a future leaderboard filter to forget);
+ * its side of the result is fabricated purely so the rankedResult broadcast
+ * is shaped exactly like a human settlement. The fictional prior is 19 games
+ * (settled K, matchesPlayed 20 after this one — never renders as "in
+ * placements") with peak = advertised rating.
+ */
+export const recordRankedBotMatch = async (db: Db, input: RankedBotMatchInput): Promise<RankedMatchResult | null> => {
+  const already = await db.execute({
+    sql: "SELECT 1 FROM ranked_matches WHERE id = ?",
+    args: [input.matchId],
+  });
+  if (already.rows.length > 0) return null;
+
+  const human = await getRating(db, input.humanId, input.season, input.bracket);
+  const humanAfter = updateRating({
+    rating: human.rating,
+    opponent: input.botRating,
+    matchesPlayed: human.wins + human.losses,
+    won: input.humanWon,
+  });
+  const humanPeak = Math.max(human.peak, humanAfter);
+  const humanPay = input.humanWon ? winnerGlory(human.rating, input.botRating) : loserGlory();
+
+  const bot: RankedRating = {
+    subjectId: input.botId,
+    season: input.season,
+    bracket: input.bracket,
+    rating: input.botRating,
+    wins: 10,
+    losses: 9,
+    peak: input.botRating,
+  };
+  const botAfter = updateRating({
+    rating: input.botRating,
+    opponent: human.rating,
+    matchesPlayed: bot.wins + bot.losses,
+    won: !input.humanWon,
+  });
+  const botPeak = Math.max(bot.peak, botAfter);
+  const botPay = input.humanWon ? loserGlory() : winnerGlory(input.botRating, human.rating);
+
+  const winnerId = input.humanWon ? input.humanId : input.botId;
+  const loserId = input.humanWon ? input.botId : input.humanId;
+  await db.batch(
+    [
+      ratingUpsert(human, humanAfter, humanPeak, input.humanWon),
+      matchInsert(
+        {
+          matchId: input.matchId,
+          season: input.season,
+          bracket: input.bracket,
+          winnerLoadout: input.humanWon ? input.humanLoadout : input.botLoadout,
+          loserLoadout: input.humanWon ? input.botLoadout : input.humanLoadout,
+        },
+        winnerId,
+        loserId,
+        input.humanWon ? human.rating : input.botRating,
+        input.humanWon ? humanAfter : botAfter,
+        input.humanWon ? input.botRating : human.rating,
+        input.humanWon ? botAfter : humanAfter,
+      ),
+      gloryInsert(input.matchId, input.humanId, humanPay),
+    ],
+    "write",
+  );
+
+  const humanSide = sideOf(input.humanId, human, humanAfter, humanPeak, humanPay);
+  const botSide = sideOf(input.botId, bot, botAfter, botPeak, botPay);
+  return {
+    matchId: input.matchId,
+    winner: input.humanWon ? humanSide : botSide,
+    loser: input.humanWon ? botSide : humanSide,
   };
 };
 

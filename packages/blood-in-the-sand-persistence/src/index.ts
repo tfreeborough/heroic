@@ -34,11 +34,13 @@ export {
 export {
   getRating,
   recordRankedMatch,
+  recordRankedBotMatch,
   leaderboard,
   rankedSummary,
   recentForm,
   type RankedRating,
   type RankedMatchInput,
+  type RankedBotMatchInput,
   type RankedMatchResult,
   type RankedSideResult,
   type LeaderboardEntry,

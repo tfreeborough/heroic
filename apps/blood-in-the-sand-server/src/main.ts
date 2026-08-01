@@ -13,6 +13,7 @@ import { dirname, resolve } from "node:path";
 import { DEFAULT_PORT, PROTOCOL_VERSION } from "@heroic/blood-in-the-sand-sim";
 import { createDb, ensureSchema, type Db } from "@heroic/blood-in-the-sand-persistence";
 import { RoomManager } from "./manager";
+import { botBackfillConfigFromEnv } from "./botBackfill";
 import type { ClientData } from "./room";
 
 // PORT is what Render (and most PaaS) inject; ARENA_PORT is the local override.
@@ -36,7 +37,15 @@ try {
   console.error("⚠ persistence unavailable — ranked disabled:", err);
   db = null;
 }
-const manager = new RoomManager(db);
+const botCfg = botBackfillConfigFromEnv();
+if (db) {
+  console.log(
+    botCfg.enabled
+      ? `🤖 ranked bot backfill ON — wait ${botCfg.minWaitMs / 1000}–${botCfg.maxWaitMs / 1000}s, rating ±${botCfg.ratingJitter}`
+      : "🤖 ranked bot backfill OFF (RANKED_BOT_BACKFILL)",
+  );
+}
+const manager = new RoomManager(db, botCfg);
 
 const server = Bun.serve<ClientData, never>({
   port,

@@ -37,6 +37,7 @@ import {
   PLACEMENT_MATCHES,
   findPlayerByToken,
   getRating,
+  recordRankedBotMatch,
   recordRankedMatch,
   type Db,
 } from "@heroic/blood-in-the-sand-persistence";
@@ -46,9 +47,20 @@ import {
   MATCHER_INTERVAL_MS,
   RankedQueue,
   SEASON,
+  type BracketStatus,
   type QueueEntry,
   type QueueMatch,
 } from "./ranked";
+import {
+  BotIdentityBook,
+  botBackfillConfigFromEnv,
+  botDeadline,
+  botSubjectId,
+  difficultyForRating,
+  fuzzedQueueSize,
+  mirrorRating,
+  type BotBackfillConfig,
+} from "./botBackfill";
 
 const SWEEP_MS = 60_000;
 const MAX_PLAYER_NAME = 16;
@@ -65,8 +77,18 @@ export class RoomManager {
   private lastMs = 0;
 
   /** `db` null = ranked is off (no creds / DB unreachable at boot): skirmish
-   * runs untouched and queueJoin rejects honestly. */
-  constructor(private readonly db: Db | null = null) {}
+   * runs untouched and queueJoin rejects honestly. Bot backfill
+   * (bits-ranked-bots.md) rides ranked — no db, no bots; the config's kill
+   * switch turns it (and the queue-size fuzz) off without a build. */
+  constructor(
+    private readonly db: Db | null = null,
+    private readonly botCfg: BotBackfillConfig = botBackfillConfigFromEnv(),
+    private readonly identityBook: BotIdentityBook = new BotIdentityBook(),
+  ) {}
+
+  private botBackfillOn(): boolean {
+    return this.db !== null && this.botCfg.enabled;
+  }
 
   start(server: Server<ClientData>): void {
     this.server = server;
@@ -164,7 +186,7 @@ export class RoomManager {
         return;
       }
       case "queueInfo":
-        return this.send(ws, { t: "queueStatus", brackets: this.queue.statusFor(ws, performance.now()) });
+        return this.send(ws, { t: "queueStatus", brackets: this.queueStatusFor(ws, performance.now()) });
     }
   }
 
@@ -185,6 +207,12 @@ export class RoomManager {
   private closeRoom(room: Room, reason: string): void {
     room.kickAll(reason);
     this.rooms.delete(room.meta.code);
+    // Every close path releases a backfill bot's name back to the pool.
+    if (room.ranked) {
+      for (const account of room.ranked.accounts.values()) {
+        if (account.bot) this.identityBook.release(account.name);
+      }
+    }
     console.log(`✝ room ${room.meta.code} "${room.meta.name}" closed — ${reason}`);
   }
 
@@ -201,9 +229,19 @@ export class RoomManager {
   private reconcileHost(room: Room, nowMs: number): void {
     // Ranked rooms are hostless in behaviour — no crown to migrate, no
     // handoff notices. Their lifecycle (voids, post-match close) lives in
-    // tendRankedRooms; the one shared rule is "deserted = dead".
+    // tendRankedRooms; the one shared rule is "deserted = dead". A deserted
+    // UN-ENDED arming lobby is a dodge, not a mere close: whoever bailed
+    // eats the lockout (load-bearing with a bot opponent — isDeserted
+    // ignores bots, so one human leaving deserts the room instantly and
+    // would otherwise dodge free every time; bits-ranked-bots.md).
     if (room.ranked) {
-      if (room.isDeserted()) this.closeRoom(room, "everyone left the room");
+      if (room.isDeserted()) {
+        if (!room.ranked.ended && room.sim.state.round.phase === "lobby") {
+          this.voidRanked(room, nowMs, () => true);
+        } else {
+          this.closeRoom(room, "everyone left the room");
+        }
+      }
       return;
     }
     const result = room.reassignHost(nowMs);
@@ -349,9 +387,17 @@ export class RoomManager {
     if (ws.readyState !== 1 || ws.data.roomCode !== null) return;
     const now = performance.now();
     for (const bracket of brackets) {
-      this.queue.enqueue(bracket, { ws, accountId, name, announcer, rating: ratings.get(bracket)!, joinedMs: now });
+      this.queue.enqueue(bracket, {
+        ws,
+        accountId,
+        name,
+        announcer,
+        rating: ratings.get(bracket)!,
+        joinedMs: now,
+        ...(this.botBackfillOn() ? { botAtMs: botDeadline(now, this.botCfg, Math.random) } : {}),
+      });
     }
-    this.trySend(ws, { t: "queueStatus", brackets: this.queue.statusFor(ws, now) });
+    this.trySend(ws, { t: "queueStatus", brackets: this.queueStatusFor(ws, now) });
   }
 
   /** The slow beat: tend ranked-room lifecycles, run the matcher, refresh
@@ -359,17 +405,36 @@ export class RoomManager {
   private rankedBeat(): void {
     const now = performance.now();
     this.tendRankedRooms(now);
+    // Human pairing always wins the beat — backfill only takes what it left.
     for (const match of this.queue.match(now)) this.createRankedRoom(match, now);
-    for (const ws of this.queue.queuedSockets()) {
-      this.trySend(ws, { t: "queueStatus", brackets: this.queue.statusFor(ws, now) });
+    if (this.botBackfillOn()) {
+      // TODO(v2): population-aware trigger — skip backfill while the bracket's
+      // queue size is ≥ N and let the wait ride instead.
+      for (const { bracket, entry } of this.queue.takeOverdue(now, ["1v1"])) {
+        this.createRankedBotRoom(bracket, entry, now);
+      }
     }
+    for (const ws of this.queue.queuedSockets()) {
+      this.trySend(ws, { t: "queueStatus", brackets: this.queueStatusFor(ws, now) });
+    }
+  }
+
+  /** The displayed queue numbers: honest, unless backfill is on — then the
+   * fuzz rides EVERY read (queueStatus and queueInfo agree by construction)
+   * so "1 in queue → match found" never appears (bits-ranked-bots.md). */
+  private queueStatusFor(ws: Socket | null, now: number): BracketStatus[] {
+    const brackets = this.queue.statusFor(ws, now);
+    if (!this.botBackfillOn()) return brackets;
+    return brackets.map((b) => ({ ...b, size: fuzzedQueueSize(b.size, b.bracket, now) }));
   }
 
   private createRankedRoom(match: QueueMatch, now: number): void {
     // A socket can die between beats — never build a room around a corpse;
     // the survivor goes straight back in line.
     if (match.a.ws.readyState !== 1 || match.b.ws.readyState !== 1) {
-      for (const e of [match.a, match.b]) if (e.ws.readyState === 1) this.queue.enqueue(match.bracket, e);
+      for (const e of [match.a, match.b]) {
+        if (e.ws.readyState === 1) this.queue.enqueue(match.bracket, this.requeued(e));
+      }
       return;
     }
     const teamSize = RANKED_BRACKETS[match.bracket as keyof typeof RANKED_BRACKETS].teamSize;
@@ -401,6 +466,64 @@ export class RoomManager {
     );
   }
 
+  /** A queue entry whose bot deadline passed with no human to pair: a room
+   * against a server bot styled as a player (bits-ranked-bots.md). Mirrors
+   * createRankedRoom; the `[bot]` marker below is the ONLY place the truth
+   * is written — nothing on the wire carries it. */
+  private createRankedBotRoom(bracket: string, entry: QueueEntry, now: number): void {
+    if (entry.ws.readyState !== 1) return; // died between beats — already unqueued
+    const teamSize = RANKED_BRACKETS[bracket as keyof typeof RANKED_BRACKETS].teamSize;
+    const code = generateRoomCode(new Set(this.rooms.keys()), Math.random);
+    const room = new Room(
+      this.server!,
+      { code, name: `Ranked ${bracket}`, passcode: null, hostId: 0 },
+      Date.now() >>> 0,
+      teamSize,
+      now,
+    );
+    room.ranked = { bracket, matchId: randomUUID(), accounts: new Map(), ended: false, settled: false };
+    room.onRankedMatchEnd = (winnerTeam) => void this.settleRanked(room, winnerTeam);
+    this.rooms.set(code, room);
+
+    this.trySend(entry.ws, { t: "matchFound", bracket, code });
+    const humanId = room.seat(entry.ws, entry.name, entry.announcer, now);
+    if (humanId === null) {
+      // A fresh room can't be full — belt-and-braces: never leak the room.
+      this.closeRoom(room, "the match was called off");
+      return;
+    }
+    room.ranked.accounts.set(humanId, {
+      accountId: entry.accountId,
+      name: entry.name,
+      announcer: entry.announcer,
+      rating: entry.rating,
+      joinedMs: entry.joinedMs,
+    });
+
+    const botName = this.identityBook.pick(entry.accountId, Math.random);
+    const difficulty = difficultyForRating(entry.rating);
+    const botRating = mirrorRating(entry.rating, this.botCfg.ratingJitter, Math.random);
+    const botSeat = room.seatRankedBot(botName, difficulty, now);
+    if (botSeat === null) {
+      this.identityBook.release(botName);
+      this.voidRanked(room, now, () => false); // nobody's fault — requeue the human
+      return;
+    }
+    // BOTH accounts land in the map so the settleRanked guard passes; the
+    // bot entry's flag routes settlement to the one-sided writer.
+    room.ranked.accounts.set(botSeat, {
+      accountId: botSubjectId(),
+      name: botName,
+      announcer: "default",
+      rating: botRating,
+      joinedMs: now,
+      bot: true,
+    });
+    console.log(
+      `⚔ ranked ${bracket} room ${code}: ${entry.name} (${entry.rating}) vs ${botName} (${botRating}) [bot:${difficulty}]`,
+    );
+  }
+
   /** Ranked-room lifecycle, one pass per beat: close settled rooms whose sim
    * returned to lobby, and void arming rooms that lost a player or blew the
    * deadline. Mid-match rooms are left entirely alone — the arena's own laws
@@ -411,9 +534,11 @@ export class RoomManager {
       if (!ctx) continue;
       const phase = room.sim.state.round.phase;
       if (ctx.ended) {
-        // The sim holds matchEnd for the victory ceremony (rankedResult rides
-        // that window), returns to lobby — and then the room's life is over.
-        if (phase === "lobby" && ctx.settled) this.closeRoom(room, "match complete");
+        // The room holds the matchEnd ceremony's final frame (it never steps
+        // the sim back to lobby — bits-ranked-bots.md § match end); once the
+        // hold is reached AND the settlement landed, its life is over. This
+        // roomClosed is the authoritative "match over, leave" signal.
+        if (room.ceremonyOver && ctx.settled) this.closeRoom(room, "match complete");
         continue;
       }
       if (phase !== "lobby") continue;
@@ -439,6 +564,9 @@ export class RoomManager {
     ctx.settled = true;
     const requeue: QueueEntry[] = [];
     for (const [seatId, account] of ctx.accounts) {
+      // A backfill bot is never at fault and never rejoins a line — its name
+      // frees on the close below.
+      if (account.bot) continue;
       if (dodged(seatId)) {
         this.queue.lockout(account.accountId, now);
         console.log(`[${room.meta.code}] ranked void — ${account.name} dodged (lockout)`);
@@ -446,22 +574,34 @@ export class RoomManager {
       }
       const ws = room.socketOf(seatId);
       if (ws && ws.readyState === 1) {
-        requeue.push({
-          ws,
-          accountId: account.accountId,
-          name: account.name,
-          announcer: account.announcer,
-          rating: account.rating,
-          joinedMs: account.joinedMs,
-        });
+        requeue.push(
+          this.requeued({
+            ws,
+            accountId: account.accountId,
+            name: account.name,
+            announcer: account.announcer,
+            rating: account.rating,
+            joinedMs: account.joinedMs,
+          }),
+        );
       }
     }
     const bracket = ctx.bracket;
     this.closeRoom(room, "the match was called off"); // detaches every socket first…
     for (const entry of requeue) {
       this.queue.enqueue(bracket, entry); // …then the innocents rejoin the line
-      this.trySend(entry.ws, { t: "queueStatus", brackets: this.queue.statusFor(entry.ws, now) });
+      this.trySend(entry.ws, { t: "queueStatus", brackets: this.queueStatusFor(entry.ws, now) });
     }
+  }
+
+  /** A re-queued entry keeps its earned wait (joinedMs) but rolls a FRESH bot
+   * deadline — a void must never pop an instant bot (bits-ranked-bots.md). */
+  private requeued(entry: QueueEntry): QueueEntry {
+    if (!this.botBackfillOn()) {
+      const { botAtMs: _stale, ...rest } = entry;
+      return rest;
+    }
+    return { ...entry, botAtMs: botDeadline(performance.now(), this.botCfg, Math.random) };
   }
 
   /** The recorder (bits-ranked.md § result recording): Elo + history + Glory
@@ -481,18 +621,42 @@ export class RoomManager {
         console.error(`[${room.meta.code}] ranked settle: seats/accounts missing — match ${ctx.matchId} unrecorded`);
         return;
       }
-      const input = {
-        matchId: ctx.matchId,
-        season: SEASON,
-        bracket: ctx.bracket,
-        winnerId: winnerAccount.accountId,
-        loserId: loserAccount.accountId,
-        winnerLoadout: { weapon: winner.weapon, abilities: winner.abilities },
-        loserLoadout: { weapon: loser.weapon, abilities: loser.abilities },
-      };
+      // A bot on either side routes to the one-sided writer: the human's Elo,
+      // history, and Glory land; the bot's side of the result is fabricated
+      // upstream (bits-ranked-bots.md) and never touches the ladder.
+      const botSide = winnerAccount.bot ? "winner" : loserAccount.bot ? "loser" : null;
+      const record = botSide
+        ? () =>
+            recordRankedBotMatch(this.db!, {
+              matchId: ctx.matchId,
+              season: SEASON,
+              bracket: ctx.bracket,
+              humanId: (botSide === "winner" ? loserAccount : winnerAccount).accountId,
+              humanWon: botSide === "loser",
+              botId: (botSide === "winner" ? winnerAccount : loserAccount).accountId,
+              botRating: (botSide === "winner" ? winnerAccount : loserAccount).rating,
+              humanLoadout:
+                botSide === "winner"
+                  ? { weapon: loser.weapon, abilities: loser.abilities }
+                  : { weapon: winner.weapon, abilities: winner.abilities },
+              botLoadout:
+                botSide === "winner"
+                  ? { weapon: winner.weapon, abilities: winner.abilities }
+                  : { weapon: loser.weapon, abilities: loser.abilities },
+            })
+        : () =>
+            recordRankedMatch(this.db!, {
+              matchId: ctx.matchId,
+              season: SEASON,
+              bracket: ctx.bracket,
+              winnerId: winnerAccount.accountId,
+              loserId: loserAccount.accountId,
+              winnerLoadout: { weapon: winner.weapon, abilities: winner.abilities },
+              loserLoadout: { weapon: loser.weapon, abilities: loser.abilities },
+            });
       for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt++) {
         try {
-          const result = await recordRankedMatch(this.db!, input);
+          const result = await record();
           if (result) {
             room.publish({
               t: "rankedResult",

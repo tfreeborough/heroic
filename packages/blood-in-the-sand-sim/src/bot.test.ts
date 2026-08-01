@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { speedFactorOf } from "./abilities";
-import { ARCHETYPES, botThink, createBotMemory, decideCasts, deriveArchetype, DIFFICULTIES, focusTarget, nearestEnemy, SnapshotHistory } from "./bot";
+import { ARCHETYPES, botThink, createBotMemory, decideCasts, deriveArchetype, DIFFICULTIES, focusTarget, nearestEnemy, resolveBand, SnapshotHistory } from "./bot";
 import type { AbilityId } from "./config";
 import { createBotNav, dashClear, navDirection, openDirection } from "./nav";
 import type { AbilitySlotSnapshot, DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot, SnapshotMsg } from "./protocol";
@@ -280,18 +280,21 @@ describe("archetypes", () => {
     const enemy = snap({ id: 9, team: 2, x: 620, y: 100 });
     const mate = snap({ id: 1, team: 1, x: 100, y: 550 });
     let firstSx = 0;
-    let lateSx = 0;
+    let cameBack = false;
     for (let tick = 0; tick < 180; tick++) {
       const me = snap({ x: pos.x, y: pos.y, hp: 30, weapon: "bow", abilities: [slot("mirror-guard"), slot("ironhide")] });
       const d = botThink(memory, me, w([me, mate, enemy]), nav, { difficulty: "godlike" });
       pos.x = Math.max(30, pos.x + d.sx * 9);
       pos.y = Math.max(30, Math.min(610, pos.y + d.sy * 9));
       if (tick === 0) firstSx = d.sx;
-      if (tick === 170) lateSx = d.sx;
+      // Once the budget is burned the bot must charge back toward the enemy
+      // at +x (a single-tick sample would race the band-holding strafe orbit
+      // it settles into afterwards).
+      if (memory.fleeSpent && d.sx > 0.5) cameBack = true;
     }
     expect(firstSx).toBeLessThan(0); // fleeing the enemy at +x
     expect(memory.fleeSpent).toBe(true); // the allowance burned
-    expect(lateSx).toBeGreaterThan(-0.1); // no longer running away
+    expect(cameBack).toBe(true); // …then back INTO the fight
     // Healing re-arms: back above threshold, the trackers reset.
     const healed = snap({ x: pos.x, y: pos.y, hp: 90, weapon: "bow", abilities: [] });
     botThink(memory, healed, w([healed, mate, enemy]), nav, { difficulty: "godlike" });
@@ -506,6 +509,155 @@ describe("difficulty", () => {
     expect(speedFactorOf(p, [p])).toBe(1);
     p.moveFactor = DIFFICULTIES.godlike.speedFactor;
     expect(speedFactorOf(p, [p])).toBeCloseTo(1.1, 5);
+  });
+});
+
+describe("humanization (bot-humanization.md)", () => {
+  const nav = createBotNav(POCKET_ZONE);
+
+  /** Walk the bot from `start` for `ticks`, collecting each decision + pos. */
+  const walk = (
+    memory: ReturnType<typeof createBotMemory>,
+    start: { x: number; y: number },
+    mkWorld: (me: PlayerSnapshot) => ReturnType<typeof w>,
+    ticks: number,
+    meOver: Partial<PlayerSnapshot> = {},
+    difficulty: "godlike" | "skilled" = "godlike",
+  ) => {
+    const pos = { ...start };
+    const trail: { sx: number; sy: number; x: number; y: number }[] = [];
+    for (let t = 0; t < ticks; t++) {
+      const me = snap({ x: pos.x, y: pos.y, weapon: "blade", abilities: [], ...meOver });
+      const d = botThink(memory, me, mkWorld(me), nav, { difficulty });
+      pos.x += d.sx * 9;
+      pos.y += d.sy * 9;
+      trail.push({ sx: d.sx, sy: d.sy, x: pos.x, y: pos.y });
+    }
+    return trail;
+  };
+
+  test("M1: a reversed target is turned toward at a thumb rate, never snapped", () => {
+    // Establish a heading toward +x, then teleport the enemy behind: the
+    // very next intent must still lean +x (a machine flips 180° in one
+    // tick), and the turn must complete within a second.
+    const memory = createBotMemory(11);
+    const ahead = snap({ id: 9, team: 2, x: 620, y: 300 });
+    walk(memory, { x: 200, y: 300 }, (me) => w([me, ahead]), 6);
+    const behind = snap({ id: 9, team: 2, x: 40, y: 300 });
+    const trail = walk(memory, { x: 260, y: 300 }, (me) => w([me, behind]), 20);
+    expect(trail[0]!.sx).toBeGreaterThan(0); // still carried by the old heading
+    // …and fully turned within ~2/3 s (sampled before it reaches close
+    // quarters, where the contact-brain strafe angles the charge).
+    expect(Math.min(...trail.slice(14, 20).map((p) => p.sx))).toBeLessThan(-0.7);
+  });
+
+  test("M1: the reactive dodge snaps through the inertia at full stick", () => {
+    // Heading established toward the enemy; an arrow arrives dead-on — the
+    // evasion must be immediate and perpendicular, no smoothing lag.
+    const memory = createBotMemory(11);
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 300 });
+    walk(memory, { x: 200, y: 300 }, (me) => w([me, enemy]), 6);
+    const me = snap({ x: 260, y: 300, weapon: "blade", abilities: [] });
+    const shot = arrow({ x: 340, y: 300, angle: Math.PI });
+    const d = botThink(memory, me, w([me, enemy], [], [shot]), nav, { difficulty: "godlike" });
+    expect(Math.abs(d.sy)).toBeGreaterThan(0.8);
+  });
+
+  test("M2: a trap on the path gets ONE committed side and is never triggered", () => {
+    const trap = deployable({ id: 42, kind: "sandtrap", team: 2, x: 375, y: 300 });
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 300 });
+    const memory = createBotMemory(5);
+    const trail = walk(memory, { x: 150, y: 300 }, (me) => w([me, enemy], [trap]), 90);
+    // It gets past the trap toward the enemy…
+    expect(Math.max(...trail.map((p) => p.x))).toBeGreaterThan(475);
+    // …without ever entering the trigger radius (120)…
+    const minZd = Math.min(...trail.map((p) => Math.hypot(p.x - 375, p.y - 300)));
+    expect(minZd).toBeGreaterThan(120);
+    // …and the detour holds ONE side: a real arc one way, at most the
+    // inertia's small return-overshoot the other — never two equal arcs.
+    const devs = trail.map((p) => p.y - 300);
+    const above = Math.max(...devs);
+    const below = Math.min(...devs);
+    const big = Math.max(above, -below);
+    const small = Math.min(above, -below);
+    expect(big).toBeGreaterThan(60);
+    expect(big).toBeGreaterThan(small * 2.5);
+  });
+
+  test("M2: the personal margin differs between bots", () => {
+    const trap = deployable({ id: 42, kind: "sandtrap", team: 2, x: 375, y: 300 });
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 300 });
+    const peak = (seed: number): number => {
+      const trail = walk(createBotMemory(seed), { x: 150, y: 300 }, (me) => w([me, enemy], [trap]), 90);
+      return Math.max(...trail.map((p) => Math.abs(p.y - 300)));
+    };
+    const widths = new Set([Math.round(peak(1)), Math.round(peak(5)), Math.round(peak(9))]);
+    expect(widths.size).toBeGreaterThan(1); // not one canonical arc
+  });
+
+  test("M2: a trap noticed late triggers the flinch away, not a smooth arc", () => {
+    // Fresh heading, trap already almost underfoot: the first intent points
+    // AWAY from it (the "oh crap" swerve) even though the enemy lies beyond.
+    const trap = deployable({ id: 42, kind: "sandtrap", team: 2, x: 375, y: 300 });
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 300 });
+    const me = snap({ x: 330, y: 300, weapon: "blade", abilities: [] });
+    const d = botThink(createBotMemory(3), me, w([me, enemy], [trap]), nav, { difficulty: "godlike" });
+    expect(d.sx).toBeLessThan(-0.3);
+  });
+
+  test("M3 greed: a diving bot tanks the trap it would otherwise respect", () => {
+    // Opportunist (diveBelow 0.45) vs a weak mark behind a trap: the dive
+    // damps avoidance and it plows through the trigger radius for the kill.
+    const trap = deployable({ id: 42, kind: "sandtrap", team: 2, x: 375, y: 300 });
+    const loadout = { abilities: [slot("harpoon"), slot("dash", { charges: 0 })] };
+    const minZd = (targetHp: number): number => {
+      const enemy = snap({ id: 9, team: 2, x: 620, y: 300, hp: targetHp });
+      const trail = walk(createBotMemory(5), { x: 150, y: 300 }, (me) => w([me, enemy], [trap]), 90, loadout);
+      return Math.min(...trail.map((p) => Math.hypot(p.x - 375, p.y - 300)));
+    };
+    expect(minZd(30)).toBeLessThan(115); // diving: through the trap
+    expect(minZd(100)).toBeGreaterThan(120); // healthy mark: around it
+  });
+
+  test("M4: band flips need a real overshoot, not a pixel", () => {
+    // A skirmisher at its (fuzz-pinned) band edge: +10px past far keeps the
+    // hold; +40px flips to advance; dropping back just under far keeps the
+    // advance until the overshoot the other way.
+    const band = resolveBand(ARCHETYPES.skirmisher, "bow")!;
+    const think = (memory: ReturnType<typeof createBotMemory>, dist: number) => {
+      memory.bandFuzz = 1;
+      memory.bandFuzzTicks = 9_999; // pin the fuzz — this test is about hysteresis
+      const me = snap({ x: 100, y: 100, weapon: "bow", abilities: [slot("dash", { charges: 0 }), slot("mirror-guard")] });
+      const enemy = snap({ id: 9, team: 2, x: 100 + dist, y: 100, weapon: "bow" });
+      botThink(memory, me, w([me, enemy]), nav, { difficulty: "godlike" });
+      return memory.bandState;
+    };
+    const memory = createBotMemory(7);
+    expect(think(memory, band.far + 10)).toBe(0); // inside the dead zone: hold
+    expect(think(memory, band.far + 40)).toBe(1); // real overshoot: advance
+    expect(think(memory, band.far - 10)).toBe(1); // hysteresis: still advancing
+    expect(think(memory, band.far - 40)).toBe(0); // …until truly back inside
+  });
+
+  test("M5: the feet occasionally stop for a beat, at every tier", () => {
+    // Distant static enemy, many seeds: some bot somewhere takes a breather
+    // (emits a zero stick) even at godlike — dither is novice-only, this
+    // texture is not.
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 550 });
+    let paused = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const trail = walk(createBotMemory(seed), { x: 80, y: 80 }, (me) => w([me, enemy]), 300);
+      if (trail.some((p) => p.sx === 0 && p.sy === 0)) paused += 1;
+    }
+    expect(paused).toBeGreaterThan(0);
+    expect(paused).toBeLessThan(25); // …but it's a garnish, not a limp
+  });
+
+  test("determinism: the same seed replays the same walk", () => {
+    const trap = deployable({ id: 42, kind: "sandtrap", team: 2, x: 375, y: 300 });
+    const enemy = snap({ id: 9, team: 2, x: 620, y: 300 });
+    const run = () => walk(createBotMemory(13), { x: 150, y: 300 }, (me) => w([me, enemy], [trap]), 120);
+    expect(JSON.stringify(run())).toBe(JSON.stringify(run()));
   });
 });
 

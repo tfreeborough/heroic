@@ -263,6 +263,10 @@ trivial at this shape.
 - **Feedback:** while queued the client gets `queueStatus` (per-bracket queue size +
   seconds waited) every few seconds; queue sizes also stream to RankedScreen *before*
   queueing. No fake "estimated wait" — honest numbers only.
+  **Decision reversed 2026-08-01** for as long as ranked bot backfill is live
+  (bits-ranked-bots.md § queue-size display): queue sizes are fuzzed **server-side**
+  on both reads, so "1 in queue → match found" never betrays a bot match. The fuzz
+  dies with the backfill kill switch — honest numbers return automatically.
 - **Queue is ephemeral by design:** a server deploy drops queues along with rooms
   (accepted in glory-economy.md's topology). Client treats a dropped socket while
   queued as "requeue with one tap", never an error screen.
@@ -277,7 +281,7 @@ same `Room` machinery, different rules:
 | Discovery | listed / code / passcode | never listed, unjoinable, no code shown |
 | Host | host powers + migration | no host — server owns the room |
 | forceStart / cancelStart | host / any-seated | disabled |
-| Bots | backfill on forceStart | never |
+| Bots | backfill on forceStart | queue backfill after a 15–25 s empty-queue wait, disguised as a player (bits-ranked-bots.md; was "never" — reversed 2026-08-01, env kill switch) |
 | switchTeam | open seat hop | disabled |
 | Team size | host-picked 1–4 | fixed by bracket (Season I: 1v1) |
 | Start | arming wizard, auto-start when full+armed | same wizard, **60 s arm deadline** |
