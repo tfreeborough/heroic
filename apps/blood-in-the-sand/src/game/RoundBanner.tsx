@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, Easing, StyleSheet, View } from "react-native";
 import type { OutcomeKind } from "./roundMessages";
 
 // The premium centre banner for round- and match-end. Round outcomes get a
@@ -7,6 +7,10 @@ import type { OutcomeKind } from "./roundMessages";
 // grand treatment — darker scrim, a big glowing title that breathes, and the
 // final score. Classic RN Animated (native driver) to match HomeScreen/RoomList
 // and stay off the JS thread while the arena keeps rendering behind it.
+//
+// Ranked settlements deliberately do NOT ride this plate (bits-ranked.md §
+// ceremony, 2026-08-02): in-game the match-end is title + score only, and the
+// Glory/rating reveal happens in RankedCeremony back on the ranked screen.
 
 interface Look {
   /** Title colour. */
@@ -52,103 +56,21 @@ const LOOK: Record<OutcomeKind, Look> = {
   },
 };
 
-/** The match-end rank-change moment (bits-ranked.md § display v2): the
- * visual half of the rank_up / rank_down audio. Promotions get the new crest
- * popping in with "RANK UP"; demotions get one muted line and no ceremony —
- * losing already stings. */
-export interface RankCallout {
-  direction: "up" | "down";
-  /** The new rank's full name ("GLADIATOR I"). */
-  label: string;
-  /** The new tier's forged crest, or null while unforged. */
-  badge: number | null;
-}
-
-/** The ranked settlement under the score — structured (not a prebuilt
- * string) so the Glory number can COUNT. */
-export interface RankedSettle {
-  /** The pre-Glory portion ("1520 → 1540 (+20)" / "PLACEMENT MATCH 3 OF 10"). */
-  line: string;
-  glory: number;
-  newBest: boolean;
-}
-
 export interface RoundBannerProps {
   kind: OutcomeKind;
   title: string;
   subtitle: string;
   /** [mine, theirs] — only shown on match-end. */
   score: [number, number];
-  /** Ranked match-end only (bits-ranked.md): the settlement riding under the
-   * score, with its Glory count-up. */
-  ranked?: RankedSettle | null;
-  /** Ranked match-end only: the displayed rank moved this match. */
-  rankCallout?: RankCallout | null;
 }
 
-/** How long the Glory number takes to count home — matched to the
- * glory_earned choral swell (~4s), which fires on the same arrival: fast
- * early ticks easing off so the last +1 lands as the choir fades. */
-const GLORY_COUNT_MS = 4000;
-
-/** The settlement line with its counting Glory number. Ease-out cubic: most
- * of the count lands in the first second and a half, then it crawls — small
- * amounts (5–29) stretch into single satisfying ticks. NEW BEST holds back
- * until the count completes (it caps the moment, not the arrival). */
-const RankedSettleLine = ({ settle }: { settle: RankedSettle }) => {
-  const [shown, setShown] = useState(0);
-  useEffect(() => {
-    const start = Date.now();
-    let raf = 0;
-    const tick = (): void => {
-      const t = Math.min(1, (Date.now() - start) / GLORY_COUNT_MS);
-      setShown(Math.round(settle.glory * (1 - (1 - t) ** 3)));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [settle.glory]);
-  const done = shown >= settle.glory;
-  return (
-    <Text style={styles.rankedLine}>
-      {`${settle.line}  ·  +${shown} GLORY`}
-      {settle.newBest ? <Text style={{ opacity: done ? 1 : 0 }}>{"  ·  NEW BEST"}</Text> : null}
-    </Text>
-  );
-};
-
-export const RoundBanner = ({
-  kind,
-  title,
-  subtitle,
-  score,
-  ranked = null,
-  rankCallout = null,
-}: RoundBannerProps) => {
+export const RoundBanner = ({ kind, title, subtitle, score }: RoundBannerProps) => {
   const look = LOOK[kind];
   // One driver for the plate (opacity + scale + rule sweep), one delayed driver
   // for the subtitle rise, one looping driver for the match-end glow breath.
   const intro = useRef(new Animated.Value(0)).current;
   const sub = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
-  // The rank callout rides its OWN driver keyed on arrival, not the intro:
-  // the settlement broadcast lands a beat after the plate is already up, so
-  // the crest pops the moment the data exists (in step with the rank_up
-  // fanfare, which fires on the same arrival).
-  const callout = useRef(new Animated.Value(0)).current;
-  const calloutKey = rankCallout ? `${rankCallout.direction}:${rankCallout.label}` : null;
-  useEffect(() => {
-    callout.setValue(0);
-    if (!calloutKey) return;
-    Animated.timing(callout, {
-      toValue: 1,
-      duration: rankCallout?.direction === "up" ? 480 : 300,
-      // Promotions overshoot like the plate itself; demotions just fade.
-      easing: rankCallout?.direction === "up" ? Easing.out(Easing.back(2.2)) : Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the callout's identity
-  }, [callout, calloutKey]);
 
   useEffect(() => {
     intro.setValue(0);
@@ -306,40 +228,6 @@ export const RoundBanner = ({
               <Animated.Text style={styles.scoreNum}>{score[1]}</Animated.Text>
             </Animated.View>
           ) : null}
-
-          {look.big && ranked ? (
-            <Animated.View style={{ opacity: subOpacity, transform: [{ translateY: subRise }] }}>
-              <RankedSettleLine settle={ranked} />
-            </Animated.View>
-          ) : null}
-
-          {look.big && rankCallout ? (
-            rankCallout.direction === "up" ? (
-              <Animated.View
-                style={[
-                  styles.rankUp,
-                  {
-                    opacity: callout,
-                    transform: [{ scale: callout.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
-                  },
-                ]}
-              >
-                {rankCallout.badge !== null && (
-                  <Image source={rankCallout.badge} style={styles.rankUpBadge} resizeMode="contain" />
-                )}
-                <View>
-                  <Animated.Text style={styles.rankUpCap}>RANK UP</Animated.Text>
-                  <Animated.Text style={styles.rankUpName}>{rankCallout.label}</Animated.Text>
-                </View>
-              </Animated.View>
-            ) : (
-              // One quiet line, no crest, no ceremony — the demotion twin of
-              // rank_down's "subtle, non-punishing" rule.
-              <Animated.Text style={[styles.rankDownLine, { opacity: callout }]}>
-                {`RANK DOWN · ${rankCallout.label}`}
-              </Animated.Text>
-            )
-          ) : null}
         </Animated.View>
       </View>
     </View>
@@ -368,49 +256,6 @@ const styles = StyleSheet.create({
   titleWrap: { alignItems: "center", justifyContent: "center" },
   // The glow copy is layered exactly over the crisp title.
   titleGlow: { position: "absolute" },
-  rankedLine: {
-    marginTop: 10,
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#e8c87a",
-    letterSpacing: 1.5,
-    textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    // The Glory count ticks — fixed-width digits keep the line from jittering.
-    fontVariant: ["tabular-nums"],
-  },
-  rankUp: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 18 },
-  rankUpBadge: { width: 46, height: 46 },
-  rankUpCap: {
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 3,
-    color: "#f2cd6e",
-    textShadowColor: "rgba(232,176,72,0.7)",
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  rankUpName: {
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 2,
-    color: "#f5ede0",
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  // Muted warm grey, deliberately NOT defeat-red — the badge slipped, the
-  // world didn't end.
-  rankDownLine: {
-    marginTop: 12,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.5,
-    color: "#9c8577",
-    textAlign: "center",
-  },
   subtitle: {
     marginTop: 4,
     fontSize: 15,

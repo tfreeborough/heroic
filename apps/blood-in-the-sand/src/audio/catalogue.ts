@@ -56,6 +56,7 @@ export type BitsSoundEvent =
   | "rankUp" //         the displayed rank climbed (server-computed rankChange)
   | "rankDown" //       …or slipped — deliberately subtle, never punishing
   | "gloryEarned" //    the Glory payout lands on the ceremony plate
+  | "ceremonyShift" //  the ceremony's fade from Glory to the rating reveal
   // ── UI ────────────────────────────────────────────────────────────────────
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
@@ -232,6 +233,10 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // coin sound (Tom, 2026-08-01): Glory is renown, and players must never
   // read it as money. The one human-voice texture outside the announcer.
   gloryEarned: { clips: ["glory_earned_1"], volume: 0.8 },
+  // Owed from the Forge — silent until ceremony_shift_1 lands: a soft airy
+  // whoosh as the post-match ceremony crossfades from the Glory count to the
+  // rating reveal (RankedCeremony). Transition texture, not a stinger.
+  ceremonyShift: { clips: ["ceremony_shift_1"], volume: 0.7 },
 
   // ── UI ──────────────────────────────────────────────────────────────────
   uiTap: { clips: ["ui_tap_1"], volume: 0.7 },

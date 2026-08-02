@@ -100,15 +100,49 @@ The human's Elo delta depends only on opponent rating and own K, so transfer
 side of `rankedResult` uses matchesPlayed=20 → `placement: null` (a bot
 opponent must never render as "in placements").
 
-### Names
+### Names — the rotating roster *(reworked 2026-08-02)*
 
-Parts-based gamer-tag generator in the **server** package — never the sim
-(the sim ships in the client bundle; a datamined name list is a receipt) —
-and distinct from the casual gladiator pool `BOT_NAMES` (`room.ts:61`) that
-players already recognize as bot names. ~40 handle stems × 3 patterns (bare /
-digit-suffixed / lowercase compound), ≤16 chars (the wire name cap). A
-`BotIdentityBook` keeps a per-account ring of the last 10 names served plus a
-live-rooms in-use set — no "same stranger twice in 10 minutes".
+A fixed **96-name roster** in the **server** package — never the sim (the sim
+ships in the client bundle; a datamined name list is a receipt) — and distinct
+from the casual gladiator pool `BOT_NAMES` (`room.ts`) that players already
+recognize as bot names. Curated from the texture of real EU WoW ladder
+top-500 handles (Tom's call — the first invented-stem cut didn't sell):
+accent-marked tags (Krôna, Doînk), spelled-number suffixes (Rycntwo),
+confident plain words (Totemfear, Spongeman). Generic handles lifted
+near-verbatim, distinctive ones mutated; excluded: famous-player references,
+real-name lookalikes, Cyrillic (device font risk). ≤16 chars (the wire cap),
+flavours interleaved around the ring so any online window reads mixed.
+
+*(v1 was a parts-based generator — infinite fresh strangers, which is itself a
+tell once you play a lot. Tom, 2026-08-02: static names that keep hours.)*
+
+**Rotation — a population that keeps hours:** 4 names are "online" at any
+moment; at the top of each hour 2 clock off and the next 2 on the ring clock
+on (`onlineNames`). Each name works a **2-hour shift**, and the ring cycles
+every `ROSTER.length/2` hours — at 96 names a **48-hour cycle**, so each
+regular shows up every OTHER day (Tom, 2026-08-02: sized up from 48/daily
+once the real-handle source made curation cheap — real people don't play
+daily, and an every-evening player now sees two alternating casts instead of
+the same metronomic four). The ring's first two names work the
+cycle-wrapping night shift. Pure function of wall-clock hour: restarts never
+reshuffle who's on.
+
+**`BotIdentityBook` (the front desk)** serves `{name, rating}` under three
+rules:
+
+- **Never the same stranger twice in a row** per account (was: a 10-name
+  ring). A re-match with one game in between is *allowed* — that's exactly
+  what a small real population feels like.
+- **Never a name already fighting** in a live room (release on room close).
+  If the whole online window is busy or ruled out, the next names on the ring
+  come online early — exhaustion is impossible.
+- **A coherent rating per shift**: the first serve anchors the name's
+  advertised rating at the human's ±jitter (`mirrorRating`, as before);
+  every later serve in the same 2-hour shift reuses it with a ±8 drift ("been
+  playing since you last met") instead of re-mirroring — a recurring name
+  whose rating tracked *your* rating would be a tell. If an anchored name
+  sits >100 from the queuing human, the book skips it and a fresh name logs
+  on early rather than teleporting the rating.
 
 ### Anti-tell details (wire hygiene audit)
 

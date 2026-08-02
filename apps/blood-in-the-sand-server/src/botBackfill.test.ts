@@ -2,13 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { RATING_FLOOR } from "@heroic/blood-in-the-sand-persistence";
 import {
   BotIdentityBook,
+  ONLINE_COUNT,
+  ROSTER,
   botBackfillConfigFromEnv,
   botDeadline,
   botSubjectId,
   difficultyForRating,
   fuzzedQueueSize,
-  generateBotName,
   mirrorRating,
+  onlineNames,
 } from "./botBackfill";
 
 /** Deterministic rand: cycles the given values. */
@@ -87,47 +89,104 @@ describe("bot identity", () => {
     expect(botSubjectId()).not.toBe(a);
   });
 
-  test("generated names fit the wire cap", () => {
-    let rolls = 0;
-    const rand = () => {
-      // Deterministic pseudo-random walk over the whole pattern space.
-      rolls += 1;
-      return (rolls * 0.6180339887) % 1;
-    };
-    for (let i = 0; i < 500; i++) {
-      const name = generateBotName(rand);
+  test("the roster is 96 unique names inside the wire cap", () => {
+    expect(ROSTER).toHaveLength(96);
+    expect(new Set(ROSTER).size).toBe(ROSTER.length);
+    for (const name of ROSTER) {
       expect(name.length).toBeGreaterThan(0);
       expect(name.length).toBeLessThanOrEqual(16);
     }
   });
+});
 
-  test("the book avoids an account's recent names and live in-use names", () => {
-    let n = 0;
-    // A generator that yields A, B, C, … deterministically per call.
-    const book = new BotIdentityBook(() => `Name${n++}`);
-    const rand = randOf(0);
-    const first = book.pick("acct", rand);
-    const second = book.pick("acct", rand);
-    expect(second).not.toBe(first); // in-use AND recent
-    book.release(first);
-    // Released but still recent for THIS account → still avoided…
-    const third = book.pick("acct", rand);
-    expect(third).not.toBe(first);
-    // …but another account may draw it.
-    n = 0; // reset the generator so Name0 comes up again
-    const other = book.pick("other", rand);
-    expect(other).toBe(first);
+describe("roster rotation", () => {
+  const HOUR = 3_600_000;
+
+  test("four online; two clock off at the top of each hour", () => {
+    const now = onlineNames(0);
+    expect(now).toHaveLength(ONLINE_COUNT);
+    const next = onlineNames(HOUR);
+    expect(now.filter((n) => next.includes(n))).toHaveLength(2);
   });
 
-  test("the ring forgets after 10 names", () => {
-    let n = 0;
-    const book = new BotIdentityBook(() => `Name${n++}`);
-    const rand = randOf(0);
-    const first = book.pick("acct", rand);
-    book.release(first);
-    for (let i = 0; i < 10; i++) book.release(book.pick("acct", rand));
-    n = 0; // Name0 next — first fell off the 10-ring, so it may serve again
-    expect(book.pick("acct", rand)).toBe(first);
+  test("every name works one 2-hour shift per cycle", () => {
+    const cycleHours = ROSTER.length / 2; // 2 fresh names an hour
+    const hoursOnline = new Map<string, number[]>();
+    for (let h = 0; h < cycleHours; h++) {
+      for (const name of onlineNames(h * HOUR)) {
+        hoursOnline.set(name, [...(hoursOnline.get(name) ?? []), h]);
+      }
+    }
+    expect(hoursOnline.size).toBe(ROSTER.length); // the whole book cycles
+    for (const hours of hoursOnline.values()) {
+      expect(hours).toHaveLength(2);
+      // Consecutive — one shift, not two visits. The ring's first two names
+      // work the cycle-wrapping night shift (hours [0, cycleHours-1]).
+      expect([1, cycleHours - 1]).toContain(hours[1]! - hours[0]!);
+    }
+  });
+
+  test("pure in wall-clock time — a restart changes nothing", () => {
+    expect(onlineNames(5 * HOUR + 123)).toEqual(onlineNames(5 * HOUR + 456_789));
+  });
+});
+
+describe("BotIdentityBook", () => {
+  const NOW = 12 * 3_600_000; // mid-day, mid-ring
+  const pick = (book: BotIdentityBook, acct = "acct", rating = 1500, now = NOW, rand = randOf(0.5)) =>
+    book.pick(acct, rating, 50, now, rand);
+
+  test("serves from the online window, never the same name twice in a row", () => {
+    const book = new BotIdentityBook();
+    const online = onlineNames(NOW);
+    const first = pick(book);
+    expect(online).toContain(first.name);
+    book.release(first.name);
+    const second = pick(book);
+    expect(second.name).not.toBe(first.name);
+    book.release(second.name);
+    // A re-match with a game in between is allowed — small-population feel.
+    expect(pick(book).name).toBe(first.name);
+  });
+
+  test("concurrent matches never share a name; exhaustion pulls names online early", () => {
+    const book = new BotIdentityBook();
+    const online = onlineNames(NOW);
+    const served = Array.from({ length: 6 }, (_, i) => pick(book, `acct${i}`).name);
+    expect(new Set(served).size).toBe(6); // all live at once, all distinct
+    // The first four are the online window; the overflow came off the ring
+    // just past it — tomorrow's names logging on early.
+    expect(served.slice(0, ONLINE_COUNT).sort()).toEqual([...online].sort());
+    for (const name of served.slice(ONLINE_COUNT)) expect(online).not.toContain(name);
+  });
+
+  test("a name keeps a coherent rating for its whole shift", () => {
+    const book = new BotIdentityBook();
+    const first = pick(book, "a", 1500, NOW, randOf(0.5)); // anchors at the mirror (=1500)
+    expect(first.rating).toBe(1500);
+    book.release(first.name);
+    // Another account, a plausible rating away: same name, drifted-not-mirrored.
+    const again = pick(book, "b", 1560, NOW + 60_000, randOf(0.5));
+    expect(again.name).toBe(first.name);
+    expect(Math.abs(again.rating - first.rating)).toBeLessThanOrEqual(8);
+  });
+
+  test("an implausible rating gap gets a different name, not a jumped rating", () => {
+    const book = new BotIdentityBook();
+    const first = pick(book, "a", 1500);
+    book.release(first.name);
+    const stranger = pick(book, "b", 1900); // 400 away — Vex can't suddenly be 1900
+    expect(stranger.name).not.toBe(first.name);
+    expect(Math.abs(stranger.rating - 1900)).toBeLessThanOrEqual(50);
+  });
+
+  test("the shift's anchor expires with the shift", () => {
+    const book = new BotIdentityBook();
+    const first = pick(book, "a", 1500, NOW);
+    book.release(first.name);
+    // Two hours on: the shift is over; the same slot re-anchors fresh.
+    const later = pick(book, "b", 1900, NOW + 2 * 3_600_000 + 60_000);
+    expect(Math.abs(later.rating - 1900)).toBeLessThanOrEqual(50);
   });
 });
 

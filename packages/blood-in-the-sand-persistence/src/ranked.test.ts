@@ -37,16 +37,16 @@ describe("recordRankedMatch", () => {
       loserLoadout: { weapon: "bow", abilities: ["heal"] },
     });
     expect(result).not.toBeNull();
-    // Both on placement K=40, even ratings: ±20.
-    expect(result!.winner.after).toBe(1520);
-    expect(result!.winner.delta).toBe(20);
-    expect(result!.loser.after).toBe(1480);
-    expect(result!.loser.delta).toBe(-20);
+    // Both on placement K=24, even ratings: ±12.
+    expect(result!.winner.after).toBe(1512);
+    expect(result!.winner.delta).toBe(12);
+    expect(result!.loser.after).toBe(1488);
+    expect(result!.loser.delta).toBe(-12);
     expect(result!.winner.tier).toBe("Gladiator");
-    expect(result!.winner.division).toBe(2); // 1520 sits in Gladiator II (1500–1549)
-    expect(result!.winner.rankChange).toBeNull(); // 1500 → 1520 stays inside Gladiator II
+    expect(result!.winner.division).toBe(2); // 1512 sits in Gladiator II (1500–1549)
+    expect(result!.winner.rankChange).toBeNull(); // 1500 → 1512 stays inside Gladiator II
     expect(result!.loser.tier).toBe("Gladiator");
-    expect(result!.loser.division).toBe(3); // 1480 is honestly Gladiator III (floor 1450)
+    expect(result!.loser.division).toBe(3); // 1488 is honestly Gladiator III (floor 1450)
     expect(result!.loser.rankChange).toBe("down"); // II → III — divisions have no grace
     expect(result!.winner.matchesPlayed).toBe(1); // both mid-placements
     expect(result!.loser.matchesPlayed).toBe(1);
@@ -55,7 +55,7 @@ describe("recordRankedMatch", () => {
     expect(await gloryBalance(db, alice)).toBe(23);
     expect(await gloryBalance(db, bob)).toBe(5);
     // The ladder rows persisted.
-    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1520);
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
     expect((await getRating(db, bob, 1, "1v1")).wins).toBe(0);
     expect((await getRating(db, bob, 1, "1v1")).losses).toBe(1);
   });
@@ -64,7 +64,7 @@ describe("recordRankedMatch", () => {
     const input = { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob };
     expect(await recordRankedMatch(db, input)).not.toBeNull();
     expect(await recordRankedMatch(db, input)).toBeNull();
-    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1520);
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
     expect(await gloryBalance(db, alice)).toBe(23);
   });
 
@@ -110,18 +110,18 @@ describe("recordRankedBotMatch", () => {
     const result = await recordRankedBotMatch(db, botMatch("m1", true));
     expect(result).not.toBeNull();
     expect(result!.winner.subjectId).toBe(alice);
-    expect(result!.winner.after).toBe(1520); // placement K=40, even ratings
+    expect(result!.winner.after).toBe(1512); // placement K=24, even ratings
     expect(result!.winner.matchesPlayed).toBe(1);
     expect(result!.winner.glory).toBe(23);
     expect(await gloryBalance(db, alice)).toBe(23);
-    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1520);
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
     expect(await recentForm(db, alice, 1, "1v1")).toEqual([true]);
   });
 
   test("a human loss settles the other way", async () => {
     const result = await recordRankedBotMatch(db, botMatch("m1", false));
     expect(result!.loser.subjectId).toBe(alice);
-    expect(result!.loser.after).toBe(1480);
+    expect(result!.loser.after).toBe(1488);
     expect(result!.loser.glory).toBe(5);
     expect(result!.winner.subjectId).toBe("bot:0000-test");
     expect(await gloryBalance(db, alice)).toBe(5);
@@ -129,14 +129,14 @@ describe("recordRankedBotMatch", () => {
   });
 
   test("the fabricated bot side is settled-K and never in placements", async () => {
-    const result = await recordRankedBotMatch(db, botMatch("m1", true, 1520));
+    const result = await recordRankedBotMatch(db, botMatch("m1", true, 1512));
     const bot = result!.loser;
     expect(bot.subjectId).toBe("bot:0000-test");
-    expect(bot.before).toBe(1520);
+    expect(bot.before).toBe(1512);
     expect(bot.matchesPlayed).toBe(20); // > PLACEMENT_MATCHES → placement: null upstream
-    expect(bot.after).toBeLessThan(1520); // settled K=20 loss
-    expect(bot.before - bot.after).toBeLessThanOrEqual(20);
-    expect(bot.peak).toBe(1520);
+    expect(bot.after).toBeLessThan(1512); // settled K=15 loss
+    expect(bot.before - bot.after).toBeLessThanOrEqual(15);
+    expect(bot.peak).toBe(1512);
   });
 
   test("the bot never touches ranked_ratings or glory_ledger", async () => {
@@ -153,7 +153,7 @@ describe("recordRankedBotMatch", () => {
   test("a replayed match id is a no-op", async () => {
     expect(await recordRankedBotMatch(db, botMatch("m1", true))).not.toBeNull();
     expect(await recordRankedBotMatch(db, botMatch("m1", true))).toBeNull();
-    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1520);
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
     expect(await gloryBalance(db, alice)).toBe(23);
   });
 
@@ -175,13 +175,13 @@ describe("season peak", () => {
   test("the peak rises with the rating and survives the fall", async () => {
     await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
     const climbed = await getRating(db, alice, 1, "1v1");
-    expect(climbed.rating).toBe(1520);
-    expect(climbed.peak).toBe(1520);
+    expect(climbed.rating).toBe(1512);
+    expect(climbed.peak).toBe(1512);
     await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winnerId: bob, loserId: alice });
     const dipped = await getRating(db, alice, 1, "1v1");
-    expect(dipped.rating).toBeLessThan(1520);
-    expect(dipped.peak).toBe(1520); // monotonic — the whole point
-    expect((await rankedSummary(db, alice, 1))[0]!.peak).toBe(1520);
+    expect(dipped.rating).toBeLessThan(1512);
+    expect(dipped.peak).toBe(1512); // monotonic — the whole point
+    expect((await rankedSummary(db, alice, 1))[0]!.peak).toBe(1512);
   });
 
   test("the settle result flags a new best (and only a new best)", async () => {
@@ -189,15 +189,15 @@ describe("season peak", () => {
       matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob,
     });
     expect(first!.winner.newBest).toBe(true);
-    expect(first!.winner.peak).toBe(1520);
+    expect(first!.winner.peak).toBe(1512);
     expect(first!.loser.newBest).toBe(false);
     expect(first!.loser.peak).toBe(1500); // the start rating is the initial peak
-    // Alice loses back to 1500-ish, then wins again without passing 1520.
+    // Alice loses back to 1500-ish, then wins again without passing 1512.
     await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winnerId: bob, loserId: alice });
     const third = await recordRankedMatch(db, {
       matchId: "m3", season: 1, bracket: "1v1", winnerId: alice, loserId: bob,
     });
-    expect(third!.winner.after).toBeLessThanOrEqual(1520);
+    expect(third!.winner.after).toBeLessThanOrEqual(1512);
     expect(third!.winner.newBest).toBe(false);
   });
 });

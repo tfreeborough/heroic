@@ -76,64 +76,141 @@ export const mirrorRating = (humanRating: number, jitter: number, rand: () => nu
 export const botSubjectId = (): string => `bot:${randomUUID()}`;
 
 // ── names ──────────────────────────────────────────────────────────────────
-// Parts-based gamer tags, server-side only (the sim ships in the client
+// A fixed 48-name roster, server-side only (the sim ships in the client
 // bundle — a datamined list is a receipt) and deliberately unlike the casual
 // gladiator pool (room.ts BOT_NAMES) players already read as bot names.
+//
+// Replaced the procedural generator 2026-08-02 (Tom): infinite fresh
+// strangers is itself a tell. Instead the roster rotates like a population —
+// 4 names "online" at any moment, 2 clocking off at the top of each hour as
+// 2 more log on. Each name works a 2-hour shift, and the ring cycles every
+// ROSTER.length/2 hours: at 96 names that's a 48-hour cycle, so each regular
+// shows up every OTHER day — real people don't play daily.
 
-const STEMS = [
-  "Vex", "Karv", "Dusk", "Moro", "Ash", "Ryn", "Brack", "Sable", "Torv", "Ferro",
-  "Nyx", "Corvo", "Hale", "Grim", "Vanta", "Riven", "Oxen", "Skarn", "Tallow", "Murk",
-  "Drav", "Kest", "Ombra", "Pike", "Rook", "Sorrel", "Thane", "Ulric", "Wren", "Yarrow",
-  "Basil", "Calder", "Ember", "Fenwick", "Garrick", "Haldor", "Ivar", "Jorah", "Lorcan", "Merek",
+// Curated 2026-08-02 from the texture of real EU ladder top-500 handles
+// (Tom: the invented stems didn't sell): accent-marked tags, spelled-number
+// suffixes, confident plain words. Generic ones lifted near-verbatim,
+// distinctive ones mutated; no famous-player references, no real-name
+// lookalikes, no WoW-class suffixes, no Cyrillic (device font risk).
+// Flavours interleaved around the ring so any 4-name online window reads as
+// a mixed crowd.
+export const ROSTER: readonly string[] = [
+  "Krôna", "Melan", "Drakesha", "Fokkus", "Nølo", "Totemfear",
+  "Xerwothree", "Velux", "Béndie", "Swiftkicks", "Rycntwo", "Khiro",
+  "Síbz", "Shadowviper", "Streaq", "Motrax", "Doînk", "Lonecrusader",
+  "Zeock", "Borreas", "Mistå", "Spongeman", "Vooksar", "Khoron",
+  "Børe", "Anix", "Trokthar", "Viklund", "Arnéa", "Calvas",
+  "Nycteus", "Elianos", "Zahó", "Yoelus", "Barotz", "Rotkar",
+  "Túrè", "Tweeq", "Cerlidh", "Adonk", "Mogiz", "Jestern",
+  "Kushr", "Vyo", "Joopla", "Buffx", "Canexx", "Starstrike",
+  "Spâlter", "Ralek", "Spookx", "Revves", "Skarìs", "Saltblind",
+  "Waitless", "Ruffneck", "Chämpion", "Boneshox", "Sanshee", "Draze",
+  "Stòrm", "Waspx", "Scarado", "Barawr", "Wiltzú", "Lyzerd",
+  "Swaazy", "Kwepp", "Nyjâh", "Fjanti", "Spudbag", "Sunfirez",
+  "Zòót", "Cyntos", "Gorkamungus", "Faramond", "Nébu", "Mortaxx",
+  "Yoloalpha", "Zorandor", "Dùnk", "Fjore", "Xanrath", "Zaneon",
+  "Icytröll", "Chronii", "Rilla", "Calith", "Wassabî", "Exoticz",
+  "Kovax", "Vudax", "Xaíl", "Critex", "Trizter", "Kreedze",
 ] as const;
 
-const TAILS = [
-  "wolf", "fox", "hawk", "viper", "jackal", "moth", "crow", "hound",
-  "blade", "brand", "mark", "fall", "born", "bane", "shade", "vane",
-] as const;
+/** Names "online" at any moment. */
+export const ONLINE_COUNT = 4;
+/** Names that clock off (and on) at the top of each hour. */
+const SHIFT_PER_HOUR = 2;
+const HOUR_MS = 3_600_000;
+/** One name's shift — how long it stays online, and how long its anchored
+ * rating stays coherent before it re-anchors as a fresh session. */
+const SHIFT_MS = (ONLINE_COUNT / SHIFT_PER_HOUR) * HOUR_MS;
 
-/** One tag: bare stem / digit-suffixed / lowercase compound — ≤16 chars (the
- * wire name cap). */
-export const generateBotName = (rand: () => number): string => {
-  const stem = STEMS[Math.floor(rand() * STEMS.length)]!;
-  const pattern = Math.floor(rand() * 3);
-  if (pattern === 0) return stem;
-  if (pattern === 1) return `${stem}${Math.floor(rand() * 90) + 10}${rand() < 0.3 ? Math.floor(rand() * 10) : ""}`;
-  return `${stem.toLowerCase()}${TAILS[Math.floor(rand() * TAILS.length)]!}`.slice(0, 16);
+/** The roster window online at wall-clock `nowMs` — a pure function of the
+ * hour (restarts never reshuffle who's on), sliding SHIFT_PER_HOUR names
+ * along the ring each hour. */
+export const onlineNames = (nowMs: number): string[] => {
+  const start = (Math.floor(nowMs / HOUR_MS) * SHIFT_PER_HOUR) % ROSTER.length;
+  return Array.from({ length: ONLINE_COUNT }, (_, i) => ROSTER[(start + i) % ROSTER.length]!);
 };
 
-const RECENT_PER_ACCOUNT = 10;
-const RECENT_ACCOUNT_CAP = 2_000;
+/** A recurring name whose advertised rating tracked a different player's
+ * would be a tell — beyond this gap the book leaves the anchored name alone
+ * and "someone new logs on" instead. */
+const PLAUSIBLE_RATING_GAP = 100;
+/** Re-serving a session re-nudges its rating by ±this — the name has
+ * plausibly been playing since you last met. */
+const SESSION_NUDGE = 8;
+const LAST_FACED_CAP = 2_000;
+
+/** What a pick hands the manager: the identity AND the rating it advertises
+ * (session-anchored — see pick()). */
+export interface BotIdentity {
+  name: string;
+  rating: number;
+}
 
 /**
- * No "same stranger twice in 10 minutes": a per-account ring of the last
- * names served, plus a live-rooms in-use set (release on room close).
+ * The roster's front desk. Serves identities from the online window with
+ * three rules: never the same stranger twice IN A ROW for one account (a
+ * re-match after a game apart is exactly what a small population feels
+ * like), never a name already fighting in a live room (release on room
+ * close), and never an implausible rating jump — a name keeps the rating it
+ * anchored for its whole 2-hour shift (first serve anchors at the human's
+ * ±jitter, later serves drift a few points), so a recurring regular reads as
+ * one coherent player. When the online window can't serve (all mid-match or
+ * anchored too far away), the next names on the ring come online early.
  */
 export class BotIdentityBook {
-  /** accountId → the last names this account has faced, oldest first. */
-  private readonly recent = new Map<string, string[]>();
+  /** accountId → the one name it faced last. */
+  private readonly lastFaced = new Map<string, string>();
   private readonly inUse = new Set<string>();
+  /** name → the shift-scoped rating anchor. */
+  private readonly sessions = new Map<string, { rating: number; anchoredMs: number }>();
 
-  constructor(private readonly generate: (rand: () => number) => string = generateBotName) {}
+  constructor(private readonly roster: readonly string[] = ROSTER) {}
 
-  pick(accountId: string, rand: () => number): string {
-    const seen = new Set(this.recent.get(accountId) ?? []);
-    let name = this.generate(rand);
-    for (let attempt = 0; attempt < 50 && (this.inUse.has(name) || seen.has(name)); attempt++) {
-      name = this.generate(rand);
+  pick(accountId: string, humanRating: number, jitter: number, nowMs: number, rand: () => number): BotIdentity {
+    const start = (Math.floor(nowMs / HOUR_MS) * SHIFT_PER_HOUR) % this.roster.length;
+    const last = this.lastFaced.get(accountId);
+    const session = (name: string): { rating: number; anchoredMs: number } | null => {
+      const s = this.sessions.get(name);
+      return s && nowMs - s.anchoredMs < SHIFT_MS ? s : null;
+    };
+    // Walk the ring from the online window; stepping past ONLINE_COUNT is
+    // the "comes online early" fallback, so exhaustion is impossible.
+    let name: string | null = null;
+    for (let i = 0; i < this.roster.length; i++) {
+      const candidate = this.roster[(start + i) % this.roster.length]!;
+      if (this.inUse.has(candidate) || candidate === last) continue;
+      const s = session(candidate);
+      if (s && Math.abs(s.rating - humanRating) > PLAUSIBLE_RATING_GAP) continue;
+      name = candidate;
+      break;
     }
+    // Whole ring implausible or busy (needs ~48 live bot matches): take the
+    // freest online name and re-anchor — a wrong-looking rating beats a hang.
+    name ??= this.roster.find((n) => !this.inUse.has(n)) ?? this.roster[start]!;
+
+    const s = session(name);
+    const rating = s
+      ? this.nudge(s, rand)
+      : this.anchor(name, mirrorRating(humanRating, jitter, rand), nowMs);
     this.inUse.add(name);
-    const ring = this.recent.get(accountId) ?? [];
-    ring.push(name);
-    while (ring.length > RECENT_PER_ACCOUNT) ring.shift();
-    this.recent.delete(accountId); // re-insert = newest in Map order…
-    this.recent.set(accountId, ring);
+    this.lastFaced.delete(accountId); // re-insert = newest in Map order…
+    this.lastFaced.set(accountId, name);
     // …so the lazy cap always evicts the longest-idle account.
-    if (this.recent.size > RECENT_ACCOUNT_CAP) {
-      const oldest = this.recent.keys().next().value;
-      if (oldest !== undefined) this.recent.delete(oldest);
+    if (this.lastFaced.size > LAST_FACED_CAP) {
+      const oldest = this.lastFaced.keys().next().value;
+      if (oldest !== undefined) this.lastFaced.delete(oldest);
     }
-    return name;
+    return { name, rating };
+  }
+
+  private anchor(name: string, rating: number, nowMs: number): number {
+    this.sessions.set(name, { rating, anchoredMs: nowMs });
+    return rating;
+  }
+
+  private nudge(s: { rating: number; anchoredMs: number }, rand: () => number): number {
+    s.rating = Math.max(RATING_FLOOR, s.rating + Math.round((rand() * 2 - 1) * SESSION_NUDGE));
+    return s.rating;
   }
 
   release(name: string): void {

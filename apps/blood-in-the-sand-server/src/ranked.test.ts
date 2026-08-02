@@ -257,7 +257,7 @@ describe("ranked flow", () => {
       }[];
     };
     const mine = result.results.find((r) => r.playerId === a.ws.data.playerId)!;
-    expect(mine.after).toBe(1520); // even placement win
+    expect(mine.after).toBe(1512); // even placement win
     expect(mine.glory).toBe(23);
     expect(mine.tier).toBe("Gladiator");
     expect(mine.placement).toEqual({ number: 1, of: 10 }); // first placement match
@@ -265,7 +265,7 @@ describe("ranked flow", () => {
     // The ledger and ladder agree.
     const accountA = a.ws.data.accountId!;
     expect(await gloryBalance(db, accountA)).toBe(23);
-    expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1520);
+    expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1512);
 
     // Settled + ceremony held ⇒ the room closes on the next beat. (A ranked
     // room never returns to lobby — the room stops stepping the sim at the
@@ -397,19 +397,19 @@ describe("ranked bot backfill", () => {
       results: { playerId: number; after: number; delta: number; glory: number; placement: unknown }[];
     };
     const mine = result.results.find((r) => r.playerId === a.ws.data.playerId)!;
-    expect(mine.after).toBe(1520); // placement K=40, even ratings
+    expect(mine.after).toBe(1512); // placement K=24, even ratings
     expect(mine.glory).toBe(23);
     expect(mine.placement).toEqual({ number: 1, of: 10 });
 
     // The fabricated bot side: settled K, never "in placements".
     const theirs = result.results.find((r) => r.playerId !== a.ws.data.playerId)!;
     expect(theirs.placement).toBeNull();
-    expect(theirs.delta).toBe(-10); // K=20 loss at even ratings
+    expect(theirs.delta).toBe(-7); // K=15 loss at even ratings (half-point rounds up)
 
     // The DB holds exactly one side of the story.
     const accountA = a.ws.data.accountId!;
     expect(await gloryBalance(db, accountA)).toBe(23);
-    expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1520);
+    expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1512);
     const ratings = await db.execute("SELECT subject_id FROM ranked_ratings");
     expect(ratings.rows.map((r) => String(r["subject_id"]))).toEqual([accountA]);
     const glory = await db.execute("SELECT player_id FROM glory_ledger");
@@ -431,9 +431,9 @@ describe("ranked bot backfill", () => {
       results: { playerId: number; after: number; glory: number }[];
     };
     const mine = result.results.find((r) => r.playerId === a.ws.data.playerId)!;
-    expect(mine.after).toBe(1480);
+    expect(mine.after).toBe(1488);
     expect(mine.glory).toBe(5);
-    expect((await getRating(db, a.ws.data.accountId!, SEASON, "1v1")).rating).toBe(1480);
+    expect((await getRating(db, a.ws.data.accountId!, SEASON, "1v1")).rating).toBe(1488);
   });
 
   test("leaving the arming lobby against a bot eats the dodge lockout", async () => {
@@ -467,7 +467,7 @@ describe("ranked bot backfill", () => {
     expect(a.of("reject")[0]!["reason"]).toContain("lockout");
   });
 
-  test("consecutive matches draw different bot names", async () => {
+  test("back-to-back matches never repeat a bot name (a later re-match may)", async () => {
     await boot(instantCfg);
     const names: string[] = [];
     for (let i = 0; i < 3; i++) {
@@ -485,7 +485,10 @@ describe("ranked bot backfill", () => {
       internals(manager).tendRankedRooms(performance.now());
       expect(manager.roomCount()).toBe(0);
     }
-    expect(new Set(names).size).toBe(3);
+    // The roster book promises pairwise-adjacent distinctness only — with 4
+    // names online, match 3 re-meeting match 1's opponent is by design.
+    expect(names[1]).not.toBe(names[0]);
+    expect(names[2]).not.toBe(names[1]);
   });
 
   test("a requeue rolls a fresh bot deadline", async () => {

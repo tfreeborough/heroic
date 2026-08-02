@@ -36,12 +36,18 @@ import {
   type RankedBracketStanding,
 } from "../net/api";
 import type { ArenaClient } from "../net/connection";
+import { RankedCeremony } from "./RankedCeremony";
 
 export interface RankedScreenProps {
   client: ArenaClient;
   playerName: string;
   onBack: () => void;
 }
+
+/** Which match's ceremony has already played — module-level so the once-only
+ * survives this screen unmounting for the match itself (the compact settle
+ * card underneath stays as the record afterwards). */
+let ceremoniedMatchId: string | null = null;
 
 const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
 
@@ -198,6 +204,13 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
   const queueSize = oneVOne?.size ?? 0;
   const waitedSec = oneVOne?.waitedSec;
   const settlement = client.lastSettlement;
+  // The ceremony (bits-ranked.md § ceremony): one full-screen reveal per
+  // settlement, then never again — dismissal re-renders via the reducer.
+  const [, ceremonyDismissed] = useReducer((x: number) => x + 1, 0);
+  const ceremony =
+    settlement && settlementKey !== "" && ceremoniedMatchId !== settlementKey
+      ? settlement
+      : null;
   // Placing until /ranked/me proves otherwise — the fresh-player-correct default.
   const placing = standing === null || standing.placementsLeft > 0;
   const played = standing ? standing.wins + standing.losses : 0;
@@ -394,15 +407,26 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
         <Text style={styles.note}>Ranked needs the arena account service — check your connection and retry.</Text>
       )}
       {client.lastError && <Text style={styles.error}>{client.lastError}</Text>}
+
+      {ceremony && (
+        <RankedCeremony
+          won={ceremony.won}
+          mine={ceremony.mine}
+          onDone={() => {
+            ceremoniedMatchId = settlementKey;
+            ceremonyDismissed();
+          }}
+        />
+      )}
     </View>
   );
 };
 
-/** How many rating points a win is worth, roughly — K=20 post-placements
- * against an even opponent pays ~10. Presentation heuristic only (the real
+/** How many rating points a win is worth, roughly — K=15 post-placements
+ * against an even opponent pays ~8. Presentation heuristic only (the real
  * number swings with the matchup); it exists because "80 TO CHAMPION III"
  * speaks in rating points and players think in WINS (Tom, 2026-08-01). */
-const RATING_PER_WIN = 10;
+const RATING_PER_WIN = 8;
 
 /** The climb inside the current rung (bits-ranked.md § display v2 +
  * divisions): a filled bar running INTO the next rank's crest (small,

@@ -14,10 +14,13 @@
 export const RATING_START = 1500;
 /** A backstop far below the realistic range (~1100–2200), not a mechanic. */
 export const RATING_FLOOR = 800;
-/** First N matches in a bracket run the hot K — placements. */
+/** First N matches in a bracket run the hot K — placements. Retuned
+ * 2026-08-02 (Tom: two divisions in a day-one session felt cheap): settled
+ * play moves ~7–8 a game against an even opponent, placements ~12 — fast
+ * enough to calibrate, slow enough that the climb is the game. */
 export const PLACEMENT_MATCHES = 10;
-export const K_PLACEMENT = 40;
-export const K_SETTLED = 20;
+export const K_PLACEMENT = 24;
+export const K_SETTLED = 15;
 
 /** Chance (0..1) that `rating` beats `opponent`. Equal → 0.5; +200 → ~0.76. */
 export const expectedScore = (rating: number, opponent: number): number =>
@@ -48,7 +51,7 @@ export const updateRating = ({ rating, opponent, matchesPlayed, won }: RatingUpd
 /** Bands over the number, presentation only — no gameplay effect, no
  * promotion matches (bits-ranked.md § Tiers). Ordered by ascending floor.
  * Six tiers (revised 2026-07-30 from eight): the middle four are 150 wide so
- * their thirds — the divisions — are a uniform 50 points, ~5 net wins each
+ * their thirds — the divisions — are a uniform 50 points, ~7 net wins each
  * (Tom: 33-pt divisions promoted in 2 wins, which felt cheap). */
 export const TIERS = [
   { name: "Initiate", floor: 0 },
@@ -90,7 +93,7 @@ export interface Rung {
 
 /** The full ladder, ascending — derived from TIERS so the tier bands stay
  * the single source of truth: each middle tier splits evenly into III/II/I
- * (Tom, 2026-07-30: division rank-ups every ~5 net wins keep the climb
+ * (Tom, 2026-07-30: division rank-ups every ~7 net wins keep the climb
  * visible without feeling cheap). 1 + 4×3 + 1 = 14. */
 export const RUNGS: readonly Rung[] = TIERS.flatMap((t, i): Rung[] => {
   const next = TIERS[i + 1];

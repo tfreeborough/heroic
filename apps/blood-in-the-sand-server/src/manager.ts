@@ -58,7 +58,6 @@ import {
   botSubjectId,
   difficultyForRating,
   fuzzedQueueSize,
-  mirrorRating,
   type BotBackfillConfig,
 } from "./botBackfill";
 
@@ -500,9 +499,16 @@ export class RoomManager {
       joinedMs: entry.joinedMs,
     });
 
-    const botName = this.identityBook.pick(entry.accountId, Math.random);
+    // Wall clock, not the beat's performance.now() — the roster rotation is
+    // a time-of-day schedule.
+    const { name: botName, rating: botRating } = this.identityBook.pick(
+      entry.accountId,
+      entry.rating,
+      this.botCfg.ratingJitter,
+      Date.now(),
+      Math.random,
+    );
     const difficulty = difficultyForRating(entry.rating);
-    const botRating = mirrorRating(entry.rating, this.botCfg.ratingJitter, Math.random);
     const botSeat = room.seatRankedBot(botName, difficulty, now);
     if (botSeat === null) {
       this.identityBook.release(botName);

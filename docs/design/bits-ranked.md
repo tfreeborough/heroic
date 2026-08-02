@@ -57,14 +57,17 @@ in one match.)*
 - **Expected score** for you vs opponent: `E = 1 / (1 + 10^((opp − you) / 400))`.
   Equal ratings → 0.5; opponent +200 → ~0.24; opponent −200 → ~0.76.
 - **Update:** `new = old + K × (S − E)` where `S` = 1 win / 0 loss.
-- **K-factor schedule:** `K = 40` for a player's first **10** matches *in that bracket*
-  this season ("placement" — new accounts and smurfs settle fast), `K = 20` after.
-  Both sides use their *own* K.
+- **K-factor schedule:** `K = 24` for a player's first **10** matches *in that bracket*
+  this season ("placement" — new accounts and smurfs settle fast), `K = 15` after.
+  Both sides use their *own* K. *(Retuned 2026-08-02 from 40/20 — Tom's day-one run
+  climbed two divisions in ~10 games and it felt cheap. At 15, an even settled win
+  pays ~7–8, a division is ~7 net wins, and the skill bands deliberately tighten;
+  the placement K stays warm-not-hot so new players still calibrate fast.)*
 - **Placements hide the numbers** *(decided 2026-07-30)*: until the 10 placement
   matches are done, the client shows NO rank and NO rating anywhere — the ranked
   home shows placement progress ("N/10 · X matches until your rank is forged") and
-  the match-end plate shows "PLACEMENT MATCH N OF 10 · +Glory" instead of the Elo
-  movement. Sells the reveal, and stops players reading meaning into a 1500 that
+  the post-match ceremony shows "PLACEMENT MATCH N OF 10 · +Glory" instead of the
+  Elo movement. Sells the reveal, and stops players reading meaning into a 1500 that
   hasn't converged. Server-driven: `/ranked/me` carries `placementsLeft`,
   `rankedResult` rows carry `placement {number, of} | null` — the client never
   re-implements the threshold.
@@ -96,9 +99,10 @@ everywhere.
 
 A fresh player starts mid-table in Gladiator II (1500 sits mid-tier; hidden until
 placements are done anyway) — placements sort them fast. Tier art landed 2026-08-01,
-and the `rank_up` moment is BUILT (see Audio & art owed): on the match-end plate the
-new crest pops in under "RANK UP" in step with the fanfare; demotions get one muted
-warm-grey line ("RANK DOWN · <rank>"), no crest, no ceremony.
+and the `rank_up` moment is BUILT (see Audio & art owed): the new crest pops in
+under "RANK UP" in step with the fanfare — since 2026-08-02 inside the post-match
+ceremony (§ The ceremony), not on the in-game plate; demotions get one muted
+warm-grey line ("RANK DOWN · <rank>"), no crest, no fanfare.
 
 #### Divisions — the 14-rung ladder *(decided + built 2026-07-30, re-cut same day)*
 
@@ -112,7 +116,8 @@ rungs: Initiate is the "climb out of here" bin, Immortal the summit.
 First cut kept the 8 tiers (20 rungs), but 100-wide tiers made 33-point divisions —
 a promotion every ~2–3 wins, which Tom flagged as feeling cheap (and the fresh
 post-placement K=40 tail moved a division per win). Re-cut same day: **every middle
-tier is 150 wide, so every division is exactly 50 points ≈ 5 net wins settled** —
+tier is 150 wide, so every division is exactly 50 points — ≈ 5 net wins settled at
+the original K=20, ≈ 7 after the 2026-08-02 retune to K=15** —
 Blooded and Veteran retired, Immortal now 1900+ (attainable for grinders per the
 expected-range note above, still rare).
 
@@ -141,6 +146,30 @@ Champion III 1600 · II 1650 · I 1700 · Warlord III 1750 · II 1800 · I 1850.
   `rankFloor` + `nextRank {tier, division, floor}|null` (replacing display v2's
   short-lived `tierFloor`/`nextTier`).
 
+### The ceremony — the settlement gets its own stage *(decided + built 2026-08-02)*
+
+Tom, after a day on ranked: the Glory + rating changes "pushed into a small text
+space below" the VICTORY title undersold the moment. The split now:
+
+- **In-game** the match-end plate is **title + score only** (RoundBanner: no
+  settlement line, no rank callout — both deleted). The arena's job ends at
+  VICTORY/DEFEAT.
+- **Back on the ranked home**, a full-screen **ceremony overlay**
+  (`RankedCeremony.tsx`) plays ONCE per settlement (module-level matchId latch —
+  survives the screen unmounting for the match), then dismisses to the ranked
+  home, where the existing compact settle card remains as the quiet record.
+- **Beats**: VICTORY/DEFEAT title + the Glory count-up (ease-out cubic, timed to
+  the `glory_earned` swell) → auto-crossfade (`ceremony_shift`, new catalogue id,
+  clip owed) → the rating beat: the number counts before → after, delta chip,
+  rank crest + name; if the displayed rank moved, the crest pop / muted line
+  holds back until the count lands (`rank_up` / `rank_down` fire HERE now, not in
+  GameScreen). `NEW SEASON BEST` caps the count when set. Placements swap the
+  rating beat for "N / 10 · X matches until your rank is forged" — the
+  numbers-stay-hidden rule follows the settlement wherever it's shown.
+- **Tap rules — premium, never trapping**: tap mid-count snaps the count home;
+  tap on a finished beat advances; the last beat waits for the dismissing tap
+  ("TAP TO CONTINUE").
+
 ### Display v2 — progress you can feel *(decided + built 2026-07-30)*
 
 The problem: Elo is zero-sum, so a mid-table regular sees the same number all month
@@ -153,8 +182,8 @@ ever go up, without touching the math (Tom, 2026-07-30):
   tier's crest when the rung crosses a tier boundary (six badges cover fourteen
   rungs, so a same-tier crest endcap just mirrored the player's own badge) — and
   the label speaks in the player's unit:
-  **"NEXT RANK · ~2 WINS TO CHAMPION III"** (`RATING_PER_WIN ≈ 10`, a client-side
-  presentation heuristic off K=20). Immortal (no ceiling) shows a full gold bar +
+  **"NEXT RANK · ~2 WINS TO CHAMPION III"** (`RATING_PER_WIN ≈ 8`, a client-side
+  presentation heuristic off K=15). Immortal (no ceiling) shows a full gold bar +
   "TOP OF THE LADDER". Ladder math (`rankFloor`, `nextRank`) is computed server-side
   in `/ranked/me`; the client renders, never re-implements the bands. The rating
   number carries a small "RATING" cap, and the form dots a "LAST N GAMES" cap —
@@ -195,7 +224,7 @@ config** (monetisation.md: keep earn rates server-side, tune against retention).
   retries can never double-credit). Source string: `ranked:<matchId>`.
 - **Smurf honesty note:** the bonus reads *current* rating, so a fresh smurf account
   briefly earns equal-opponent rates while stomping. The real containment is the
-  placement K = 40 — ten matches and they've rated out of the low bands. Accepted.
+  placement K = 24 — ten matches and they've rated out of the low bands. Accepted.
 
 ### Economy sizing *(added 2026-07-29)*
 
@@ -413,9 +442,10 @@ persisted display name column is a fast follow decided at build time.)
    error line; settlement banner held until the next queue). matchFound flows
    into the existing RoomScreen wizard (`ranked` prop: no force start, no side
    switch, no crowns, SEASON I badge instead of the copyable code) → match →
-   the VICTORY/DEFEAT plate carries a gold settlement line (rating movement +
-   Glory) → the client auto-leaves the dead post-match lobby back to
-   RankedScreen. On-device pass owed.
+   VICTORY/DEFEAT plate (title + score; the settlement moved to the ceremony
+   overlay 2026-08-02 — § The ceremony) → the client auto-leaves the dead
+   post-match lobby back to RankedScreen, where the ceremony plays. On-device
+   pass owed.
 4. **M4 — ladder polish:** leaderboard endpoint + UI, tier badge art, ranked
    sounds, dodge lockout UX. Season-roll tooling, multi-queue UI, premade teams
    stay deferred.
@@ -430,7 +460,11 @@ persisted display name column is a fast follow decided at build time.)
   dip is silent and placements never fire it; `gloryEarned` with every settlement —
   a low wordless CHORAL SWELL, deliberately never a coin sound: Glory is renown and
   must not read as money (Tom, 2026-08-01; a forged coin-chink take was cut for it)).
-  Silent until forged (missing-manifest rule).
+  Silent until forged (missing-manifest rule). *(2026-08-02: all three settle sounds
+  now fire from `RankedCeremony`, not GameScreen — same triggers, new stage.)*
+- `ceremony_shift` **NEW 2026-08-02, clip owed**: a soft airy whoosh on the
+  ceremony's crossfade from the Glory count to the rating reveal — transition
+  texture, not a stinger. On the catalogue (`ceremonyShift`), silent until forged.
 - ~~Tier badge art ×6~~ **FORGED + wired 2026-08-01** (`badge-bits`, shield anchor + per-tier
   dominant-colour system — asset-forge.md; `RANK_BADGES` in RankedScreen.tsx). Division
   numerals composite client-side. Squint-verified at 28px on the void: the colour ramp names

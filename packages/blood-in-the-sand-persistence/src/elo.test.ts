@@ -38,28 +38,28 @@ describe("expected score", () => {
 
 describe("K schedule", () => {
   test("placements run hot, then settle", () => {
-    expect(kFactor(0)).toBe(40);
-    expect(kFactor(9)).toBe(40);
-    expect(kFactor(10)).toBe(20);
-    expect(kFactor(500)).toBe(20);
+    expect(kFactor(0)).toBe(24);
+    expect(kFactor(9)).toBe(24);
+    expect(kFactor(10)).toBe(15);
+    expect(kFactor(500)).toBe(15);
   });
 });
 
 describe("rating updates", () => {
-  test("an even placement win moves +20, a settled one +10", () => {
-    expect(updateRating({ rating: 1500, opponent: 1500, matchesPlayed: 0, won: true })).toBe(1520);
-    expect(updateRating({ rating: 1500, opponent: 1500, matchesPlayed: 50, won: true })).toBe(1510);
+  test("an even placement win moves +12, a settled one +8", () => {
+    expect(updateRating({ rating: 1500, opponent: 1500, matchesPlayed: 0, won: true })).toBe(1512);
+    expect(updateRating({ rating: 1500, opponent: 1500, matchesPlayed: 50, won: true })).toBe(1508);
   });
 
-  test("losses mirror wins at equal ratings", () => {
-    expect(updateRating({ rating: 1500, opponent: 1500, matchesPlayed: 50, won: false })).toBe(1490);
+  test("losses mirror wins at equal ratings (odd K: the half-point rounds up both ways)", () => {
+    expect(updateRating({ rating: 1500, opponent: 1500, matchesPlayed: 50, won: false })).toBe(1493);
   });
 
   test("an upset pays big, a stomp pays scraps", () => {
     // 1500 beats 1900 (E ≈ 0.09): almost the full K.
-    expect(updateRating({ rating: 1500, opponent: 1900, matchesPlayed: 50, won: true })).toBe(1518);
+    expect(updateRating({ rating: 1500, opponent: 1900, matchesPlayed: 50, won: true })).toBe(1514);
     // 1900 beats 1500: barely moves.
-    expect(updateRating({ rating: 1900, opponent: 1500, matchesPlayed: 50, won: true })).toBe(1902);
+    expect(updateRating({ rating: 1900, opponent: 1500, matchesPlayed: 50, won: true })).toBe(1901);
   });
 
   test("nobody rates below the floor", () => {
