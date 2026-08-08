@@ -151,6 +151,16 @@ what's next.
 10. M5 secret items (first achievement-granted weapon: full new-content
     tax — bot cast rules, archetype check, forge icon+SFX — else bots leak
     the secret; entitlement-aware arming wizard; item-name registry).
+11. Wave-2 FEATS BUILT 2026-08-08 (the deferred second set, Tom: "do them
+    all" — achievements.md § Wave-2 feats): 8 new one-offs (by-a-thread,
+    return-to-sender, still-standing, flawless, the-old-ways, carnage,
+    killer-instinct, never-doubted) + lifeblood now reads healingDealt.
+    New accumulator tallies: crits, roundWinners (events already carried
+    the data — no sim/wire change). PLACEHOLDER TITLES (Tom's naming pass
+    owed), thresholds: 7 reflects/10 crits (Tom-tuned), 300 dmg still a first guess, 8 icon
+    subjects briefed in the style bible (DEED_ICONS null until forged —
+    next Realmsmith session). Feats deliberately cascade (a perfect match
+    pops Not a Scratch + Flawless + Still Standing together).
 
 ## Gotchas the next session should not rediscover
 

@@ -59,6 +59,7 @@ describe("MatchStatsAccumulator", () => {
       healingReceived: 0,
       healingDealt: 0,
       reflects: 0,
+      crits: 1,
       casts: { dash: 2 },
       roundsWon: 2,
       lastRoundHpFrac: 0.88,
@@ -74,6 +75,7 @@ describe("MatchStatsAccumulator", () => {
       healingReceived: 30,
       healingDealt: 30, // the self-heal credits the caster too
       reflects: 0,
+      crits: 0,
       casts: { "blood-font": 1 },
       roundsWon: 0,
       lastRoundHpFrac: null, // dead when the decider closed
@@ -282,9 +284,72 @@ describe("Wave-1 defs", () => {
     expect(loserFired).not.toContain("not-a-scratch");
   });
 
+  test("Wave-2 feats fire on their exact shapes", () => {
+    // A 2-1 comeback decider: seat 0 drops round 1, takes rounds 2 and 3,
+    // finishing at 6% HP with heavy damage, ten crits, and seven reflects.
+    const acc = new MatchStatsAccumulator([
+      { id: 0, team: 1 },
+      { id: 1, team: 2 },
+    ]);
+    const crit = (n: number): ArenaEvent[] =>
+      Array.from({ length: n }, (): ArenaEvent => ({
+        type: "hit", attackerId: 0, targetId: 1, damage: 30, crit: true, lethal: false, x: 0, y: 0,
+      }));
+    acc.ingest([
+      { type: "roundEnd", winnerTeam: 2, wins: [0, 1], standing: [{ id: 1, hpFrac: 0.5 }] },
+      ...crit(10), // 300 damage
+      { type: "hit", attackerId: 0, targetId: 1, damage: 160, crit: false, lethal: true, x: 0, y: 0 },
+      ...Array.from({ length: 7 }, (): ArenaEvent => ({ type: "reflect", playerId: 0, attackerId: 1, x: 0, y: 0 })),
+      { type: "roundEnd", winnerTeam: 1, wins: [1, 1], standing: [{ id: 0, hpFrac: 0.3 }] },
+      // The wound that makes it a 6% finish — 0 took real damage on the way.
+      { type: "hit", attackerId: 1, targetId: 0, damage: 94, crit: false, lethal: false, x: 0, y: 0 },
+      { type: "roundEnd", winnerTeam: 1, wins: [2, 1], standing: [{ id: 0, hpFrac: 0.06 }] },
+      { type: "matchEnd", winnerTeam: 1 },
+    ]);
+    const summary = acc.summary({
+      ranked: true, bracket: "1v1", teamSize: 1, winnerTeam: 1,
+      players: [
+        { id: 0, team: 1, weapon: "blade", bot: false },
+        { id: 1, team: 2, weapon: "bow", bot: false },
+      ],
+    });
+    const fired = evaluate({
+      defs: ACHIEVEMENT_DEFS, boards: ACHIEVEMENT_BOARDS, summary,
+      playerKey: 0, before: {}, after: {}, unlocked: new Set(),
+    }).map((d) => d.id);
+    // The war story: comeback + decider-under-10% + carnage + crits + reflects…
+    for (const id of ["by-a-thread", "never-doubted", "carnage", "killer-instinct", "return-to-sender", "the-old-ways", "still-standing"]) {
+      expect(fired).toContain(id);
+    }
+    // …but NOT the sweep or the untouched run (a round was dropped, damage taken).
+    expect(fired).not.toContain("flawless");
+    expect(fired).not.toContain("not-a-scratch");
+    // The loser fires nothing from this match.
+    const loserFired = evaluate({
+      defs: ACHIEVEMENT_DEFS, boards: ACHIEVEMENT_BOARDS, summary,
+      playerKey: 1, before: {}, after: {}, unlocked: new Set(),
+    }).map((d) => d.id);
+    for (const id of ["by-a-thread", "never-doubted", "still-standing", "flawless", "the-old-ways"]) {
+      expect(loserFired).not.toContain(id);
+    }
+  });
+
+  test("flawless is the sweep — and a swept loser never comebacks", () => {
+    const summary = play1v1(); // 2-0 to team 1
+    const fired = evaluate({
+      defs: ACHIEVEMENT_DEFS, boards: ACHIEVEMENT_BOARDS, summary,
+      playerKey: 0, before: {}, after: {}, unlocked: new Set(),
+    }).map((d) => d.id);
+    expect(fired).toContain("flawless");
+    expect(fired).toContain("still-standing");
+    expect(fired).not.toContain("by-a-thread"); // no decider in a sweep
+    expect(fired).not.toContain("never-doubted"); // won the opener
+    expect(fired).not.toContain("the-old-ways"); // dash was cast
+  });
+
   test("lifeblood reads the single-match healing, not the lifetime counter", () => {
     const summary = play1v1();
-    summary.stats[1]!.healingReceived = 200;
+    summary.stats[1]!.healingDealt = 200; // Wave 2: lifeblood reads healing DEALT
     const fired = evaluate({
       defs: ACHIEVEMENT_DEFS,
       boards: ACHIEVEMENT_BOARDS,

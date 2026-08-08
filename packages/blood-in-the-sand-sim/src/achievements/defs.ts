@@ -31,7 +31,7 @@ import {
   type ChainTier,
 } from "@heroic/achievements";
 import { COUNTERS } from "./counters";
-import { wonMatch, type MatchSummary } from "./summary";
+import { summaryTeamOf, wonMatch, type MatchSummary } from "./summary";
 
 export type BitsAchievementDef = AchievementDef<MatchSummary>;
 
@@ -305,7 +305,11 @@ const healing = milestoneChain<MatchSummary>({
   ],
 });
 
-/** The feats — one-off nodes branching off their related chains. */
+/** The feats — one-off nodes branching off their related chains. Wave-2
+ * set authored 2026-08-08 (achievements.md § Wave-2 feats; titles are
+ * placeholders until Tom's naming pass; 7/300/10 thresholds are Tom-tuned
+ * tuning knobs). Several deliberately CASCADE (Not a Scratch ⊃ Flawless ⊃
+ * Still Standing can pop off one perfect match — a great ceremony). */
 const FEATS: BitsAchievementDef[] = [
   {
     id: "not-a-scratch",
@@ -324,13 +328,131 @@ const FEATS: BitsAchievementDef[] = [
     id: "lifeblood",
     board: RANKED_BOARD,
     title: "Lifeblood",
+    // Wave 2: healing credits its CASTER — this reads healing DEALT now
+    // (identical in 1v1 self-heals; correct once team heals exist).
     description: "Restore 200 health in a single ranked match.",
     icon: "deed-lifeblood",
     parent: healing[0]!.id,
     pos: { x: 45, y: 1075 },
     trigger: {
       kind: "feat",
-      test: (s, p) => (s.stats[p]?.healingReceived ?? 0) >= 200,
+      test: (s, p) => (s.stats[p]?.healingDealt ?? 0) >= 200,
+    },
+  },
+  {
+    id: "by-a-thread",
+    board: RANKED_BOARD,
+    title: "By a Thread",
+    description: "Take a ranked match to the final round and win it with a sliver of health.",
+    icon: "deed-thread",
+    parent: wins[0]!.id,
+    pos: { x: -265, y: -130 },
+    trigger: {
+      kind: "feat",
+      // A decider = both sides took a round; the Wave-2 HP sample is the
+      // FINAL round's close (null = dead when it ended).
+      test: (s, p) => {
+        const frac = s.stats[p]?.lastRoundHpFrac;
+        return wonMatch(s, p) && s.roundWins[0] > 0 && s.roundWins[1] > 0 && frac !== null && frac !== undefined && frac < 0.1;
+      },
+    },
+  },
+  {
+    id: "return-to-sender",
+    board: RANKED_BOARD,
+    title: "Return to Sender",
+    description: "Turn seven shots back with Mirror Guard in a single ranked match.",
+    icon: "deed-reflect",
+    parent: "casts-mirror-guard-15",
+    pos: { x: -25, y: 745 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => (s.stats[p]?.reflects ?? 0) >= 7,
+    },
+  },
+  {
+    id: "still-standing",
+    board: RANKED_BOARD,
+    title: "Still Standing",
+    description: "Win a ranked match without dying once.",
+    icon: "deed-standing",
+    parent: wins[0]!.id,
+    pos: { x: -150, y: -245 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => wonMatch(s, p) && (s.stats[p]?.deaths ?? 1) === 0,
+    },
+  },
+  {
+    id: "flawless",
+    board: RANKED_BOARD,
+    title: "Flawless",
+    description: "Win a ranked match without dropping a single round.",
+    icon: "deed-flawless",
+    parent: wins[0]!.id,
+    pos: { x: -265, y: -245 },
+    trigger: {
+      kind: "feat",
+      // The OTHER side's round tally is zero (wins index = team - 1).
+      test: (s, p) => {
+        const team = summaryTeamOf(s, p);
+        return team !== null && wonMatch(s, p) && s.roundWins[team === 1 ? 1 : 0] === 0;
+      },
+    },
+  },
+  {
+    id: "the-old-ways",
+    board: RANKED_BOARD,
+    title: "The Old Ways",
+    description: "Win a ranked match without casting a single ability.",
+    icon: "deed-old-ways",
+    parent: FIRST_MATCH.id,
+    pos: { x: -265, y: -15 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => wonMatch(s, p) && Object.values(s.stats[p]?.casts ?? {}).every((n) => !n),
+    },
+  },
+  {
+    id: "carnage",
+    board: RANKED_BOARD,
+    title: "Carnage",
+    description: "Deal 300 damage in a single ranked match.",
+    icon: "deed-carnage",
+    parent: damage[0]!.id,
+    pos: { x: 255, y: -140 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => (s.stats[p]?.damageDealt ?? 0) >= 300,
+    },
+  },
+  {
+    id: "killer-instinct",
+    board: RANKED_BOARD,
+    title: "Killer Instinct",
+    description: "Land ten critical hits in a single ranked match.",
+    icon: "deed-crits",
+    parent: kills[0]!.id,
+    pos: { x: 140, y: -115 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => (s.stats[p]?.crits ?? 0) >= 10,
+    },
+  },
+  {
+    id: "never-doubted",
+    board: RANKED_BOARD,
+    title: "Never Doubted",
+    description: "Lose the opening round, then win the ranked match.",
+    icon: "deed-comeback",
+    parent: wins[0]!.id,
+    pos: { x: -150, y: -15 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => {
+        const team = summaryTeamOf(s, p);
+        return team !== null && wonMatch(s, p) && s.roundWinners[0] !== undefined && s.roundWinners[0] !== 0 && s.roundWinners[0] !== team;
+      },
     },
   },
 ];
@@ -365,12 +487,22 @@ const idsOf = (defs: readonly BitsAchievementDef[]): string[] => defs.map((d) =>
 export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
   {
     title: "The Pit",
-    ids: [FIRST_MATCH.id, ...idsOf(wins), ...idsOf(winStreaks), "not-a-scratch", ...idsOf(lossStreaks)],
+    ids: [
+      FIRST_MATCH.id,
+      ...idsOf(wins),
+      ...idsOf(winStreaks),
+      "not-a-scratch",
+      "by-a-thread",
+      "still-standing",
+      "flawless",
+      "never-doubted",
+      ...idsOf(lossStreaks),
+    ],
   },
-  { title: "The Kill", ids: [...idsOf(kills), ...idsOf(damage)] },
-  { title: "The Arsenal", ids: idsOf(weaponRounds) },
+  { title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
+  { title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
   { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 9)) },
-  { title: "Defensive Arts", ids: idsOf(abilityCasts.slice(9, 24)) },
+  { title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(9, 24)), "return-to-sender"] },
   { title: "Support Arts", ids: idsOf(abilityCasts.slice(24)) },
   { title: "Glory", ids: idsOf(glory) },
   { title: "Blood & Mercy", ids: [...idsOf(healing), "lifeblood"] },

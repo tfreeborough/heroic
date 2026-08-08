@@ -30,6 +30,8 @@ export interface PlayerMatchStats {
   healingDealt: number;
   /** Shots turned around by this player's Mirror Guard (Wave 2). */
   reflects: number;
+  /** Critical hits landed on players (the hit event's crit flag). */
+  crits: number;
   casts: Partial<Record<AbilityId, number>>;
   /** Rounds this player's TEAM took (loadouts are per-match, so per-weapon
    * round counters read straight off this). */
@@ -53,6 +55,9 @@ export interface MatchSummary {
   teamSize: number;
   winnerTeam: Team;
   roundWins: [number, number];
+  /** Each round's winner in play order (0 = a double-wipe draw) — comeback
+   * feats read the opening entries. */
+  roundWinners: (Team | 0)[];
   players: MatchSummaryPlayer[];
   stats: Record<number, PlayerMatchStats>;
 }
@@ -65,6 +70,7 @@ const freshStats = (): PlayerMatchStats => ({
   healingReceived: 0,
   healingDealt: 0,
   reflects: 0,
+  crits: 0,
   casts: {},
   roundsWon: 0,
   lastRoundHpFrac: null,
@@ -74,6 +80,7 @@ export class MatchStatsAccumulator {
   private readonly stats = new Map<number, PlayerMatchStats>();
   private readonly teams = new Map<number, Team>();
   private roundWins: [number, number] = [0, 0];
+  private readonly roundWinners: (Team | 0)[] = [];
 
   /** Seats are fixed for a room's life — seed them up front so hit targets
    * can be filtered to real players (deployable ids never match). */
@@ -97,6 +104,7 @@ export class MatchStatsAccumulator {
           const attacker = this.stats.get(e.attackerId);
           if (attacker && e.attackerId !== e.targetId) {
             attacker.damageDealt += e.damage;
+            if (e.crit) attacker.crits += 1;
             if (e.lethal) attacker.kills += 1;
           }
           break;
@@ -123,6 +131,7 @@ export class MatchStatsAccumulator {
         }
         case "roundEnd": {
           this.roundWins = e.wins;
+          this.roundWinners.push(e.winnerTeam);
           if (e.winnerTeam !== 0) {
             for (const [id, team] of this.teams) {
               if (team === e.winnerTeam) this.stats.get(id)!.roundsWon += 1;
@@ -158,6 +167,7 @@ export class MatchStatsAccumulator {
       teamSize: ctx.teamSize,
       winnerTeam: ctx.winnerTeam,
       roundWins: this.roundWins,
+      roundWinners: [...this.roundWinners],
       players: [...ctx.players],
       stats,
     };

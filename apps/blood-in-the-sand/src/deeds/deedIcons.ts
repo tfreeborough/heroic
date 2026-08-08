@@ -29,6 +29,16 @@ export const DEED_ICONS: Record<string, number | null> = {
   "deed-healing": require("../../assets/deeds/deed-healing.png"),
   "deed-untouched": require("../../assets/deeds/deed-untouched.png"),
   "deed-lifeblood": require("../../assets/deeds/deed-lifeblood.png"),
+  // Wave-2 feats (2026-08-08) — null until forged; the codex renders the
+  // bare well and the ceremony simply skips the icon block.
+  "deed-thread": null,
+  "deed-reflect": null,
+  "deed-standing": null,
+  "deed-flawless": null,
+  "deed-old-ways": null,
+  "deed-carnage": null,
+  "deed-crits": null,
+  "deed-comeback": null,
   // Loadout-icon reuse — derived, never forged as deeds.
   ...Object.fromEntries(WEAPON_IDS.map((w) => [`deed-rounds-${w}`, ICON_SOURCES[w]])),
   ...Object.fromEntries(ABILITY_IDS.map((a) => [`deed-casts-${a}`, ICON_SOURCES[a]])),

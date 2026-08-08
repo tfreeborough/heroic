@@ -287,6 +287,36 @@ Consequence: the skirmish board, skirmish_* counters, and friends-lobby
 farming policy are all DEAD as work items. The milestone roadmap goes
 M1→M2→M3→M5 (secret items).
 
+## Wave-2 feats *(Tom 2026-08-08: "do them all" — the deferred second set)*
+
+The Season I sketch deferred every deed the sim couldn't measure ("Wave 2
+trails"); the sim events landed 2026-08-08, and this is the content that
+cashes them in — EIGHT new one-off feats (the codex previously had only
+two) plus one accounting fix. Placeholder titles; Tom's naming pass owed.
+
+| id | placeholder | fires when | reads |
+| --- | --- | --- | --- |
+| by-a-thread | By a Thread | win a decider (both sides took a round) alive under 10% HP | lastRoundHpFrac (Wave 2) |
+| return-to-sender | Return to Sender | turn 7 shots with Mirror Guard in one match | reflects (Wave 2) |
+| still-standing | Still Standing | win a match without dying | deaths |
+| flawless | Flawless | win without dropping a round | roundWins |
+| the-old-ways | The Old Ways | win a match casting NO abilities | casts |
+| carnage | Carnage | deal 300 damage in one match | damageDealt |
+| killer-instinct | Killer Instinct | land 10 crits in one match | crits (NEW tally) |
+| never-doubted | Never Doubted | lose the opening round, win the match | roundWinners (NEW tally) |
+
+Plus: **Lifeblood now reads healing DEALT** (was received — identical in
+1v1 self-heals, correct forever after; free pre-deploy).
+
+The two NEW tallies are accumulator-only (`crits` per player,
+`roundWinners` sequence on the summary) — the hit/roundEnd events already
+carry the data; no sim or wire changes. Feats cascade deliberately
+(Not a Scratch ⊃ Flawless ⊃ Still Standing can pop together — a great
+ceremony, not a bug). Thresholds: 7 reflects / 300 damage / 10 crits (reflects+crits
+Tom-tuned 2026-08-08; 300 damage still a first guess). Each feat needs a forged icon (subjects briefed
+in the style bible; null until the PNG lands) and lives in a codex chapter
+(test-enforced). Rewards deliberately unset — economy/titles pass is Tom's.
+
 ## Secret items in the wizard
 
 An achievement-granted weapon/ability, once entitled, simply appears in the arming

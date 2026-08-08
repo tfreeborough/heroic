@@ -781,6 +781,39 @@ export const BADGE: BadgeSpec = {
 // Serpent, glory = the Hercules myth-arc ending at Demigod / A Star Is
 // Born, damage = the blood-flood ladder ending at Hemoclysm, and so on.
 export const DEED_SUBJECTS: Record<string, string> = {
+  // ── Wave-2 feats (2026-08-08) — single bold familiar objects, no scenes ──
+  // "By a Thread" — victory hanging by one strand.
+  "deed-thread":
+    "a heavy bronze gladiator medallion dangling from a single fraying red thread, the last strand " +
+    "taut and about to snap",
+  // "Return to Sender" — the mirror that turns the shot.
+  "deed-reflect":
+    "a polished round bronze mirror with an arrow rebounding off its face, the arrow bent back " +
+    "the way it came, one bright glint on the mirror",
+  // "Still Standing" — the one who never fell.
+  "deed-standing":
+    "a single intact marble column standing upright among broken column stumps, warm desert light " +
+    "on its capital",
+  // "Flawless" — the unblemished shield.
+  "deed-flawless":
+    "a pristine polished steel shield with a perfect mirror finish, not a single dent or scratch, " +
+    "one clean specular star of light",
+  // "The Old Ways" — bare steel, no sorcery.
+  "deed-old-ways":
+    "a plain unadorned iron gladius sword driven point-down into sand, stripped of any ornament, " +
+    "honest worn steel",
+  // "Carnage" — overwhelming damage in one bout.
+  "deed-carnage":
+    "a heavy cleaver-like blade buried deep in a wooden arena post, the post splitting from the " +
+    "force, droplets of crimson on the steel",
+  // "Killer Instinct" — the precise repeated strike.
+  "deed-crits":
+    "a wooden archery target with three arrows clustered dead-centre in the red bullseye, shafts " +
+    "almost touching",
+  // "Never Doubted" — the comeback from the brink.
+  "deed-comeback":
+    "a bronze phoenix rising with spread wings from a small pile of grey ash, tail feathers still " +
+    "trailing embers",
   // "Christened with blood" — the arena's baptism.
   "deed-first-match":
     "a battered bronze gladiator helm anointed with a fresh blood mark, one bold red line " +
