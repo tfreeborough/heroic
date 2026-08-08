@@ -171,6 +171,37 @@ export const fetchRankedMe = async (identity: Identity): Promise<RankedMe | null
   }
 };
 
+/** One unlocked deed from GET /achievements/me. */
+export interface DeedUnlockRecord {
+  id: string;
+  /** Unix seconds. */
+  unlockedAt: number;
+}
+
+/** The deeds screen's one read (achievements.md § API): unlock STATE only —
+ * definitions ship in the app bundle (the sim package). `counters` includes
+ * `glory_earned` served live off the ledger. */
+export interface AchievementsMe {
+  unlocks: DeedUnlockRecord[];
+  counters: Record<string, number>;
+  entitlements: { itemId: string; source: string; grantedAt: number }[];
+}
+
+/** The caller's achievement state; null = unavailable (offline / no API). */
+export const fetchAchievements = async (identity: Identity): Promise<AchievementsMe | null> => {
+  if (!API_URL) return null;
+  try {
+    const res = await apiFetch("/achievements/me", {
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    if (!res.ok) return null;
+    const me = (await res.json()) as AchievementsMe;
+    return Array.isArray(me.unlocks) ? me : null;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * The title screen's wallet: registers if needed, then loads the balance.
  * Stays null (render nothing) until a real number arrives — the scene

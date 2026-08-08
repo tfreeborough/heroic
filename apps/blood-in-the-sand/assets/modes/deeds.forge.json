@@ -1,0 +1,21 @@
+{
+  "type": "mode-bits",
+  "subject": "a vast illuminated chronicle unrolled across a stone table by candlelight — aged parchment dense with inked deeds on the right, wax seals and small gold-leaf medallions linked by drawn lines like a constellation, a quill at rest, warm candle glow; the left side is quiet shadowed stone in deep amber dark",
+  "prompt": "a vast illuminated chronicle unrolled across a stone table by candlelight — aged parchment dense with inked deeds on the right, wax seals and small gold-leaf medallions linked by drawn lines like a constellation, a quill at rest, warm candle glow; the left side is quiet shadowed stone in deep amber dark. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga game backdrops: hand-placed chunky pixels, a strictly limited palette of about 64 colours, skies and light built from hard stepped colour ramps and checkerboard dithering — no smooth gradients, no anti-aliasing, never flat vector art, never ink outlines or crosshatching, never a photograph. True materials and light each in their own full colour, no sepia wash: honey sand-gold (#dcb96f) ground and warm ambience, battle-grey steel (#9aa0a6), bone-white highlights (#f2e9d4), deep warm umber shadows (#4a3520) never pure black; dried-blood red (#a32c22) rationed to banners, cloth and wounds; a burnt-gold (#e8c87a) glow only where the light source earns it. Composition is strict: all focal detail and figures sit in the RIGHT two thirds of the frame; the LEFT third is quiet, low-detail atmosphere (sky, wall, drifting dust) with no figures and no focal shapes — interface text will sit over it. The horizon and all key elements sit in the vertical middle of the frame: the top quarter is only sky and the bottom quarter only ground, both safe to crop away. The paint fills the whole frame edge-to-edge with no border, no vignette, no frame line. Grim, sun-scoured, blood-and-sand mood. No text, no lettering, no banners with writing.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1536x1024",
+    "quality": "medium",
+    "background": "opaque",
+    "savedWidth": 900,
+    "savedHeight": 360,
+    "pixelGrid": "300x120",
+    "paletteColours": 64
+  },
+  "files": [
+    "deeds.png"
+  ],
+  "created": "2026-08-07T15:52:17.931Z",
+  "updated": "2026-08-07T15:52:55.715Z"
+}

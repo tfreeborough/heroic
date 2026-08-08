@@ -22,6 +22,7 @@
         "expo-audio": "~56.0.12",
         "expo-clipboard": "~56.0.4",
         "expo-dev-client": "~56.0.20",
+        "expo-font": "~56.0.7",
         "expo-haptics": "~56.0.3",
         "expo-keep-awake": "~56.0.3",
         "expo-secure-store": "~56.0.4",
@@ -53,6 +54,7 @@
       "name": "blood-in-the-sand-server",
       "version": "0.0.0",
       "dependencies": {
+        "@heroic/achievements": "workspace:*",
         "@heroic/blood-in-the-sand-persistence": "workspace:*",
         "@heroic/blood-in-the-sand-sim": "workspace:*",
         "@heroic/core": "workspace:*",
@@ -127,6 +129,27 @@
         "vite": "^6.0.7",
       },
     },
+    "packages/achievements": {
+      "name": "@heroic/achievements",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/react": "~19.2.2",
+      },
+      "peerDependencies": {
+        "@shopify/react-native-skia": "*",
+        "react": "*",
+        "react-native": "*",
+        "react-native-gesture-handler": "*",
+        "react-native-reanimated": "*",
+      },
+      "optionalPeers": [
+        "@shopify/react-native-skia",
+        "react",
+        "react-native",
+        "react-native-gesture-handler",
+        "react-native-reanimated",
+      ],
+    },
     "packages/blood-in-the-sand-persistence": {
       "name": "@heroic/blood-in-the-sand-persistence",
       "version": "0.0.0",
@@ -138,6 +161,7 @@
       "name": "@heroic/blood-in-the-sand-sim",
       "version": "0.0.0",
       "dependencies": {
+        "@heroic/achievements": "workspace:*",
         "@heroic/core": "workspace:*",
       },
     },
@@ -434,6 +458,8 @@
     "@expo/ws-tunnel": ["@expo/ws-tunnel@1.0.6", "", {}, "sha512-nDRbLmSrJar7abvUjp3smDwH8HcbZcoOEa5jVPUv9/9CajgmWw20JNRwTuBRzWIWIkEJDkz20GoNA+tSwUqk0Q=="],
 
     "@expo/xcpretty": ["@expo/xcpretty@4.4.4", "", { "dependencies": { "@babel/code-frame": "^7.20.0", "chalk": "^4.1.0", "js-yaml": "^4.1.0" }, "bin": { "excpretty": "build/cli.js" } }, "sha512-4aQzz9vgxcNXFfo/iyNgDDYfsU5XGKKxWxZopw0cVotHiW+U8IJbIxMaxsINs6bHhtkG3StKNPcOrn3eBuxKPw=="],
+
+    "@heroic/achievements": ["@heroic/achievements@workspace:packages/achievements"],
 
     "@heroic/blood-in-the-sand-persistence": ["@heroic/blood-in-the-sand-persistence@workspace:packages/blood-in-the-sand-persistence"],
 

@@ -31,6 +31,7 @@ export type BitsSoundEvent =
   | "weaponFire" //     a ranged weapon looses         (qualifier: WeaponId)
   | "weaponStrike" //   an attack connects             (qualifier: WeaponId)
   | "hitTaken" //       the LOCAL player is struck
+  | "reflect" //        Mirror Guard turns a shot around (Wave-2 reflect event)
   | "death" //          a combatant falls
   | "crowdCheer" //     the pit mob roars when YOUR side scores (8-take bank, randomised)
   | "crowdJeer" //      the pit mob groans when the ENEMY scores on you (bank, randomised)
@@ -57,6 +58,7 @@ export type BitsSoundEvent =
   | "rankDown" //       …or slipped — deliberately subtle, never punishing
   | "gloryEarned" //    the Glory payout lands on the ceremony plate
   | "ceremonyShift" //  the ceremony's fade from Glory to the rating reveal
+  | "deedUnlock" //     a deed card stamps in on the ceremony (achievements.md)
   // ── UI ────────────────────────────────────────────────────────────────────
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
@@ -116,6 +118,10 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // Your own pained grunt — reserved for CRITS taken (a normal hit on you just
   // thuds; the crit is what earns the "oof"). See GameScreen's hit handler.
   hitTaken: { clips: ["player_hurt_1"], volume: 0.9, pitchVariance: 0.06 },
+  // Owed from the Forge — silent until reflect_1 lands: Mirror Guard turning
+  // a shot (the Wave-2 reflect event) — a bright metallic parry ting with a
+  // whip of departure, short; the turned shot's own flight sound carries on.
+  reflect: { clips: ["reflect_1"], pitchVariance: 0.05 },
   // A combatant dies (player kill; straw men don't route here).
   death: { clips: ["death_1"], pitchVariance: 0.05 },
   // The pit crowd erupting at a kill — an 8-take bank the scheduler picks from at
@@ -237,15 +243,22 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // whoosh as the post-match ceremony crossfades from the Glory count to the
   // rating reveal (RankedCeremony). Transition texture, not a stinger.
   ceremonyShift: { clips: ["ceremony_shift_1"], volume: 0.7 },
+  // Owed from the Forge — silent until deed_unlock_1 lands: the DEED
+  // COMPLETE stamp (achievements.md § unlock ceremony) — a wax-seal thunk
+  // with a short bright tail; triumphant but shorter and smaller than
+  // rank_up, since first matches pop 2–3 back-to-back.
+  deedUnlock: { clips: ["deed_unlock_1"] },
 
   // ── UI ──────────────────────────────────────────────────────────────────
   uiTap: { clips: ["ui_tap_1"], volume: 0.7 },
   uiConfirm: { clips: ["ui_confirm_1"] },
   uiBack: { clips: ["ui_back_1"], volume: 0.7 },
   uiError: { clips: ["ui_error_1"] },
-  // Owed from the Forge — silent until mode_reveal_1 lands: a low drum hit
-  // with air, played once as the mode-select stack finishes its entrance.
-  modeReveal: { clips: ["mode_reveal_1"], volume: 0.8 },
+  // A low drum hit with air — one per mode card as it settles, a four-beat
+  // roll down the stack (~95–230ms between beats). No throttle so a slow
+  // frame can never eat a beat; slight pitch drift keeps the roll from
+  // sounding machine-stamped. Quiet: it plays four times per screen entry.
+  modeReveal: { clips: ["mode_reveal_1"], volume: 0.5, throttleMs: 0, pitchVariance: 0.04 },
   // The title screen's dust squall (HomeScreen's DustStorm) — quiet ambience,
   // not a stinger. Note the first gust after a cold launch can land before any
   // tap has unlocked audio; it stays silent and the next one sounds.

@@ -56,6 +56,7 @@ import {
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
+import { getWornTitle } from "../deeds/wornTitle";
 import { devFlags } from "../dev";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
 
@@ -149,8 +150,10 @@ export class PracticeClient implements LobbyClient {
     const me =
       mode === "dummies" ? addPlayer(this.sim, playerName, 1)! : addPlayer(this.sim, playerName)!;
     // Your kills announce in YOUR picked voice offline too (bots keep the
-    // default) — practice mirrors the real room, announcer included.
+    // default) — practice mirrors the real room, announcer included. Same
+    // for the worn title: it shows on your own name tag offline.
     me.announcer = getActiveAnnouncer();
+    me.title = getWornTitle();
     if (mode === "dummies") {
       for (let i = 0; i < teamSize * 2 - 1; i++) {
         addDummy(this.sim, DUMMY_NAMES[i % DUMMY_NAMES.length]!);

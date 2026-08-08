@@ -7,6 +7,13 @@ alpha-dithered, verified visually indistinguishable on the game void), verified 
 Applies to: both games (tooling; consumers: Enter the Gauntlet SFX, Blood in the Sand icons) ·
 Last decided: 2026-07-14
 
+> **Style direction changed 2026-08-06**: Blood in the Sand's visual language moved from
+> dark-fantasy woodcut to **pre-rendered pixel art** (the app icon's aesthetic) —
+> see [bits-art-style.md](./bits-art-style.md), now the owner doc for the game's brand
+> language. The woodcut-era template notes below are kept as history; the save pipeline
+> gained a **pixel-grid snap** step (`forge/images.ts`) that bakes every asset onto a true
+> per-family pixel grid. All existing BITS image assets are due for regeneration.
+
 Built: `apps/realmsmith/forge/` (Vite plugin: `/forge/status|expand|generate|save`, style bible,
 ElevenLabs + OpenAI calls, ffmpeg-static audio + sharp image processing) + the Forge panel
 (`src/forge/ForgePanel.tsx`, toolbar toggle). Keys live in `apps/realmsmith/.env.local` (see

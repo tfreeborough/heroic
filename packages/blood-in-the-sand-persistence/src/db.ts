@@ -97,6 +97,40 @@ const applySchema = async (db: Db): Promise<void> => {
         loser_loadout TEXT,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       )`,
+      // Achievements (achievements.md): permanent, cross-season, board-blind
+      // — only counters and unlocks are ever stored; the per-match summary
+      // is server memory. The PK is what makes a double-award impossible.
+      `CREATE TABLE IF NOT EXISTS achievement_unlocks (
+        player_id TEXT NOT NULL REFERENCES players(id),
+        achievement_id TEXT NOT NULL,
+        unlocked_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        PRIMARY KEY (player_id, achievement_id)
+      )`,
+      // Lifetime counters, absolute values (streak counters included — the
+      // adapter computes reset/high-water semantics before writing).
+      `CREATE TABLE IF NOT EXISTS achievement_counters (
+        player_id TEXT NOT NULL,
+        counter TEXT NOT NULL,
+        value INTEGER NOT NULL,
+        PRIMARY KEY (player_id, counter)
+      )`,
+      // The double-count guard: one row per (match, player) achievement
+      // application — a retried settle that already applied is a no-op.
+      `CREATE TABLE IF NOT EXISTS achievement_progress_marks (
+        match_id TEXT NOT NULL,
+        player_id TEXT NOT NULL,
+        PRIMARY KEY (match_id, player_id)
+      )`,
+      // Owned items — shared by achievements (source achievement:<id>) and
+      // the future store (source purchase:<sku>); achievements.md § secret
+      // items. One row per owned item regardless of how it arrived.
+      `CREATE TABLE IF NOT EXISTS entitlements (
+        player_id TEXT NOT NULL REFERENCES players(id),
+        item_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        granted_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        PRIMARY KEY (player_id, item_id)
+      )`,
     ],
     "write",
   );

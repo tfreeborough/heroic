@@ -7,11 +7,12 @@
  * offers PRACTICE OFFLINE, so a dead server never means "nothing to do".
  */
 import { useEffect, useRef } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { playSound, unlockAudio } from "../audio";
 import type { ConnectState } from "../net/useArenaConnection";
+import { DISPLAY_FONT } from "../typography";
 
 export interface ConnectScreenProps {
   state: Exclude<ConnectState, "online">;
@@ -26,9 +27,6 @@ export interface ConnectScreenProps {
   onPractice: () => void;
   onBack: () => void;
 }
-
-/** Same ceremony face as the title and mode cards (bundled font still owed). */
-const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
 
 const press = (fn: () => void, sound: "uiTap" | "uiConfirm" | "uiBack") => () => {
   unlockAudio();
@@ -160,7 +158,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#d94141",
     fontSize: 38,
-    fontWeight: "900",
     textAlign: "center",
     letterSpacing: 2,
     textShadowColor: "rgba(0,0,0,0.8)",
@@ -185,7 +182,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
     fontSize: 17,
-    fontWeight: "900",
     letterSpacing: 2,
     textAlign: "center",
   },

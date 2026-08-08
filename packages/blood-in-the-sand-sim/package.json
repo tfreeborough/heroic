@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@heroic/achievements": "workspace:*",
     "@heroic/core": "workspace:*"
   }
 }

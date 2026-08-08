@@ -127,4 +127,5 @@ export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): Roo
     armed: loadoutComplete(p),
     bot: p.bot,
     announcer: p.announcer,
+    title: p.title,
   }));

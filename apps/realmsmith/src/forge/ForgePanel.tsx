@@ -7,14 +7,16 @@ import type {
   GenerateResponse,
   SaveResponse,
 } from "../../forge/protocol";
-import { BADGE, ICON, MODE, SPRITE } from "../../forge/styleBible";
+import { BADGE, DEED, HOME, ICON, MODE, SPRITE } from "../../forge/styleBible";
 import { buildBadgeSet, type BadgeSetEntry } from "./badgeSet";
+import { buildDeedSet, type DeedSetEntry } from "./deedSet";
+import { buildHomeSet, type HomeSetEntry } from "./homeSet";
 import { buildIconSet, type IconSetEntry } from "./iconSet";
 import { buildModeSet, type ModeSetEntry } from "./modeSet";
 import { buildSoundSet, type SoundCategory, type SoundSetEntry } from "./soundSet";
 import { buildSpriteSet, type SpriteSetEntry } from "./spriteSet";
 
-type ForgeType = "sfx-bits" | "icon-bits" | "sprite-bits" | "mode-bits" | "badge-bits" | "sfx";
+type ForgeType = "sfx-bits" | "icon-bits" | "sprite-bits" | "mode-bits" | "badge-bits" | "deed-bits" | "home-bits" | "sfx";
 
 /**
  * The Asset Forge panel (docs/design/asset-forge.md): sentence → (optional LLM
@@ -79,6 +81,8 @@ export const ForgePanel = ({ onClose }: Props) => {
   const [spriteId, setSpriteId] = useState<string | null>(null);
   const [modeId, setModeId] = useState<string | null>(null);
   const [badgeId, setBadgeId] = useState<string | null>(null);
+  const [deedId, setDeedId] = useState<string | null>(null);
+  const [homeId, setHomeId] = useState<string | null>(null);
 
   const [subject, setSubject] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -106,8 +110,10 @@ export const ForgePanel = ({ onClose }: Props) => {
   const isSprite = type === "sprite-bits";
   const isMode = type === "mode-bits";
   const isBadge = type === "badge-bits";
+  const isDeed = type === "deed-bits";
+  const isHome = type === "home-bits";
   /** All gpt-image-1 flows: one candidate kept, saved as `<id>.png`. */
-  const isImage = isIcon || isSprite || isMode || isBadge;
+  const isImage = isIcon || isSprite || isMode || isBadge || isDeed || isHome;
   const isBits = type === "sfx-bits"; // the SFX type with a done-tick sound manifest
   // The set comes from the game's own tables; the server only says which files exist.
   const icons = useMemo(buildIconSet, []);
@@ -131,6 +137,17 @@ export const ForgePanel = ({ onClose }: Props) => {
   const badgeEntry = badges.find((e) => e.id === badgeId) ?? null;
   const badgeDoneCount = badges.filter((e) => badgeDone(e.id)).length;
 
+  // The deed-icon set — derived from the sim's ACHIEVEMENT_DEFS (deedSet.ts);
+  // cast/weapon chains reuse loadout icons in-game, so they never appear here.
+  const deeds = useMemo(buildDeedSet, []);
+  const deedDone = (id: string): boolean => (status?.deedFiles ?? []).includes(`${id}.png`);
+  const deedDoneCount = deeds.filter((e) => deedDone(e.id)).length;
+
+  // The home-backdrop set — the checked-in HOME_KEYS list (homeSet.ts).
+  const homes = useMemo(buildHomeSet, []);
+  const homeDone = (id: string): boolean => (status?.homeFiles ?? []).includes(`${id}.png`);
+  const homeDoneCount = homes.filter((e) => homeDone(e.id)).length;
+
   // The sound set — same derive-from-the-sim pattern; a bank is done when any
   // `<id>_<n>.mp3` exists in the destination.
   const sounds = useMemo(buildSoundSet, []);
@@ -146,9 +163,13 @@ export const ForgePanel = ({ onClose }: Props) => {
         ? (modeId ?? "")
         : isBadge
           ? (badgeId ?? "")
-          : nameEdited
-            ? name
-            : slug(subject);
+          : isDeed
+            ? (deedId ?? "")
+            : isHome
+              ? (homeId ?? "")
+              : nameEdited
+                ? name
+                : slug(subject);
   const kept = takes.filter((t) => t.keep);
   const sfxReady = status?.keys.elevenlabs === true;
   const openaiReady = status?.keys.openai === true;
@@ -171,6 +192,8 @@ export const ForgePanel = ({ onClose }: Props) => {
     setSpriteId(null);
     setModeId(null);
     setBadgeId(null);
+    setDeedId(null);
+    setHomeId(null);
     setName("");
     setNameEdited(false);
     resetWork();
@@ -196,6 +219,18 @@ export const ForgePanel = ({ onClose }: Props) => {
 
   const pickBadge = (entry: BadgeSetEntry): void => {
     setBadgeId(entry.id);
+    setSubject(entry.subject);
+    resetWork();
+  };
+
+  const pickDeed = (entry: DeedSetEntry): void => {
+    setDeedId(entry.id);
+    setSubject(entry.subject);
+    resetWork();
+  };
+
+  const pickHome = (entry: HomeSetEntry): void => {
+    setHomeId(entry.id);
     setSubject(entry.subject);
     resetWork();
   };
@@ -242,7 +277,11 @@ export const ForgePanel = ({ onClose }: Props) => {
             ? prompt.trim() || MODE.template(subject.trim())
             : isBadge
               ? prompt.trim() || BADGE.template(subject.trim(), badgeEntry?.accent)
-              : prompt.trim() || undefined;
+              : isDeed
+                ? prompt.trim() || DEED.template(subject.trim())
+                : isHome
+                  ? prompt.trim() || HOME.template(subject.trim())
+                  : prompt.trim() || undefined;
       const data = await post<GenerateResponse>("/forge/generate", {
         type,
         subject: subject.trim(),
@@ -258,7 +297,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     } finally {
       setBusy(null);
     }
-  }, [type, isIcon, isSprite, isMode, isBadge, isImage, iconId, badgeId, subject, prompt, durationSeconds, influence]);
+  }, [type, isIcon, isSprite, isMode, isBadge, isDeed, isHome, isImage, iconId, badgeId, deedId, homeId, subject, prompt, durationSeconds, influence]);
 
   const save = useCallback(async () => {
     setBusy("save");
@@ -439,6 +478,56 @@ export const ForgePanel = ({ onClose }: Props) => {
         </div>
       )}
 
+      {isDeed && (
+        <div className="icon-manifest">
+          <div className="icon-manifest-head">
+            The deed icons — {deedDoneCount} of {deeds.length} done (cast/weapon chains reuse the loadout icons)
+          </div>
+          <div className="icon-cat-row">
+            <span className="icon-cat icon-cat-mode">deed</span>
+            <div className="icon-chips">
+              {deeds.map((e) => (
+                <button
+                  key={e.id}
+                  className={`icon-chip${e.id === deedId ? " active" : ""}${deedDone(e.id) ? " done" : ""}`}
+                  onClick={() => pickDeed(e)}
+                  title={e.missingSubject ? "no art subject yet — add one to DEED_SUBJECTS in forge/styleBible.ts" : e.subject}
+                >
+                  {deedDone(e.id) ? "✓ " : ""}
+                  {e.name}
+                  {e.missingSubject ? " ⚠" : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isHome && (
+        <div className="icon-manifest">
+          <div className="icon-manifest-head">
+            The home backdrops — {homeDoneCount} of {homes.length} done
+          </div>
+          <div className="icon-cat-row">
+            <span className="icon-cat icon-cat-mode">scene</span>
+            <div className="icon-chips">
+              {homes.map((e) => (
+                <button
+                  key={e.id}
+                  className={`icon-chip${e.id === homeId ? " active" : ""}${homeDone(e.id) ? " done" : ""}`}
+                  onClick={() => pickHome(e)}
+                  title={e.missingSubject ? "no art subject yet — add one to HOME_SUBJECTS in forge/styleBible.ts" : e.subject}
+                >
+                  {homeDone(e.id) ? "✓ " : ""}
+                  {e.name}
+                  {e.missingSubject ? " ⚠" : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isSprite && (
         <div className="icon-manifest">
           <div className="icon-manifest-head">
@@ -473,9 +562,13 @@ export const ForgePanel = ({ onClose }: Props) => {
               ? "Scene subject (from the manifest — edit freely)"
               : isBadge
                 ? "Badge subject (from the manifest — edit freely)"
-                : isBits
-                  ? "Sound brief (from the manifest — edit freely)"
-                  : "Describe the sound"}
+                : isDeed
+                  ? "Deed subject (from the manifest — edit freely)"
+                  : isHome
+                    ? "Backdrop subject (from the manifest — edit freely)"
+                    : isBits
+                    ? "Sound brief (from the manifest — edit freely)"
+                    : "Describe the sound"}
         <textarea
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
@@ -488,9 +581,13 @@ export const ForgePanel = ({ onClose }: Props) => {
                   ? "pick a mode card above, or describe a scene"
                   : isBadge
                     ? "pick a badge above, or describe an emblem"
-                    : isBits
-                      ? "pick a sound above, or describe one"
-                      : "a heavy sword striking a wooden shield"
+                    : isDeed
+                      ? "pick a deed above, or describe an emblem"
+                      : isHome
+                        ? "pick a backdrop above, or describe a scene"
+                        : isBits
+                        ? "pick a sound above, or describe one"
+                        : "a heavy sword striking a wooden shield"
           }
           rows={2}
         />
@@ -517,7 +614,7 @@ export const ForgePanel = ({ onClose }: Props) => {
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={
             isImage
-              ? `leave blank — the style bible's ${isSprite ? "sprite" : isMode ? "mode-card" : isBadge ? "badge" : "icon"} template carries the brand language`
+              ? `leave blank — the style bible's ${isSprite ? "sprite" : isMode ? "mode-card" : isBadge ? "badge" : isDeed ? "deed" : isHome ? "home-backdrop" : "icon"} template carries the brand language`
               : "dozens of chitinous spider legs skittering over stone as a nest collapses…"
           }
           rows={4}
@@ -611,10 +708,13 @@ export const ForgePanel = ({ onClose }: Props) => {
       {takes.length > 0 && isImage && (
         <>
           <div className="icon-candidates">
+            {/* Previews show the SAVE pipeline's output (grid-snapped) when the
+                server provides it — judge what will actually ship, not the raw
+                generation; save still posts the raw b64. */}
             {takes.map((t) => (
               <button
                 key={t.id}
-                className={`icon-candidate${isSprite ? " sprite" : ""}${isMode ? " mode" : ""}${t.keep ? " keep" : ""}`}
+                className={`icon-candidate${isSprite ? " sprite" : ""}${isMode ? " mode" : ""}${isHome ? " home" : ""}${t.keep ? " keep" : ""}`}
                 onClick={() => keepOne(t.id)}
               >
                 {isMode ? (
@@ -622,29 +722,58 @@ export const ForgePanel = ({ onClose }: Props) => {
                   // scrim gradient and a stand-in title over the left third —
                   // if the title fights the art here, it will in the game.
                   <div className="mode-frame">
-                    <img className="icon-full" src={`data:${t.mime};base64,${t.b64}`} alt={`candidate ${t.id + 1}`} />
+                    <img
+                      className="icon-full"
+                      src={`data:${t.mime};base64,${t.preview ?? t.b64}`}
+                      alt={`candidate ${t.id + 1}`}
+                    />
                     <div className="mode-frame-scrim" />
                     <span className="mode-frame-title">{(modeId ?? "mode").toUpperCase()}</span>
                   </div>
+                ) : isHome ? (
+                  // The in-game verify: a phone-shaped cover-crop (the 2:3
+                  // canvas loses its outer sixths) with the title over the
+                  // sky and a stand-in PLAY over the sand — if the UI fights
+                  // the art here, it will on the phone.
+                  <div className="home-frame">
+                    <img
+                      className="icon-full"
+                      src={`data:${t.mime};base64,${t.preview ?? t.b64}`}
+                      alt={`candidate ${t.id + 1}`}
+                    />
+                    <div className="home-frame-title">
+                      <span className="home-frame-word-a">BLOOD</span>
+                      <span className="home-frame-word-b">IN THE SAND</span>
+                    </div>
+                    <span className="home-frame-play">PLAY</span>
+                  </div>
                 ) : (
-                  <img className="icon-full" src={`data:${t.mime};base64,${t.b64}`} alt={`candidate ${t.id + 1}`} />
+                  <img
+                    className="icon-full"
+                    src={`data:${t.mime};base64,${t.preview ?? t.b64}`}
+                    alt={`candidate ${t.id + 1}`}
+                  />
                 )}
                 <div className="icon-small-row">
-                  {!isMode && (
+                  {!isMode && !isHome && (
                     <img
                       className={isSprite ? "sprite-small" : "icon-small"}
-                      src={`data:${t.mime};base64,${t.b64}`}
+                      src={`data:${t.mime};base64,${t.preview ?? t.b64}`}
                       alt=""
                     />
                   )}
                   <span>
                     {isMode
                       ? "card crop + scrim — does the title read over the left third?"
-                      : isSprite
-                        ? "~title-screen size, on sand — reads well?"
-                        : isBadge
-                          ? "32px — reads as a rank crest beside the tier title?"
-                          : "32px — still readable?"}
+                      : isHome
+                        ? "phone crop — sky clear for the title, sand clear for the menu?"
+                        : isSprite
+                          ? "~title-screen size, on sand — reads well?"
+                          : isBadge
+                            ? "32px — reads as a rank crest beside the tier title?"
+                            : isDeed
+                              ? "32px — reads as a deed medallion on the map?"
+                              : "32px — still readable?"}
                   </span>
                 </div>
               </button>
@@ -658,7 +787,7 @@ export const ForgePanel = ({ onClose }: Props) => {
             title={
               baseName
                 ? `saves as ${baseName}.png`
-                : `pick a manifest ${isSprite ? "sprite" : isMode ? "mode card" : isBadge ? "badge" : "icon"} to name the file`
+                : `pick a manifest ${isSprite ? "sprite" : isMode ? "mode card" : isBadge ? "badge" : isHome ? "backdrop" : "icon"} to name the file`
             }
           >
             {busy === "save"
@@ -677,7 +806,9 @@ export const ForgePanel = ({ onClose }: Props) => {
             {isImage
               ? isMode
                 ? ` (${MODE.savedWidth}×${MODE.savedHeight}, opaque 5:2 crop).`
-                : ` (${isSprite ? SPRITE.savedSize : isBadge ? BADGE.savedSize : ICON.savedSize}px, transparent).`
+                : isHome
+                  ? ` (${HOME.savedWidth}×${HOME.savedHeight}, opaque portrait — phones cover-crop at runtime).`
+                  : ` (${isSprite ? SPRITE.savedSize : isBadge ? BADGE.savedSize : isDeed ? DEED.savedSize : ICON.savedSize}px, transparent).`
               : " (trimmed + loudness-normalized)."}
           </div>
           <div>
@@ -691,7 +822,11 @@ export const ForgePanel = ({ onClose }: Props) => {
                     : "Paste into MODE_ART in src/screens/ModeSelectScreen.tsx (replaces image: null):"
                   : isBadge
                     ? "Paste into RANK_BADGES in src/components/rankBadges.ts (replaces null):"
-                    : isBits
+                    : isDeed
+                      ? "Paste into DEED_ICONS in src/deeds/deedIcons.ts (replaces null):"
+                      : isHome
+                        ? "Paste into HOME_ART in src/screens/homeArt.ts (replaces null):"
+                        : isBits
                       ? "Paste into src/audio/manifest.ts:"
                       : "Paste into src/game/audio/manifest.ts:"}
           </div>

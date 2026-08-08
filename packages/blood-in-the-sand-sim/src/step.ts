@@ -440,6 +440,7 @@ const stepProjectiles = (
         if (back.x === 0 && back.y === 0) back = { x: -shot.dir.x, y: -shot.dir.y };
         shot.dir = back;
         reflected = true;
+        events.push({ type: "reflect", playerId: defender.id, attackerId: owner.id, x: shot.pos.x, y: shot.pos.y });
         break;
       }
 

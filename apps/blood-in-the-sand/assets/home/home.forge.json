@@ -1,0 +1,21 @@
+{
+  "type": "home-bits",
+  "subject": "standing on the raked sand of a colosseum floor at brutal high sun, looking across the empty arena — the far wall rises in the middle of the frame with packed crowd tiers above it, tattered blood-red banners hanging in the heat, heat-haze shimmering where sand meets wall, a few scattered pebbles and one dark old bloodstain sunk into the raked lines of the foreground sand",
+  "prompt": "standing on the raked sand of a colosseum floor at brutal high sun, looking across the empty arena — the far wall rises in the middle of the frame with packed crowd tiers above it, tattered blood-red banners hanging in the heat, heat-haze shimmering where sand meets wall, a few scattered pebbles and one dark old bloodstain sunk into the raked lines of the foreground sand. A tall portrait scene for a brutal gladiator arena game set in a scorched desert — a phone game's title screen backdrop. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga game backdrops: hand-placed chunky pixels, a strictly limited palette of about 64 colours, skies and light built from hard stepped colour ramps and checkerboard dithering — no smooth gradients, no anti-aliasing, never flat vector art, never ink outlines or crosshatching, never a photograph. True materials and light each in their own full colour, no sepia wash: honey sand-gold (#dcb96f) ground and warm ambience, bone-white highlights (#f2e9d4), deep warm umber shadows (#4a3520) never pure black; dried-blood red (#a32c22) rationed to banners and old stains. Composition is strict: the TOP third of the frame is only vast quiet scorched sky — open, low-detail, no shapes (title lettering will sit over it). The BOTTOM third is only open empty raked sand — flat, low-detail, no objects or figures (menu buttons and fighters composite over it). All focal detail — the far arena wall, crowd tiers, banners, heat haze — lives in the horizontal band between them, and every essential shape stays within the central two thirds of the width: phones crop the outer sixth on each side away. The paint fills the whole frame edge-to-edge with no border, no vignette, no frame line. Grim, sun-scoured, blood-and-sand mood. No text, no lettering, no banners with writing.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1536",
+    "quality": "medium",
+    "background": "opaque",
+    "savedWidth": 1024,
+    "savedHeight": 1536,
+    "pixelGrid": "256x384",
+    "paletteColours": 64
+  },
+  "files": [
+    "home.png"
+  ],
+  "created": "2026-08-08T18:31:47.205Z",
+  "updated": "2026-08-08T18:31:47.205Z"
+}

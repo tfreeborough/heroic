@@ -1,11 +1,11 @@
 {
   "type": "sfx-bits",
-  "subject": "the sound of \"mode select — stack lands\"",
-  "prompt": "Close-mic’d metallic clack: sun-baked bronze plates sliding and locking, gritty sand rasp, a sharp hollow ring that peaks quickly then decays into a dry, dusty tail — a tight 0.5s impact with weight and grounded resonance.",
+  "subject": "A small single dull thud of leather on leather",
+  "prompt": "A small single dull thud of leather on leather",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 0.5,
+    "durationSeconds": 1,
     "promptInfluence": 0.3,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
@@ -13,6 +13,6 @@
   "files": [
     "mode_reveal_1.mp3"
   ],
-  "created": "2026-07-31T08:31:38.321Z",
-  "updated": "2026-07-31T08:31:38.321Z"
+  "created": "2026-08-04T08:17:31.662Z",
+  "updated": "2026-08-04T08:17:31.662Z"
 }

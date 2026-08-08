@@ -264,5 +264,12 @@ export const checkRoundOver = (sim: ArenaSim, events: ArenaEvent[]): void => {
   round.lastWinner = winner;
   round.phase = "roundEnd";
   round.timer = ROUND_END_SECONDS;
-  events.push({ type: "roundEnd", winnerTeam: winner, wins: [round.wins[0], round.wins[1]] });
+  events.push({
+    type: "roundEnd",
+    winnerTeam: winner,
+    wins: [round.wins[0], round.wins[1]],
+    standing: seated
+      .filter((p) => p.alive)
+      .map((p) => ({ id: p.id, hpFrac: p.combatant.hp / p.combatant.stats.maxHp })),
+  });
 };

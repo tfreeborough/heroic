@@ -34,6 +34,7 @@ import {
   loadoutComplete,
   makeClientConfig,
   markDisconnected,
+  MatchStatsAccumulator,
   nextHost,
   reconnectPlayer,
   removePlayer,
@@ -87,6 +88,8 @@ export interface RankedSeatAccount {
   accountId: string;
   name: string;
   announcer: string;
+  /** Worn title (deed id, "" = bare) — entitlement-verified at queue time. */
+  title: string;
   /** Bracket rating at queue time — rides along for a void's re-queue. */
   rating: number;
   /** Original queue-entry time — a void's re-queue keeps the wait earned. */
@@ -131,6 +134,13 @@ export class Room {
    * return frees bot seats mid-plate; bits-ranked-bots.md § match end) — and
    * the manager closes it once the settlement has landed. */
   ceremonyOver = false;
+  /** Achievement tallies (achievements.md § MatchSummary) — assigned by the
+   * manager on ranked rooms once both seats exist; fed each step with
+   * exactly what stepSim returned (never the persistent event buffer, which
+   * lives on across steps). Null = nothing tallies (deeds are ranked-only,
+   * decided 2026-08-08 — a skirmish-counting pass was built and reverted
+   * the same day). */
+  matchStats: MatchStatsAccumulator | null = null;
 
   private readonly server: Server<ClientData>;
   private readonly seats = new Map<number, Socket>();
@@ -225,7 +235,7 @@ export class Room {
    * rejoin takes over the live body), else a free lobby seat. Returns the
    * player id, or null if the room filled up in the meantime.
    */
-  seat(ws: Socket, name: string, announcer: string, nowMs: number): number | null {
+  seat(ws: Socket, name: string, announcer: string, title: string, nowMs: number): number | null {
     const ghost = seatedPlayers(this.sim.state).find((p) => !p.connected);
     let playerId: number | null = null;
     if (ghost) {
@@ -243,9 +253,11 @@ export class Room {
       playerId = addPlayer(this.sim, name)?.id ?? null;
     }
     if (playerId === null) return null;
-    // The announcer pack rides both paths — a rejoiner's pick lands like a
-    // joiner's (reconnectPlayer refreshes name; this is its cosmetic sibling).
+    // The cosmetics ride both paths — a rejoiner's picks land like a
+    // joiner's (reconnectPlayer refreshes name; these are its cosmetic
+    // siblings).
     this.sim.state.players[playerId]!.announcer = announcer;
+    this.sim.state.players[playerId]!.title = title;
 
     // A stale socket may still hold the seat (rejoin racing the close event).
     this.seats.get(playerId)?.close();
@@ -441,10 +453,11 @@ export class Room {
    * where Elo is at stake — difficulty stays brain-only in ranked). The bot
    * arms 2–8 s in, off the sim rng.
    */
-  seatRankedBot(name: string, difficulty: DifficultyId, nowMs: number): number | null {
+  seatRankedBot(name: string, difficulty: DifficultyId, title: string, nowMs: number): number | null {
     const bot = addBot(this.sim, name);
     if (!bot) return null;
     bot.announcer = "default";
+    bot.title = title; // part of the disguise — see the manager's BOT_TITLES
     bot.moveFactor = 1;
     this.botSeats.set(bot.id, { memory: createBotMemory(0x9e3779b9 ^ bot.id), difficulty, seq: 0 });
     this.pendingBotArms.set(bot.id, nowMs + 2_000 + this.sim.rng.next() * 6_000);
@@ -570,7 +583,9 @@ export class Room {
         // The latch fires on the first catch-up step only — one press, one cast.
         stepInputs.set(id, { ...input, casts: i === 0 ? (this.castLatch.get(id) ?? noCasts) : noCasts });
       }
-      this.eventBuffer.push(...stepSim(this.sim, stepInputs, TICK_DT));
+      const events = stepSim(this.sim, stepInputs, TICK_DT);
+      this.eventBuffer.push(...events);
+      this.matchStats?.ingest(events);
     }
     this.castLatch.clear();
     this.logEvents();
@@ -627,7 +642,7 @@ export class Room {
     // the room topic any more (pvp-pick-ceremony.md).
     const key = JSON.stringify([
       seatedPlayers(this.sim.state).map((p) => [
-        p.id, p.name, p.team, p.connected, p.weapon, p.abilities,
+        p.id, p.name, p.team, p.connected, p.weapon, p.abilities, p.title,
       ]),
       this.meta.hostId,
     ]);

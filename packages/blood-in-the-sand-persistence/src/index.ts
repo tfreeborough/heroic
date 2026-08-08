@@ -32,6 +32,17 @@ export {
   type TierName,
 } from "./elo";
 export {
+  achievementCounters,
+  achievementUnlocks,
+  applyMatchAchievements,
+  entitlementsOf,
+  gloryEarned,
+  type AchievementAward,
+  type AchievementUnlockRecord,
+  type EntitlementRecord,
+  type MatchAchievementsInput,
+} from "./achievements";
+export {
   getRating,
   recordRankedMatch,
   recordRankedBotMatch,

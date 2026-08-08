@@ -24,6 +24,7 @@ import {
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
+import { getWornTitle } from "../deeds/wornTitle";
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "rejected";
 
@@ -200,6 +201,11 @@ export class ArenaClient {
    * result rows are keyed by in-room seat id, which means nothing once
    * welcome is gone). RankedScreen reads this after the room closes. */
   lastSettlement: { won: boolean; mine: RankedResultRow; theirs: RankedResultRow | null } | null = null;
+  /** MY newly-unlocked deeds from the last settle (achievements.md § unlock
+   * ceremony) — the server sends them per-socket, so this is never the
+   * opponent's list. Survives the room closing like rankedResult (the
+   * ceremony plays on RankedScreen); cleared on the next queue entry. */
+  deedUnlocks: string[] | null = null;
 
   /** Fired on status / room / phase changes (drive React re-renders). */
   onChange: (() => void) | null = null;
@@ -363,6 +369,17 @@ export class ArenaClient {
         this.onChange?.();
         return;
       }
+      case "deedUnlocks":
+        // Arrives on the settle's heels (same socket, ordered after
+        // rankedResult) while the ceremony hold keeps the room open — store
+        // it for the ceremony's deeds beat. A list from some OTHER match
+        // (can't happen with an honest server, but the wire is the wire) is
+        // ignored rather than pinned to the wrong settlement.
+        if (this.rankedResult?.matchId === msg.matchId) {
+          this.deedUnlocks = msg.unlocks;
+          this.onChange?.();
+        }
+        return;
       case "reject":
         if (msg.reason.includes("protocol mismatch")) {
           this.status = "rejected";
@@ -382,6 +399,7 @@ export class ArenaClient {
     this.lastError = null;
     this.rankedResult = null; // a fresh campaign — the old ceremony is done
     this.lastSettlement = null;
+    this.deedUnlocks = null;
     this.send({
       t: "queueJoin",
       v: PROTOCOL_VERSION,
@@ -389,6 +407,7 @@ export class ArenaClient {
       playerName,
       brackets,
       announcer: getActiveAnnouncer(),
+      title: getWornTitle(),
     });
   }
 
@@ -410,9 +429,10 @@ export class ArenaClient {
       playerName,
       roomName,
       teamSize,
-      // The announcer pack is claimed at seat time (like the name) — read here
-      // rather than passed in, so every screen's create/join carries it.
+      // The cosmetics are claimed at seat time (like the name) — read here
+      // rather than passed in, so every screen's create/join carries them.
       announcer: getActiveAnnouncer(),
+      title: getWornTitle(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
     });
   }
@@ -426,6 +446,7 @@ export class ArenaClient {
       code: code.trim().toUpperCase(),
       playerName,
       announcer: getActiveAnnouncer(),
+      title: getWornTitle(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
     });
   }

@@ -161,6 +161,10 @@ export interface ArenaPlayer {
    * voice). "default" unless the seat's client claimed a pack; bots and
    * dummies keep the default. */
   announcer: string;
+  /** Worn title as a deed id (cosmetic, sim-meaningless — carried like
+   * `announcer`, broadcast via RoomStatePlayer). "" = bare; disguised ranked
+   * bots may claim one so bare bots never become a backfill tell. */
+  title: string;
 }
 
 export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
@@ -319,6 +323,7 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   bot: false,
   respawnLeft: 0,
   announcer: "default",
+  title: "",
 });
 
 /** Defensive input scrubbing — the sim never trusts the wire. */

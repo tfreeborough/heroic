@@ -1,0 +1,377 @@
+/**
+ * The Season I ranked board — Wave-1 content (achievements.md § content
+ * sketch): every chain derivable from events the sim already emits. Titles
+ * are PLACEHOLDERS in the right voice — Tom owns the titles pass, and each
+ * tier is a plain object so title/description/reward edit in place next to
+ * their threshold (Tom, 2026-08-03). Rewards are deliberately unset pending
+ * the economy pass (glory-economy.md owns amounts); the per-tier `reward`
+ * slot is live whenever content wants it.
+ *
+ * Per-weapon and per-ability chains are HAND-AUTHORED (Tom, 2026-08-04 —
+ * split out from table derivation so each gets its own identity ramp, not a
+ * templated "X Adept N"). The safety net for new sim content is the
+ * coverage test in achievements.test.ts: a new weapon/ability FAILS the
+ * suite until someone writes its chain here (and its forge icon row still
+ * derives — deedIcons.ts maps these chains onto the loadout icons).
+ *
+ * `rewards: [{ kind: "title" }]` tiers (Tom, 2026-08-04): the deed's NAME is
+ * also a wearable player title — unlocking grants the `title:<id>`
+ * entitlement; the wearing UX is a future design pass.
+ *
+ * Board positions are rough authored placeholders — the Deed Map milestone
+ * (M3) brings the chain-layout helper + Realmsmith board tab that will own
+ * them. Nothing persisted cares about `pos`.
+ */
+import {
+  milestoneChain,
+  WIN_STREAK,
+  LOSS_STREAK,
+  type AchievementDef,
+  type BoardDef,
+  type ChainTier,
+} from "@heroic/achievements";
+import { COUNTERS } from "./counters";
+import { wonMatch, type MatchSummary } from "./summary";
+
+export type BitsAchievementDef = AchievementDef<MatchSummary>;
+
+export const RANKED_BOARD = "ranked";
+
+export const ACHIEVEMENT_BOARDS: Record<string, BoardDef<MatchSummary>> = {
+  [RANKED_BOARD]: { id: RANKED_BOARD, accepts: (s) => s.ranked },
+};
+
+/** The board's root: everyone's first node, parent of every chain. */
+const FIRST_MATCH: BitsAchievementDef = {
+  id: "sworn-to-the-sand",
+  board: RANKED_BOARD,
+  title: "Christened with blood",
+  rewards: [{ kind: "title" }],
+  description: "Fight in your first ranked match.",
+  icon: "deed-first-match",
+  parent: null,
+  pos: { x: 0, y: 0 },
+  trigger: { kind: "milestone", counter: COUNTERS.rankedMatches, threshold: 1 },
+};
+
+// ── Board geometry (reworked 2026-08-04, Tom's first board pass) ───────────
+// Trunk and clusters (v4, same day — Tom: thematic grouping, more air):
+// the wins spine runs NORTH along x=0 (not-a-scratch straight west of its
+// first tier); kills run EAST with the damage row branching off 25 kills;
+// the win-streak row branches east off the spine; and the south trunk
+// (x=0) carries CLUSTERS — weapons, then glory, then healing as separate
+// EAST blocks; loss-streaks and the three ability CATEGORY clusters
+// (offensive / defensive / support) as WEST blocks — 115px rows inside a
+// cluster, ~215px of air between clusters. Every chain runs along one
+// axis; branch edges are auto-routed L-elbows (mapMath.routeEdge). Spacing
+// is enforced by the overlap test in achievements.test.ts.
+
+const wins = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "ranked-wins",
+  counter: COUNTERS.rankedWins,
+  icon: "deed-wins",
+  parent: FIRST_MATCH.id,
+  origin: { x: 0, y: -130 },
+  step: { x: 0, y: -115 },
+  tiers: [
+    { threshold: 5, title: "The Sand snake", description: "Win 5 ranked matches.", rewards: [{ kind: "title" }] },
+    { threshold: 25, title: "The Pit Viper", description: "Win 25 ranked matches." },
+    { threshold: 50, title: "The King Cobra", description: "Win 50 ranked matches.", rewards: [{ kind: "title" }] },
+    { threshold: 100, title: "The Great Constrictor", description: "Win 100 ranked matches." },
+    { threshold: 250, title: "The Basilisk", description: "Win 250 ranked matches." },
+    { threshold: 500, title: "The Elder Wrym", description: "Win 500 ranked matches." },
+    { threshold: 1000, title: "The World Serpent", description: "Win 1000 ranked matches.", rewards: [{ kind: "title" }] },
+  ],
+});
+
+const kills = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "killing-blows",
+  counter: COUNTERS.killingBlows,
+  icon: "deed-kills",
+  parent: FIRST_MATCH.id,
+  origin: { x: 140, y: 0 },
+  step: { x: 115, y: 0 },
+  tiers: [
+    { threshold: 1, title: "Lights Out", description: "Strike your first killing blow." },
+    { threshold: 25, title: "Gravedigger", description: "Strike 25 killing blows." },
+    { threshold: 100, title: "Judge, Jury and Executioner", description: "Strike 100 killing blows." },
+    { threshold: 500, title: "Sudden Death", description: "Strike 500 killing blows." },
+    { threshold: 1250, title: "The Fourth Horseman", description: "Strike 1250 killing blows.", rewards: [{ kind: "title" }] },
+    { threshold: 9001, title: "It's Over 9000", description: "Strike 9001 killing blows." },
+  ],
+});
+
+/** Per-weapon round chains — four EAST ribs off the south trunk. */
+const weaponChain = (weapon: string, row: number, tiers: readonly ChainTier[]) =>
+  milestoneChain<MatchSummary>({
+    board: RANKED_BOARD,
+    idBase: `rounds-${weapon}`,
+    counter: `rounds_won:${weapon}`,
+    icon: `deed-rounds-${weapon}`,
+    parent: FIRST_MATCH.id,
+    origin: { x: 140, y: 185 + row * 115 },
+    step: { x: 115, y: 0 },
+    tiers,
+  });
+
+const weaponRounds = [
+  ...weaponChain("blade", 0, [
+    { threshold: 5, title: "Quick on the Draw", description: "Win 5 rounds wielding the Blade." },
+    { threshold: 50, title: "A Cut Above", description: "Win 50 rounds wielding the Blade." },
+    { threshold: 200, title: "The Crimson Blur", description: "Win 200 rounds wielding the Blade.", rewards: [{ kind: "title" }] },
+  ]),
+  ...weaponChain("bow", 1, [
+    { threshold: 5, title: "Fletcher's Friend", description: "Win 5 rounds wielding the Bow." },
+    { threshold: 50, title: "Deadeye", description: "Win 50 rounds wielding the Bow." },
+    { threshold: 200, title: "Death from Afar", description: "Win 200 rounds wielding the Bow.", rewards: [{ kind: "title" }] },
+  ]),
+  ...weaponChain("staff", 2, [
+    { threshold: 5, title: "Spark-Thrower", description: "Win 5 rounds wielding the Staff." },
+    { threshold: 50, title: "The Long Reach", description: "Win 50 rounds wielding the Staff." },
+    { threshold: 200, title: "Stormcaller", description: "Win 200 rounds wielding the Staff.", rewards: [{ kind: "title" }] },
+  ]),
+  ...weaponChain("hammer", 3, [
+    { threshold: 5, title: "Heavy-Handed", description: "Win 5 rounds wielding the Hammer." },
+    { threshold: 50, title: "Bonebreaker", description: "Win 50 rounds wielding the Hammer." },
+    { threshold: 200, title: "The Landslide", description: "Win 200 rounds wielding the Hammer.", rewards: [{ kind: "title" }] },
+  ]),
+];
+
+/** Per-ability cast chains — WEST ribs, clustered BY CATEGORY (offensive /
+ * defensive / support — thematic grouping, Tom 2026-08-04) with a wide gap
+ * between clusters. Rows 0-2 offensive, 3-7 defensive, 8-10 support match
+ * the authored order below. */
+const abilityRowY = (row: number): number =>
+  185 + row * 115 + (row >= 3 ? 100 : 0) + (row >= 8 ? 100 : 0);
+
+const abilityChain = (ability: string, row: number, tiers: readonly ChainTier[]) =>
+  milestoneChain<MatchSummary>({
+    board: RANKED_BOARD,
+    idBase: `casts-${ability}`,
+    counter: `cast:${ability}`,
+    icon: `deed-casts-${ability}`,
+    parent: FIRST_MATCH.id,
+    origin: { x: -140, y: abilityRowY(row) },
+    step: { x: -115, y: 0 },
+    tiers,
+  });
+
+const abilityCasts = [
+  ...abilityChain("sandtrap", 0, [
+    { threshold: 10, title: "Trapper's Apprentice", description: "Cast Sandtrap 10 times." },
+    { threshold: 50, title: "Tread Carefully", description: "Cast Sandtrap 50 times." },
+    { threshold: 250, title: "The Ground Lies", description: "Cast Sandtrap 250 times." },
+  ]),
+  ...abilityChain("tremor", 1, [
+    { threshold: 10, title: "Rumbler", description: "Cast Tremor 10 times." },
+    { threshold: 50, title: "Faultline", description: "Cast Tremor 50 times." },
+    { threshold: 250, title: "The Earthshaker", description: "Cast Tremor 250 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("harpoon", 2, [
+    { threshold: 10, title: "Hooked", description: "Cast Harpoon 10 times." },
+    { threshold: 50, title: "Reel Them In", description: "Cast Harpoon 50 times." },
+    { threshold: 250, title: "The Butcher's Gaff", description: "Cast Harpoon 250 times." },
+  ]),
+  ...abilityChain("dash", 3, [
+    { threshold: 25, title: "Quickstep", description: "Cast Dash 25 times." },
+    { threshold: 100, title: "Dust Devil", description: "Cast Dash 100 times." },
+    { threshold: 500, title: "Gone in a Blink", description: "Cast Dash 500 times." },
+  ]),
+  ...abilityChain("mirror-guard", 4, [
+    { threshold: 15, title: "Polished Bronze", description: "Cast Mirror Guard 15 times." },
+    { threshold: 100, title: "Turnabout", description: "Cast Mirror Guard 100 times." },
+    { threshold: 300, title: "The Mirror's Edge", description: "Cast Mirror Guard 300 times." },
+  ]),
+  ...abilityChain("ironhide", 5, [
+    { threshold: 10, title: "Thick-Skinned", description: "Cast Ironhide 10 times." },
+    { threshold: 50, title: "Man of Iron", description: "Cast Ironhide 50 times." },
+    { threshold: 250, title: "The Anvil", description: "Cast Ironhide 250 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("straw-man", 6, [
+    { threshold: 10, title: "Decoy", description: "Cast Straw Man 10 times." },
+    { threshold: 75, title: "Misdirection", description: "Cast Straw Man 75 times." },
+    { threshold: 200, title: "The Puppeteer", description: "Cast Straw Man 200 times." },
+  ]),
+  ...abilityChain("warding-shout", 7, [
+    { threshold: 20, title: "Stand Back", description: "Cast Warding Shout 20 times." },
+    { threshold: 100, title: "Hold the Line", description: "Cast Warding Shout 100 times." },
+    { threshold: 250, title: "The Herald's Roar", description: "Cast Warding Shout 250 times." },
+  ]),
+  ...abilityChain("war-drums", 8, [
+    { threshold: 10, title: "Drummer Boy", description: "Cast War Drums 10 times." },
+    { threshold: 50, title: "March to War", description: "Cast War Drums 50 times." },
+    { threshold: 150, title: "The Rhythm of Ruin", description: "Cast War Drums 250 times." },
+  ]),
+  ...abilityChain("blood-font", 9, [
+    { threshold: 10, title: "First Aid", description: "Cast Blood Font 10 times." },
+    { threshold: 50, title: "Haemophiliac", description: "Cast Blood Font 50 times." },
+    { threshold: 250, title: "The Red Spring", description: "Cast Blood Font 250 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("sandstorm", 10, [
+    { threshold: 10, title: "Dust Kicker", description: "Cast Sandstorm 10 times." },
+    { threshold: 50, title: "Eye of the Storm", description: "Cast Sandstorm 50 times." },
+    { threshold: 250, title: "The Desert's Wrath", description: "Cast Sandstorm 250 times." },
+  ]),
+];
+
+const winStreaks = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "win-streak",
+  counter: `${WIN_STREAK}_best`,
+  icon: "deed-win-streak",
+  // A streak begins once you've won a few — branches off the wins spine.
+  parent: wins[0]!.id,
+  origin: { x: 140, y: -280 },
+  step: { x: 115, y: 0 },
+  tiers: [
+    { threshold: 3, title: "Hot Sand", description: "Win 3 ranked matches in a row." },
+    { threshold: 5, title: "Heat Haze", description: "Win 5 ranked matches in a row." },
+    { threshold: 10, title: "Scorched Earth", description: "Win 10 ranked matches in a row." },
+    { threshold: 25, title: "Seas of Molten Glass", description: "Win 25 ranked matches in a row." },
+  ],
+});
+
+/** Never pays Glory or items — paying out for losing in ranked is a throw
+ * incentive (achievements.md § content sketch). Joke TITLES are fair game
+ * (the wearable punchline); the coverage test enforces the line. */
+const lossStreaks = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "loss-streak",
+  counter: `${LOSS_STREAK}_best`,
+  icon: "deed-loss-streak",
+  parent: FIRST_MATCH.id,
+  origin: { x: -140, y: 45 },
+  step: { x: -115, y: 0 },
+  tiers: [
+    { threshold: 3, title: "Swallowed by the Dunes", description: "Lose 3 ranked matches in a row. It happens." },
+    { threshold: 5, title: "Bleached Bones", description: "Lose 5 ranked matches in a row. It happens." },
+    { threshold: 10, title: "Fossil Record", description: "Lose 10 ranked matches in a row. It happens.", rewards: [{ kind: "title" }]  },
+  ],
+});
+
+const glory = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "glory-earned",
+  counter: COUNTERS.gloryEarned,
+  icon: "deed-glory",
+  parent: FIRST_MATCH.id,
+  origin: { x: 140, y: 745 },
+  step: { x: 115, y: 0 },
+  tiers: [
+    { threshold: 100, title: "I can go the distance", description: "Earn 100 lifetime Glory from ranked matches" },
+    { threshold: 500, title: "Zero to Hero", description: "Earn 500 lifetime Glory from ranked matches" },
+    { threshold: 2500, title: "Hall of Fame", description: "Earn 2500 lifetime Glory from ranked matches" },
+    { threshold: 5000, title: "Living Legend", description: "Earn 5000 lifetime Glory from ranked matches", rewards: [{ kind: "title" }]  },
+    { threshold: 8500, title: "Demigod", description: "Earn 8500 lifetime Glory from ranked matches", rewards: [{ kind: "title" }]  },
+    { threshold: 15000, title: "The Thirteenth Labour", description: "Earn 15000 lifetime Glory from ranked matches" },
+    { threshold: 25000, title: "A Star Is Born", description: "Earn 25000 lifetime Glory from ranked matches" },
+  ],
+});
+
+const damage = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "damage-dealt",
+  counter: COUNTERS.damageDealt,
+  icon: "deed-damage",
+  // Mass damage is the killer's road — branches off 25 killing blows.
+  parent: kills[1]!.id,
+  origin: { x: 370, y: -140 },
+  step: { x: 115, y: 0 },
+  tiers: [
+    { threshold: 500, title: "Bloodletter", description: "Deal 500 damage to your foes." },
+    { threshold: 2500, title: "Crimson Rain", description: "Deal 2500 damage to your foes." },
+    { threshold: 10000, title: "Bloodbath", description: "Deal 10000 damage to your foes." },
+    { threshold: 25000, title: "Red Tide", description: "Deal 25000 damage to your foes." },
+    { threshold: 100000, title: "Hemoclysm", description: "Deal 100000 damage to your foes." },
+  ],
+});
+
+const healing = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "healing-done",
+  counter: COUNTERS.healingDone,
+  icon: "deed-healing",
+  parent: FIRST_MATCH.id,
+  origin: { x: 140, y: 960 },
+  step: { x: 115, y: 0 },
+  tiers: [
+    { threshold: 500, title: "Medic", description: "Restore 500 health.", rewards: [{ kind: "title" }]  },
+    { threshold: 2500, title: "Field Surgeon", description: "Restore 2500 health.", rewards: [{ kind: "title" }]  },
+    { threshold: 10000, title: "Lifeline", description: "Restore 10000 health." },
+    { threshold: 25000, title: "Guardian Angel", description: "Restore 25000 health.", rewards: [{ kind: "title" }]  },
+    { threshold: 100000, title: "Panacea", description: "Restore 100000 health." },
+  ],
+});
+
+/** The feats — one-off nodes branching off their related chains. */
+const FEATS: BitsAchievementDef[] = [
+  {
+    id: "not-a-scratch",
+    board: RANKED_BOARD,
+    title: "Not a Scratch",
+    description: "Win a ranked match without taking a single point of damage.",
+    icon: "deed-untouched",
+    parent: wins[0]!.id,
+    pos: { x: -150, y: -130 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => wonMatch(s, p) && (s.stats[p]?.damageTaken ?? 0) === 0,
+    },
+  },
+  {
+    id: "lifeblood",
+    board: RANKED_BOARD,
+    title: "Lifeblood",
+    description: "Restore 200 health in a single ranked match.",
+    icon: "deed-lifeblood",
+    parent: healing[0]!.id,
+    pos: { x: 45, y: 1075 },
+    trigger: {
+      kind: "feat",
+      test: (s, p) => (s.stats[p]?.healingReceived ?? 0) >= 200,
+    },
+  },
+];
+
+export const ACHIEVEMENT_DEFS: readonly BitsAchievementDef[] = [
+  FIRST_MATCH,
+  ...wins,
+  ...kills,
+  ...weaponRounds,
+  ...abilityCasts,
+  ...winStreaks,
+  ...lossStreaks,
+  ...glory,
+  ...damage,
+  ...healing,
+  ...FEATS,
+];
+
+/**
+ * The Chronicle's chapters (achievements.md § the codex, Tom 2026-08-04 —
+ * the scrolling illuminated codex replaced the 2D map): thematic reading
+ * order, defined HERE so content and presentation stay in lockstep. Titles
+ * are Tom's to rename like any other content string.
+ */
+export interface AchievementChapter {
+  title: string;
+  ids: readonly string[];
+}
+
+const idsOf = (defs: readonly BitsAchievementDef[]): string[] => defs.map((d) => d.id);
+
+export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
+  {
+    title: "The Pit",
+    ids: [FIRST_MATCH.id, ...idsOf(wins), ...idsOf(winStreaks), "not-a-scratch", ...idsOf(lossStreaks)],
+  },
+  { title: "The Kill", ids: [...idsOf(kills), ...idsOf(damage)] },
+  { title: "The Arsenal", ids: idsOf(weaponRounds) },
+  { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 9)) },
+  { title: "Defensive Arts", ids: idsOf(abilityCasts.slice(9, 24)) },
+  { title: "Support Arts", ids: idsOf(abilityCasts.slice(24)) },
+  { title: "Glory", ids: idsOf(glory) },
+  { title: "Blood & Mercy", ids: [...idsOf(healing), "lifeblood"] },
+];

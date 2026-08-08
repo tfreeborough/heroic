@@ -1,18 +1,20 @@
 {
   "type": "icon-bits",
   "subject": "a helmeted gladiator head mid-roar in profile, concentric shout rings bursting from the open mouth",
-  "prompt": "a helmeted gladiator head mid-roar in profile, concentric shout rings bursting from the open mouth. A grim dark-fantasy game ability icon for a brutal gladiator arena game set in a scorched desert. Hand-inked woodcut illustration: one bold central silhouette filling about 80% of the frame, heavy black ink, rough expressive hatching, sun-bleached bone (#f0e8d8) highlights carving the shape out of the dark, scorched sand-ochre (#b39763) midtones like heat-baked dust settled on every surface, and a steel blue (#4da3d9) accent burning on the focal element. Gladiatorial desert materials: hammered bronze, cracked leather wraps, sun-split wood, rust and dried blood. A rough aged-bone die-cut outline traces the whole silhouette, like a woodcut poster cut from pale paper — it separates the shape from a near-black UI. Grim, sun-scoured, blood-and-sand mood — never cute, never photorealistic, never a clean flat vector. Chunky shapes that stay readable at 32 pixels. The cut-out floats alone on a fully transparent background — no backdrop, no glow, no vignette; every pixel outside the cut line is transparent. No text.",
+  "prompt": "a helmeted gladiator head mid-roar in profile, concentric shout rings bursting from the open mouth. A game ability icon for a brutal gladiator arena game set in a scorched desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga games: hand-placed chunky pixels, a strictly limited palette of about 32 colours, shading built from hard stepped colour ramps and checkerboard dithering — no smooth gradients, no anti-aliasing. The form still reads dimensional: specular glints on metal, warm light bounced up from golden sand, deep warm umber shadow in the recesses, never pure black — but every transition is a decisive pixel step. True materials each in their own full colour, no sepia wash: battle-grey steel (#9aa0a6), honey sand-gold (#dcb96f), bone-white specular highlights (#f2e9d4), saturated dried-blood crimson (#a32c22), cracked leather, sun-split wood. A steel blue (#4da3d9) accent glows on the focal element. One bold central subject filling about 80% of the frame, lit by a low warm desert sun. Grim, sun-scoured, blood-and-sand mood — never cute, never cartoonish, never flat vector art, never ink outlines or crosshatching, never a photograph. Chunky forms that stay readable at 32 pixels. Draw no frame of any kind: no circle, ring, plate, badge backing, or border around the subject — the game composites any framing itself. The subject floats alone on a fully transparent background — no backdrop, no glow, no vignette, no shadow cast outside the subject; every pixel outside the subject is transparent. No text.",
   "provider": "openai-image",
   "model": "gpt-image-1",
   "params": {
     "size": "1024x1024",
     "quality": "medium",
     "background": "transparent",
-    "savedSize": 256
+    "savedSize": 256,
+    "pixelGrid": 64,
+    "paletteColours": 32
   },
   "files": [
     "warding-shout.png"
   ],
   "created": "2026-07-17T21:41:01.237Z",
-  "updated": "2026-07-17T21:41:01.237Z"
+  "updated": "2026-08-07T15:34:42.740Z"
 }

@@ -10,11 +10,16 @@
 import { randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { advanceFixed } from "@heroic/core";
+import { evaluate, streakUpdates } from "@heroic/achievements";
 import {
   ABILITIES,
+  ACHIEVEMENT_BOARDS,
+  ACHIEVEMENT_DEFS,
+  COUNTERS,
   HEARTBEAT_SWEEP_MS,
   HEARTBEAT_TIMEOUT_MS,
   LOADOUT_ABILITY_COUNT,
+  MatchStatsAccumulator,
   MAX_ROOMS,
   PROTOCOL_VERSION,
   RANKED_BRACKETS,
@@ -22,6 +27,7 @@ import {
   TICK_RATE,
   WEAPONS,
   canJoin,
+  counterDeltas,
   generateRoomCode,
   sanitizePasscode,
   sanitizeRoomName,
@@ -35,11 +41,18 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import {
   PLACEMENT_MATCHES,
+  achievementCounters,
+  achievementUnlocks,
+  applyMatchAchievements,
+  entitlementsOf,
   findPlayerByToken,
   getRating,
+  gloryEarned,
   recordRankedBotMatch,
   recordRankedMatch,
+  type AchievementAward,
   type Db,
+  type RankedMatchResult,
 } from "@heroic/blood-in-the-sand-persistence";
 import { Room, type ClientData, type RankedSeatAccount, type Socket } from "./room";
 import {
@@ -64,6 +77,15 @@ import {
 const SWEEP_MS = 60_000;
 const MAX_PLAYER_NAME = 16;
 const MAX_ANNOUNCER_ID = 32;
+/** Deed ids are short kebab slugs; anything longer than this is garbage. */
+const MAX_TITLE_ID = 64;
+/** Disguised ranked bots occasionally wear a plausible low-tier title —
+ * bare bots would become a backfill tell once titles are common (the same
+ * principle as bots counting toward deeds). Curated LOW-tier ids only: a
+ * bot flexing "The World Serpent" invites scrutiny, "The Sand snake" does
+ * not. Ids are persistence-frozen content, safe to hand-write here. */
+const BOT_TITLE_CHANCE = 0.3;
+const BOT_TITLES = ["sworn-to-the-sand", "ranked-wins-5"] as const;
 /** DB settlement retries — the batch is idempotent, so retrying is free. */
 const SETTLE_ATTEMPTS = 3;
 const SETTLE_BACKOFF_MS = 1_000;
@@ -292,7 +314,7 @@ export class RoomManager {
       performance.now(),
     );
     this.rooms.set(code, room);
-    room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), performance.now());
+    room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), performance.now());
     console.log(
       `⚔ room ${code} "${room.meta.name}" (${teamSize}v${teamSize}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
     );
@@ -318,7 +340,7 @@ export class RoomManager {
     if (verdict !== "ok") return this.send(ws, { t: "reject", reason: verdict });
 
     const playerName = sanitizeName(msg.playerName);
-    const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), performance.now());
+    const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), performance.now());
     if (id === null) return this.send(ws, { t: "reject", reason: "room full" });
     console.log(`⚔ ${playerName} joined room ${room.meta.code} as player ${id}`);
   }
@@ -351,9 +373,10 @@ export class RoomManager {
     this.leaveFirst(ws);
     const name = sanitizeName(msg.playerName);
     const announcer = sanitizeAnnouncer(msg.announcer);
+    const title = sanitizeTitle(msg.title);
     // Token verification + rating loads are async; the socket handler is not.
     // Everything after the awaits re-checks the socket's world before acting.
-    void this.verifyAndEnqueue(ws, msg.token, name, announcer, brackets).catch((err) => {
+    void this.verifyAndEnqueue(ws, msg.token, name, announcer, title, brackets).catch((err) => {
       console.error("queueJoin failed:", err);
       this.trySend(ws, { t: "reject", reason: "ranked is unreachable right now — try again" });
     });
@@ -364,6 +387,7 @@ export class RoomManager {
     token: string,
     name: string,
     announcer: string,
+    title: string,
     brackets: string[],
   ): Promise<void> {
     const db = this.db!;
@@ -376,6 +400,13 @@ export class RoomManager {
     const lockLeft = this.queue.lockoutLeft(accountId, performance.now());
     if (lockLeft > 0) {
       return this.trySend(ws, { t: "reject", reason: `queue lockout — try again in ${lockLeft}s` });
+    }
+    // Ranked verifies the worn title against the entitlements table — an
+    // unowned claim is SILENTLY stripped, never a rejection: a cosmetic must
+    // not cost a match (achievements.md § wearing titles). Skirmish has no
+    // identity to check against until M4, so only ranked can be strict.
+    if (title !== "" && !(await entitlementsOf(db, accountId)).some((e) => e.itemId === `title:${title}`)) {
+      title = "";
     }
     const ratings = new Map<string, number>();
     for (const bracket of brackets) {
@@ -391,6 +422,7 @@ export class RoomManager {
         accountId,
         name,
         announcer,
+        title,
         rating: ratings.get(bracket)!,
         joinedMs: now,
         ...(this.botBackfillOn() ? { botAtMs: botDeadline(now, this.botCfg, Math.random) } : {}),
@@ -450,16 +482,18 @@ export class RoomManager {
     this.rooms.set(code, room);
     for (const entry of [match.a, match.b]) {
       this.trySend(entry.ws, { t: "matchFound", bracket: match.bracket, code });
-      const id = room.seat(entry.ws, entry.name, entry.announcer, now);
+      const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, now);
       if (id === null) continue; // two seats, two players — can't happen
       room.ranked.accounts.set(id, {
         accountId: entry.accountId,
         name: entry.name,
         announcer: entry.announcer,
+        title: entry.title,
         rating: entry.rating,
         joinedMs: entry.joinedMs,
       });
     }
+    this.attachMatchStats(room);
     console.log(
       `⚔ ranked ${match.bracket} room ${code}: ${match.a.name} (${match.a.rating}) vs ${match.b.name} (${match.b.rating})`,
     );
@@ -485,7 +519,7 @@ export class RoomManager {
     this.rooms.set(code, room);
 
     this.trySend(entry.ws, { t: "matchFound", bracket, code });
-    const humanId = room.seat(entry.ws, entry.name, entry.announcer, now);
+    const humanId = room.seat(entry.ws, entry.name, entry.announcer, entry.title, now);
     if (humanId === null) {
       // A fresh room can't be full — belt-and-braces: never leak the room.
       this.closeRoom(room, "the match was called off");
@@ -495,6 +529,7 @@ export class RoomManager {
       accountId: entry.accountId,
       name: entry.name,
       announcer: entry.announcer,
+      title: entry.title,
       rating: entry.rating,
       joinedMs: entry.joinedMs,
     });
@@ -509,7 +544,10 @@ export class RoomManager {
       Math.random,
     );
     const difficulty = difficultyForRating(entry.rating);
-    const botSeat = room.seatRankedBot(botName, difficulty, now);
+    // The disguise extends to titles: like its name and rating, off the same
+    // dice as the rest of the bot's identity (achievements.md § wearing titles).
+    const botTitle = Math.random() < BOT_TITLE_CHANCE ? BOT_TITLES[Math.floor(Math.random() * BOT_TITLES.length)]! : "";
+    const botSeat = room.seatRankedBot(botName, difficulty, botTitle, now);
     if (botSeat === null) {
       this.identityBook.release(botName);
       this.voidRanked(room, now, () => false); // nobody's fault — requeue the human
@@ -521,10 +559,12 @@ export class RoomManager {
       accountId: botSubjectId(),
       name: botName,
       announcer: "default",
+      title: botTitle,
       rating: botRating,
       joinedMs: now,
       bot: true,
     });
+    this.attachMatchStats(room);
     console.log(
       `⚔ ranked ${bracket} room ${code}: ${entry.name} (${entry.rating}) vs ${botName} (${botRating}) [bot:${difficulty}]`,
     );
@@ -586,6 +626,7 @@ export class RoomManager {
             accountId: account.accountId,
             name: account.name,
             announcer: account.announcer,
+            title: account.title,
             rating: account.rating,
             joinedMs: account.joinedMs,
           }),
@@ -598,6 +639,15 @@ export class RoomManager {
       this.queue.enqueue(bracket, entry); // …then the innocents rejoin the line
       this.trySend(entry.ws, { t: "queueStatus", brackets: this.queueStatusFor(entry.ws, now) });
     }
+  }
+
+  /** Start achievement tallies for a freshly-seated ranked room
+   * (achievements.md § award pipeline). Seats are fixed for the room's life
+   * (a rejoin reclaims its seat id), so seeding here is safe. */
+  private attachMatchStats(room: Room): void {
+    room.matchStats = new MatchStatsAccumulator(
+      seatedPlayers(room.sim.state).map((p) => ({ id: p.id, team: p.team })),
+    );
   }
 
   /** A re-queued entry keeps its earned wait (joinedMs) but rolls a FRESH bot
@@ -677,6 +727,10 @@ export class RoomManager {
             console.log(
               `[${room.meta.code}] ranked settled: ${winnerAccount.name} ${result.winner.before}→${result.winner.after} (+${result.winner.glory}g), ${loserAccount.name} ${result.loser.before}→${result.loser.after} (+${result.loser.glory}g)`,
             );
+            // Achievements ride the settle but never block it: the ratings
+            // and rankedResult above are already committed and broadcast —
+            // a deeds failure is logged, not fatal (achievements.md).
+            await this.awardDeeds(room, winnerTeam, result);
           }
           return; // null = already settled (a replay) — nothing more to do
         } catch (err) {
@@ -687,6 +741,93 @@ export class RoomManager {
       console.error(`[${room.meta.code}] ranked match ${ctx.matchId} LOST to the ledger — every settle attempt failed`);
     } finally {
       ctx.settled = true; // the room may close either way
+    }
+  }
+
+  /**
+   * The achievement pass (achievements.md § award pipeline), one human seat
+   * at a time: read counters/unlocks/lifetime-Glory, apply this match's
+   * deltas (streak semantics + the ledger-derived glory counter included),
+   * evaluate, land everything in one idempotent batch keyed on the match id,
+   * then tell THAT player — per-socket, never broadcast: a room-wide send
+   * would leak secret-item unlocks to the opponent.
+   */
+  private async awardDeeds(room: Room, winnerTeam: Team, result: RankedMatchResult): Promise<void> {
+    const ctx = room.ranked!;
+    const stats = room.matchStats;
+    const db = this.db;
+    if (!stats || !db) return;
+    const seated = seatedPlayers(room.sim.state);
+    const summary = stats.summary({
+      ranked: true,
+      bracket: ctx.bracket,
+      teamSize: room.sim.state.players.length / 2,
+      winnerTeam,
+      players: seated.map((p) => ({ id: p.id, team: p.team, weapon: p.weapon, bot: p.bot === true })),
+    });
+    for (const [seatId, account] of ctx.accounts) {
+      if (account.bot) continue;
+      try {
+        const [counters, unlockRecords, earnedNow] = await Promise.all([
+          achievementCounters(db, account.accountId),
+          achievementUnlocks(db, account.accountId),
+          gloryEarned(db, account.accountId),
+        ]);
+        const won = result.winner.subjectId === account.accountId;
+        const matchGlory = won ? result.winner.glory : result.loser.glory;
+        // The ledger already holds this match's ranked Glory (the settle
+        // batch landed first) — "before" backs it out so the crossing rule
+        // sees this match's earnings. Achievement Glory rewards land after
+        // this evaluation and count from the NEXT match (accepted one-match
+        // lag, achievements.md § content sketch).
+        const before = { ...counters, [COUNTERS.gloryEarned]: Math.max(0, earnedNow - matchGlory) };
+        const after: Record<string, number> = { ...before };
+        for (const [counter, delta] of Object.entries(counterDeltas(summary, seatId))) {
+          after[counter] = (after[counter] ?? 0) + delta;
+        }
+        Object.assign(after, streakUpdates(before, won));
+        after[COUNTERS.gloryEarned] = earnedNow;
+        const fired = evaluate({
+          defs: ACHIEVEMENT_DEFS,
+          boards: ACHIEVEMENT_BOARDS,
+          summary,
+          playerKey: seatId,
+          before,
+          after,
+          unlocked: new Set(unlockRecords.map((u) => u.id)),
+        });
+        // Rewards stack (achievements.md § titles): Glory sums, and every
+        // entitlement kind lands its own row — a title records the deed's
+        // OWN id (`title:<id>`); clients render the string from the defs.
+        const unlocks: AchievementAward[] = fired.map((def) => {
+          const rewards = def.rewards ?? [];
+          const gloryTotal = rewards.reduce((sum, r) => (r.kind === "glory" ? sum + r.amount : sum), 0);
+          const entitlements = rewards.flatMap((r) =>
+            r.kind === "entitlement" ? [r.itemId] : r.kind === "title" ? [`title:${def.id}`] : [],
+          );
+          return {
+            id: def.id,
+            ...(gloryTotal > 0 ? { glory: gloryTotal } : {}),
+            ...(entitlements.length > 0 ? { entitlements } : {}),
+          };
+        });
+        await applyMatchAchievements(db, {
+          matchId: ctx.matchId,
+          playerId: account.accountId,
+          counters: after,
+          unlocks,
+        });
+        if (fired.length > 0) {
+          const ws = room.socketOf(seatId);
+          if (ws) this.trySend(ws, { t: "deedUnlocks", matchId: ctx.matchId, unlocks: fired.map((d) => d.id) });
+          console.log(`[${room.meta.code}] deeds for ${account.name}: ${fired.map((d) => d.id).join(", ")}`);
+        }
+      } catch (err) {
+        // This match's tallies are lost for this player (the guard mark
+        // never landed, but nothing re-runs it) — loud log, same posture as
+        // a lost settle; unlocks re-fire naturally as counters keep growing.
+        console.error(`[${room.meta.code}] deeds for ${account.name} failed:`, err);
+      }
     }
   }
 
@@ -782,3 +923,11 @@ const sanitizeName = (name: unknown): string =>
  * honest: a length-capped string, anything else collapses to the default. */
 const sanitizeAnnouncer = (pack: unknown): string =>
   ((typeof pack === "string" ? pack : "").trim().slice(0, MAX_ANNOUNCER_ID)) || "default";
+
+/** The worn title is a DEED ID claim — clients resolve display text from
+ * their own defs (an unknown id renders bare), so the wire only needs a
+ * length-capped string. Ranked additionally verifies ownership in
+ * verifyAndEnqueue; skirmish takes the word (achievements.md § wearing
+ * titles). "" = bare. */
+const sanitizeTitle = (title: unknown): string =>
+  (typeof title === "string" ? title : "").trim().slice(0, MAX_TITLE_ID);

@@ -34,12 +34,20 @@ export type ArenaEvent =
   | { type: "harpoon"; casterId: number; fromX: number; fromY: number; toX: number; toY: number }
   /** A sandtrap went off (its own sound, distinct from the cast). */
   | { type: "detonate"; x: number; y: number }
-  /** A blood-font tick landed — the green number. */
-  | { type: "heal"; targetId: number; amount: number; x: number; y: number }
+  /** A blood-font tick landed — the green number. `casterId` = the font's
+   * owner (Wave 2, achievements.md: healing credits its SOURCE — a font
+   * healing three allies is the caster's healing done). */
+  | { type: "heal"; targetId: number; casterId: number; amount: number; x: number; y: number }
+  /** Mirror Guard turned a shot around (Wave 2) — the reflector's stat, and
+   * a hook for a future parry flash/sting. Shipped clients ignore unknown
+   * event types (if/else drain), so this is additive like `deedUnlocks`. */
+  | { type: "reflect"; playerId: number; attackerId: number; x: number; y: number }
   /** Every seat armed — the arming countdown just started (banner/SFX cue).
    * Cancels are NOT events: the client reads round.timer going back to 0. */
   | { type: "armingComplete" }
   | { type: "roundStart"; roundNumber: number }
   | { type: "fightStart" }
-  | { type: "roundEnd"; winnerTeam: Team | 0; wins: [number, number] }
+  /** `standing` (Wave 2): the survivors' HP fractions at the close — feats
+   * like "win the decider under 10%" sample it; dead players are absent. */
+  | { type: "roundEnd"; winnerTeam: Team | 0; wins: [number, number]; standing: { id: number; hpFrac: number }[] }
   | { type: "matchEnd"; winnerTeam: Team };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -16,6 +16,7 @@ import {
 import { playSound, unlockAudio } from "../audio";
 import { GloryPill } from "../components/GloryPill";
 import { devFlags } from "../dev";
+import { DISPLAY_FONT } from "../typography";
 
 export interface ModeSelectScreenProps {
   onBack: () => void;
@@ -25,12 +26,11 @@ export interface ModeSelectScreenProps {
   onRanked: () => void;
   /** Practice → the bots-or-dummies front door. */
   onPractice: () => void;
+  /** Deeds → the Chronicle (achievements.md § the codex). */
+  onDeeds: () => void;
 }
 
-/** Same ceremony face as the title (bundled display font still owed). */
-const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
-
-type ModeKey = "ranked" | "skirmish" | "practice" | "story";
+type ModeKey = "ranked" | "skirmish" | "practice" | "story" | "deeds";
 
 /**
  * Per-mode card art. `image` is the forged PNG (assets/modes/<mode>.png,
@@ -50,6 +50,7 @@ const MODE_ART: Record<
   skirmish: { image: require("../../assets/modes/skirmish.png"), ramp: ["#131a21", "#1c2733", "#2b241c"], glow: "rgba(255,160,60,0.55)", glowAt: [0.72, 0.85] },
   practice: { image: require("../../assets/modes/practice.png"), ramp: ["#4a3520", "#8a6d44", "#c9a76a"], glow: "rgba(245,237,224,0.45)", glowAt: [0.70, 0.10] },
   story: { image: require("../../assets/modes/story.png"), ramp: ["#241a12", "#2e2214", "#3a2a1a"], glow: "rgba(232,200,122,0.10)", glowAt: [0.75, 0.40] },
+  deeds: { image: require("../../assets/modes/deeds.png"), ramp: ["#241a10", "#4a3520", "#8a6d44"], glow: "rgba(242,205,110,0.40)", glowAt: [0.76, 0.25] },
 };
 
 /**
@@ -122,6 +123,12 @@ const CardArt = ({ mode, w, h, locked }: { mode: ModeKey; w: number; h: number; 
   );
 };
 
+/** Each card owns a slice of the shared entrance clock, top card first:
+ *  card i fades/rises over [i × STAGGER, i × STAGGER + SLICE]. Shared with the
+ *  screen's sound scheduling so the drum hits land exactly on the settles. */
+const ENTRANCE_STAGGER = 0.18;
+const ENTRANCE_SLICE = 0.4;
+
 interface ModeCardProps {
   mode: ModeKey;
   title: string;
@@ -132,9 +139,12 @@ interface ModeCardProps {
   /** The screen's shared entrance clock + this card's slot in the stagger. */
   entrance: Animated.Value;
   index: number;
+  /** Half-width cards (the Skirmish/Practice row) — smaller title so it
+   * doesn't crowd the narrow card. */
+  compact?: boolean;
 }
 
-const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index }: ModeCardProps) => {
+const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact = false }: ModeCardProps) => {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [pressed, setPressed] = useState(false);
   const shake = useRef(new Animated.Value(0)).current;
@@ -177,9 +187,8 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index }: ModeC
 
   const onPress = state === "live" ? enter : deny;
 
-  // Each card owns a slice of the shared entrance clock, top card first.
-  const from = index * 0.14;
-  const to = from + 0.5;
+  const from = index * ENTRANCE_STAGGER;
+  const to = from + ENTRANCE_SLICE;
   const rise = {
     opacity: entrance.interpolate({ inputRange: [from, to], outputRange: [0, 1], extrapolate: "clamp" as const }),
     transform: [
@@ -223,7 +232,7 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index }: ModeC
           </Canvas>
         )}
         <View style={styles.copy} pointerEvents="none">
-          <Text style={[styles.title, locked && styles.titleDim]}>{title}</Text>
+          <Text style={[styles.title, compact && styles.titleCompact, locked && styles.titleDim]}>{title}</Text>
           <Text style={[styles.pitch, locked && styles.pitchDim]}>{pitch}</Text>
         </View>
       </Pressable>
@@ -232,23 +241,32 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index }: ModeC
 };
 
 /**
- * The fork behind PLAY (bits-mode-select.md): four full-art cards, stacked —
- * Skirmish, Practice, Ranked, Story (live modes first). Locked modes render
- * greyscale instead of hiding — the closed doors are part of the sell. No
- * connectivity checks here: Skirmish always routes into the play flow, whose
- * connect screen already owns down/update states.
+ * The fork behind PLAY (bits-mode-select.md; layout reworked 2026-08-04):
+ * Ranked leads full-width, Skirmish + Practice share a half-width row (the
+ * space saver), then Deeds, then locked Story. Locked modes render greyscale
+ * instead of hiding — the closed doors are part of the sell. No connectivity
+ * checks here: Skirmish always routes into the play flow, whose connect
+ * screen already owns down/update states.
  */
-export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice }: ModeSelectScreenProps) => {
+export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onDeeds }: ModeSelectScreenProps) => {
   const insets = useSafeAreaInsets();
   const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // The stack rises card by card; the drum lands as the last one settles.
-    Animated.timing(entrance, { toValue: 1, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(
-      ({ finished }) => {
-        if (finished) playSound("modeReveal");
-      },
-    );
+    // The stack rises card by card, and the drum lands per card as EACH one
+    // settles — a four-beat roll down the stack, not one hit after everything.
+    // Listening to the clock (native-driven values still emit to JS listeners)
+    // keeps the beats glued to the easing instead of guessing with timeouts.
+    const settles = [0, 1, 2, 3].map((i) => i * ENTRANCE_STAGGER + ENTRANCE_SLICE);
+    let next = 0;
+    const sub = entrance.addListener(({ value }) => {
+      while (next < settles.length && value >= settles[next]) {
+        playSound("modeReveal");
+        next += 1;
+      }
+    });
+    Animated.timing(entrance, { toValue: 1, duration: 1000, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    return () => entrance.removeListener(sub);
   }, [entrance]);
 
   return (
@@ -270,29 +288,43 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice }: M
 
       <View style={styles.cards}>
         <ModeCard
-          mode="skirmish"
-          title="SKIRMISH"
-          pitch="Hop into a quick game of BITS."
-          state="live"
-          onEnter={onSkirmish}
-          entrance={entrance}
-          index={0}
-        />
-        <ModeCard
-          mode="practice"
-          title="PRACTICE"
-          pitch="Practice your skills against the computer."
-          state="live"
-          onEnter={onPractice}
-          entrance={entrance}
-          index={1}
-        />
-        <ModeCard
           mode="ranked"
           title="RANKED"
           pitch="Win ultimate glory in the arena."
           state="live"
           onEnter={onRanked}
+          entrance={entrance}
+          index={0}
+        />
+        {/* The half-width pair — one row, one entrance beat, shared slot. */}
+        <View style={styles.halfRow}>
+          <ModeCard
+            mode="skirmish"
+            title="SKIRMISH"
+            pitch="Quick games with friends."
+            state="live"
+            onEnter={onSkirmish}
+            entrance={entrance}
+            index={1}
+            compact
+          />
+          <ModeCard
+            mode="practice"
+            title="PRACTICE"
+            pitch="Spar with the computer."
+            state="live"
+            onEnter={onPractice}
+            entrance={entrance}
+            index={1}
+            compact
+          />
+        </View>
+        <ModeCard
+          mode="deeds"
+          title="DEEDS"
+          pitch="Chart the legend you've carved."
+          state="live"
+          onEnter={onDeeds}
           entrance={entrance}
           index={2}
         />
@@ -321,6 +353,9 @@ const styles = StyleSheet.create({
   back: { width: 44, paddingVertical: 2 },
   backText: { color: "#8a7f70", fontSize: 26, fontWeight: "800", lineHeight: 28 },
   cards: { flex: 1, gap: 12 },
+  /** Skirmish + Practice side by side — each ModeCard's flex:1 splits the
+   * width; the row itself takes one card-height unit of the column. */
+  halfRow: { flex: 1, flexDirection: "row", gap: 12 },
   card: {
     flex: 1,
     borderRadius: 14,
@@ -336,13 +371,13 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
     fontSize: 22,
-    fontWeight: "900",
     letterSpacing: 3,
     textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
+  titleCompact: { fontSize: 17, letterSpacing: 2 },
   titleDim: { color: "#cfc4b0" },
-  pitch: { color: "#d9cbb4", fontSize: 13, lineHeight: 18, maxWidth: 240 },
+  pitch: { color: "#d9cbb4", fontSize: 13, lineHeight: 18, maxWidth: 240, flexShrink: 1 },
   pitchDim: { color: "#8d8272" },
 });

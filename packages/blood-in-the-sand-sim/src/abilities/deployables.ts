@@ -157,7 +157,7 @@ export const stepDeployables = (
           const amount = Math.min(BLOOD_FONT.healPerTick, p.combatant.stats.maxHp - p.combatant.hp);
           if (amount <= 0) continue;
           p.combatant.hp += amount;
-          events.push({ type: "heal", targetId: p.id, amount, x: p.mover.pos.x, y: p.mover.pos.y });
+          events.push({ type: "heal", targetId: p.id, casterId: d.ownerId, amount, x: p.mover.pos.x, y: p.mover.pos.y });
         }
         d.tickLeft += BLOOD_FONT.tickInterval;
       }

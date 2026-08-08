@@ -32,6 +32,8 @@ export interface QueueEntry {
   accountId: string;
   name: string;
   announcer: string;
+  /** Worn title (deed id, "" = bare) — entitlement-verified before enqueue. */
+  title: string;
   /** This bracket's season rating, loaded at queue entry — the matcher's
    * sort key. Fresh enough: nobody's rating moves while they queue. */
   rating: number;

@@ -60,6 +60,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   // combat (roster-independent)
   { id: "hit_generic", label: "Impact — generic", category: "combat" },
   { id: "player_hurt", label: "You take a hit", category: "combat" },
+  { id: "reflect", label: "Mirror Guard — shot turned (parry ting)", category: "combat" },
   { id: "death", label: "Death", category: "combat" },
   { id: "crowd_cheer", label: "Crowd — kill roar (8 takes)", category: "combat" },
   { id: "crowd_jeer", label: "Crowd — groan, you're scored on (few takes)", category: "combat" },
@@ -83,6 +84,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "rank_up", label: "Ranked — rank up fanfare", category: "flow" },
   { id: "rank_down", label: "Ranked — rank down (subtle)", category: "flow" },
   { id: "glory_earned", label: "Ranked — Glory earned (choral swell)", category: "flow" },
+  { id: "deed_unlock", label: "Deeds — unlock stamp (achievements.md)", category: "flow" },
   // UI
   { id: "ui_tap", label: "UI tap", category: "ui" },
   { id: "ui_confirm", label: "UI confirm", category: "ui" },

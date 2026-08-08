@@ -33,6 +33,12 @@ export interface ForgeStatus {
   /** PNGs already in the rank-badge destination folder — done-ticks for the
    * badge set (the checked-in BADGE_KEYS/BADGE_SUBJECTS list). */
   badgeFiles: string[];
+  /** PNGs already in the deed-icon destination folder — done-ticks for the
+   * deed set (derived from ACHIEVEMENT_DEFS, deedSet.ts). */
+  deedFiles: string[];
+  /** PNGs already in the home-backdrop destination folder — done-ticks for
+   * the home set (the checked-in HOME_KEYS/HOME_SUBJECTS list). */
+  homeFiles: string[];
 }
 
 export interface ExpandRequest {
@@ -65,6 +71,10 @@ export interface Candidate {
   id: number;
   mime: string;
   b64: string;
+  /** Image flows only: the candidate as the SAVE pipeline would ship it
+   * (grid-snapped, quantized) — the panel previews this so what you judge is
+   * what saves; `b64` stays the raw generation and is what save receives. */
+  preview?: string;
 }
 
 export interface GenerateResponse {

@@ -1,9 +1,10 @@
 /**
- * Weapon + ability icons — Asset Forge woodcut art (256px palette-quantized
- * die-cut PNGs on transparent, apps/blood-in-the-sand/assets/icons/; ~20KB
- * each, biggest in-app render is the 52pt codex hero). The art carries its
- * own palette (bone/ochre/accent on black), so icons are no longer tinted by
- * the caller; category colour lives in the surrounding chrome instead.
+ * Weapon + ability icons — Asset Forge pre-rendered pixel art (256px
+ * palette-quantized cut-out PNGs on transparent, snapped to a 64px grid,
+ * apps/blood-in-the-sand/assets/icons/; biggest in-app render is the 52pt
+ * codex hero). The art carries its own full-colour palette
+ * (docs/design/bits-art-style.md), so icons are never tinted by the caller;
+ * category colour lives in the surrounding chrome instead.
  */
 import { Image } from "react-native";
 import type { AbilityId, WeaponId } from "@heroic/blood-in-the-sand-sim";

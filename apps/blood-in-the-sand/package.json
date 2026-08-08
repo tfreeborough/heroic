@@ -13,6 +13,7 @@
     "expo-audio": "~56.0.12",
     "expo-clipboard": "~56.0.4",
     "expo-dev-client": "~56.0.20",
+    "expo-font": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-keep-awake": "~56.0.3",
     "expo-secure-store": "~56.0.4",

@@ -19,7 +19,9 @@ import { join, resolve } from "node:path";
 import { loadEnv, type Plugin } from "vite";
 import {
   BADGE,
+  DEED,
   EXPANDER_MODEL,
+  HOME,
   ICON,
   MODE,
   SFX,
@@ -27,6 +29,8 @@ import {
   SPRITE,
   expanderSystem,
   type BadgeSpec,
+  type DeedSpec,
+  type HomeSpec,
   type IconSpec,
   type ModeSpec,
   type SfxSpec,
@@ -57,9 +61,21 @@ const sfxSpec = (type: string): SfxSpec | null =>
   type === SFX.id ? SFX : type === SFX_BITS.id ? SFX_BITS : null;
 
 /** The gpt-image-1 types share a pipeline — canvas/destination/template differ. */
-type ImageSpec = IconSpec | SpriteSpec | ModeSpec | BadgeSpec;
+type ImageSpec = IconSpec | SpriteSpec | ModeSpec | BadgeSpec | DeedSpec | HomeSpec;
 const imageSpec = (type: string): ImageSpec | null =>
-  type === ICON.id ? ICON : type === SPRITE.id ? SPRITE : type === MODE.id ? MODE : type === BADGE.id ? BADGE : null;
+  type === ICON.id
+    ? ICON
+    : type === SPRITE.id
+      ? SPRITE
+      : type === MODE.id
+        ? MODE
+        : type === BADGE.id
+          ? BADGE
+          : type === DEED.id
+            ? DEED
+            : type === HOME.id
+              ? HOME
+              : null;
 
 /** Seed prompt when only a bare subject arrives (curl/testing — the panel builds its own). */
 const imageTemplate = (spec: ImageSpec, subject: string): string =>
@@ -114,12 +130,14 @@ export const forgePlugin = (): Plugin => {
       const abs = join(repoRoot, dir);
       return existsSync(abs) ? (await readdir(abs)).filter((f) => f.endsWith(ext)) : [];
     };
-    const [iconFiles, sfxFiles, spriteFiles, modeFiles, badgeFiles] = await Promise.all([
+    const [iconFiles, sfxFiles, spriteFiles, modeFiles, badgeFiles, deedFiles, homeFiles] = await Promise.all([
       listDir(ICON.destination, ".png"),
       listDir(SFX_BITS.destination, ".mp3"),
       listDir(SPRITE.destination, ".png"),
       listDir(MODE.destination, ".png"),
       listDir(BADGE.destination, ".png"),
+      listDir(DEED.destination, ".png"),
+      listDir(HOME.destination, ".png"),
     ]);
     return {
       types: [
@@ -128,6 +146,8 @@ export const forgePlugin = (): Plugin => {
         { id: SPRITE.id, label: SPRITE.label, provider: SPRITE.provider, candidates: SPRITE.candidates },
         { id: MODE.id, label: MODE.label, provider: MODE.provider, candidates: MODE.candidates },
         { id: BADGE.id, label: BADGE.label, provider: BADGE.provider, candidates: BADGE.candidates },
+        { id: DEED.id, label: DEED.label, provider: DEED.provider, candidates: DEED.candidates },
+        { id: HOME.id, label: HOME.label, provider: HOME.provider, candidates: HOME.candidates },
         { id: SFX.id, label: SFX.label, provider: SFX.provider, candidates: SFX.candidates },
       ],
       keys: { elevenlabs: elevenKey.length > 0, openai: openaiKey.length > 0 },
@@ -136,6 +156,8 @@ export const forgePlugin = (): Plugin => {
       spriteFiles,
       modeFiles,
       badgeFiles,
+      deedFiles,
+      homeFiles,
     };
   };
 
@@ -187,8 +209,28 @@ export const forgePlugin = (): Plugin => {
     );
     const candidates: Candidate[] = [];
     for (const r of settled) {
-      if (r.status === "fulfilled")
-        candidates.push({ id: candidates.length, mime: "image/png", b64: r.value.toString("base64") });
+      if (r.status !== "fulfilled") continue;
+      // Preview = the save pipeline's own output (grid snap + quantize), so
+      // the panel judges candidates as they will actually ship — the raw
+      // generation stays the save payload (bits-art-style.md § pixel grids).
+      let preview: string | undefined;
+      try {
+        const processed =
+          "savedWidth" in spec
+            ? await processScene(
+                r.value,
+                spec.savedWidth,
+                spec.savedHeight,
+                spec.pixelGridWidth,
+                spec.pixelGridHeight,
+                spec.paletteColours,
+              )
+            : await processIcon(r.value, spec.savedSize, spec.pixelGrid, spec.paletteColours);
+        preview = processed.toString("base64");
+      } catch {
+        /* best-effort — the panel falls back to the raw image */
+      }
+      candidates.push({ id: candidates.length, mime: "image/png", b64: r.value.toString("base64"), preview });
     }
     if (candidates.length === 0) {
       const first = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
@@ -254,10 +296,19 @@ export const forgePlugin = (): Plugin => {
     await mkdir(dir, { recursive: true });
     const file = `${id}.png`;
     // Cut-outs letterbox into a square; scenes cover-crop to their frame.
+    // Both snap to the style's true pixel grid and crush to its palette
+    // budget (bits-art-style.md).
     const processed =
       "savedWidth" in spec
-        ? await processScene(raw, spec.savedWidth, spec.savedHeight)
-        : await processIcon(raw, spec.savedSize);
+        ? await processScene(
+            raw,
+            spec.savedWidth,
+            spec.savedHeight,
+            spec.pixelGridWidth,
+            spec.pixelGridHeight,
+            spec.paletteColours,
+          )
+        : await processIcon(raw, spec.savedSize, spec.pixelGrid, spec.paletteColours);
     await writeFile(join(dir, file), processed);
 
     // Sidecar: keep `created` across regenerations, refresh everything else.
@@ -283,8 +334,13 @@ export const forgePlugin = (): Plugin => {
         quality: "medium",
         background: "background" in spec ? spec.background : "transparent",
         ...("savedWidth" in spec
-          ? { savedWidth: spec.savedWidth, savedHeight: spec.savedHeight }
-          : { savedSize: spec.savedSize }),
+          ? {
+              savedWidth: spec.savedWidth,
+              savedHeight: spec.savedHeight,
+              pixelGrid: `${spec.pixelGridWidth}x${spec.pixelGridHeight}`,
+            }
+          : { savedSize: spec.savedSize, pixelGrid: spec.pixelGrid }),
+        paletteColours: spec.paletteColours,
       },
       files: [file],
       created,

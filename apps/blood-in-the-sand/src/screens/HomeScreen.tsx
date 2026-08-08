@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Animated, Easing, Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Blur, Canvas, Fill, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
+import { Blur, Canvas, Fill, Group, Oval, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
+import type { RankedResultRow } from "../net/connection";
 import { DUST_EFFECT } from "./dustStorm";
+import { HOME_ART } from "./homeArt";
 import { bannerAnchors, buildCrowd, makeHighSunPicture, sceneAnchors, type BannerAnchor } from "./homeScene";
+import { RankedCeremony } from "./RankedCeremony";
 import { pickDuel, TITLE_SPRITE_SCALE, TITLE_SPRITES } from "./titleSprites";
+import { DISPLAY_FONT } from "../typography";
 
 export interface HomeScreenProps {
   /** → the mode select (bits-mode-select.md); Practice lives in there now. */
@@ -36,9 +40,26 @@ const DEV_TAPS = 5;
 /** …as long as no two taps are further apart than this (slower = start over). */
 const DEV_TAP_GAP_MS = 1500;
 
-/** The ceremony face — iOS ships Copperplate; Android falls back to its serif
- * until a bundled display font is picked (owed). */
-const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
+/** Dev-menu ceremony rehearsal (bits-dev-menu.md): a plausible fake
+ * settlement — a win with a rank-up and a new season best, so every beat
+ * (glory swell, rating count, rank-up sting, deeds) gets exercised. */
+const REHEARSAL_ROW: RankedResultRow = {
+  playerId: 0,
+  before: 1437,
+  after: 1462,
+  delta: 25,
+  tier: "Gladiator",
+  division: 2,
+  rankChange: "up",
+  glory: 23,
+  peak: 1462,
+  newBest: true,
+  placement: null,
+};
+
+/** A spread of deed shapes for the rehearsal: the root feat, an early kill
+ * milestone, and a titled chain tier — three cards, three reveal flavours. */
+const REHEARSAL_DEEDS = ["sworn-to-the-sand", "killing-blows-1", "ranked-wins-5"];
 
 /** Drifting sunlit dust motes over the scene. */
 const MOTE_COUNT = 14;
@@ -295,12 +316,16 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
 };
 
 /**
- * The front door: the High Sun arena scene (homeScene.ts — static Skia
- * painting; forged gladiator sprites breathe over it) with the title at the
- * top and the two ways in at the bottom — PLAY opens the mode select
- * (ranked / skirmish / practice / story), SETTINGS is the quiet one. Red is
- * rationed to the banners and PLAY. No server needed to be here —
- * connection concerns start behind the mode select's gates.
+ * The front door: the forged home backdrop (homeArt.ts — a full-bleed
+ * retro-pixel scene, bits-art-style.md) with the title at the top and the
+ * two ways in at the bottom — PLAY opens the mode select (ranked / skirmish
+ * / practice / story), SETTINGS is the quiet one. The forged gladiator duel
+ * stands on the backdrop's sand band, with the weather layers (motes,
+ * swallows, dust storm) over everything. Until the backdrop is forged
+ * (HOME_ART.home null), the hand-painted Skia High Sun scene (homeScene.ts)
+ * plus its geometry-bound life layers (banners, crowd glint) stand in. No
+ * server needed to be here — connection concerns start behind the mode
+ * select's gates.
  *
  * There's also a hidden fourth way in: tapping the title DEV_TAPS times in a
  * row toggles the dev menu, a small panel pinned to the bottom-left corner.
@@ -321,16 +346,24 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
   const [hapticsOff, setHapticsOff] = useState(devFlags.disableHaptics);
   const [botArchetype, setBotArchetype] = useState(devFlags.botArchetype);
   const [botDifficulty, setBotDifficulty] = useState(devFlags.botDifficulty);
+  const [deedsPreview, setDeedsPreview] = useState(devFlags.deedsPreview);
   // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
   // session-only devFlags rows — App.tsx applies it on launch; this label
   // just needs the same stored value.
   const [announcer, setAnnouncer] = useState<AnnouncerPackId>("default");
+  // Full post-match ceremony on fake data — see REHEARSAL_ROW above.
+  const [deedRehearsal, setDeedRehearsal] = useState(false);
   useEffect(() => {
     void loadAnnouncerPack().then(setAnnouncer);
   }, []);
   const knock = useRef({ count: 0, lastMs: 0 });
 
-  const scene = useMemo(() => makeHighSunPicture(width, height), [width, height]);
+  // The forged backdrop owns the screen when it exists; the painted scene
+  // (and its geometry-bound life: banners, crowd glint) is the fallback.
+  const homeArt = HOME_ART["home"] ?? null;
+  const scene = useMemo(() => (homeArt ? null : makeHighSunPicture(width, height)), [homeArt, width, height]);
+  // Screen-fraction anchors — the duel stands on the lower sand band in both
+  // the painted scene and the forged art (whose brief reserves that band).
   const anchors = useMemo(() => sceneAnchors(width, height), [width, height]);
   // Today's matchup — two random fighters from the pool, fixed for the mount.
   const [duel] = useState(pickDuel);
@@ -340,8 +373,6 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
   const leftBox = figBox * (TITLE_SPRITE_SCALE[duel.left] ?? 1);
   const rightBox = figBox * (TITLE_SPRITE_SCALE[duel.right] ?? 1);
 
-  // Breathing sway on the duellists — statues that live, not animations.
-  const sway = useRef(new Animated.Value(0)).current;
   // Entrance: title, then the scene's cast, then the menu rises in.
   const entrance = useRef(new Animated.Value(0)).current;
   // The PLAY halo breathes like the rooms screen's create button.
@@ -349,12 +380,6 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
 
   useEffect(() => {
     const loops = [
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(sway, { toValue: 1, duration: 2600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(sway, { toValue: 0, duration: 2600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ]),
-      ),
       Animated.loop(
         Animated.sequence([
           Animated.timing(glow, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -365,7 +390,7 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
     loops.forEach((l) => l.start());
     Animated.timing(entrance, { toValue: 1, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     return () => loops.forEach((l) => l.stop());
-  }, [sway, glow, entrance]);
+  }, [glow, entrance]);
 
   const rise = (from: number, to: number) => ({
     opacity: entrance.interpolate({ inputRange: [from, to], outputRange: [0, 1], extrapolate: "clamp" }),
@@ -408,6 +433,15 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
     setBotDifficulty(next);
   };
 
+  // Deed Map preview — fake unlock states for board testing without the
+  // grind (achievements.md; read on DeedsScreen mount, session-only).
+  const onCycleDeedsPreview = (): void => {
+    const ring = [null, "some", "all"] as const;
+    const next = ring[(ring.indexOf(devFlags.deedsPreview) + 1) % ring.length]!;
+    devFlags.deedsPreview = next;
+    setDeedsPreview(next);
+  };
+
   // Cycle the announcer voice — applied live + persisted, then the new pack's
   // FIRST BLOOD line plays so you hear who you just hired (the same
   // ear-training move as the wizard's ability-pick SFX).
@@ -432,15 +466,25 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
     }
   };
 
-  const swayY = sway.interpolate({ inputRange: [0, 1], outputRange: [0, 2.5] });
-  const swayYOpposed = sway.interpolate({ inputRange: [0, 1], outputRange: [2.5, 0] });
-
   return (
     <View style={styles.root}>
-      <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Picture picture={scene} />
-      </Canvas>
-      <SceneLife w={width} h={height} />
+      {homeArt ? (
+        // Explicit window dims + style resizeMode: the backdrop always covers
+        // the full screen (centre-cropped), never letterboxed.
+        <Image
+          source={homeArt}
+          style={{ position: "absolute", top: 0, left: 0, width, height, resizeMode: "cover" }}
+        />
+      ) : (
+        scene && (
+          <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Picture picture={scene} />
+          </Canvas>
+        )
+      )}
+      {/* Banners + crowd glint are anchored to the PAINTED scene's geometry —
+          they retire with it rather than floating over unrelated art. */}
+      {!homeArt && <SceneLife w={width} h={height} />}
       {[0, 1, 2].map((i) => (
         <Swallow key={i} w={width} h={height} i={i} />
       ))}
@@ -448,6 +492,53 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
       {Array.from({ length: MOTE_COUNT }, (_, i) => (
         <Mote key={i} w={width} h={height} seed={i + 3} />
       ))}
+
+      {/* Contact shadows under the duel — the sprite template forbids baked
+          shadows (the scene composites its own), so the scene does: a soft
+          dark pool at each fighter's feet, fading in with its owner. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { opacity: entrance.interpolate({ inputRange: [0.2, 0.6], outputRange: [0, 1], extrapolate: "clamp" }) },
+        ]}
+      >
+        <Canvas style={StyleSheet.absoluteFill}>
+          {(
+            [
+              [anchors.leftX, leftBox],
+              [anchors.rightX, rightBox],
+            ] as const
+          ).map(([cx, box], i) => (
+            // Two layers ground the figure (the EmberGlow recipe): a wide
+            // soft pool plus a tight near-black core right under the feet —
+            // one diffuse ellipse alone reads floaty.
+            // Pool centre rides ~3% of the box ABOVE the figureY anchor — the
+            // forged sprites carry a touch more bottom margin than the anchor
+            // maths assumes, and the shadow must kiss the soles, not trail.
+            <Group key={i}>
+              <Oval
+                x={cx - box * 0.26}
+                y={anchors.figureY - box * 0.03 - box * 0.055}
+                width={box * 0.52}
+                height={box * 0.11}
+                color="rgba(30,18,8,0.5)"
+              >
+                <Blur blur={5} />
+              </Oval>
+              <Oval
+                x={cx - box * 0.16}
+                y={anchors.figureY - box * 0.03 - box * 0.032}
+                width={box * 0.32}
+                height={box * 0.064}
+                color="rgba(20,12,6,0.65)"
+              >
+                <Blur blur={2.5} />
+              </Oval>
+            </Group>
+          ))}
+        </Canvas>
+      </Animated.View>
 
       {/* the duel — two random fighters from the pool over the painted sand;
           all sprites face right, so the right slot is always mirrored */}
@@ -461,7 +552,6 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
             width: leftBox,
             height: leftBox,
             opacity: entrance.interpolate({ inputRange: [0.2, 0.6], outputRange: [0, 1], extrapolate: "clamp" }),
-            transform: [{ translateY: swayY }],
           },
         ]}
       />
@@ -475,14 +565,16 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
             width: rightBox,
             height: rightBox,
             opacity: entrance.interpolate({ inputRange: [0.2, 0.6], outputRange: [0, 1], extrapolate: "clamp" }),
-            transform: [{ scaleX: -1 }, { translateY: swayYOpposed }],
+            transform: [{ scaleX: -1 }],
           },
         ]}
       />
 
       <DustStorm w={width} h={height} />
 
-      <View style={[styles.ui, { paddingTop: insets.top + 54, paddingBottom: insets.bottom + 70 }]} pointerEvents="box-none">
+      {/* The title block is compressed into the backdrop's sky band (top ~27%
+          of the art) — below it the colosseum begins and text drowns. */}
+      <View style={[styles.ui, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + 70 }]} pointerEvents="box-none">
         <Animated.View style={rise(0, 0.45)}>
           <Pressable onPress={onTitleTap}>
             <Text style={styles.eyebrow}>HEROIC</Text>
@@ -564,7 +656,29 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
               ANNOUNCER {announcer === "default" ? "○ DEFAULT" : `◉ ${announcer.replace(/_/g, " ").toUpperCase()}`}
             </Text>
           </Pressable>
+          {/* Ceremony feel-testing without earning anything (achievements.md
+              § unlock ceremony) — plays every beat on fake data. */}
+          <Pressable onPress={withTap("uiTap", () => setDeedRehearsal(true))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>DEED CEREMONY ▶</Text>
+          </Pressable>
+          {/* Deed Map preview — REAL server data / SOME (frontier on show) /
+              ALL unlocked. Applies next time the deeds screen opens. */}
+          <Pressable onPress={withTap("uiTap", onCycleDeedsPreview)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              DEEDS {deedsPreview ? `◉ ${deedsPreview.toUpperCase()} UNLOCKED` : "○ REAL DATA"}
+            </Text>
+          </Pressable>
         </View>
+      )}
+
+      {deedRehearsal && (
+        <RankedCeremony
+          won
+          mine={REHEARSAL_ROW}
+          deeds={REHEARSAL_DEEDS}
+          rehearsal
+          onDone={() => setDeedRehearsal(false)}
+        />
       )}
     </View>
   );
@@ -584,51 +698,62 @@ const styles = StyleSheet.create({
   ui: { flex: 1, alignItems: "center", paddingHorizontal: 24 },
   // RN letterSpacing adds a trailing space — tracked centered text needs the
   // negative marginRight (the wizard's YOU ARE ARMED lesson).
+  // Title palette rule (backdrop era): every line must read over BOTH the
+  // bright dithered sky and, if it ever drifts low, the stone band — so the
+  // supporting lines are bone-light with dark shadows, never stone-dark.
+  // The eyebrow sits highest — right in the backdrop's bright sun-lit sky —
+  // so it's the one line that goes DARK, with a faint pale lift beneath.
   eyebrow: {
-    color: "#8a6d44",
+    color: "#4a3520",
     fontSize: 12,
     fontWeight: "800",
     textAlign: "center",
     letterSpacing: 9,
     marginRight: -9,
-    marginBottom: 6,
+    marginBottom: 5,
+    textShadowColor: "rgba(240,228,200,0.4)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 0,
   },
   wordA: {
     fontFamily: DISPLAY_FONT,
     color: "#a32c22",
     fontSize: 54,
-    fontWeight: "900",
     textAlign: "center",
     letterSpacing: 6,
     marginRight: -6,
-    textShadowColor: "rgba(46,28,14,0.45)",
+    // Carved harder than before — BLOOD can sit in front of the backdrop's
+    // sun, and the deep shadow is what keeps its edge there.
+    textShadowColor: "rgba(30,18,8,0.65)",
     textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 1,
+    textShadowRadius: 2,
   },
   wordB: {
     fontFamily: DISPLAY_FONT,
-    color: "#4a3626",
+    color: "#f0e4c8",
     fontSize: 23,
-    fontWeight: "900",
     textAlign: "center",
     letterSpacing: 10,
     marginRight: -10,
-    marginTop: 4,
-    textShadowColor: "rgba(240,228,200,0.35)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
+    marginTop: 2,
+    textShadowColor: "rgba(46,28,14,0.6)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 1,
   },
   tagline: {
-    color: "#6b5335",
+    color: "rgba(240,228,200,0.85)",
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 4,
     marginRight: -4,
     textAlign: "center",
-    marginTop: 12,
+    marginTop: 8,
+    textShadowColor: "rgba(46,28,14,0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
-  rule: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16, width: 220, alignSelf: "center" },
-  ruleLine: { flex: 1, height: 1, backgroundColor: "rgba(138,109,68,0.8)" },
+  rule: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, width: 220, alignSelf: "center" },
+  ruleLine: { flex: 1, height: 1, backgroundColor: "rgba(240,228,200,0.55)" },
   gem: {
     width: 7,
     height: 7,

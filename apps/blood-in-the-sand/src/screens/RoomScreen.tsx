@@ -60,6 +60,7 @@ import {
   weaponBars,
 } from "../loadout/catalogue";
 import { loadLastLoadout, saveLastLoadout, type SavedLoadout } from "../settings";
+import { resolveTitleText } from "../deeds/wornTitle";
 
 export interface RoomScreenProps {
   /** ArenaClient for real rooms; PracticeClient drives the same flow offline. */
@@ -1313,15 +1314,25 @@ const PlayerRow = ({
   hostId: number | null;
   own: boolean;
   compact?: boolean;
-}) => (
+}) => {
+  // Resolved from OUR defs — an unknown claim renders bare, never raw text.
+  const wornTitle = resolveTitleText(p.title);
+  return (
   <View style={[styles.playerRow, compact && tight.playerRow, !p.connected && styles.playerGone]}>
-    <Text style={[styles.playerName, compact && tight.playerName]}>
-      {p.id === hostId ? "♛ " : ""}
-      {p.name}
-      {p.bot ? <Text style={styles.botTag}>{"  BOT"}</Text> : null}
-      {isMe ? " (you)" : ""}
-      {p.connected ? "" : " — reconnecting…"}
-    </Text>
+    <View style={styles.playerIdentity}>
+      <Text style={[styles.playerName, compact && tight.playerName]}>
+        {p.id === hostId ? "♛ " : ""}
+        {p.name}
+        {p.bot ? <Text style={styles.botTag}>{"  BOT"}</Text> : null}
+        {isMe ? " (you)" : ""}
+        {p.connected ? "" : " — reconnecting…"}
+      </Text>
+      {wornTitle !== null && (
+        <Text style={[styles.playerTitle, compact && tight.playerTitle]} numberOfLines={1}>
+          {wornTitle}
+        </Text>
+      )}
+    </View>
     <View style={styles.playerRight}>
       {own && p.weapon !== null ? (
         <View style={styles.pickIcons}>
@@ -1338,7 +1349,8 @@ const PlayerRow = ({
       )}
     </View>
   </View>
-);
+  );
+};
 
 // ── Countdown veil ──────────────────────────────────────────────────────────
 
@@ -1663,7 +1675,9 @@ const styles = StyleSheet.create({
   teamRule: { flex: 1, height: 1, backgroundColor: "#2e2820" },
   playerRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
   playerGone: { opacity: 0.45 },
+  playerIdentity: { flexShrink: 1 },
   playerName: { color: C_BONE, fontSize: 13.5, fontWeight: "700", flexShrink: 1 },
+  playerTitle: { color: "#b3925e", fontSize: 10.5, fontStyle: "italic", letterSpacing: 0.4, marginTop: 1 },
   playerRight: { marginLeft: "auto" },
   pickIcons: { flexDirection: "row", alignItems: "center", gap: 5 },
   pickSep: { width: 1, height: 14, backgroundColor: "#3a332a", marginHorizontal: 3 },
@@ -1759,6 +1773,7 @@ const tight = StyleSheet.create({
   teamHead: { marginTop: 9, marginBottom: 2 },
   playerRow: { paddingVertical: 3 },
   playerName: { fontSize: 12.5 },
+  playerTitle: { fontSize: 9.5 },
   openSeat: { paddingVertical: 4, marginVertical: 1 },
   arsenalHint: { marginTop: 4 },
   lastMatch: { marginTop: 8, fontSize: 12 },

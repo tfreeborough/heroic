@@ -693,6 +693,10 @@ body {
   width: 100%;
   aspect-ratio: 1;
   object-fit: contain;
+  /* Snapped previews upscale here — keep the pixel grid crisp, not blurred.
+     The small previews stay smooth on purpose: RN's Image smooth-downscales
+     in-game, so smooth IS the honest roster-row render. */
+  image-rendering: pixelated;
 }
 
 .forge .icon-candidate .icon-small-row {
@@ -731,6 +735,78 @@ body {
   display: block;
   aspect-ratio: 1536 / 614;
   object-fit: cover;
+  /* Mode previews render near their saved size (a downscale if anything) —
+     smooth matches the in-game RN Image render. */
+  image-rendering: auto;
+}
+
+/* ── Forge: Blood in the Sand home backdrop ─────────────────────────────── */
+
+/* The in-game verify: a phone-shaped window (19.5:9 portrait) cover-crops the
+   2:3 art exactly like RN Image will, with the title over the sky and a
+   stand-in PLAY over the sand. */
+.forge .icon-candidate.home {
+  max-width: 190px;
+}
+
+.forge .home-frame {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.forge .icon-candidate.home .icon-full {
+  display: block;
+  aspect-ratio: 9 / 19.5;
+  object-fit: cover;
+  /* Backdrop previews render close to saved-pixel scale — smooth matches
+     the in-game RN Image render, like the mode cards. */
+  image-rendering: auto;
+}
+
+.forge .home-frame-title {
+  position: absolute;
+  top: 9%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.forge .home-frame-word-a {
+  color: #a32c22;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 1px rgba(46, 28, 14, 0.45);
+}
+
+.forge .home-frame-word-b {
+  color: #4a3626;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-shadow: 0 1px 0 rgba(240, 228, 200, 0.35);
+}
+
+.forge .home-frame-play {
+  position: absolute;
+  bottom: 8%;
+  left: 18%;
+  right: 18%;
+  padding: 8px 0;
+  border-radius: 6px;
+  background: #8c2f2f;
+  border: 1px solid #e0503c;
+  color: #f5ede0;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .forge .mode-frame-scrim {

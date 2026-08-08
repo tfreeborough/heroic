@@ -11,7 +11,7 @@
  * gradient fallback until the PNGs land.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
-import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -37,6 +37,7 @@ import {
 } from "../net/api";
 import type { ArenaClient } from "../net/connection";
 import { RankedCeremony } from "./RankedCeremony";
+import { DISPLAY_FONT } from "../typography";
 
 export interface RankedScreenProps {
   client: ArenaClient;
@@ -49,7 +50,6 @@ export interface RankedScreenProps {
  * card underneath stays as the record afterwards). */
 let ceremoniedMatchId: string | null = null;
 
-const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
 
 /**
  * Forged bracket-card art (the Forge's mode-bits type, `bracket-<key>` ids,
@@ -412,6 +412,7 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
         <RankedCeremony
           won={ceremony.won}
           mine={ceremony.mine}
+          deeds={client.deedUnlocks ?? []}
           onDone={() => {
             ceremoniedMatchId = settlementKey;
             ceremonyDismissed();
@@ -530,7 +531,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#e8c87a",
     fontSize: 15,
-    fontWeight: "900",
     letterSpacing: 4,
   },
   standing: {
@@ -570,7 +570,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#9c8a68",
     fontSize: 17,
-    fontWeight: "900",
     width: 26,
     textAlign: "center",
     flexShrink: 0,
@@ -582,7 +581,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
     fontSize: 16,
-    fontWeight: "900",
     letterSpacing: 2,
   },
   record: { color: "#8a7f70", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
@@ -597,7 +595,7 @@ const styles = StyleSheet.create({
   },
   settleWin: { borderColor: "#7a5f36", backgroundColor: "#221c11" },
   settleLoss: { borderColor: "#5a3030", backgroundColor: "#1e1412" },
-  settleTitle: { fontFamily: DISPLAY_FONT, fontSize: 14, fontWeight: "900", letterSpacing: 3 },
+  settleTitle: { fontFamily: DISPLAY_FONT, fontSize: 14, letterSpacing: 3 },
   settleTitleWin: { color: "#e8c87a" },
   settleTitleLoss: { color: "#c96a5a" },
   settleLine: { color: "#d9cbb4", fontSize: 13, fontWeight: "700", letterSpacing: 0.5 },
@@ -628,7 +626,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
     fontSize: 24,
-    fontWeight: "900",
     letterSpacing: 3,
     textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 2 },
@@ -643,7 +640,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#e8c87a",
     fontSize: 40,
-    fontWeight: "900",
     letterSpacing: 1,
     textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 2 },

@@ -36,6 +36,7 @@ import {
 } from "../game/AbilityButton";
 import { useAbilityIconImages } from "../game/abilityIcons";
 import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
+import { resolveTitleText } from "../deeds/wornTitle";
 import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
 import { RoundBanner } from "../game/RoundBanner";
@@ -239,6 +240,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const pulsesRef = useRef<StatusPulses | null>(null);
   pulsesRef.current ??= new StatusPulses();
   const pulses = pulsesRef.current;
+  // Worn titles by player id, resolved to display text (roomState is the
+  // source; snapshots stay cosmetic-free). Rebuilt only when the roomState
+  // OBJECT changes — never per frame (the GC diet).
+  const titlesRef = useRef<{ src: unknown; map: Map<number, string> }>({ src: null, map: new Map() });
   // Lefty mode (settings page): read at mount, i.e. match start.
   const [lefty, setLefty] = useState(false);
   useEffect(() => {
@@ -574,6 +579,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             undefined,
             gainAt(e.fromX, e.fromY),
           );
+        } else if (e.type === "reflect") {
+          // Mirror Guard turned a shot (Wave 2) — the parry ting, spatialised
+          // at the bounce. Silent until the Forge clip lands (catalogue.ts).
+          playSound("reflect", undefined, undefined, gainAt(e.x, e.y));
         } else if (e.type === "detonate") {
           fxRef.current.push({
             item: { kind: "ring", x: e.x, y: e.y, life: 1, big: true },
@@ -742,6 +751,15 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             spectateDeadAt.current = null;
           }
 
+          if (titlesRef.current.src !== client.roomState) {
+            const map = new Map<number, string>();
+            for (const p of client.roomState?.players ?? []) {
+              const text = resolveTitleText(p.title);
+              if (text !== null) map.set(p.id, text);
+            }
+            titlesRef.current = { src: client.roomState, map };
+          }
+
           const prevPic = picture.value;
           picture.value = recordArena({
             view,
@@ -760,6 +778,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             nowMs: now,
             atlas,
             abilityIcons,
+            titles: titlesRef.current.map,
           });
           if (prevPic !== EMPTY_ARENA_PICTURE) {
             retiredPics.current.push(prevPic);

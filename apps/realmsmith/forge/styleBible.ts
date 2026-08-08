@@ -147,6 +147,12 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   glory_earned:
     "a low wordless male choir hum that swells warm and reverent then fades — a legend growing, mythic and human, " +
     "no words and no melody, about a second and a half",
+  deed_unlock:
+    "an achievement unlock stamp — a heavy wax-seal thunk onto parchment with a short bright metallic shimmer tail, " +
+    "triumphant but compact, under a second",
+  reflect:
+    "a magical parry — a bright glassy metallic TING as a mirror shield turns a projectile around, with a quick " +
+    "whip of departure as the shot leaves the other way, sharp attack, under half a second",
   // ── UI ────────────────────────────────────────────────────────────────────
   ui_tap: "a soft dry UI tap — a quick muted wooden or leather tick, understated",
   ui_confirm: "a confident UI confirm — a firm metallic clack-thunk with a short bright ring, committing",
@@ -210,6 +216,14 @@ export interface IconSpec {
   candidates: number;
   /** Saved size (game renders at ≤52px; 512 keeps the bundle light). */
   savedSize: number;
+  /** True pixel grid the save snaps to — the retro pixel-art style's
+   * consistency guarantee lives in the pipeline, not the model
+   * (bits-art-style.md § pixel grids). */
+  pixelGrid: number;
+  /** Hard palette budget the save crushes to (median-cut + Bayer ordered
+   * dithering in forge/images.ts) — the early-90s VGA crunch (Tom,
+   * 2026-08-07: uncapped palettes read "too clean"). */
+  paletteColours: number;
   /** Generation canvas — icons are square emblems, square canvas fits. */
   size: "1024x1024";
   /** Repo-relative destination folder. */
@@ -227,52 +241,61 @@ export const ICON: IconSpec = {
   // Largest in-app render is the codex hero at 52pt → 156px on a 3× screen;
   // 256 covers that with margin. Bump only if a bigger surface appears.
   savedSize: 256,
+  pixelGrid: 64,
+  paletteColours: 32,
   size: "1024x1024",
   destination: "apps/blood-in-the-sand/assets/icons",
   manifestDir: "../../assets/icons",
-  // Dark-fantasy direction (Tom, 2026-07-14 — replaced the flat-vector v1):
-  // hand-inked, grim, Darkest-Dungeon-adjacent. Described by attributes, not
-  // by naming the game — attribute language steers the model more reliably.
-  // v2 lessons: "dramatic rim light"/"pooled shadows" made the model paint a
-  // backdrop glow (background:"transparent" allows alpha, it doesn't forbid
-  // painting a ground) — isolation must be stated as what surrounds the
-  // subject. And the icons sit on near-black cards, so the shape must be
-  // carved in bone highlights, not silhouetted in black.
-  // v3: die-cut aged-bone outline added — black-heavy woodcut art melts into
-  // the near-black UI at 32px; the pale cut-line carries the silhouette (and
-  // it's an honest woodcut-poster trope besides).
-  // v4 (Tom): dark fantasy × DESERT — the game is Blood in the Sand, and the
-  // grimness must stay sun-scoured, never gothic-damp: scorched ochre
-  // midtones, gladiatorial material language (bronze, leather, sun-split
-  // wood), blood-and-sand mood.
+  // Pre-rendered pixel-art direction (Tom, 2026-08-06 — replaced the v1–v5
+  // dark-fantasy woodcut line; docs/design/bits-art-style.md). The brand
+  // anchor is the APP ICON: a pre-rendered pixel helmet half-buried in
+  // bloody sand — dimensional light, true full-colour materials, chunky
+  // pixels. Still described by attributes, never by naming the game.
+  // Woodcut-era lessons that survive the style change:
+  // - isolation is stated as what SURROUNDS the subject (merely allowing
+  //   alpha makes the model paint grounds);
+  // - no frames — separation/framing is the GAME's job (v5, 2026-08-04);
+  // - grim stays sun-scoured, never gothic-damp.
+  // New rule (Tom, 2026-08-06): cut-outs must be BACKGROUND-AGNOSTIC — the
+  // UI is WIP and surfaces will gain/lose backdrops, so nothing bakes
+  // outside the silhouette. Sand grounding is fine only INSIDE it (the app
+  // icon's half-buried trick), and only where the subject brief asks.
+  // The prompt's pixel language is a style cue only — the save pipeline
+  // snaps to the true grid (pixelGrid above), so set-wide consistency never
+  // depends on the model drawing honest pixels.
   template: (subject, category) => {
     const accent = ICON_ACCENTS[category];
     return (
-      `${subject}. A grim dark-fantasy game ability icon for a brutal gladiator arena game set ` +
-      "in a scorched desert. Hand-inked woodcut illustration: one bold central silhouette " +
-      "filling about 80% of the frame, heavy black ink, rough expressive hatching, sun-bleached " +
-      "bone (#f0e8d8) highlights carving the shape out of the dark, scorched sand-ochre " +
-      `(#b39763) midtones like heat-baked dust settled on every surface, and a ${accent.name} ` +
-      `(${accent.hex}) accent burning on the focal element. Gladiatorial desert materials: ` +
-      "hammered bronze, cracked leather wraps, sun-split wood, rust and dried blood. A rough " +
-      "aged-bone die-cut outline traces the whole silhouette, like a woodcut poster cut from " +
-      "pale paper — it separates the shape from a near-black UI. Grim, sun-scoured, " +
-      "blood-and-sand mood — never cute, never photorealistic, never a clean flat vector. " +
-      "Chunky shapes that stay readable at 32 pixels. The cut-out floats alone on a fully " +
-      "transparent background — no backdrop, no glow, no vignette; every pixel outside the " +
-      "cut line is transparent. No text."
+      `${subject}. A game ability icon for a brutal gladiator arena game set in a scorched ` +
+      "desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga " +
+      "games: hand-placed chunky pixels, a strictly limited palette of about 32 colours, " +
+      "shading built from hard stepped colour ramps and checkerboard dithering — no smooth " +
+      "gradients, no anti-aliasing. The form still reads dimensional: specular glints on " +
+      "metal, warm light bounced up from golden sand, deep warm umber shadow in the " +
+      "recesses, never pure black — but every transition is a decisive pixel step. True " +
+      "materials each in " +
+      "their own full colour, no sepia wash: battle-grey steel (#9aa0a6), honey sand-gold " +
+      "(#dcb96f), bone-white specular highlights (#f2e9d4), saturated dried-blood crimson " +
+      `(#a32c22), cracked leather, sun-split wood. A ${accent.name} (${accent.hex}) accent ` +
+      "glows on the focal element. One bold central subject filling about 80% of the frame, " +
+      "lit by a low warm desert sun. Grim, sun-scoured, blood-and-sand mood — never cute, " +
+      "never cartoonish, never flat vector art, never ink outlines or crosshatching, never " +
+      "a photograph. Chunky forms that stay readable at 32 pixels. Draw no frame of any " +
+      "kind: no circle, ring, plate, badge backing, or border around the subject — the game " +
+      "composites any framing itself. The subject floats alone on a fully transparent " +
+      "background — no backdrop, no glow, no vignette, no shadow cast outside the subject; " +
+      "every pixel outside the subject is transparent. No text."
     );
   },
 };
 
 // ── Blood in the Sand sprites ──────────────────────────────────────────────
 // Full-figure scene art (title screen first; splashes later) — the same
-// woodcut world as the icons, but FIGURE language instead of emblem language:
-// whole body in frame, a baked facing direction, lit for the sunlit High Sun
-// scene. Two deliberate differences from the icon template: no die-cut bone
-// outline (sprites sit ON painted scenes, not near-black UI cards), and no
-// ground/cast shadow (the scene draws its own contact shadows, so the figure
-// must arrive clean to place).
+// pre-rendered pixel world as the icons, but FIGURE language instead of
+// emblem language: whole body in frame, a baked facing direction, lit for
+// the sunlit High Sun scene. One deliberate difference from the icon
+// template: no ground/cast shadow at all (the scene draws its own contact
+// shadows, so the figure must arrive clean to place).
 
 /**
  * Art subjects per sprite id. The `title-<weaponId>` ids derive from the
@@ -314,6 +337,10 @@ export interface SpriteSpec {
   candidates: number;
   /** Saved size — title figures render ~180px on a 3× screen; 512 leaves reuse headroom. */
   savedSize: number;
+  /** True pixel grid the save snaps to (bits-art-style.md § pixel grids). */
+  pixelGrid: number;
+  /** Hard palette budget (see IconSpec.paletteColours). */
+  paletteColours: number;
   /** Generation canvas: PORTRAIT — a standing figure fits it natively, where a
    * square canvas pressured the model into edge-to-edge crops (the bow/hammer
    * first-generation lesson). Saves still letterbox into a square PNG. */
@@ -330,42 +357,44 @@ export const SPRITE: SpriteSpec = {
   provider: "openai-image",
   candidates: 2,
   savedSize: 512,
+  pixelGrid: 128,
+  paletteColours: 48,
   size: "1024x1536",
   destination: "apps/blood-in-the-sand/assets/sprites",
   manifestDir: "../../assets/sprites",
   // Same brand language as the icon template (attributes, not the game's
   // name), same isolation lesson (state what surrounds the subject — the
   // model paints grounds if merely allowed alpha). Differences are scene-fit:
-  // full figure with margin, high-sun rim light, no die-cut, no shadow.
-  // v2 (Tom, first generations): figures came out polished-bronze-statue —
-  // the value structure must be ANCHORED IN BLACK like the icons ("reads as
-  // dark inked woodcut, never a bronze statue"); and the ground smudge
-  // survived the "no cast shadow" negation — isolation now borrows the
-  // die-cut CUT-OUT framing (cut line = the silhouette, transparent starts
-  // at the soles) without asking for the icons' visible pale outline.
+  // full figure with margin, warm rim light, no shadow. The woodcut-era
+  // ground-smudge lesson survives restyled: the "no cast shadow" negation
+  // alone failed, so isolation keeps the CUT-OUT framing (cut line = the
+  // silhouette, transparent starts at the soles).
   template: (subject) =>
-    `${subject}. A full-figure character sprite for a grim dark-fantasy gladiator arena game ` +
-    "set in a scorched desert. Hand-inked woodcut illustration: heavy black ink linework, " +
-    "rough expressive hatching, and deep pooled black shadows anchor the form — the figure " +
-    "reads as dark inked woodcut, never a polished bronze statue. Sun-bleached bone " +
-    "(#f0e8d8) highlights carve the shape out of the dark; scorched sand-ochre (#b39763) " +
-    "midtones like heat-baked dust settled on every surface. Gladiatorial desert materials: " +
-    "hammered bronze trim, cracked leather wraps, sun-split wood, rust and dried blood. Lit " +
-    "by a harsh high desert sun — a warm rim light burns along the helmet crest and upper " +
-    "shoulders. The ENTIRE figure stands about 80% of the frame tall, centered, with empty " +
-    "transparent margin visible on all four sides — above the helmet crest, below the feet, " +
-    "and past every weapon tip; nothing touches or crosses the frame edge. Grim, weighty, " +
-    "battle-scarred — never cute, never " +
-    "photorealistic, never a clean flat vector. The figure is a clean die-cut cut-out: the " +
-    "cut line follows the figure's own silhouette exactly, and every pixel outside it is " +
-    "fully transparent — including directly beneath the boots, where bare transparent pixels " +
-    "begin at the soles. The figure touches nothing and stands on nothing: no ground, no " +
-    "cast shadow, no dust at the feet, no backdrop, no glow. No text.",
+    `${subject}. A full-figure character sprite for a brutal gladiator arena game set in a ` +
+    "scorched desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit " +
+    "Amiga games: hand-placed chunky pixels, a strictly limited palette of about 48 " +
+    "colours, shading built from hard stepped colour ramps and checkerboard dithering — " +
+    "no smooth gradients, no anti-aliasing. The figure still reads dimensional: specular " +
+    "glints on armour, warm light bounced up from golden sand, deep warm umber shadow in " +
+    "the recesses, never pure black — but every transition is a decisive pixel step. True " +
+    "materials each in their own full colour, no sepia wash: battle-grey steel (#9aa0a6), " +
+    "bone-white specular highlights (#f2e9d4), saturated dried-blood crimson (#a32c22), " +
+    "cracked leather wraps, hammered bronze trim, sun-split wood. Lit by a low warm desert " +
+    "sun — a golden rim light burns along the helmet crest and upper shoulders. The ENTIRE " +
+    "figure stands about 80% of the frame tall, centered, with empty transparent margin " +
+    "visible on all four sides — above the helmet crest, below the feet, and past every " +
+    "weapon tip; nothing touches or crosses the frame edge. Grim, weighty, battle-scarred — " +
+    "never cute, never cartoonish, never flat vector art, never ink outlines or " +
+    "crosshatching, never a photograph. The figure is a clean cut-out: the cut line follows " +
+    "the figure's own silhouette exactly, and every pixel outside it is fully transparent — " +
+    "including directly beneath the boots, where bare transparent pixels begin at the " +
+    "soles. The figure touches nothing and stands on nothing: no ground, no cast shadow, no " +
+    "dust at the feet, no backdrop, no glow. No text.",
 };
 
 // ── Blood in the Sand mode cards ───────────────────────────────────────────
 // Full-bleed landscape scene art for the mode select's stacked cards
-// (bits-mode-select.md): the same woodcut world as the icons/sprites, but
+// (bits-mode-select.md): the same pre-rendered pixel world as the icons/sprites, but
 // SCENE language — a painted place, not a cut-out subject. Two hard layout
 // facts drive the template: the card lays its title/pitch/status over the
 // LEFT third behind a dark scrim (so that third must stay quiet), and the
@@ -377,7 +406,7 @@ export const SPRITE: SpriteSpec = {
  * different paste target: BRACKET_ART in RankedScreen.tsx). modeSet.ts
  * derives the checklist from this — a future mode or bracket appears there
  * by adding a key + subject. */
-export const MODE_KEYS = ["ranked", "skirmish", "practice", "story", "bracket-1v1", "bracket-2v2"] as const;
+export const MODE_KEYS = ["ranked", "skirmish", "practice", "story", "deeds", "bracket-1v1", "bracket-2v2"] as const;
 
 /**
  * Art subjects per mode card. Each brief owns the PLACE and the LIGHT (the
@@ -391,6 +420,11 @@ export const MODE_SUBJECTS: Record<string, string> = {
     "the right, tattered blood-red banners streaming, heat-haze over raked fighting sand, " +
     "a lone armoured gladiator small at the arena's centre-right with arms spread to the " +
     "mob; the left side is empty scorched sky above a quiet sun-bleached arena wall",
+  deeds:
+    "a vast illuminated chronicle unrolled across a stone table by candlelight — aged " +
+    "parchment dense with inked deeds on the right, wax seals and small gold-leaf " +
+    "medallions linked by drawn lines like a constellation, a quill at rest, warm candle " +
+    "glow; the left side is quiet shadowed stone in deep amber dark",
   skirmish:
     "a gladiators' camp at dusk outside the arena walls — fighters at ease around a " +
     "crackling campfire on the right, one pair lazily sparring behind them, weapon racks " +
@@ -428,11 +462,20 @@ export interface ModeSpec {
   /** Saved frame — the 5:2 card crop, cover-cropped from the 3:2 canvas,
    * never letterboxed. 900 wide ≈ 2.2× density at the biggest phone render
    * (card height ~162pt × 2.5 aspect ≈ 405pt): deliberately shy of full 3×
-   * — this is background art under a scrim, and the woodcut hatching hides
-   * the softness, so pixel-perfect wasn't worth ~80% more bytes (Tom,
+   * — this is background art under a scrim, and since the pixel-grid snap
+   * the true resolution is the grid anyway (the saved frame just bakes the
+   * blocks), so pixel-perfect wasn't worth ~80% more bytes (Tom,
    * 2026-07-28). Bump toward 1200 if a surface ever shows the art bare. */
   savedWidth: number;
   savedHeight: number;
+  /** True pixel grid the save snaps to (bits-art-style.md § pixel grids) —
+   * scenes get a finer 3px block than the cut-outs' 4px: they're background
+   * art under a scrim, and too-chunky blocks destroy painted depth. */
+  pixelGridWidth: number;
+  pixelGridHeight: number;
+  /** Hard palette budget (see IconSpec.paletteColours) — scenes get the
+   * biggest budget: gradient skies need more ramp steps than emblems. */
+  paletteColours: number;
   /** Generation canvas: LANDSCAPE, the widest gpt-image-1 offers. 3:2 is
    * taller than the card — the save keeps the middle band, so the template
    * declares the top/bottom quarters sacrificial. */
@@ -455,27 +498,34 @@ export const MODE: ModeSpec = {
   candidates: 2,
   savedWidth: 900,
   savedHeight: 360,
+  pixelGridWidth: 300,
+  pixelGridHeight: 120,
+  paletteColours: 64,
   size: "1536x1024",
   background: "opaque",
   destination: "apps/blood-in-the-sand/assets/modes",
   manifestDir: "../../assets/modes",
   manifestLine: (id, file) =>
     id.startsWith("bracket-")
-      ? `  "${id.slice("bracket-".length)}": require("../../assets/modes/${file}"), // → BRACKET_ART in RankedScreen.tsx, replacing null`
-      : `  image: require("../../assets/modes/${file}"), // → MODE_ART.${id}, replacing image: null`,
+      ? `  "${id.slice("bracket-".length)}": require("../../assets/modes/${file}"),`
+      : `  image: require("../../assets/modes/${file}"),`,
   // Same brand attributes as the icon/sprite templates (never the game's
   // name); differences are all scene-fit: painted full-bleed ground instead
   // of a cut-out, composition stated as thirds (the scrim lesson: say where
   // the QUIET is, not just where the subject is), and the letterbox crop
   // declared so nothing vital lives in the top/bottom quarters.
   template: (subject) =>
-    `${subject}. A wide painted scene for a grim dark-fantasy gladiator arena game set in a ` +
-    "scorched desert. Hand-inked woodcut illustration: heavy black ink linework, rough " +
-    "expressive hatching, deep pooled black shadows anchoring every form — it reads as dark " +
-    "inked woodcut, never photorealistic, never a clean flat vector. Sun-bleached bone " +
-    "(#f0e8d8) highlights carve shapes out of the dark; scorched sand-ochre (#b39763) " +
-    "midtones like heat-baked dust; dried-blood red (#a32c22) rationed to banners, cloth " +
-    "and wounds; a burnt-gold (#e8c87a) glow only where the light source earns it. " +
+    `${subject}. A wide scene for a brutal gladiator arena game set in a scorched ` +
+    "desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga game " +
+    "backdrops: hand-placed chunky pixels, a strictly limited palette of about 64 colours, " +
+    "skies and light built from hard stepped colour ramps and checkerboard dithering — no " +
+    "smooth gradients, no anti-aliasing, never flat vector art, never ink outlines or " +
+    "crosshatching, never a photograph. True " +
+    "materials and light each in their own full colour, no sepia wash: honey sand-gold " +
+    "(#dcb96f) ground and warm ambience, battle-grey steel (#9aa0a6), bone-white highlights " +
+    "(#f2e9d4), deep warm umber shadows (#4a3520) never pure black; dried-blood red " +
+    "(#a32c22) rationed to banners, cloth and wounds; a burnt-gold (#e8c87a) glow only " +
+    "where the light source earns it. " +
     "Composition is strict: all focal detail and figures sit in the RIGHT two thirds of the " +
     "frame; the LEFT third is quiet, low-detail atmosphere (sky, wall, drifting dust) with " +
     "no figures and no focal shapes — interface text will sit over it. The horizon and all " +
@@ -485,10 +535,105 @@ export const MODE: ModeSpec = {
     "blood-and-sand mood. No text, no lettering, no banners with writing.",
 };
 
+// ── Blood in the Sand home backdrop ────────────────────────────────────────
+// Full-bleed PORTRAIT scene art for the HomeScreen (the front door): the
+// generated backdrop replaces the hand-painted Skia High Sun scene
+// (src/screens/homeScene.ts) as the screen's ground; UI (title top, menu
+// bottom) and the surviving living layers (sprite duel, motes, swallows,
+// dust storm) composite on top. Three hard layout facts drive the template:
+// the title text sits over the TOP of the frame, the menu buttons AND the
+// two duelling title sprites stand on the BOTTOM third, and phones
+// cover-crop the 2:3 canvas to ~19.5:9 portrait — keeping full height but
+// only the central ~70% of the width, so the outer sixths are sacrificial.
+
+/** The home set — one backdrop today; future splash/loading scenes append
+ * here (homeSet.ts derives the checklist from this). */
+export const HOME_KEYS = ["home"] as const;
+
+/** Art subjects per home key. The brief owns the PLACE and the LIGHT; the
+ * template owns brand + the portrait composition contract. */
+export const HOME_SUBJECTS: Record<string, string> = {
+  home:
+    "standing on the raked sand of a colosseum floor at brutal high sun, looking across " +
+    "the empty arena — the far wall rises in the middle of the frame with packed crowd " +
+    "tiers above it, tattered blood-red banners hanging in the heat, heat-haze shimmering " +
+    "where sand meets wall, a few scattered pebbles and one dark old bloodstain sunk into " +
+    "the raked lines of the foreground sand",
+};
+
+export interface HomeSpec {
+  id: "home-bits";
+  label: string;
+  provider: "openai-image";
+  candidates: number;
+  /** Saved frame — the full portrait canvas at generation size (no downscale:
+   * this is the one full-screen surface, shown bare with UI over it; phones
+   * cover-crop it to their own aspect at runtime via RN Image). */
+  savedWidth: number;
+  savedHeight: number;
+  /** True pixel grid (bits-art-style.md § pixel grids) — 4px blocks like the
+   * cut-outs; the backdrop is the style's biggest single statement. */
+  pixelGridWidth: number;
+  pixelGridHeight: number;
+  /** Hard palette budget (see IconSpec.paletteColours) — scene-sized. */
+  paletteColours: number;
+  /** Generation canvas: PORTRAIT, the tallest gpt-image-1 offers. */
+  size: "1024x1536";
+  /** Full-bleed scenes are opaque — asking for alpha invites holes in the sky. */
+  background: "opaque";
+  destination: string;
+  /** Prefix of the require() path handed back after save (consumer-module relative). */
+  manifestDir: string;
+  /** The paste line targets HOME_ART in src/screens/homeArt.ts. */
+  manifestLine: (id: string, file: string) => string;
+  template: (subject: string) => string;
+}
+
+export const HOME: HomeSpec = {
+  id: "home-bits",
+  label: "Home backdrop (Blood in the Sand)",
+  provider: "openai-image",
+  candidates: 2,
+  savedWidth: 1024,
+  savedHeight: 1536,
+  pixelGridWidth: 256,
+  pixelGridHeight: 384,
+  paletteColours: 64,
+  size: "1024x1536",
+  background: "opaque",
+  destination: "apps/blood-in-the-sand/assets/home",
+  manifestDir: "../../assets/home",
+  manifestLine: (id, file) => `  "${id}": require("../../assets/home/${file}"),`,
+  // The mode-card template's brand + scene lessons, rotated to portrait: the
+  // quiet zones are stated as WHAT THEY CONTAIN (sky / empty sand), never as
+  // "leave space" — the model paints places, not absences. The centre-safe
+  // rule mirrors the mode cards' left-third rule for the phone cover-crop.
+  template: (subject) =>
+    `${subject}. A tall portrait scene for a brutal gladiator arena game set in a scorched ` +
+    "desert — a phone game's title screen backdrop. Early-1990s retro pixel art in the " +
+    "lineage of VGA DOS and 16-bit Amiga game backdrops: hand-placed chunky pixels, a " +
+    "strictly limited palette of about 64 colours, skies and light built from hard stepped " +
+    "colour ramps and checkerboard dithering — no smooth gradients, no anti-aliasing, " +
+    "never flat vector art, never ink outlines or crosshatching, never a photograph. True " +
+    "materials and light each in their own full colour, no sepia wash: honey sand-gold " +
+    "(#dcb96f) ground and warm ambience, bone-white highlights (#f2e9d4), deep warm umber " +
+    "shadows (#4a3520) never pure black; dried-blood red (#a32c22) rationed to banners and " +
+    "old stains. Composition is strict: the TOP third of the frame is only vast quiet " +
+    "scorched sky — open, low-detail, no shapes (title lettering will sit over it). The " +
+    "BOTTOM third is only open empty raked sand — flat, low-detail, no objects or figures " +
+    "(menu buttons and fighters composite over it). All focal detail — the far arena wall, " +
+    "crowd tiers, banners, heat haze — lives in the horizontal band between them, and " +
+    "every essential shape stays within the central two thirds of the width: phones crop " +
+    "the outer sixth on each side away. The paint fills the whole frame edge-to-edge with " +
+    "no border, no vignette, no frame line. Grim, sun-scoured, blood-and-sand mood. No " +
+    "text, no lettering, no banners with writing.",
+};
+
 // ── Blood in the Sand rank badges ──────────────────────────────────────────
 // The ranked ladder's tier badges (bits-ranked.md § tiers): square emblem
-// cut-outs in the icon family — same die-cut bone outline, they sit on the
-// same near-black UI. ONE anchor object across the set: every badge is a
+// cut-outs in the icon family, on the same near-black UI (outline-free
+// since 2026-08-04 like every generated cut-out — see the icon template's
+// v5 note; separation is the game's job). ONE anchor object across the set: every badge is a
 // round gladiator SHIELD shown face-on (Tom, 2026-07-31 — helmets tried and
 // dropped; shield chosen for the crest canvas). THE LEGIBILITY RULE (Tom,
 // same day): rank must read at a glance when the icon is tiny, so each tier
@@ -564,6 +709,10 @@ export interface BadgeSpec {
   candidates: number;
   /** Saved size — the standing panel renders ~56pt → 168px at 3×; 256 covers. */
   savedSize: number;
+  /** True pixel grid the save snaps to (bits-art-style.md § pixel grids). */
+  pixelGrid: number;
+  /** Hard palette budget (see IconSpec.paletteColours). */
+  paletteColours: number;
   size: "1024x1024";
   destination: string;
   /** Prefix of the require() path handed back after save (consumer-module relative). */
@@ -580,36 +729,162 @@ export const BADGE: BadgeSpec = {
   provider: "openai-image",
   candidates: 2,
   savedSize: 256,
+  pixelGrid: 64,
+  paletteColours: 32,
   size: "1024x1024",
   destination: "apps/blood-in-the-sand/assets/ranks",
   manifestDir: "../../assets/ranks",
-  manifestLine: (id, file) =>
-    `  "${id}": require("../../assets/ranks/${file}"), // → RANK_BADGES in src/components/rankBadges.ts, replacing null`,
-  // The icon template's brand + isolation lessons verbatim (die-cut bone
-  // outline, state what surrounds the subject); differences are the rank
+  // No trailing comment on the line — it's pasted verbatim and a comment
+  // would have to be hand-stripped every time (Tom, 2026-08-04); the panel's
+  // "Paste into …" label already names the destination.
+  manifestLine: (id, file) => `  "${id}": require("../../assets/ranks/${file}"),`,
+  // The icon template's brand + isolation lessons verbatim (pre-rendered
+  // pixel art, state what surrounds the subject); differences are the rank
   // system: the shield ANCHOR baked in structurally (one object family,
   // face-on — even a hand-edited subject stays on-theme), and the tier's
-  // DOMINANT COLOUR replacing the icons' fixed ochre-midtone + gold-accent
-  // wash — at tiny sizes rank is read by colour before shape, so the colour
-  // must own the shield face, not decorate it. No-numerals stays: the game
-  // composites III/II/I itself.
+  // DOMINANT COLOUR replacing the icons' full-material palette — at tiny
+  // sizes rank is read by colour before shape, so the colour must own the
+  // shield face, not decorate it. No-numerals stays: the game composites
+  // III/II/I itself.
   template: (subject, accent = BADGE_ACCENTS["gladiator"]!) =>
     `${subject}. A rank badge emblem for a brutal gladiator arena game set in a scorched ` +
     "desert. The emblem is a single round gladiator shield shown face-on — the ladder's " +
     "one anchor object; no other objects share the frame. The shield's dominant material " +
     `colour is ${accent.name} (${accent.hex}): it floods the whole shield face and rim, ` +
     "unmistakable at a glance — this colour IS the rank, so it must stay pure and " +
-    "saturated, never muddied toward brown or bronze by dust or shadow. Hand-inked " +
-    "woodcut illustration: one bold central emblem filling about 80% of the frame, heavy " +
-    "black ink, rough expressive hatching, sun-bleached bone (#f0e8d8) highlights carving " +
-    "the shape out of the dark. A rough aged-bone die-cut outline traces the whole " +
-    "silhouette, like a woodcut poster cut from pale paper — it separates the shape from a " +
-    "near-black UI. Grim, sun-scoured, blood-and-sand mood — never cute, never " +
-    "photorealistic, never a clean flat vector. Chunky shapes: at 24 pixels the shield " +
-    "must still read, and its colour must still name the rank. The cut-out floats alone " +
-    "on a fully transparent background — no backdrop, no glow, no vignette; every pixel " +
-    "outside the cut line is transparent. No text, no letters, no numerals — the emblem " +
-    "carries no writing of any kind.",
+    "saturated, never muddied toward brown or bronze by dust or shadow. Early-1990s " +
+    "retro pixel art in the lineage of VGA DOS and 16-bit Amiga games: hand-placed " +
+    "chunky pixels, a strictly limited palette of about 32 colours, shading built from " +
+    "hard stepped colour ramps and checkerboard dithering — no smooth gradients, no " +
+    "anti-aliasing. Specular glints on its metal and lacquer, deep warm shadow in the " +
+    "embossing, one bold central emblem filling about 80% of the frame, lit by a low " +
+    "warm desert sun. " +
+    "Grim, sun-scoured, blood-and-sand mood — never cute, never cartoonish, never flat " +
+    "vector art, never ink outlines or crosshatching, never a photograph. Chunky forms: " +
+    "at 24 pixels the shield must still read, and its colour must still name the rank. " +
+    "The shield floats alone on a fully transparent background — no backdrop, no glow, " +
+    "no vignette; every pixel outside the shield is transparent. No text, no letters, no " +
+    "numerals — the emblem carries no writing of any kind.",
+};
+
+// ── Blood in the Sand deed icons (achievements.md § icon art) ──────────────
+// The Deed Map's node medallions. Only the deed-SPECIFIC families forge here
+// (~10 subjects): the per-ability cast chains and per-weapon round chains
+// REUSE the already-forged loadout icons in-game (deedIcons.ts maps them),
+// which keeps recognition and saves ~45 generations. Chain tiers share one
+// icon — the map composites bronze/silver/gold tier frames itself, so like
+// the badges' no-numerals rule, the art carries no tier marking.
+
+// Subjects are written to the CHAIN'S TITLE FANTASY (Tom, 2026-08-04 —
+// titles first, image serves the name), aimed at the apex title since all
+// tiers share the icon: wins = the serpent ladder ending at The World
+// Serpent, glory = the Hercules myth-arc ending at Demigod / A Star Is
+// Born, damage = the blood-flood ladder ending at Hemoclysm, and so on.
+export const DEED_SUBJECTS: Record<string, string> = {
+  // "Christened with blood" — the arena's baptism.
+  "deed-first-match":
+    "a battered bronze gladiator helm anointed with a fresh blood mark, one bold red line " +
+    "running down between the eye-slits — a christening, the arena's baptism",
+  // The serpent ladder: Sand Snake → … → The World Serpent.
+  "deed-wins":
+    "a colossal serpent coiled tight around a cracking marble victory column, crushing it, " +
+    "jaws open above the capital — scales like hammered bronze, one slitted eye fixed on " +
+    "the viewer",
+  // The death ladder: Lights Out → … → The Fourth Horseman.
+  "deed-kills":
+    "a gaunt pale horse's skull in profile wearing a torn battle-caparison, a scythe " +
+    "blade curving behind it like a crescent — the fourth rider come to the sand",
+  // The heat ladder: Hot Sand → … → Seas of Molten Glass.
+  "deed-win-streak":
+    "a heavy iron chain pulled taut on the diagonal, its links glowing hotter toward the " +
+    "middle — dark cold iron at the ends, white-molten at the centre link — and still " +
+    "UNBROKEN, radiating heat",
+  // The burial ladder: Swallowed by the Dunes → … → Fossil Record.
+  "deed-loss-streak":
+    "a gladiator's skeleton pressed flat into layered stone strata like a fossil, sword " +
+    "still clutched in its bony grip — defeat recorded in the rock, worn with dark humour",
+  // The myth-arc: Zero to Hero → … → Demigod / A Star Is Born.
+  "deed-glory":
+    "a laurel-crowned marble hero's bust breaking apart at the crown into a rising " +
+    "constellation of stars — a mortal becoming myth, renown outliving the flesh",
+  // The blood-flood ladder: Bloodletter → … → Hemoclysm.
+  "deed-damage":
+    "blood bursting through a stone colosseum gate — torrents forced between the pillars " +
+    "and out over the steps, the arch straining — the arena itself overflowing with " +
+    "spilled blood",
+  // The mercy ladder: Medic → … → Guardian Angel → Panacea.
+  "deed-healing":
+    "a clay chalice with folded feathered wings wrapped around its bowl, pouring an " +
+    "endless stream of glowing liquid that never empties — the cure for everything",
+  // "Not a Scratch".
+  "deed-untouched":
+    "a flawless polished breastplate gleaming bone-white, an incoming arrow shattering " +
+    "against it into splinters — not a single mark on the metal",
+  // "Lifeblood" — 200 health clawed back in one fight.
+  "deed-lifeblood":
+    "an anatomical heart bound tight in leather cords, one bright drop falling into it " +
+    "from above, a young green vine curling out of its crown — life pulled back from the " +
+    "brink",
+};
+
+export interface DeedSpec {
+  id: "deed-bits";
+  label: string;
+  provider: "openai-image";
+  candidates: number;
+  /** Saved size — map nodes render ~52pt; 256 covers 3× with room. */
+  savedSize: number;
+  /** True pixel grid the save snaps to (bits-art-style.md § pixel grids). */
+  pixelGrid: number;
+  /** Hard palette budget (see IconSpec.paletteColours). */
+  paletteColours: number;
+  size: "1024x1024";
+  destination: string;
+  /** Prefix of the require() path handed back after save (consumer-module relative). */
+  manifestDir: string;
+  manifestLine: (id: string, file: string) => string;
+  template: (subject: string) => string;
+}
+
+export const DEED: DeedSpec = {
+  id: "deed-bits",
+  label: "Deed icon (Blood in the Sand)",
+  provider: "openai-image",
+  candidates: 2,
+  savedSize: 256,
+  pixelGrid: 64,
+  paletteColours: 32,
+  size: "1024x1024",
+  destination: "apps/blood-in-the-sand/assets/deeds",
+  manifestDir: "../../assets/deeds",
+  // Comment-free like the badge line — pasted verbatim, never hand-trimmed.
+  manifestLine: (id, file) => `  "${id}": require("../../assets/deeds/${file}"),`,
+  // The icon template's brand + isolation rules (pre-rendered pixel art,
+  // transparent isolation, no outline); the deed rules are: no drawn FRAME
+  // of any kind (node framing is the game's, and its shape is undecided —
+  // Tom 2026-08-04, don't bake a circle assumption into the art) and no
+  // tier marking (the map composites bronze/silver/gold frames itself, the
+  // badges' no-numerals rule tiered).
+  template: (subject) =>
+    `${subject}. An achievement illustration for a brutal gladiator arena game set in a ` +
+    "scorched desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit " +
+    "Amiga games: hand-placed chunky pixels, a strictly limited palette of about 32 " +
+    "colours, shading built from hard stepped colour ramps and checkerboard dithering — " +
+    "no smooth gradients, no anti-aliasing. The form still reads dimensional: specular " +
+    "glints, warm light bounced up from golden sand, deep warm umber shadow in the " +
+    "recesses, never pure black. One bold central subject " +
+    "filling about 80% of the frame, lit by a low warm desert sun. Draw NO frame of any " +
+    "kind: no circle, no ring, no coin face, no medallion, no shield backing, no border " +
+    "or rim around the subject — the subject floats free and the game composites any " +
+    "framing itself. True materials each in their own full colour, no sepia wash: " +
+    "battle-grey steel (#9aa0a6), honey sand-gold (#dcb96f), bone-white specular " +
+    "highlights (#f2e9d4), saturated dried-blood crimson (#a32c22), with one muted gold " +
+    "accent where the subject earns it. Grim, sun-scoured, blood-and-sand mood — never " +
+    "cute, never cartoonish, never flat vector art, never ink outlines or crosshatching, " +
+    "never a photograph. Chunky forms: at 24 pixels the subject must still read. The " +
+    "subject floats alone on a fully transparent background — no backdrop, no glow, no " +
+    "vignette; every pixel outside the subject is transparent. No text, no letters, no " +
+    "numerals — the artwork carries no writing or tier marks of any kind.",
 };
 
 /**

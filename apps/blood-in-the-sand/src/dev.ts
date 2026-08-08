@@ -22,4 +22,10 @@ export const devFlags = {
   /** Override the practice-lobby difficulty pick for every bot this session.
    * null = whatever the lobby picked. */
   botDifficulty: null as DifficultyId | null,
+  /** Deed Map preview (achievements.md): fake the unlock state client-side
+   * so the board is testable without grinding matches. null = real
+   * /achievements/me data · "some" = root + every chain's first tier
+   * unlocked (frontier ghosts + hidden tails on show) · "all" = everything.
+   * Read on DeedsScreen mount; never touches the server. */
+  deedsPreview: null as null | "some" | "all",
 };

@@ -150,6 +150,28 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the sticky-badge grace applied, not the raw band. Same day (divisions):
  * rows carry `division` — the middle six tiers split into III/II/I for a
  * 20-rung ladder; null in the single-rung end tiers.
+ * Amended 2026-08-03 (achievements M1, achievements.md) — additive, NO bump:
+ * new server msg `deedUnlocks` (this player's newly-unlocked achievement ids,
+ * sent PER-SOCKET after the settle — never broadcast, a room-wide send would
+ * leak secret-item unlocks to the opponent). Shipped v19 clients ignore
+ * unknown message types (verified: the client switch has no default), so a
+ * version bump would only lock them out for nothing; the ceremony client
+ * lands in M2.
+ * Amended 2026-08-08 (wearable titles, achievements.md § wearing titles) —
+ * additive, NO bump: `createRoom`/`joinRoom`/`queueJoin` gain `title?` (the
+ * sender's worn DEED ID, never display text) and RoomStatePlayer carries it
+ * PUBLICLY like `announcer`. Clients resolve the display string from their
+ * own ACHIEVEMENT_DEFS — an unknown id renders bare, so free-text spoofing
+ * is impossible by construction. The ranked queue verifies the claim against
+ * the entitlements table and SILENTLY strips unowned ids (a cosmetic never
+ * costs a match); skirmish takes the client's word until M4 brings identity
+ * to lobby sockets (the announcer-pack stance). Shipped v19 clients neither
+ * send nor read the field.
+ * (2026-08-08: a skirmish-counting amendment — `token?` on
+ * createRoom/joinRoom feeding lifetime counters — was built and REVERTED
+ * the same day: deeds are RANKED-ONLY by design (Tom: ranked is the mode
+ * to push players toward, and per-mode counting rules are too hard to
+ * explain). Don't rebuild it without that decision changing.)
  */
 export const PROTOCOL_VERSION = 19;
 export const DEFAULT_PORT = 7777;
@@ -168,8 +190,8 @@ export type RankedBracket = keyof typeof RANKED_BRACKETS;
 export type ClientMsg =
   /** `teamSize` 1–4 (the host's 1v1/2v2/3v3/4v4 pick) → 2×N seats; absent or
    * off-menu falls back to 1v1 (sanitizeTeamSize). */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; announcer?: string }
-  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string }
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; announcer?: string; title?: string }
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }
@@ -198,7 +220,7 @@ export type ClientMsg =
    * bearer secret — verified server-side against the shared DB; a bad token
    * (or an unreachable DB) rejects, ranked being the one honestly
    * connectivity-gated mode. `brackets` always ["1v1"] in Season I. */
-  | { t: "queueJoin"; v: number; token: string; playerName: string; brackets: string[]; announcer?: string }
+  | { t: "queueJoin"; v: number; token: string; playerName: string; brackets: string[]; announcer?: string; title?: string }
   | { t: "queueLeave" }
   /** Unauthenticated queue-size read — the ranked screen's population display
    * before the player commits to queueing. Answered with `queueStatus`. */
@@ -297,6 +319,10 @@ export interface RoomStatePlayer {
    * plays the ATTACKER's voice on their kill calls, so everyone needs
    * everyone's. Unrecognised ids fall back to the default pack client-side. */
   announcer: string;
+  /** This player's worn title as a DEED ID (`""` = bare) — PUBLIC like
+   * `announcer`. Clients resolve the display string from ACHIEVEMENT_DEFS;
+   * unknown ids render bare (achievements.md § wearing titles). */
+  title: string;
 }
 
 /** A live shot, projected for rendering (the client lerps x/y/angle by id). */
@@ -421,4 +447,9 @@ export type ServerMsg =
         newBest: boolean;
         placement: { number: number; of: number } | null;
       }[];
-    };
+    }
+  /** YOUR newly-unlocked achievements this match (achievements.md), sent
+   * per-socket alongside the settle — the client looks the ids up in
+   * ACHIEVEMENT_DEFS and queues the unlock ceremony. Never carries the
+   * opponent's unlocks. */
+  | { t: "deedUnlocks"; matchId: string; unlocks: string[] };

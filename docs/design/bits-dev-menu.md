@@ -103,6 +103,31 @@ packs get auditioned. The product shape is LIVE (protocol v18): the KILLER's
 pack voices kill calls on every client in the room — so cycling this row is
 also how you demo the flex (see monetisation.md § announcer packs).
 
+## Tool 6 — Deed ceremony rehearsal *(2026-08-03)*
+
+`DEED CEREMONY ▶` — plays the ENTIRE post-match ceremony (achievements.md
+§ unlock ceremony) on fabricated data, right over the title screen: the
+Glory count, the rating count, the RANK UP pop (Pit Fighter — a forged
+badge), NEW SEASON BEST, then three deed cards including the N-of-M
+counter. Fake data in, the real `RankedCeremony` component throughout, so
+feel-tuning here IS tuning the live thing. The `rehearsal` flag keeps the
+celebrated set untouched — a rehearsed deed still gets its real moment when
+genuinely earned. Fully offline: no server, no DB, session-only like the
+rest of the menu.
+
+## Tool 7 — Deed Map preview *(2026-08-04)*
+
+`DEEDS ○ REAL DATA / ◉ SOME UNLOCKED / ◉ ALL UNLOCKED` — fakes the board's
+unlock state client-side so the Deed Map is testable without grinding
+matches (achievements.md). SOME = the root + every chain's first tier
+unlocked, which puts every node state on show at once (full art, frontier
+ghosts, hidden tails) with counters faked ~60% toward each next tier so
+milestone progress lines render; ALL = the finished board. Read on
+DeedsScreen MOUNT — flip the flag, then re-enter the screen. Session-only,
+purely client-side: no server writes, the celebrated set is never touched
+(the missed-ceremony replay is suppressed while previewing), and real data
+returns the moment the flag is off.
+
 ## Adding future tools
 
 `HomeScreen`'s dev panel is just a column — add a `Pressable` per tool and a

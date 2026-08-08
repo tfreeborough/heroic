@@ -15,9 +15,13 @@ import { DEFAULT_SERVER } from "./src/net/connection";
 import { useArenaConnection } from "./src/net/useArenaConnection";
 import { setAnnouncerPack } from "./src/audio";
 import { loadAnnouncerPack } from "./src/settings";
+import { loadWornTitle } from "./src/deeds/wornTitle";
+import { useFonts } from "expo-font";
+import { DISPLAY_FONT_SOURCE } from "./src/typography";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
 import { ConnectScreen } from "./src/screens/ConnectScreen";
+import { DeedsScreen } from "./src/screens/DeedsScreen";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { ModeSelectScreen } from "./src/screens/ModeSelectScreen";
@@ -75,7 +79,7 @@ const confirmLeave = (what: "lobby" | "match", leave: () => void): void => {
   );
 };
 
-type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings";
+type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings" | "deeds";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
@@ -101,11 +105,18 @@ export default function App() {
   // keeps its own call too; redundant awake locks are harmless).
   useKeepAwake();
 
+  // The bundled display face (typography.ts). The hook re-renders the tree
+  // when the load lands; until then text draws in the system fallback for a
+  // frame or two rather than gating startup.
+  useFonts(DISPLAY_FONT_SOURCE);
+
   useEffect(() => {
     void AsyncStorage.getItem(KEY_NAME).then((v) => setPlayerName(v?.trim() ?? ""));
     // The persisted announcer voice (dev-menu picked) — applied before any
     // match can play a kill line; matches only exist behind PLAY/PRACTICE.
     void loadAnnouncerPack().then(setAnnouncerPack);
+    // The worn title — loaded before any join can claim it (same reasoning).
+    void loadWornTitle();
   }, []);
 
   const saveName = useCallback((name: string) => {
@@ -236,6 +247,9 @@ export default function App() {
         onApplyUpdate={restartToApply}
       />
     );
+  } else if (route === "deeds") {
+    // Entered from the mode select's DEEDS card — back returns there.
+    screen = <DeedsScreen onBack={() => setRoute("modes")} />;
   } else if (route === "modes") {
     // Connectivity-blind on purpose: Skirmish routes into the play flow,
     // whose connect screen already owns the down/update states. wake() makes
@@ -253,6 +267,7 @@ export default function App() {
           setRoute("ranked");
         }}
         onPractice={() => setRoute("practice")}
+        onDeeds={() => setRoute("deeds")}
       />
     );
   } else if (route === "settings") {

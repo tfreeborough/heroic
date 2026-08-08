@@ -169,6 +169,18 @@ New hook `useConnectivity()` in `src/net/`:
   (new event → manual wiring: play once from the mode screen's entrance
   effect).
 
+## Layout rework (2026-08-04)
+
+The stack reflowed when the DEEDS card arrived (achievements.md § map —
+moved off the title screen: it's a destination you pick, not chrome):
+**Ranked full-width on top** (the flagship slot), **Skirmish + Practice
+half-width side by side** (one row, ONE shared entrance beat — the pair
+rises together, so the four-beat reveal roll survives with five cards),
+then **Deeds**, then locked **Story**. The pair's pitches shortened to fit
+the half width. Deeds ships on the painted-gradient fallback (candlelit
+chronicle golds) until its PNG is forged — the `deeds` key is in the forge
+mode set with a subject brief.
+
 ## Open questions
 
 1. Skirmish glory conditions — economy design, tracked in `monetisation.md`.

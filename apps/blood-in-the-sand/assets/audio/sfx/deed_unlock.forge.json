@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "an achievement unlock stamp — a heavy wax-seal thunk onto parchment with a short bright metallic shimmer tail, triumphant but compact, under a second",
+  "prompt": "an achievement unlock stamp — a heavy wax-seal thunk onto parchment with a short bright metallic shimmer tail, triumphant but compact, under a second. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 4,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "deed_unlock_1.mp3"
+  ],
+  "created": "2026-08-04T08:08:24.819Z",
+  "updated": "2026-08-04T08:08:24.819Z"
+}

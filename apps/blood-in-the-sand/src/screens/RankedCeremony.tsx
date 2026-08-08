@@ -10,25 +10,39 @@
  * Placements swap the rating beat for placement progress — the
  * numbers-stay-hidden rule (bits-ranked.md § placements) applies here too.
  *
+ * After the rank moment comes the DEEDS beat (achievements.md § unlock
+ * ceremony): one card per newly-unlocked deed — the reveal machine and card
+ * face live in DeedCards.tsx, shared with the deeds screen's
+ * missed-ceremony replay so the feel is tuned in exactly one place.
+ *
  * Tap rules — premium, never trapping: a tap mid-count snaps the count home;
  * a tap on a finished beat advances (the last one dismisses). Every beat
  * also auto-advances except the final one, which waits for the tap.
  */
-import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Platform, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { playSound } from "../audio";
 import { badgeFor } from "../components/rankBadges";
 import { rankName } from "../net/api";
 import type { RankedResultRow } from "../net/connection";
+import { DeedCardFace, resolveDeedDefs, useDeedReveal } from "./DeedCards";
+import { DISPLAY_FONT } from "../typography";
 
 export interface RankedCeremonyProps {
   won: boolean;
   mine: RankedResultRow;
+  /** MY newly-unlocked deed ids from this settle (per-socket delivery —
+   * never the opponent's). Empty = the deeds beat is skipped entirely. */
+  deeds: string[];
+  /** Dev-menu rehearsal (bits-dev-menu.md): the full ceremony on fake data —
+   * plays everything but never marks the celebrated set, so a rehearsed deed
+   * still gets its real moment when genuinely earned. */
+  rehearsal?: boolean;
   onDone: () => void;
 }
 
-const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
 
 /** The Glory count — matched to the glory_earned choral swell so the last
  * tick lands as the choir fades. (Slowed from 2400 on Tom's device pass,
@@ -36,8 +50,10 @@ const DISPLAY_FONT = Platform.select({ ios: "Copperplate", default: "serif" });
 const GLORY_COUNT_MS = 3200;
 /** The rating count — quicker; the number is the reveal, not the ride. */
 const RATING_COUNT_MS = 1400;
-/** Hold on a finished Glory count before the crossfade. */
-const GLORY_HOLD_MS = 1000;
+/** Hold on a finished Glory count before the crossfade. (Doubled from 1000
+ * on Tom's device pass, 2026-08-04: the plate moved on before the win had
+ * time to feel won.) */
+const GLORY_HOLD_MS = 2000;
 const FADE_MS = 300;
 /** The scrim's rise — each beat (and its sound) waits for its fade to
  * finish, so nothing starts on a screen the player can't see yet (Tom's
@@ -70,8 +86,12 @@ const useCount = (target: number, durationMs: number, run: boolean): [number, ()
   return [shown, snap, run && shown >= target];
 };
 
-export const RankedCeremony = ({ won, mine, onDone }: RankedCeremonyProps) => {
-  const [phase, setPhase] = useState<"glory" | "rating">("glory");
+export const RankedCeremony = ({ won, mine, deeds, rehearsal = false, onDone }: RankedCeremonyProps) => {
+  const insets = useSafeAreaInsets();
+  const [phase, setPhase] = useState<"glory" | "rating" | "deeds">("glory");
+  // Resolve ids → defs once per delivery; unknown ids drop out silently
+  // (NOT celebrated — the deeds screen replays them after an app update).
+  const deedDefs = useMemo(() => resolveDeedDefs(deeds), [deeds]);
   // A beat is "ready" once its fade-in has finished — counts and sounds hold
   // until the player can actually see the screen they belong to.
   const [beatReady, setBeatReady] = useState(false);
@@ -103,16 +123,26 @@ export const RankedCeremony = ({ won, mine, onDone }: RankedCeremonyProps) => {
     });
   }, [scrim]);
 
-  const crossfade = (): void => {
-    if (crossfading.current || phase !== "glory") return;
+  /** Fade the beat out, apply the change, fade back in. Serialized by the
+   * crossfading latch — a double-tap can never stack fades. */
+  const fadeTo = (apply: () => void): void => {
+    if (crossfading.current) return;
     crossfading.current = true;
     setBeatReady(false);
     Animated.timing(beat, { toValue: 0, duration: FADE_MS, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
-      playSound("ceremonyShift");
-      setPhase("rating");
+      apply();
       Animated.timing(beat, { toValue: 1, duration: FADE_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => {
+        crossfading.current = false;
         setBeatReady(true);
       });
+    });
+  };
+
+  const crossfade = (): void => {
+    if (phase !== "glory") return;
+    fadeTo(() => {
+      playSound("ceremonyShift");
+      setPhase("rating");
     });
   };
 
@@ -140,14 +170,24 @@ export const RankedCeremony = ({ won, mine, onDone }: RankedCeremonyProps) => {
     }).start();
   }, [rankRevealed, rankBeat, rankPop]);
 
+  // The deed cards — the reveal machine lives in DeedCards.tsx (shared with
+  // the deeds screen's replay). Active only while the deeds beat is visible
+  // and its fade has finished, so the sting never plays over a transition.
+  const deedCards = useDeedReveal(deedDefs, phase === "deeds" && beatReady, rehearsal);
+
   const tap = (): void => {
     if (phase === "glory") {
       if (!gloryDone) snapGlory();
       else crossfade();
       return;
     }
-    if (!mine.placement && !ratingDone) snapRating();
-    else onDone();
+    if (phase === "rating") {
+      if (!mine.placement && !ratingDone) snapRating();
+      else if (deedDefs.length > 0) fadeTo(() => setPhase("deeds"));
+      else onDone();
+      return;
+    }
+    if (deedCards.tap() === "done") onDone();
   };
 
   const titleColor = won ? styles.titleWin : styles.titleLoss;
@@ -165,6 +205,8 @@ export const RankedCeremony = ({ won, mine, onDone }: RankedCeremonyProps) => {
               <Text style={styles.gloryNum}>{`+${glory}`}</Text>
               <Text style={styles.gloryCap}>GLORY</Text>
             </>
+          ) : phase === "deeds" ? (
+            <DeedCardFace reveal={deedCards} />
           ) : mine.placement ? (
             <>
               <Text style={styles.beatCap}>PLACEMENTS</Text>
@@ -216,7 +258,11 @@ export const RankedCeremony = ({ won, mine, onDone }: RankedCeremonyProps) => {
             </>
           )}
         </Animated.View>
-        {phase === "rating" && settledDone && <Text style={styles.hint}>TAP TO CONTINUE</Text>}
+        {((phase === "rating" && settledDone) || (phase === "deeds" && beatReady)) && (
+          // Above the home indicator on notched devices; the old fixed 46
+          // sat partly under it (Tom's device pass, 2026-08-04).
+          <Text style={[styles.hint, { bottom: insets.bottom + 34 }]}>TAP TO CONTINUE</Text>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -229,7 +275,6 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: DISPLAY_FONT,
     fontSize: 40,
-    fontWeight: "900",
     letterSpacing: 6,
     textAlign: "center",
   },
@@ -250,7 +295,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#e8c87a",
     fontSize: 64,
-    fontWeight: "900",
     letterSpacing: 2,
     fontVariant: ["tabular-nums"],
     textShadowColor: "rgba(232,176,72,0.5)",
@@ -263,7 +307,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
     fontSize: 58,
-    fontWeight: "900",
     letterSpacing: 1,
     fontVariant: ["tabular-nums"],
   },
@@ -279,7 +322,6 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#d9cbb4",
     fontSize: 16,
-    fontWeight: "900",
     letterSpacing: 2,
   },
   rankUpCap: {
@@ -294,7 +336,6 @@ const styles = StyleSheet.create({
   rankUpName: {
     fontFamily: DISPLAY_FONT,
     fontSize: 21,
-    fontWeight: "900",
     letterSpacing: 2,
     color: "#f5ede0",
   },
@@ -302,7 +343,6 @@ const styles = StyleSheet.create({
   rankDownName: {
     fontFamily: DISPLAY_FONT,
     fontSize: 17,
-    fontWeight: "900",
     letterSpacing: 2,
     color: "#b3a795",
   },
@@ -311,13 +351,11 @@ const styles = StyleSheet.create({
     fontFamily: DISPLAY_FONT,
     color: "#f5ede0",
     fontSize: 54,
-    fontWeight: "900",
     fontVariant: ["tabular-nums"],
   },
   placementLine: { color: "#d9cbb4", fontSize: 13, fontWeight: "700", letterSpacing: 0.5, marginTop: 6 },
   hint: {
     position: "absolute",
-    bottom: 46,
     alignSelf: "center",
     color: "#8a7f70",
     fontSize: 11,

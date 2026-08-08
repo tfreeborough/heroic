@@ -308,6 +308,12 @@ const NAME_FONT = matchFont({
   fontSize: 12,
   fontWeight: "600",
 });
+const TITLE_FONT = matchFont({
+  fontFamily: FX_FONT_FAMILY,
+  fontSize: 10,
+  fontStyle: "italic",
+});
+const C_TITLE = Skia.Color("#cfa964"); // worn-title gold, under the name
 
 export interface ArenaRenderInput {
   view: InterpolatedView;
@@ -352,6 +358,10 @@ export interface ArenaRenderInput {
   /** Forge icon art keyed by ability — the cast flash draws from these
    *  (useAbilityIconImages; an icon still decoding just skips its flash). */
   abilityIcons: Partial<Record<AbilityId, SkImage>>;
+  /** Worn titles by player id, already RESOLVED to display text (GameScreen
+   *  joins roomState against the deed defs — snapshots stay cosmetic-free).
+   *  Absent id = bare. */
+  titles?: ReadonlyMap<number, string>;
 }
 
 // ── Premium blood material ──────────────────────────────────────────────────
@@ -528,6 +538,7 @@ const drawPlayer = (
   friendTeam: number,
   pulses: StatusPulses,
   nowMs: number,
+  title?: string,
 ): void => {
   const r = config.playerRadius;
 
@@ -670,6 +681,19 @@ const drawPlayer = (
     fill,
     NAME_FONT,
   );
+  // Worn title, one line further down in gold (achievements.md § wearing
+  // titles) — dims with death like the name.
+  if (title !== undefined) {
+    fill.setColor(C_TITLE);
+    fill.setAlphaf(p.alive ? 0.65 : 0.3);
+    canvas.drawText(
+      title,
+      p.x - TITLE_FONT.getTextWidth(title) / 2,
+      p.y + r + 29,
+      fill,
+      TITLE_FONT,
+    );
+  }
   fill.setAlphaf(1);
 
   if (p.alive) {
@@ -1628,7 +1652,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         pi < byFeet.length &&
         byFeet[pi]!.y + config.playerRadius <= prop.y
       ) {
-        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
+        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs, r.titles?.get(byFeet[pi]!.id));
         pi++;
       }
       if (r.atlas) {
@@ -1653,7 +1677,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       }
     }
     for (; pi < byFeet.length; pi++)
-      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
+      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs, r.titles?.get(byFeet[pi]!.id));
 
     drawProjectiles(canvas, view.projectiles);
     drawReelChains(canvas, view.players);

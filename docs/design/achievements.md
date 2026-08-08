@@ -1,6 +1,14 @@
 # Achievements — the Deed Map
 
-Status: **designed 2026-08-02** (nothing built) ·
+Status: **designed 2026-08-02 · M1+M2 BUILT 2026-08-03 · M3 map v1 BUILT
+2026-08-04** (M1: engine package + accumulator + Wave-1 defs w/ placeholder
+titles + persistence tables + settle wiring + per-socket `deedUnlocks` +
+`/achievements/me`. M2: the deeds beat in RankedCeremony + `deed_unlock`
+forged + rehearsal dev row + device-pass tuning. M3 v1: the shared
+`@heroic/achievements/map` pan/zoom board, DeedsScreen + DEEDS title-screen
+entry + missed-ceremony replay. Owed: titles pass, forge icon set + tier
+frames, Realmsmith board-layout tab, on-device pass. **M4 RETIRED
+2026-08-08: deeds are ranked-only by design** — § M4 retired below) ·
 Applies to: **all Heroic games** — Blood in the Sand ships it first; Enter the
 Gauntlet adopts later ·
 Last decided: 2026-08-02
@@ -185,10 +193,28 @@ Only counters and unlocks are ever persisted — the `MatchSummary` is server me
 discarded after settle. (Future option, not M1: persist the summary as a JSON
 column on `ranked_matches` for a match-history screen.)
 
-## The unlock ceremony *(decided 2026-08-03)*
+## The unlock ceremony *(decided 2026-08-03 · BUILT same day)*
 
 Unlocking is the payoff moment and gets a dedicated animated flow, shipped
-*before* the map (see milestone order):
+*before* the map (see milestone order). Built as a third beat in
+`RankedCeremony` (glory → rating/placement → **deeds**): one card per deed —
+"DEED COMPLETE" as a steady anchor, then ONE eased 700ms timeline staging
+the card in: the title settles (1.12→1 fade-scale, `deed_unlock` sting on
+start; forge clip owed — silent until forged), then the rule, then the
+description-as-reveal + reward rise in, the N-of-M counter last. Tap
+mid-reveal snaps the card home (the ceremony's snap rule); tap when settled
+advances via a 140ms fade-down into the next card's reveal. *(Reworked
+2026-08-03 after Tom's pass: the first cut crossfaded the beat container
+between cards, flashing the next title at full opacity before an overshoot
+bounce reset it — every visible piece is now driven by the one timeline, so
+no frame can show un-revealed content, and the bounce is gone. Device pass
+2026-08-04: glory hold 1000→2000ms, a 1100ms per-card dwell before an
+advancing tap is honoured — the forged ~1s sting finishes instead of being
+stepped on; snap stays instant — and TAP TO CONTINUE is safe-inset aware.)* Cards are marked celebrated the moment
+they're SHOWN (per-card, not per-batch), so a mid-queue app death only
+replays what never appeared. Ids the bundle doesn't recognise (a newer
+server's content) are skipped and NOT celebrated — they replay after the
+app updates. Icon art joins the cards in M3 with the forge set.
 
 - **Delivery**: new unlocks accompany the settle result during the existing
   post-match ceremony hold (ranked rooms never return to lobby), but are **sent
@@ -226,6 +252,41 @@ season baked into its id.
   entitlements. The map screen's single fetch; band math stays server-side as ever.
 - Definitions themselves ship in the app bundle (sim package) — no endpoint.
 
+## M4 retired — deeds are RANKED-ONLY *(decided 2026-08-08)*
+
+Skirmish counting (the old M4) was **built and fully reverted the same
+day**. Tom's call, and it's final design intent, not a deferral:
+
+1. **Ranked is the mode to push players toward** — deeds are part of
+   ranked's reward gravity. If casual play progressed the Chronicle, one
+   reason to queue disappears.
+2. **Per-mode counting rules are too hard to explain.** The built version
+   needed "milestones progress in skirmish but feats are ranked-only" —
+   a distinction players shouldn't have to learn. "Deeds come from ranked"
+   is one sentence.
+
+What the day's experiment established, kept for the record (it cost real
+debugging to learn):
+
+- Skirmish sockets have no identity; counting there means an optional
+  `token?` on `createRoom`/`joinRoom` (best-effort, additive, no bump) and
+  a seat→account map that must be scrubbed when seats free (ids get
+  re-issued — a stale entry credits a stranger).
+- **The milestone-crossing trap:** `evaluate()` sees each before/after
+  counter pair exactly once, and the board `accepts` gate blocks the WHOLE
+  board. If any non-accepted context ever applies counters, a milestone
+  crossing behind the gate is consumed without firing — permanently. The
+  built version exempted milestones from `accepts`; the revert restored
+  the full gate, which is sound again ONLY because non-ranked applies no
+  longer exist. Re-read this paragraph before ever making anything but
+  ranked move a counter.
+- Anti-farm posture if it ever returns: feats never from lobbies
+  (stageable), bot-only opposition counts for nobody (AFK farms).
+
+Consequence: the skirmish board, skirmish_* counters, and friends-lobby
+farming policy are all DEAD as work items. The milestone roadmap goes
+M1→M2→M3→M5 (secret items).
+
 ## Secret items in the wizard
 
 An achievement-granted weapon/ability, once entitled, simply appears in the arming
@@ -236,10 +297,47 @@ forge icon + cast SFX, bot cast rule in `botCasts.ts`, `deriveArchetype` pass, a
 an archetype-worthiness check — bots must use it credibly or its existence leaks
 that a lobby is bot-backfilled.
 
-## The map (the Deed Map)
+## The Chronicle — the codex *(PIVOT 2026-08-04, supersedes the map below)*
+
+After three polish passes the 2D pan/zoom map was retired: each pass made
+it tidier, never richer — BITS's premium surfaces (mode cards, badges, the
+ceremony) all get there through forged art + typography + beats, and the
+map was the one screen built entirely from drawn primitives. The deeds
+screen is now a **scrolling illuminated codex**: one chapter per thematic
+family (`ACHIEVEMENT_CHAPTERS`, content-owned in the sim package next to
+the defs — The Pit, The Kill, The Arsenal, the three ability Arts, Glory,
+Blood & Mercy), each deed a rich entry row. Unlocked = icon + title +
+description + reward marks + unlock date; frontier = faded icon + title +
+a milestone progress bar; anything deeper collapses per stretch into "N
+deeds lie beyond" — mystery as depth, not spam. Embers and the
+missed-ceremony replay carry over; the dev preview cycle drives it the
+same way. Owed for the premium ceiling: forged chapter-art headers, a
+bundled display font, and the entry-reveal micro-animation pass.
+
+The DeedMap component below REMAINS in `@heroic/achievements/map` (pure,
+tested, unused by BITS) — another game can still choose it.
+
+## The map (the Deed Map) *(retired for BITS — see the Chronicle above)*
 
 *(Greenfield gesture work: the game camera is fully automatic today — this is our
 first user-driven camera.)*
+
+**v1 BUILT 2026-08-04.** The board lives in the shared package as
+`@heroic/achievements/map` — a subpath export so the package ROOT stays free
+of React Native (servers keep importing the engine). Mechanics: the canvas
+is sized to the padded world bounds and drawn once per state change into an
+`SkPicture`; pan/pinch transform the wrapping view (a GPU layer transform —
+no redraw per gesture frame); taps invert the transform and hit-test in JS;
+the pure geometry (bounds, clamp, focal-pinned pinch, hit-test) is
+unit-tested in `mapMath.ts`. First placement centres the board root. Nodes
+are drawn medallions until the forge set lands (unlocked = parchment + gold
+ring + glow; frontier = dark + dashed ring; an `iconFor` resolver slots in
+with the art). BITS's `DeedsScreen` (DEEDS on the title screen) fetches
+`/achievements/me`, renders the board, shows the bottom detail card
+(unlocked: full reveal + date; frontier: title + milestone progress only),
+and replays any unlock the local celebrated set never saw via
+`DeedReplayOverlay` — the deed cards were extracted to `DeedCards.tsx`,
+shared verbatim with the post-match ceremony so the feel is tuned once.
 
 - One Skia `<Canvas>` drawing the board; `Gesture.Pan()` + `Gesture.Pinch()` running
   simultaneously drive translate/scale shared values (reanimated), clamped to the
@@ -254,18 +352,35 @@ first user-driven camera.)*
 - Board dressing in the BITS voice: parchment/sand field, vignette, the dark-fantasy
   woodcut icon set on die-cut bone outlines. The board component itself is themable
   (colors/textures via props) since ETG will reskin it.
-- Entry point: HomeScreen (alongside the Glory pill) — deeds span modes, so it's not
-  a ranked-screen child. New `deeds` route in App.tsx's hand-rolled router. The
-  screen owns the board tabs (ranked-only until M3) and hands the active board to
-  the map component.
+- Entry point *(moved 2026-08-04)*: a full-art DEEDS card on the mode-select
+  screen — it's a destination you pick, not title-screen chrome (Tom's call;
+  the mode screen also reflowed: Ranked full-width on top, Skirmish +
+  Practice half-width side by side, Deeds, then locked Story). Deeds span
+  modes, so it's still not a ranked-screen child. `deeds` route in App.tsx's
+  hand-rolled router; back returns to the mode select. The screen owns the
+  board tabs (ranked-only until M4) and hands the active board to the map
+  component.
 
-## Icon art
+## Icon art *(pipeline BUILT 2026-08-04)*
 
-Standard forge pattern: an `achievementSet.ts` in Realmsmith derived from the
-definitions list in the sim package (the `badgeSet.ts` shape: id + subject +
-accent), destination `apps/blood-in-the-sand/assets/achievements`, subjects written
-per-achievement in the style bible, done-ticks derived from the directory listing.
-Adding an achievement to `defs.ts` automatically adds a to-forge row.
+The forge's `deed-bits` type: `deedSet.ts` derives rows from the sim's
+`ACHIEVEMENT_DEFS` unique icon keys (a new deed family grows its own to-forge
+row automatically), subjects in `DEED_SUBJECTS`, destination
+`apps/blood-in-the-sand/assets/deeds` (256px die-cut transparent, the icon
+woodcut language composed for a circular medallion, NO tier marks in the
+art), save step pastes into `DEED_ICONS` in `src/deeds/deedIcons.ts`.
+
+Two decisions that shrank the bill from ~85 to **10 generations**:
+- **Chain tiers share one icon**; the MAP composites the rank — bronze/
+  silver/gold tier-frame rings (`tierFrames` in the map theme), bucketed by
+  threshold rank within the chain (3-tier chains map 0/1/2 exactly).
+- **Cast and weapon-round chains reuse the forged loadout icons** — the map
+  resolves `deed-casts-*`/`deed-rounds-*` straight from `ICON_SOURCES`, so
+  recognition carries over and new sim content wires its own map icon.
+
+On the board, icons draw only on UNLOCKED nodes — frontier stays a bare
+silhouette medallion; the emblem is part of the unlock's reveal. Missing art
+renders as the bare medallion, never a break.
 
 ## Enter the Gauntlet later
 
@@ -275,7 +390,67 @@ unlock state in AsyncStorage, no entitlements/Glory (its rewards are its own).
 The map component renders ETG definitions with an ETG theme. The engine package
 must never grow a Turso or bearer-token assumption — that's the contract.
 
-## Season I ranked board — content sketch *(Tom, 2026-08-02; draft, titles TBD)*
+## Wearable titles *(Tom, 2026-08-04 — data layer BUILT, wearing UX a future design pass)*
+
+Some deeds crown a **player title**: a `{ kind: "title" }` entry in the
+deed's `rewards` ARRAY (Tom, 2026-08-04 — rewards stack: a deed can pay
+Glory AND crown its title AND drop a secret item; Glory entries sum, every
+entitlement/title entry lands its own row). The title IS the deed's own
+name — the kind carries no itemId, there is never a separate title string.
+At unlock the server grants the entitlement `title:<deed-id>` — the
+existing entitlements table, no schema change — so `/achievements/me`
+already returns every earned title, and the ceremony/detail cards render
+one reward line per entry.
+
+### Wearing titles *(designed 2026-08-08 with Tom — the announcer-pack pattern)*
+
+The announcer pack is the exact template: an optional string claimed at
+seat time on every join shape, sanitized once server-side, stored on
+`ArenaPlayer`, echoed publicly on `RoomStatePlayer`, resolved client-side
+with a graceful unknown-id fallback.
+
+- **The wire carries the DEED ID, never display text.** `title?: string`
+  (a deed id, e.g. `ranked-wins-5`) added to `createRoom` / `joinRoom` /
+  `queueJoin`; public `RoomStatePlayer.title: string` (`""` = bare).
+  Clients resolve the display string from their own `ACHIEVEMENT_DEFS` —
+  the deed's `title` field IS the wearable text. Unknown id (newer server
+  content, or garbage) renders as no title; free-text spoofing is
+  impossible by construction. NO protocol bump: additive optional fields,
+  the shipped client ignores both (the `deedUnlocks` precedent).
+- **Verification (Tom, 2026-08-08): verify ranked, trust skirmish.**
+  Ranked queue already resolves `accountId` in `verifyAndEnqueue`; one
+  `entitlementsOf` read checks the claimed id maps to an owned
+  `title:<deed-id>` row — an unowned claim is SILENTLY STRIPPED to bare
+  (never a queue rejection; a cosmetic must not cost a match). Skirmish
+  sockets have no identity until M4, so skirmish takes the client's word —
+  the exact stance announcer packs ship with; M4 closes the gap. Sanitize
+  like announcer ids (trim, length-cap, no roster check needed — resolution
+  is the roster check).
+- **Equip UX (Tom, 2026-08-08): the Chronicle is the picker.** Unlocked
+  deeds whose rewards include a title get a WEAR action on their codex
+  row; the worn deed shows a mark, tapping it again goes bare. Equipped
+  choice is device-local (AsyncStorage `bits.title`, the
+  `bits.announcerPack` pattern: module-global get/set + boot load) — no
+  server storage; the server only ever sees per-room claims.
+- **Render**: a second, smaller gold line under the name — lobby
+  `PlayerRow` and the in-match Skia name tag. The renderer reads
+  `PlayerSnapshot` (no cosmetics), so GameScreen passes a
+  playerId→displayTitle map derived from `roomState` (the announcer
+  kill-VO lookup pattern) into the render input. The compact roster
+  ticker stays name-only. The roomState diff key (`room.ts`
+  `lastRoomStateKey`) gains the title field so a changed claim ever
+  rebroadcasts.
+- **Bots (Tom, 2026-08-08): disguised ranked bots occasionally wear one.**
+  ~30% of disguised bots wear a plausible low-tier title from a curated
+  id list, seeded deterministically per room — bots never wearing titles
+  would become a backfill tell once titles are common (the same principle
+  as bots counting toward deeds).
+
+## Season I ranked board — content sketch *(Tom, 2026-08-02; titles pass IN
+PROGRESS 2026-08-04 — wins/kills renamed by Tom; weapon + ability chains
+split out of table-derivation into hand-authored per-weapon/per-ability
+identity ramps, guarded by a coverage test that fails when new roster
+content lacks a chain)*
 
 Milestone chains (tiers share one icon; bronze/silver/gold frame per tier — keeps
 the forge bill at ~25 unique subjects instead of ~85 and makes chains read as
@@ -290,7 +465,7 @@ chains on the board):
 | Casts per ability | e.g. 10/50/250 sandtrap | `cast:<ability>` | one chain per ability, thresholds tuned per ability |
 | Ability-effect chains | e.g. reflect 25/250/1500 (Mirror Guard), heal 100/1000/7500 (Blood Font) | `reflects`, `heal:<ability>` | **needs sim events**: a reflect event; `heal` gains a source-ability field |
 | Win streak | 3/5/10 | `best_win_streak` | streak counters: `current_*` reset on loss, milestone reads `best_*` |
-| Lose streak | 3/5/10 | `best_loss_streak` | **no reward** — rewarding ranked losses is a throw incentive; the unlock is the joke |
+| Lose streak | 3/5/10 | `best_loss_streak` | **never Glory or items** — rewarding ranked losses is a throw incentive; joke TITLES allowed (Fossil Record — the wearable punchline, Tom 2026-08-04), enforced by test |
 | Lifetime Glory | 500/2500/5000/7500/15000/25000 | *(none)* | read from `glory_ledger` (SUM of positive rows — balance breaks once spending exists). Achievement Glory landing in the same settle counts on the *next* evaluation — one-match lag, accepted |
 | Damage dealt | 500/2500/10k/25k/100k | `damage_dealt` | |
 | Healing done | 500/2500/10k/25k/100k | `healing_done` | |
@@ -325,12 +500,15 @@ Content implications folded into the design:
   **Wave 2** (small sim additions, can trail M1): reflect event → Mirror Guard
   chain; heal-source attribution → per-ability healing; round-end state sampling →
   HP feats.
-- **M2 — the unlock ceremony**: the animated post-match flow + unlock sting +
-  celebrated-set replay (see *The unlock ceremony*). Small, high-payoff, ships
-  the moment players start earning.
-- **M3 — the Deed Map**: pan/zoom board, node states, cards, forge icon set
-  (tier frames), chain layout helper + Realmsmith board-layout tab, HomeScreen
-  entry.
+- **M2 — the unlock ceremony** *(BUILT 2026-08-03)*: the animated post-match
+  flow + unlock sting + celebrated set (see *The unlock ceremony*). The
+  celebrated-vs-`/achievements/me` replay diff lands with the deeds screen
+  in M3 (there is no screen to replay on yet); the set is being recorded
+  from day one so nothing is ever lost.
+- **M3 — the Deed Map** *(v1 BUILT 2026-08-04)*: pan/zoom board, node
+  states, cards, HomeScreen entry, missed-ceremony replay. Still owed from
+  M3: forge icon set (tier frames), chain layout helper + Realmsmith
+  board-layout tab, on-device pass.
 - **M4 — skirmish counting**: optional identity on skirmish join, friends-lobby
   farming policy, skirmish-flavoured deeds on their own board.
 - **M5 — secret items**: first achievement-granted weapon/ability (full new-content
@@ -341,9 +519,9 @@ Content implications folded into the design:
 - **Board authoring**: resolved by the content sketch — ~85 day-one nodes means
   the chain layout helper ships in M2 alongside a Realmsmith board-layout tab
   (drag nodes/chain origins, save positions back to `defs.ts`).
-- **Retroactive counters**: `ranked_matches` history exists, so day-one milestone
-  counters *could* be backfilled from it (wins/losses only — no kill/heal history).
-  Decide at M1 ship whether early adopters' existing wins count.
-- **Anti-abuse beyond ranked**: M3's skirmish counting needs a stance on
-  friends-lobby feat farming (e.g. skirmish counts milestones but not feats, or
-  requires N unique opponents). Not designed yet.
+- **Retroactive counters**: DECIDED 2026-08-08 (Tom) — no backfill, everyone
+  starts at zero. All counters begin accruing at the first settle after the
+  server deploy; consistent across counter types (kills/damage/healing were
+  never recoverable anyway). No migration work needed.
+- ~~**Anti-abuse beyond ranked**~~: MOOT 2026-08-08 — deeds are ranked-only
+  by design (§ M4 retired above); there is no "beyond ranked" to protect.

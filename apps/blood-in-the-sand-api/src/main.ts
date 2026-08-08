@@ -16,12 +16,16 @@ import { RANKED_BRACKETS } from "@heroic/blood-in-the-sand-sim";
 import {
   PLACEMENT_MATCHES,
   RATING_START,
+  achievementCounters,
+  achievementUnlocks,
   createDb,
   displayFloorOf,
   displayRungFor,
   ensureSchema,
+  entitlementsOf,
   findPlayerByToken,
   gloryBalance,
+  gloryEarned,
   rankedSummary,
   recentForm,
   registerPlayer,
@@ -114,6 +118,30 @@ app.get("/ranked/me", async (c) => {
     }),
   );
   return c.json({ season: SEASON, brackets });
+});
+
+/**
+ * The deeds screen's one read (achievements.md § API): unlocked ids +
+ * timestamps, lifetime counters (milestone progress bars), and owned
+ * entitlements. Definitions ship in the app bundle (the sim package) — only
+ * STATE lives here. `glory_earned` is served live off the ledger, not the
+ * counter row, so Glory earned before the achievements deploy still counts
+ * toward the map's progress display.
+ */
+app.get("/achievements/me", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  const [unlocks, counters, entitlements, earned] = await Promise.all([
+    achievementUnlocks(db, playerId),
+    achievementCounters(db, playerId),
+    entitlementsOf(db, playerId),
+    gloryEarned(db, playerId),
+  ]);
+  return c.json({
+    unlocks,
+    counters: { ...counters, glory_earned: earned },
+    entitlements,
+  });
 });
 
 Bun.serve({ port, fetch: app.fetch });
