@@ -128,6 +128,18 @@ purely client-side: no server writes, the celebrated set is never touched
 (the missed-ceremony replay is suppressed while previewing), and real data
 returns the moment the flag is off.
 
+## Tool 8 — gated-item grant *(2026-08-09)*
+
+`ITEMS ○ EARNED ONLY / ◉ ALL GRANTED` — grants every achievement-gated item
+for the session (bits-secret-items.md), so the arming wizard shows the
+trident (and any future secrets) without winning the deeds. Implemented as
+a UNION overlay on `getEntitlements()` (`devFlags.grantAllItems`): the
+persisted entitlement cache is never touched, so flipping it off — or a
+relaunch, devFlags being session-only — restores honest state instantly.
+Reach: practice and skirmish only in effect; RANKED validates picks
+against the real ledger server-side, so this switch deliberately cannot
+defeat it.
+
 ## Adding future tools
 
 `HomeScreen`'s dev panel is just a column — add a `Pressable` per tool and a

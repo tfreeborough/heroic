@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a trident thrust punching into flesh — a sharp wet pierce, shorter and pointier than a slash, with a quick withdraw",
+  "prompt": "Close-mic'd trident thrust into sun-baked flesh: brittle wood shaft impact, wet stabbing puncture, immediate hollow squelch and bone-skim crunch, quick metallic scrape on withdrawal; sharp attack peak ~0.2s, rapid 0.6s decay, gritty sandy dust sibilance.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_trident_1.mp3"
+  ],
+  "created": "2026-08-09T09:49:22.778Z",
+  "updated": "2026-08-09T09:49:22.778Z"
+}

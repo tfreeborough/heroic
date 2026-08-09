@@ -148,9 +148,25 @@ what's next.
    milestone-crossing-consumed-behind-the-accepts-gate trap) are recorded
    in achievements.md § M4 retired. Skirmish board, skirmish_* counters,
    farming policy: all dead as work items. Roadmap is now M5 directly.
-10. M5 secret items (first achievement-granted weapon: full new-content
-    tax — bot cast rules, archetype check, forge icon+SFX — else bots leak
-    the secret; entitlement-aware arming wizard; item-name registry).
+10. M5 secret items — BUILT 2026-08-09 (bits-secret-items.md): the TRIDENT
+    (reach melee: 160 reach, 18° needle, kb 180, no rider) granted by THE
+    SAND SNAKE (5 ranked wins; rewards stack → one card pays title +
+    "UNLOCKED — TRIDENT"). PROTOCOL v20 (a new weapon id crashes old
+    bundles — coordinated deploy + EAS update REQUIRED, ship together).
+    sim items.ts = GATED_WEAPONS/ABILITIES + ITEM_NAMES registries
+    (humanizeItemId retired); FREE_WEAPON_IDS/FREE_ABILITY_IDS = the ONLY
+    drafting pools (Tom: bots use base roster PERMANENTLY — earned steel
+    is humanity proof; archetype/cast-rule tax waived for gated items
+    forever). Client: deeds/entitlements.ts cache (boot load, authoritative
+    replace on /achievements/me, instant local grant on deedUnlocks via
+    defs) → wizard HIDES unearned weapons (sortedWeaponIds takes the set).
+    Server: entitlements loaded once at verifyAndEnqueue ride
+    QueueEntry/RankedSeatAccount.items → setWeapon/setAbilities silently
+    ignore unowned gated picks in ranked (skirmish trusts). rounds-trident
+    chain added (PLACEHOLDER titles: Fisherman/Spearside/The Retiarius).
+    OWED: forge trident icon (harpoon png stands in) + hit_trident clip
+    (briefed in styleBible; rows auto-derive), on-device feel pass +
+    number tuning, Tom's naming pass.
 11. Wave-2 FEATS BUILT 2026-08-08 (the deferred second set, Tom: "do them
     all" — achievements.md § Wave-2 feats): 8 new one-offs (by-a-thread,
     return-to-sender, still-standing, flawless, the-old-ways, carnage,

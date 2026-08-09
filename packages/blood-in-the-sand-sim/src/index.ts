@@ -4,6 +4,7 @@
 export * from "./bot";
 export * from "./nav";
 export * from "./config";
+export * from "./items";
 export * from "./teamNames";
 export * from "./state";
 export * from "./events";

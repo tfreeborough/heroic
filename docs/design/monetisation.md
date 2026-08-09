@@ -15,7 +15,12 @@ thing; persistence/identity design lives in [glory-economy.md](./glory-economy.m
 earned from playing and winning matches, spendable on:
 
 - **Weapons & abilities** — *sidegrades, not upgrades*: new decision space, not more power.
-  Always earnable by playing at generous rates; coin packs purchasable for the impatient.
+  Always earnable by playing at generous rates.
+  **Amended 2026-08-09:** items are no longer priced in Glory directly, and **Glory
+  itself is never sold** (coin packs are dead — selling "glory" made no flavour
+  sense). Instead Glory buys a universal **Writ** voucher; every item costs 1 Writ,
+  and Writs are also sold directly for money. Decouples earn-rate tuning from store
+  prices. Full store design: [bits-store.md](./bits-store.md).
   Rule that keeps this honest: **Practice mode can use every weapon, including locked ones**
   — the unlock gates matchmade use, the knowledge is free (defuses "pay-to-learn").
 - **Cosmetics** (best margin, zero balance cost — must be visible to other players):

@@ -75,6 +75,9 @@ const STRIKE_VARIANTS: Record<WeaponId, SoundBank> = {
   bow: { clips: ["hit_bow_1"] },
   staff: { clips: ["hit_staff_1"] },
   hammer: { clips: ["hit_hammer_1"] },
+  // Owed from the Forge — silent until hit_trident_1 lands: a wet piercing
+  // punch-through, sharper and shorter than the blade's slice.
+  trident: { clips: ["hit_trident_1"] },
 };
 
 /** Per-weapon RELEASE banks (the bow twang / staff cast whoosh), played on the

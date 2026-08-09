@@ -381,3 +381,96 @@ describe("determinism", () => {
     expect(JSON.parse(JSON.stringify(sim.state))).toEqual(sim.state);
   });
 });
+
+describe("the travelling thrust (trident)", () => {
+  /** Alice on the trident, active round, bob planted `gap` px away along x. */
+  const thrustDuel = (gap: number): { sim: ArenaSim; alice: number; bob: number } => {
+    const sim = makeSim();
+    setPlayerWeapon(sim, 0, "trident");
+    expect(startMatch(sim, [])).toBe(true);
+    run(sim, COUNTDOWN_TICKS + 1); // countdown → active
+    expect(sim.state.round.phase).toBe("active");
+    const a = sim.state.players[0]!;
+    const b = sim.state.players[1]!;
+    a.mover.pos.x = 160;
+    a.mover.pos.y = 256;
+    b.mover.pos.x = 160 + gap;
+    b.mover.pos.y = 256;
+    return { sim, alice: 0, bob: 1 };
+  };
+
+  const firstHitTick = (gap: number): number => {
+    const { sim } = thrustDuel(gap);
+    const startTick = sim.state.tick;
+    const events = run(sim, 40);
+    const hit = ofType(events, "hit").find((e) => e.event.attackerId === 0 && e.event.targetId === 1);
+    expect(hit).toBeDefined();
+    return hit!.tick - startTick;
+  };
+
+  test("the front travels — a distant body is struck ticks after a close one", () => {
+    const near = firstHitTick(120);
+    const far = firstHitTick(170);
+    // Same windup (same seed, both in the band from tick 0); the difference
+    // is pure travel time across ~50px of extra front at reach/0.15s.
+    expect(far).toBeGreaterThanOrEqual(near + 1);
+  });
+
+  test("the thrust strikes each body once and lands its riders", () => {
+    const { sim } = thrustDuel(120);
+    const events = run(sim, 40);
+    const hits = ofType(events, "hit").filter(
+      (e) => e.event.attackerId === 0 && e.event.targetId === 1 && !e.event.bleed,
+    );
+    expect(hits.length).toBe(1); // one thrust, one strike — never re-hit by the expanding front
+    // The guaranteed drip is already ticking (1 dmg every 0.5s).
+    expect(
+      ofType(events, "hit").some((e) => e.event.targetId === 1 && e.event.bleed),
+    ).toBe(true);
+    const bob = sim.state.players[1]!;
+    // The 40% slow landed (and only the trident's — bob never reached alice).
+    expect(bob.slowFactor).toBeCloseTo(0.6);
+    expect(bob.slowLeft).toBeGreaterThan(0);
+    // The guaranteed drip bleed landed as ONE dot (refresh, never stack).
+    expect(bob.dots.filter((d) => d.sourceId === 0).length).toBe(1);
+    // The shove is real: bob ends further from alice than he was planted.
+    expect(bob.mover.pos.x).toBeGreaterThan(280 + 5);
+  });
+
+  test("a body inside the prongs never even draws a swing", () => {
+    // Gap 90: bob's far edge (90 + 18 = 108) is short of the 115px band. Pin
+    // both bodies each tick so bob's blade shoves can't reopen the gap.
+    const { sim } = thrustDuel(90);
+    const events: ReturnType<typeof run> = [];
+    for (let i = 0; i < 40; i++) {
+      for (const [id, x] of [[0, 160], [1, 250]] as const) {
+        const p = sim.state.players[id]!;
+        p.mover.pos.x = x;
+        p.mover.pos.y = 256;
+        p.mover.vel.x = 0;
+        p.mover.vel.y = 0;
+      }
+      events.push(...run(sim, 1));
+    }
+    expect(
+      ofType(events, "hit").filter((e) => e.event.attackerId === 0 && e.event.targetId === 1),
+    ).toHaveLength(0);
+    expect(sim.state.players[0]!.attack.phase).toBe("ready"); // no windup ever began
+  });
+
+  test("re-pokes refresh the bleed instead of stacking a second", () => {
+    const { sim, bob } = thrustDuel(120);
+    // Plant bob's body in the band across two full attack cycles: re-pin him
+    // each tick so knockback can't carry him out of reach.
+    for (let i = 0; i < 80; i++) {
+      const b = sim.state.players[bob]!;
+      b.mover.pos.x = 280;
+      b.mover.pos.y = 256;
+      b.mover.vel.x = 0;
+      b.mover.vel.y = 0;
+      run(sim, 1);
+    }
+    const dots = sim.state.players[bob]!.dots.filter((d) => d.sourceId === 0);
+    expect(dots.length).toBe(1);
+  });
+});

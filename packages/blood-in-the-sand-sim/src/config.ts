@@ -60,8 +60,14 @@ export const PLAYER_STATS: CombatStats = {
 // shots. The staff was near-unapproachable at a 0.9s cycle; it now telegraphs
 // longest and fires rarest.
 
-export type WeaponId = "blade" | "bow" | "staff" | "hammer";
-export const WEAPON_IDS: readonly WeaponId[] = ["blade", "bow", "staff", "hammer"];
+export type WeaponId = "blade" | "bow" | "staff" | "hammer" | "trident";
+export const WEAPON_IDS: readonly WeaponId[] = ["blade", "bow", "staff", "hammer", "trident"];
+
+/** The FREE roster — what bots and forceStart's random-fill draft from.
+ * Gated items (bits-secret-items.md) are earned through deeds and NEVER
+ * drafted by bots (Tom, 2026-08-09: base roster only, permanently — an
+ * earned item in hand is proof of humanity). */
+export const FREE_WEAPON_IDS: readonly WeaponId[] = ["blade", "bow", "staff", "hammer"];
 
 /** A chance-on-arc-hit damage-over-time rider (the blade's bleed). */
 export interface BleedConfig {
@@ -71,6 +77,10 @@ export interface BleedConfig {
   interval: number;
   /** Fixed damage per tick — no variance, crit, or defense (rng-stream neutral). */
   damage: number;
+  /** true = a re-hit RESETS the wielder's existing bleed instead of queueing
+   * a second one (the trident's steady drain). Absent = bleeds stack, the
+   * blade's original rule. */
+  refresh?: boolean;
 }
 
 /** An on-arc-hit movement debuff (the hammer's slow). Applies on every
@@ -178,6 +188,47 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     stats: { attack: 19 },
     engagementRadius: 125 + 160,
     slow: { duration: 1.5, factor: 0.5 },
+  },
+  // The retiarius thrust (bits-secret-items.md — the first GATED weapon,
+  // earned at The Sand snake): the spacing game the roster lacked. Only the
+  // HEAD is dangerous (Tom, 2026-08-09: a trident is deadly at the tip, not
+  // along the shaft): minReach floats the hit region into a band at the end
+  // of its reach, and the strike TRAVELS (thrustDuration) — the point runs
+  // out through the harmless shaft-zone and only bites once it crosses into
+  // the band. The knockback shoves victims back out to its own preferred
+  // range while the slow pins them there — a landed poke resets the fight
+  // to trident rules AND sets up the next poke (device pass 2026-08-09:
+  // 180 knockback was imperceptible next to the mover's damping; bow's felt
+  // shove is 260). Riders re-cut for the band rework (2026-08-09, pokes are
+  // harder to land now): a real 40%/1s slow and a GUARANTEED drip bleed —
+  // 1 dmg every 0.5s for 6s, refresh-not-stack so re-pokes reset the clock
+  // rather than queueing lethal stacks. Arc widened 18°→26° so the floating
+  // band reads as the three-pronged head, not a sliver; windup trimmed to a
+  // piston jab. Counterplay: dash i-frames through the front — and dash's
+  // 75px hop now carries you INSIDE the band, where the prongs can't touch
+  // you at all (step.ts never even starts a swing on a dead-zone target).
+  trident: {
+    name: "Trident",
+    attack: {
+      shape: "arc",
+      school: "physical",
+      // 160/95 → 180/115 (Tom, 2026-08-09): more range, same 65px head,
+      // and dash's 75px hop from max range still lands inside the prongs.
+      reach: 180,
+      minReach: 115,
+      arcWidth: (26 * Math.PI) / 180,
+      // 0.4 → 0.35 and knockback 320 → 480 (Tom, 2026-08-09): the poke is a
+      // snap-jab, and a landed one LAUNCHES them — stab, shove them clear
+      // past your band, and use the second you bought to reposition.
+      windup: 0.35,
+      recovery: 0.7,
+      knockback: 480,
+      thrustDuration: 0.15,
+    },
+    stats: { attack: 15 },
+    engagementRadius: 180 + 160,
+    bleed: { chance: 1, ticks: 12, interval: 0.5, damage: 1, refresh: true },
+    slow: { duration: 1, factor: 0.6 },
   },
 };
 
@@ -344,6 +395,12 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
 };
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
+
+/** The FREE ability roster (see FREE_WEAPON_IDS — same drafting rule). No
+ * abilities are gated yet; the split exists so a future gated ability can't
+ * leak through the random-fill sweep. Kept in config (not items.ts) beside
+ * its weapon twin — items.ts owns the entitlement side. */
+export const FREE_ABILITY_IDS = ABILITY_IDS;
 
 /** Abilities per loadout; pick order = button order in the match. Two, not
  * three: rounds are short and one-life, so a third button read as chaos in

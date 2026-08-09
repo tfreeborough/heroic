@@ -325,7 +325,19 @@ intel already teaches enemy kits). Store-side it never exists. Every secret item
 still a full sim citizen and pays the standard new-content tax before shipping:
 forge icon + cast SFX, bot cast rule in `botCasts.ts`, `deriveArchetype` pass, and
 an archetype-worthiness check — bots must use it credibly or its existence leaks
-that a lobby is bot-backfilled.
+that a lobby is bot-backfilled. *(AMENDED 2026-08-09, Tom: the bot half of that
+tax no longer applies to GATED items — bots use the base roster only,
+permanently; see bits-secret-items.md § bots. An earned item in hand is proof
+of humanity, and the statistical tell is accepted.)*
+
+**M5 designed 2026-08-09** — [bits-secret-items.md](./bits-secret-items.md):
+the first gated item is the **Trident** (reach melee, the retiarius thrust),
+granted by **The Sand snake** (5 ranked wins) so players learn early that
+deeds pay steel. Entitlement namespace `weapon:<id>`/`ability:<id>`, sim
+GATED_ITEMS + ITEM_NAMES registries, wizard hides (never greys) unearned
+items, ranked validates picks server-side, bots don't draft gated items in
+v1, and the build bumps the protocol to v20 (a new weapon id crashes old
+bundles — not additive like everything else this milestone shipped).
 
 ## The Chronicle — the codex *(PIVOT 2026-08-04, supersedes the map below)*
 

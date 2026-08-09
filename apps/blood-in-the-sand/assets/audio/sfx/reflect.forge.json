@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a magical parry — a bright glassy metallic TING as a mirror shield turns a projectile around, with a quick whip of departure as the shot leaves the other way, sharp attack, under half a second",
+  "prompt": "Close-mic'd bright glassy metallic TING as mirror-shield slices and flips a projectile; instant high, crystalline strike peaking at 0.2s, immediate sharp metallic whip whoosh of redirected bolt, sun-baked dust tick beneath — ~1.0s total.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "reflect_1.mp3"
+  ],
+  "created": "2026-08-09T09:49:48.081Z",
+  "updated": "2026-08-09T09:49:48.081Z"
+}

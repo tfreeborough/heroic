@@ -30,6 +30,10 @@ export type HurtTarget = HurtCircle | HurtBox;
  *   fat targets aren't harder to clip than thin ones.
  * - The angle test uses the target's centre; the forgiveness knob is
  *   `arcWidth` itself (see the whiff rules in the movement doc).
+ * - `minReach` > 0 floats the hit region off the wielder (the trident band):
+ *   a body must overlap the band to be struck, so anyone whose far edge is
+ *   still inside `minReach` is safely between the prongs. Both range tests
+ *   are generous to the attacker — any overlap with the band counts.
  */
 export const hitsInArc = (
   origin: Vec2,
@@ -37,6 +41,7 @@ export const hitsInArc = (
   reach: number,
   arcWidth: number,
   targets: readonly HurtTarget[],
+  minReach = 0,
 ): number[] => {
   const halfArc = arcWidth / 2;
   const hits: number[] = [];
@@ -46,8 +51,14 @@ export const hitsInArc = (
       // angle is measured to that same point — so facing a wall dead-on cleaves
       // it while a swing that glances past its edge misses, mirroring the circle
       // rule. Standing inside the box (nearest point == origin) is an unambiguous
-      // hit with no direction to test.
+      // hit with no direction to test. The inner edge mirrors the circle rule
+      // via the box's FARTHEST point: fully inside minReach = untouchable.
       if (distanceToAabb(origin, t.box) > reach) continue;
+      if (minReach > 0) {
+        const fx = Math.abs(origin.x - t.box.x) + t.box.w / 2;
+        const fy = Math.abs(origin.y - t.box.y) + t.box.h / 2;
+        if (Math.hypot(fx, fy) < minReach) continue;
+      }
       const near = closestPointOnAabb(origin, t.box);
       if (near.x === origin.x && near.y === origin.y) {
         hits.push(t.id);
@@ -56,7 +67,9 @@ export const hitsInArc = (
       if (Math.abs(angleDiff(angleTo(origin, near), facing)) > halfArc) continue;
       hits.push(t.id);
     } else {
-      if (distance(origin, t.pos) - t.radius > reach) continue;
+      const d = distance(origin, t.pos);
+      if (d - t.radius > reach) continue;
+      if (d + t.radius < minReach) continue;
       if (Math.abs(angleDiff(angleTo(origin, t.pos), facing)) > halfArc) continue;
       hits.push(t.id);
     }

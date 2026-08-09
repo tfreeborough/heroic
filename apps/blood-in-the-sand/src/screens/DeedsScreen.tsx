@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ACHIEVEMENT_CHAPTERS,
   ACHIEVEMENT_DEFS,
+  itemDisplayName,
   type BitsAchievementDef,
 } from "@heroic/blood-in-the-sand-sim";
 import { visibility } from "@heroic/achievements";
@@ -38,6 +39,7 @@ import { playSound } from "../audio";
 import { loadCelebratedDeeds } from "../deeds/celebrated";
 import { DEED_ICONS } from "../deeds/deedIcons";
 import { getWornTitle, setWornTitle } from "../deeds/wornTitle";
+import { setEntitlements } from "../deeds/entitlements";
 import { devFlags } from "../dev";
 import { ensureIdentity, fetchAchievements, type AchievementsMe } from "../net/api";
 import { DeedReplayOverlay } from "./DeedCards";
@@ -145,13 +147,6 @@ interface Chapter {
   data: CodexBlock[];
 }
 
-/** "shadow-blade" → "Shadow Blade" — until an item registry exists (M5
- * secret items), the id IS the display name's kebab form. */
-const humanizeItemId = (id: string): string =>
-  id
-    .split("-")
-    .map((w) => (w.length > 0 ? w[0]!.toUpperCase() + w.slice(1) : w))
-    .join(" ");
 
 /** Explicit reward lines (Tom, 2026-08-04): say WHAT was earned, by name —
  * the deed's own title for title rewards, the item's name for spoils. */
@@ -165,7 +160,7 @@ const RewardMarks = ({ def }: { def: BitsAchievementDef }) => {
             ? `Earned ${r.amount} Glory`
             : r.kind === "title"
               ? `Earned the title “${def.title}”`
-              : `Unlocked “${humanizeItemId(r.itemId)}”`}
+              : `Unlocked “${itemDisplayName(r.itemId)}”`}
         </Text>
       ))}
     </>
@@ -379,6 +374,10 @@ export const DeedsScreen = ({ onBack }: DeedsScreenProps) => {
       const data = identity ? await fetchAchievements(identity) : null;
       if (!live) return;
       setMe(data);
+      // The authoritative entitlement refresh (bits-secret-items.md) —
+      // replaces the device cache wholesale (it must be able to SHRINK
+      // after a dev DB reset).
+      if (data) setEntitlements(data.entitlements.map((e) => e.itemId));
       if (data && data.unlocks.length > 0) {
         const celebrated = await loadCelebratedDeeds();
         if (!live) return;

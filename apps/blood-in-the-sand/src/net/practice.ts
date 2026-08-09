@@ -42,9 +42,9 @@ import {
   stepSim,
   TICK_DT,
   TICK_RATE,
+  FREE_WEAPON_IDS,
   toRoomStatePlayers,
   toSnapshot,
-  WEAPON_IDS,
   type AbilityId,
   type ArenaEvent,
   type ArenaSim,
@@ -86,7 +86,9 @@ interface BotSeat {
 
 const randomArmBeat = (): number => 1200 + Math.random() * 1800;
 
-const randomWeapon = (): WeaponId => WEAPON_IDS[Math.floor(Math.random() * WEAPON_IDS.length)]!;
+// FREE roster only (config.ts rule): bots never wield gated weapons — and
+// the brains hold no trident band, so a min-reach weapon would strand them.
+const randomWeapon = (): WeaponId => FREE_WEAPON_IDS[Math.floor(Math.random() * FREE_WEAPON_IDS.length)]!;
 
 /** A fully random distinct hand — the brain plays its whole kit now
  * (botCasts.ts), so bots draft like players do: anything goes, dash is a

@@ -239,4 +239,23 @@ describe("achievement awards at settle", () => {
     const roster = a.of("roomState").at(-1)!["players"] as { id: number; title: string }[];
     expect(roster.find((p) => p.id === a.ws.data.playerId)?.title).toBe("sworn-to-the-sand");
   });
+
+  test("ranked gates the trident — owned picks stick, unowned are silently ignored", async () => {
+    // Alice EARNED the trident; Bob just claims one.
+    await db.execute({
+      sql: "INSERT INTO entitlements (player_id, item_id, source) VALUES (?, ?, ?)",
+      args: [accountA, "weapon:trident", "achievement:ranked-wins-5"],
+    });
+    const a = makeSocket();
+    const b = makeSocket();
+    const { room, seatA, seatB } = await startMatch(a, b);
+
+    say(manager, a, { t: "setWeapon", weapon: "trident" });
+    say(manager, b, { t: "setWeapon", weapon: "trident" });
+    expect(room.sim.state.players[seatA]!.weapon).toBe("trident");
+    expect(room.sim.state.players[seatB]!.weapon).toBeNull(); // ignored, seat unharmed
+    // The free roster stays free — Bob picks up a hammer like anyone.
+    say(manager, b, { t: "setWeapon", weapon: "hammer" });
+    expect(room.sim.state.players[seatB]!.weapon).toBe("hammer");
+  });
 });

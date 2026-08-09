@@ -517,9 +517,54 @@ const drawMyRangeRing = (
   if (!me.alive) return;
   // reach is measured to the victim's rim, so the strike circle extends one
   // body radius past it (matching hitsInArc's rule).
-  const ring = WEAPONS[me.weapon ?? "blade"].attack.reach + playerRadius;
+  const attack = WEAPONS[me.weapon ?? "blade"].attack;
+  const ring = attack.reach + playerRadius;
   rangeStroke.setAlphaf(RANGE_RING_ALPHA);
   canvas.drawCircle(me.x, me.y, ring, rangeStroke);
+  // A min-reach weapon (the trident) gets a second ring at its dead-zone
+  // edge — the band between the two circles is where the head bites.
+  if (attack.minReach) {
+    canvas.drawCircle(me.x, me.y, Math.max(0, attack.minReach - playerRadius), rangeStroke);
+  }
+};
+
+/** A melee strike region: the classic wedge from the wielder's centre, or —
+ * when the weapon floats its hit region off the body (attack.minReach, the
+ * trident head) — an annular band between the two radii. Caller pre-pads
+ * both radii by the body radius to match hitsInArc's rim rules. */
+const strikeRegionPath = (
+  cx: number,
+  cy: number,
+  inner: number,
+  outer: number,
+  facingDeg: number,
+  halfDeg: number,
+) => {
+  const b = Skia.PathBuilder.Make();
+  if (inner <= 0) {
+    b.moveTo(cx, cy).arcToOval(
+      Skia.XYWHRect(cx - outer, cy - outer, outer * 2, outer * 2),
+      facingDeg - halfDeg,
+      halfDeg * 2,
+      false,
+    );
+  } else {
+    // Outer arc one way, inner arc back the other — close() seals the sides.
+    b.arcToOval(
+      Skia.XYWHRect(cx - outer, cy - outer, outer * 2, outer * 2),
+      facingDeg - halfDeg,
+      halfDeg * 2,
+      true,
+    ).arcToOval(
+      Skia.XYWHRect(cx - inner, cy - inner, inner * 2, inner * 2),
+      facingDeg + halfDeg,
+      -halfDeg * 2,
+      false,
+    );
+  }
+  const path = b.detach();
+  path.close();
+  return path;
 };
 
 /** A body's disc colour: dead → grey ghost; else friend blue / foe red
@@ -552,16 +597,10 @@ const drawPlayer = (
       const halfDeg = ((weapon.attack.arcWidth ?? 0) / 2) * (180 / Math.PI);
       const facingDeg = p.lockedFacing * (180 / Math.PI);
       const reach = weapon.attack.reach + r;
-      const wedge = Skia.PathBuilder.Make()
-        .moveTo(p.x, p.y)
-        .arcToOval(
-          Skia.XYWHRect(p.x - reach, p.y - reach, reach * 2, reach * 2),
-          facingDeg - halfDeg,
-          halfDeg * 2,
-          false,
-        )
-        .detach();
-      wedge.close();
+      // minReach floats the danger zone off the wielder (the trident band) —
+      // the telegraph stays honest to the hitbox: only the band warns.
+      const inner = weapon.attack.minReach ? Math.max(0, weapon.attack.minReach - r) : 0;
+      const wedge = strikeRegionPath(p.x, p.y, inner, reach, facingDeg, halfDeg);
       fill.setColor(C_TELEGRAPH);
       fill.setAlphaf(0.12 + 0.28 * progress);
       canvas.drawPath(wedge, fill);
@@ -580,6 +619,54 @@ const drawPlayer = (
         stroke,
       );
       stroke.setAlphaf(1);
+    }
+  }
+
+  // The travelling thrust (attack.thrustDuration weapons — the trident):
+  // the sim's hit front runs out from the wielder over the opening of
+  // recovery, so the strike is drawn the same way — a bright wedge
+  // expanding to full reach, honest to where the point actually is.
+  if (p.alive && p.atk === "recovery") {
+    const weapon = WEAPONS[p.weapon ?? "blade"];
+    const dur = weapon.attack.thrustDuration ?? 0;
+    if (dur > 0) {
+      // Recovery can start with carried-over time, so clamp the low end.
+      const progress = Math.max(0, (weapon.attack.recovery - p.atkLeft) / dur);
+      if (progress <= 1) {
+        const halfDeg = ((weapon.attack.arcWidth ?? 0) / 2) * (180 / Math.PI);
+        const facingDeg = p.lockedFacing * (180 / Math.PI);
+        const front = weapon.attack.reach * progress + r;
+        // The band weapon's front only bites past minReach — nothing draws
+        // while the point is still crossing the harmless shaft-zone.
+        const inner = weapon.attack.minReach ? Math.max(0, weapon.attack.minReach - r) : 0;
+        if (front > inner) {
+          const wedge = strikeRegionPath(p.x, p.y, inner, front, facingDeg, halfDeg);
+          fill.setColor(C_TELEGRAPH);
+          // Bright at launch, fading as the point lands — a strike, not a warn.
+          fill.setAlphaf(0.55 * (1 - progress * 0.6));
+          canvas.drawPath(wedge, fill);
+          fill.setAlphaf(1);
+          if (inner > 0) {
+            // The three-pronged head: tine lines raked across the band.
+            stroke.setColor(C_TELEGRAPH);
+            stroke.setAlphaf(0.8 * (1 - progress * 0.6));
+            stroke.setStrokeWidth(2);
+            stroke.setStrokeCap(StrokeCap.Round);
+            const w = weapon.attack.arcWidth ?? 0;
+            for (const off of [-w / 3, 0, w / 3]) {
+              const a = p.lockedFacing + off;
+              canvas.drawLine(
+                p.x + Math.cos(a) * inner,
+                p.y + Math.sin(a) * inner,
+                p.x + Math.cos(a) * front,
+                p.y + Math.sin(a) * front,
+                stroke,
+              );
+            }
+            stroke.setAlphaf(1);
+          }
+        }
+      }
     }
   }
 

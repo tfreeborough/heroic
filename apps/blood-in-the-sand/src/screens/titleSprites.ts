@@ -16,6 +16,7 @@ export const TITLE_SPRITES: Record<string, number> = {
   "title-bow": require("../../assets/sprites/title-bow.png"),
   "title-staff": require("../../assets/sprites/title-staff.png"),
   "title-hammer": require("../../assets/sprites/title-hammer.png"),
+  "title-trident": require("../../assets/sprites/title-trident.png"),
 };
 
 /**

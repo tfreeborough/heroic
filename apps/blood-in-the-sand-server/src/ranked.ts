@@ -34,6 +34,9 @@ export interface QueueEntry {
   announcer: string;
   /** Worn title (deed id, "" = bare) — entitlement-verified before enqueue. */
   title: string;
+  /** Owned gated-item entitlements (`weapon:*`/`ability:*`), loaded at the
+   * same verify — the seat's pick validation reads these synchronously. */
+  items: string[];
   /** This bracket's season rating, loaded at queue entry — the matcher's
    * sort key. Fresh enough: nobody's rating moves while they queue. */
   rating: number;

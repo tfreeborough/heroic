@@ -172,8 +172,17 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the same day: deeds are RANKED-ONLY by design (Tom: ranked is the mode
  * to push players toward, and per-mode counting rules are too hard to
  * explain). Don't rebuild it without that decision changing.)
+ * v20 (2026-08-09): the TRIDENT — the first achievement-gated weapon
+ * (bits-secret-items.md; The Sand snake grants `weapon:trident`). A new
+ * weapon id is NOT additive: shipped bundles index WEAPONS[weapon]
+ * straight off snapshots, so an old client meeting a trident would crash
+ * — hence the bump (the mismatch screen walks stragglers through the OTA
+ * update). No message shapes changed. Wizard hides gated items until
+ * entitled; ranked validates picks server-side against entitlements
+ * loaded at queue time; bots draft from the FREE roster only,
+ * permanently (Tom: an earned item in hand is proof of humanity).
  */
-export const PROTOCOL_VERSION = 19;
+export const PROTOCOL_VERSION = 20;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a

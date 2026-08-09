@@ -22,6 +22,19 @@ export interface AttackConfig {
   reach: number;
   /** Arc only: full cone width in radians (the cleave window). */
   arcWidth?: number;
+  /** Arc only: the hit region starts this many px out instead of at the
+   * wielder — the cone becomes a floating band from `minReach` to `reach`
+   * (the trident's head: only the tip is dangerous, and a body inside the
+   * band is standing safely between the prongs and the hands). Absent = 0,
+   * the classic full cone. */
+  minReach?: number;
+  /** Arc only: the strike TRAVELS — the hit front expands from the wielder
+   * to full reach over this many seconds instead of landing everywhere at
+   * once (the trident thrust). Close bodies are struck sooner than far
+   * ones, and a dodge can slip through the moving front. Absent = the
+   * classic instant cleave. The cycle itself is untouched: the front rides
+   * the opening of recovery, so windup/recovery timings read as ever. */
+  thrustDuration?: number;
   /** Projectile only: travel speed in px/s. */
   projectileSpeed?: number;
   /** Projectile only: how many extra hostiles it passes through. */

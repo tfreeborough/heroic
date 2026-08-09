@@ -16,6 +16,7 @@ import { useArenaConnection } from "./src/net/useArenaConnection";
 import { setAnnouncerPack } from "./src/audio";
 import { loadAnnouncerPack } from "./src/settings";
 import { loadWornTitle } from "./src/deeds/wornTitle";
+import { loadEntitlements } from "./src/deeds/entitlements";
 import { useFonts } from "expo-font";
 import { DISPLAY_FONT_SOURCE } from "./src/typography";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
@@ -117,6 +118,9 @@ export default function App() {
     void loadAnnouncerPack().then(setAnnouncerPack);
     // The worn title — loaded before any join can claim it (same reasoning).
     void loadWornTitle();
+    // Earned entitlements — the wizard hides gated items until these load
+    // (bits-secret-items.md); refreshed authoritatively on codex visits.
+    void loadEntitlements();
   }, []);
 
   const saveName = useCallback((name: string) => {

@@ -75,7 +75,10 @@ const wins = milestoneChain<MatchSummary>({
   origin: { x: 0, y: -130 },
   step: { x: 0, y: -115 },
   tiers: [
-    { threshold: 5, title: "The Sand snake", description: "Win 5 ranked matches.", rewards: [{ kind: "title" }] },
+    // The Sand snake also pays the game's FIRST gated weapon — the teaching
+    // beat (bits-secret-items.md): five wins in, players learn deeds pay
+    // steel. Rewards stack: one card, title + trident.
+    { threshold: 5, title: "The Sand snake", description: "Win 5 ranked matches.", rewards: [{ kind: "title" }, { kind: "entitlement", itemId: "weapon:trident" }] },
     { threshold: 25, title: "The Pit Viper", description: "Win 25 ranked matches." },
     { threshold: 50, title: "The King Cobra", description: "Win 50 ranked matches.", rewards: [{ kind: "title" }] },
     { threshold: 100, title: "The Great Constrictor", description: "Win 100 ranked matches." },
@@ -136,6 +139,13 @@ const weaponRounds = [
     { threshold: 5, title: "Heavy-Handed", description: "Win 5 rounds wielding the Hammer." },
     { threshold: 50, title: "Bonebreaker", description: "Win 50 rounds wielding the Hammer." },
     { threshold: 200, title: "The Landslide", description: "Win 200 rounds wielding the Hammer.", rewards: [{ kind: "title" }] },
+  ]),
+  // The gated weapon's own ladder — visible like any chain, but you can't
+  // climb it until the Sand snake hands you the spear. PLACEHOLDER titles.
+  ...weaponChain("trident", 4, [
+    { threshold: 5, title: "The Fisherman", description: "Win 5 rounds wielding the Trident." },
+    { threshold: 50, title: "Spearside", description: "Win 50 rounds wielding the Trident." },
+    { threshold: 200, title: "The Retiarius", description: "Win 200 rounds wielding the Trident.", rewards: [{ kind: "title" }] },
   ]),
 ];
 

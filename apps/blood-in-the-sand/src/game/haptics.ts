@@ -17,6 +17,7 @@ export const WEAPON_HAPTIC: Record<WeaponId, HapticWeight> = {
   bow: "light",
   staff: "light",
   hammer: "medium",
+  trident: "soft", // a puncture, not a crunch — the blade's weight class
 };
 
 const IMPACT: Record<HapticWeight, Haptics.ImpactFeedbackStyle> = {

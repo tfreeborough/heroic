@@ -13,7 +13,7 @@ import { useMemo, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ACHIEVEMENT_DEFS, type BitsAchievementDef } from "@heroic/blood-in-the-sand-sim";
+import { ACHIEVEMENT_DEFS, itemDisplayName, type BitsAchievementDef } from "@heroic/blood-in-the-sand-sim";
 import { playSound } from "../audio";
 import { markDeedsCelebrated } from "../deeds/celebrated";
 import { DEED_ICONS } from "../deeds/deedIcons";
@@ -164,7 +164,12 @@ export const DeedCardFace = ({ reveal }: { reveal: DeedReveal }) => {
         <Text style={styles.deedDesc}>{shownDeed.description}</Text>
         {shownDeed.rewards?.map((r, i) => (
           <Text key={i} style={styles.deedReward}>
-            {r.kind === "glory" ? `+${r.amount} GLORY` : r.kind === "entitlement" ? "NEW SPOILS CLAIMED" : "TITLE EARNED"}
+            {r.kind === "glory"
+              ? `+${r.amount} GLORY`
+              : r.kind === "entitlement"
+                ? // The teaching beat (bits-secret-items.md): name the steel.
+                  `UNLOCKED — ${itemDisplayName(r.itemId).toUpperCase()}`
+                : "TITLE EARNED"}
           </Text>
         ))}
       </Animated.View>

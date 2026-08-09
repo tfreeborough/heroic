@@ -347,6 +347,7 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
   const [botArchetype, setBotArchetype] = useState(devFlags.botArchetype);
   const [botDifficulty, setBotDifficulty] = useState(devFlags.botDifficulty);
   const [deedsPreview, setDeedsPreview] = useState(devFlags.deedsPreview);
+  const [grantAllItems, setGrantAllItems] = useState(devFlags.grantAllItems);
   // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
   // session-only devFlags rows — App.tsx applies it on launch; this label
   // just needs the same stored value.
@@ -440,6 +441,13 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
     const next = ring[(ring.indexOf(devFlags.deedsPreview) + 1) % ring.length]!;
     devFlags.deedsPreview = next;
     setDeedsPreview(next);
+  };
+
+  // Grant every gated item this session (bits-secret-items.md) — the wizard
+  // shows unearned steel in practice/skirmish; ranked still validates.
+  const onToggleGrantItems = (): void => {
+    devFlags.grantAllItems = !devFlags.grantAllItems;
+    setGrantAllItems(devFlags.grantAllItems);
   };
 
   // Cycle the announcer voice — applied live + persisted, then the new pack's
@@ -666,6 +674,13 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
           <Pressable onPress={withTap("uiTap", onCycleDeedsPreview)} style={styles.devButton}>
             <Text style={styles.devButtonText}>
               DEEDS {deedsPreview ? `◉ ${deedsPreview.toUpperCase()} UNLOCKED` : "○ REAL DATA"}
+            </Text>
+          </Pressable>
+          {/* Session grant of every gated item — the wizard shows the trident
+              etc. in practice/skirmish; RANKED still checks the real ledger. */}
+          <Pressable onPress={withTap("uiTap", onToggleGrantItems)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              ITEMS {grantAllItems ? "◉ ALL GRANTED" : "○ EARNED ONLY"}
             </Text>
           </Pressable>
         </View>

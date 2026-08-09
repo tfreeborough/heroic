@@ -18,13 +18,13 @@
  */
 import { ATTACK_CYCLE_READY } from "@heroic/core";
 import {
-  ABILITY_IDS,
+  FREE_ABILITY_IDS,
   COUNTDOWN_SECONDS,
   LOBBY_COUNTDOWN_SECONDS,
   LOADOUT_ABILITY_COUNT,
   MATCH_END_SECONDS,
   ROUND_END_SECONDS,
-  WEAPON_IDS,
+  FREE_WEAPON_IDS,
   WINS_TO_TAKE_MATCH,
 } from "./config";
 import type { ArenaEvent } from "./events";
@@ -59,6 +59,8 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.lockedFacing = p.facing;
     p.tauntLeft = 0;
     p.tauntTargetId = null;
+    p.thrustLeft = 0; // a thrust never crosses a round boundary
+    p.thrustHits.length = 0;
     p.slots = createAbilitySlots(p.abilities); // every cooldown clean each round
     p.dots.length = 0;
     p.slowLeft = 0;
@@ -123,11 +125,14 @@ export const forceStartMatch = (sim: ArenaSim): boolean => {
   if (armingComplete(sim)) return false; // nothing to do — it's already counting
   for (const p of seated) {
     if (p.weapon === null) {
-      setPlayerWeapon(sim, p.id, WEAPON_IDS[Math.floor(sim.rng.next() * WEAPON_IDS.length)]!);
+      // FREE roster only: bots never draft gated items (permanently — an
+      // earned item in hand is proof of humanity, bits-secret-items.md),
+      // and a straggler shouldn't be handed steel they never earned.
+      setPlayerWeapon(sim, p.id, FREE_WEAPON_IDS[Math.floor(sim.rng.next() * FREE_WEAPON_IDS.length)]!);
     }
     const hand = [...p.abilities];
     while (hand.length < LOADOUT_ABILITY_COUNT) {
-      const pool = ABILITY_IDS.filter((a) => !hand.includes(a));
+      const pool = FREE_ABILITY_IDS.filter((a) => !hand.includes(a));
       hand.push(pool[Math.floor(sim.rng.next() * pool.length)]!);
     }
     setPlayerAbilities(sim, p.id, hand);

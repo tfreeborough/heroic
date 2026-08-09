@@ -565,6 +565,7 @@ describe("RankedQueue", () => {
     name: accountId,
     announcer: "default",
     title: "",
+    items: [],
     rating,
     joinedMs,
   });

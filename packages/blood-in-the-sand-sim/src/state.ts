@@ -165,6 +165,12 @@ export interface ArenaPlayer {
    * `announcer`, broadcast via RoomStatePlayer). "" = bare; disguised ranked
    * bots may claim one so bare bots never become a backfill tell. */
   title: string;
+  /** Travelling-thrust strike (attack.thrustDuration weapons): seconds until
+   * the front reaches full reach; 0 = no thrust in flight. Sim-only. */
+  thrustLeft: number;
+  /** Ids already struck by the CURRENT thrust — the front passes each body
+   * exactly once. Cleared when a new thrust arms. */
+  thrustHits: number[];
 }
 
 export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
@@ -324,6 +330,8 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   respawnLeft: 0,
   announcer: "default",
   title: "",
+  thrustLeft: 0,
+  thrustHits: [],
 });
 
 /** Defensive input scrubbing — the sim never trusts the wire. */

@@ -70,4 +70,31 @@ describe("hitsInArc", () => {
   test("cleaves circles and boxes together", () => {
     expect(hitsInArc(ORIGIN, 0, REACH, ARC, [circle(1, 60, 10), box(2, 70, -10)])).toEqual([1, 2]);
   });
+
+  describe("minReach (the floating band)", () => {
+    const MIN = 50;
+
+    test("a body inside the dead zone is untouchable", () => {
+      // Centre 30, radius 10 → far edge at 40, short of the band at 50.
+      expect(hitsInArc(ORIGIN, 0, REACH, ARC, [circle(1, 30, 0)], MIN)).toEqual([]);
+    });
+
+    test("any overlap with the band counts, both edges", () => {
+      // Far edge exactly reaches the inner edge (41 + 10 > 50) → hit.
+      expect(hitsInArc(ORIGIN, 0, REACH, ARC, [circle(1, 41, 0)], MIN)).toEqual([1]);
+      // Straddling the outer edge still hits (the original edge rule).
+      expect(hitsInArc(ORIGIN, 0, REACH, ARC, [circle(1, 109, 0)], MIN)).toEqual([1]);
+    });
+
+    test("minReach 0 is the classic full cone", () => {
+      expect(hitsInArc(ORIGIN, 0, REACH, ARC, [circle(1, 30, 0)], 0)).toEqual([1]);
+    });
+
+    test("a box fully inside the dead zone is untouchable", () => {
+      // Centre 20, 40×40 → farthest corner at hypot(40, 20) ≈ 44.7, short of 50.
+      expect(hitsInArc(ORIGIN, 0, REACH, ARC, [box(1, 20, 0)], MIN)).toEqual([]);
+      // Centre 40 → farthest corner ≈ 63.2, overlapping the band → hit.
+      expect(hitsInArc(ORIGIN, 0, REACH, ARC, [box(1, 40, 0)], MIN)).toEqual([1]);
+    });
+  });
 });

@@ -25,6 +25,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
 import { getWornTitle } from "../deeds/wornTitle";
+import { grantFromDeedUnlocks } from "../deeds/entitlements";
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "rejected";
 
@@ -370,6 +371,10 @@ export class ArenaClient {
         return;
       }
       case "deedUnlocks":
+        // Whatever these deeds PAY is usable immediately — the trident is
+        // pickable in the very next lobby, no API round-trip
+        // (bits-secret-items.md; server still validates ranked picks).
+        grantFromDeedUnlocks(msg.unlocks);
         // Arrives on the settle's heels (same socket, ordered after
         // rankedResult) while the ceremony hold keeps the room open — store
         // it for the ceremony's deeds beat. A list from some OTHER match

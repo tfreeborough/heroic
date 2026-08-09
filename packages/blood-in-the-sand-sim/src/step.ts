@@ -82,6 +82,116 @@ const hurtScratch: HurtCircle[] = [];
 const canSeePos = (sim: ArenaSim, from: ArenaPlayer, pos: Vec2): boolean =>
   segmentClear(from.mover.pos, pos, sim.zone.occluders);
 
+/**
+ * Resolve one arc strike out to `reach`: enemies and straw men inside the
+ * wedge take a full hit resolve (knockback, bleed/slow riders, kill).
+ * `alreadyHit` non-null = a TRAVELLING thrust's ledger — bodies in it are
+ * skipped and fresh ones recorded, so the expanding front strikes each
+ * exactly once; null = the classic instant cleave.
+ */
+const resolveArcStrike = (
+  sim: ArenaSim,
+  p: ArenaPlayer,
+  weapon: (typeof WEAPONS)[keyof typeof WEAPONS],
+  reach: number,
+  alreadyHit: number[] | null,
+  events: ArenaEvent[],
+): void => {
+  const state = sim.state;
+  const seats = state.players;
+  hurtScratch.length = 0;
+  for (const e of seatedPlayers(state)) {
+    if (e.team === p.team || !e.alive) continue;
+    hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: PLAYER_RADIUS });
+  }
+  for (const d of state.deployables) {
+    if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
+    hurtScratch.push({ id: d.id, pos: d.pos, radius: PLAYER_RADIUS });
+  }
+  const hits = hitsInArc(
+    p.mover.pos,
+    p.lockedFacing,
+    reach,
+    weapon.attack.arcWidth!,
+    hurtScratch,
+    weapon.attack.minReach ?? 0,
+  );
+  for (const hitId of hits) {
+    if (alreadyHit) {
+      if (alreadyHit.includes(hitId)) continue;
+      alreadyHit.push(hitId);
+    }
+    if (isDeployableId(hitId)) {
+      // The decoy soaks it: a full resolve against the dummy sheet.
+      const dummy = state.deployables.find((d) => d.id === hitId);
+      if (!dummy) continue;
+      const result = damageDummy(p, dummy, sim.rng);
+      events.push({
+        type: "hit",
+        attackerId: p.id,
+        targetId: dummy.id,
+        damage: result.damage,
+        crit: result.crit,
+        lethal: false, // dummies break, they don't die
+        x: dummy.pos.x,
+        y: dummy.pos.y,
+      });
+      continue;
+    }
+    const defender = seats[hitId];
+    if (!defender || dashInvulnerable(defender)) continue; // dodged through it
+
+    const result = resolvePlayerHit(p.combatant, defender, sim.rng);
+    const knockback = weapon.attack.knockback ?? 0;
+    let away = normalize(sub(defender.mover.pos, p.mover.pos));
+    if (away.x === 0 && away.y === 0) {
+      away = { x: Math.cos(p.lockedFacing), y: Math.sin(p.lockedFacing) };
+    }
+    applyImpulse(defender, away.x, away.y, knockback);
+
+    events.push({
+      type: "hit",
+      attackerId: p.id,
+      targetId: defender.id,
+      damage: result.damage,
+      crit: result.crit,
+      lethal: result.lethal,
+      x: defender.mover.pos.x,
+      y: defender.mover.pos.y,
+    });
+    if (result.lethal) {
+      killPlayer(defender, events);
+    } else {
+      if (weapon.bleed && sim.rng.next() < weapon.bleed.chance) {
+        // A refresh-flagged bleed (the trident) resets the wielder's existing
+        // dot instead of stacking a second — re-pokes restart the drip.
+        const prior = weapon.bleed.refresh
+          ? defender.dots.find((d) => d.sourceId === p.id)
+          : undefined;
+        if (prior) {
+          prior.ticksLeft = weapon.bleed.ticks;
+          prior.tLeft = weapon.bleed.interval;
+          prior.interval = weapon.bleed.interval;
+          prior.damage = weapon.bleed.damage;
+        } else {
+          applyDot(defender.dots, {
+            ticksLeft: weapon.bleed.ticks,
+            tLeft: weapon.bleed.interval,
+            interval: weapon.bleed.interval,
+            damage: weapon.bleed.damage,
+            sourceId: p.id,
+          });
+        }
+      }
+      if (weapon.slow && !ironhideActive(defender)) {
+        // Refresh, never stack — repeated hammer hits extend the window.
+        defender.slowLeft = Math.max(defender.slowLeft, weapon.slow.duration);
+        defender.slowFactor = weapon.slow.factor;
+      }
+    }
+  }
+};
+
 /** The player's picked weapon config. The blade fallback only serves
  * hand-forced test states — real matches can't start with an empty pick. */
 const weaponOf = (p: ArenaPlayer) => WEAPONS[p.weapon ?? "blade"];
@@ -223,10 +333,15 @@ export const stepSim = (
       const weapon = weaponOf(p);
 
       const target = targetView(state, p.targetId);
+      // Range mirrors hitsInArc's band rule: within reach AND overlapping the
+      // weapon's minReach band (a body between the trident's prongs and the
+      // hands never even triggers a swing — the dead zone is total safety).
+      const targetGap = target === null ? Infinity : distance(p.mover.pos, target.pos);
       const targetInRange =
         target !== null &&
         target.alive &&
-        distance(p.mover.pos, target.pos) - target.radius <= weapon.attack.reach;
+        targetGap - target.radius <= weapon.attack.reach &&
+        targetGap + target.radius >= (weapon.attack.minReach ?? 0);
       const locked = targetView(state, p.lockedTargetId);
       // A smoked mark counts as lost (the sandstorm rule) — mid-windup too,
       // and stepping into the cloud yourself breaks your own windup.
@@ -271,83 +386,33 @@ export const stepSim = (
             // routed us into the projectile branch).
             events.push({ type: "shoot", ownerId: p.id, weapon: p.weapon!, x: p.mover.pos.x, y: p.mover.pos.y });
           }
+        } else if (weapon.attack.thrustDuration) {
+          // The travelling thrust (the trident): arm the front — resolution
+          // happens over the next few steps as it runs out (advanced below,
+          // same tick included, so point-blank still feels instant).
+          p.thrustLeft = weapon.attack.thrustDuration;
+          p.thrustHits.length = 0;
         } else {
-          hurtScratch.length = 0;
-          for (const e of players) {
-            if (e.team === p.team || !e.alive) continue;
-            hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: PLAYER_RADIUS });
-          }
-          for (const d of state.deployables) {
-            if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
-            hurtScratch.push({ id: d.id, pos: d.pos, radius: PLAYER_RADIUS });
-          }
-          const hits = hitsInArc(
-            p.mover.pos,
-            p.lockedFacing,
-            weapon.attack.reach,
-            weapon.attack.arcWidth!,
-            hurtScratch,
-          );
-          for (const hitId of hits) {
-            if (isDeployableId(hitId)) {
-              // The decoy soaks it: a full resolve against the dummy sheet.
-              const dummy = state.deployables.find((d) => d.id === hitId);
-              if (!dummy) continue;
-              const result = damageDummy(p, dummy, sim.rng);
-              events.push({
-                type: "hit",
-                attackerId: p.id,
-                targetId: dummy.id,
-                damage: result.damage,
-                crit: result.crit,
-                lethal: false, // dummies break, they don't die
-                x: dummy.pos.x,
-                y: dummy.pos.y,
-              });
-              continue;
-            }
-            const defender = seats[hitId];
-            if (!defender || dashInvulnerable(defender)) continue; // dodged through it
-
-            const result = resolvePlayerHit(p.combatant, defender, sim.rng);
-            const knockback = weapon.attack.knockback ?? 0;
-            let away = normalize(sub(defender.mover.pos, p.mover.pos));
-            if (away.x === 0 && away.y === 0) {
-              away = { x: Math.cos(p.lockedFacing), y: Math.sin(p.lockedFacing) };
-            }
-            applyImpulse(defender, away.x, away.y, knockback);
-
-            events.push({
-              type: "hit",
-              attackerId: p.id,
-              targetId: defender.id,
-              damage: result.damage,
-              crit: result.crit,
-              lethal: result.lethal,
-              x: defender.mover.pos.x,
-              y: defender.mover.pos.y,
-            });
-            if (result.lethal) {
-              killPlayer(defender, events);
-            } else {
-              if (weapon.bleed && sim.rng.next() < weapon.bleed.chance) {
-                applyDot(defender.dots, {
-                  ticksLeft: weapon.bleed.ticks,
-                  tLeft: weapon.bleed.interval,
-                  interval: weapon.bleed.interval,
-                  damage: weapon.bleed.damage,
-                  sourceId: p.id,
-                });
-              }
-              if (weapon.slow && !ironhideActive(defender)) {
-                // Refresh, never stack — repeated hammer hits extend the window.
-                defender.slowLeft = Math.max(defender.slowLeft, weapon.slow.duration);
-                defender.slowFactor = weapon.slow.factor;
-              }
-            }
-          }
+          resolveArcStrike(sim, p, weapon, weapon.attack.reach, null, events);
         }
         p.lockedTargetId = null;
+      }
+
+      // Advance an in-flight thrust: the front expands from the wielder to
+      // full reach over thrustDuration, striking each body ONCE as it
+      // crosses them — close targets are hit sooner, and a dash can slip
+      // through the moving front. Anchored to the wielder's CURRENT
+      // position (the spear travels with the hand) at the strike's locked
+      // facing. A dead wielder's thrust dies with them.
+      if (p.alive && p.thrustLeft > 0 && p.weapon) {
+        const dur = weapon.attack.thrustDuration ?? 0;
+        if (dur > 0) {
+          p.thrustLeft = Math.max(0, p.thrustLeft - dt);
+          const front = weapon.attack.reach * (1 - p.thrustLeft / dur);
+          resolveArcStrike(sim, p, weapon, front, p.thrustHits, events);
+        } else {
+          p.thrustLeft = 0; // weapon swapped mid-thrust (lobby edge) — drop it
+        }
       }
     }
 

@@ -25,6 +25,8 @@ import {
   WARDING_SHOUT,
   WEAPONS,
   WEAPON_IDS,
+  GATED_WEAPONS,
+  weaponEntitlement,
   type AbilityCategory,
   type AbilityId,
   type WeaponId,
@@ -74,6 +76,11 @@ export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc:
     quote: "You can run from the orb. The orb does not mind.",
     desc: "Looses a seeking orb that steers toward its mark until it connects or expires.",
   },
+  trident: {
+    hint: "only the head bites — hold your range",
+    quote: "The fish never learns how long the spear is.",
+    desc: "The longest melee reach — but only the head is dangerous. Catch them at the tip and they're shoved back, slowed, and bleeding. Let them inside the prongs and it can't touch them.",
+  },
   hammer: {
     hint: "slow, crushing, and it SLOWS them",
     quote: "The first blow is a promise. The slow is how it’s kept.",
@@ -117,6 +124,10 @@ export const weaponChips = (id: WeaponId): CodexChip[] => {
   }
   if (cfg.slow) chips.push({ label: "SLOW", value: `${cfg.slow.duration}s · ×${cfg.slow.factor} speed` });
   if (cfg.attack.shape === "arc") chips.push({ label: "ARC", value: `${deg(cfg.attack.arcWidth ?? 0)}°` });
+  if (cfg.attack.minReach) {
+    // The floating hit band (the trident head) — only this range bites.
+    chips.push({ label: "BITE", value: `${cfg.attack.minReach}–${cfg.attack.reach}px` });
+  }
   if (cfg.attack.shape === "projectile" && cfg.attack.projectileSpeed) {
     chips.push({ label: id === "staff" ? "ORB" : "ARROW", value: `${cfg.attack.projectileSpeed} px/s` });
   }
@@ -261,6 +272,10 @@ export const abilitiesByCategory = (category: AbilityCategory): AbilityId[] =>
     ABILITIES[a].name.localeCompare(ABILITIES[b].name),
   );
 
-/** Weapon ids alphabetical — same ordering rule as abilities. */
-export const sortedWeaponIds = (): WeaponId[] =>
-  [...WEAPON_IDS].sort((a, b) => WEAPONS[a].name.localeCompare(WEAPONS[b].name));
+/** Weapon ids alphabetical — same ordering rule as abilities. Gated items
+ * (bits-secret-items.md) appear ONLY when entitled: hidden, never greyed —
+ * a secret doesn't exist until it's yours. */
+export const sortedWeaponIds = (entitled: ReadonlySet<string>): WeaponId[] =>
+  WEAPON_IDS.filter((w) => !GATED_WEAPONS.has(w) || entitled.has(weaponEntitlement(w))).sort((a, b) =>
+    WEAPONS[a].name.localeCompare(WEAPONS[b].name),
+  );

@@ -28,4 +28,11 @@ export const devFlags = {
    * unlocked (frontier ghosts + hidden tails on show) · "all" = everything.
    * Read on DeedsScreen mount; never touches the server. */
   deedsPreview: null as null | "some" | "all",
+  /** Grant every GATED item this session (bits-secret-items.md) — the
+   * wizard shows the trident etc. without winning the deeds. Session-only
+   * OVERLAY on getEntitlements(): the persisted cache is never touched.
+   * Works in practice/skirmish (client-trusted); RANKED still validates
+   * against the DB, so an un-earned gated pick is ignored there — by
+   * design, this switch can't defeat it. */
+  grantAllItems: false,
 };

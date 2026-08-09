@@ -27,6 +27,7 @@ export const AUDIO_MANIFEST: AudioManifest = {
     fire_staff_1: require("../../assets/audio/sfx/fire_staff_1.mp3"),
     hit_staff_1: require("../../assets/audio/sfx/hit_staff_1.mp3"),
     hit_hammer_1: require("../../assets/audio/sfx/hit_hammer_1.mp3"),
+    hit_trident_1: require("../../assets/audio/sfx/hit_trident_1.mp3"),
     hit_generic_1: require("../../assets/audio/sfx/hit_generic_1.mp3"),
     player_hurt_1: require("../../assets/audio/sfx/player_hurt_1.mp3"),
     death_1: require("../../assets/audio/sfx/death_1.mp3"),
@@ -48,6 +49,7 @@ export const AUDIO_MANIFEST: AudioManifest = {
     harpoon_whip_1: require("../../assets/audio/sfx/harpoon_whip_1.mp3"),
     heal_tick_1: require("../../assets/audio/sfx/heal_tick_1.mp3"),
     quake_rumble_1: require("../../assets/audio/sfx/quake_rumble_1.mp3"),
+    reflect_1: require("../../assets/audio/sfx/reflect_1.mp3"),
 
     countdown_tick_1: require("../../assets/audio/sfx/countdown_tick_1.mp3"),
     round_start_1: require("../../assets/audio/sfx/round_start_1.mp3"),

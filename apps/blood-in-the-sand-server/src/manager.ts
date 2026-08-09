@@ -16,6 +16,8 @@ import {
   ACHIEVEMENT_BOARDS,
   ACHIEVEMENT_DEFS,
   COUNTERS,
+  GATED_ABILITIES,
+  GATED_WEAPONS,
   HEARTBEAT_SWEEP_MS,
   HEARTBEAT_TIMEOUT_MS,
   LOADOUT_ABILITY_COUNT,
@@ -34,6 +36,8 @@ import {
   sanitizeTeamSize,
   seatedPlayers,
   shouldCollect,
+  weaponEntitlement,
+  abilityEntitlement,
   type ClientMsg,
   type RoomListing,
   type ServerMsg,
@@ -159,22 +163,44 @@ export class RoomManager {
       }
       case "setWeapon": {
         const id = ws.data.playerId;
-        // Never trust the wire: the pick must be a real weapon id.
+        // Never trust the wire: the pick must be a real weapon id — and a
+        // GATED one must be owned (bits-secret-items.md): ranked seats
+        // verify against the entitlements loaded at queue time (silent
+        // ignore, the titles posture); skirmish takes the client's word.
         if (id !== null && typeof msg.weapon === "string" && msg.weapon in WEAPONS) {
-          this.roomOf(ws)?.setWeapon(id, msg.weapon, performance.now());
+          const room = this.roomOf(ws);
+          if (
+            room?.ranked &&
+            GATED_WEAPONS.has(msg.weapon) &&
+            !room.ranked.accounts.get(id)?.items.includes(weaponEntitlement(msg.weapon))
+          ) {
+            return;
+          }
+          room?.setWeapon(id, msg.weapon, performance.now());
         }
         return;
       }
       case "setAbilities": {
         const id = ws.data.playerId;
         // Shape check here; the sim re-validates (distinct, known) regardless.
+        // Gated abilities get the setWeapon treatment (none exist yet — the
+        // gate is ready for the first one).
         if (
           id !== null &&
           Array.isArray(msg.abilities) &&
           msg.abilities.length <= LOADOUT_ABILITY_COUNT &&
           msg.abilities.every((a) => typeof a === "string" && a in ABILITIES)
         ) {
-          this.roomOf(ws)?.setAbilities(id, msg.abilities, performance.now());
+          const room = this.roomOf(ws);
+          if (
+            room?.ranked &&
+            msg.abilities.some(
+              (a) => GATED_ABILITIES.has(a) && !room.ranked!.accounts.get(id)?.items.includes(abilityEntitlement(a)),
+            )
+          ) {
+            return;
+          }
+          room?.setAbilities(id, msg.abilities, performance.now());
         }
         return;
       }
@@ -401,13 +427,18 @@ export class RoomManager {
     if (lockLeft > 0) {
       return this.trySend(ws, { t: "reject", reason: `queue lockout — try again in ${lockLeft}s` });
     }
-    // Ranked verifies the worn title against the entitlements table — an
-    // unowned claim is SILENTLY stripped, never a rejection: a cosmetic must
-    // not cost a match (achievements.md § wearing titles). Skirmish has no
-    // identity to check against until M4, so only ranked can be strict.
-    if (title !== "" && !(await entitlementsOf(db, accountId)).some((e) => e.itemId === `title:${title}`)) {
+    // One entitlement read serves two verifications: the worn title (an
+    // unowned claim is SILENTLY stripped, never a rejection — a cosmetic
+    // must not cost a match) and the GATED-ITEM list carried to the seat
+    // for pick validation (bits-secret-items.md — checked synchronously at
+    // setWeapon/setAbilities time).
+    const owned = await entitlementsOf(db, accountId);
+    if (title !== "" && !owned.some((e) => e.itemId === `title:${title}`)) {
       title = "";
     }
+    const items = owned
+      .map((e) => e.itemId)
+      .filter((i) => i.startsWith("weapon:") || i.startsWith("ability:"));
     const ratings = new Map<string, number>();
     for (const bracket of brackets) {
       ratings.set(bracket, (await getRating(db, accountId, SEASON, bracket)).rating);
@@ -423,6 +454,7 @@ export class RoomManager {
         name,
         announcer,
         title,
+        items,
         rating: ratings.get(bracket)!,
         joinedMs: now,
         ...(this.botBackfillOn() ? { botAtMs: botDeadline(now, this.botCfg, Math.random) } : {}),
@@ -489,6 +521,7 @@ export class RoomManager {
         name: entry.name,
         announcer: entry.announcer,
         title: entry.title,
+        items: entry.items,
         rating: entry.rating,
         joinedMs: entry.joinedMs,
       });
@@ -530,6 +563,7 @@ export class RoomManager {
       name: entry.name,
       announcer: entry.announcer,
       title: entry.title,
+      items: entry.items,
       rating: entry.rating,
       joinedMs: entry.joinedMs,
     });
@@ -560,6 +594,7 @@ export class RoomManager {
       name: botName,
       announcer: "default",
       title: botTitle,
+      items: [], // bots own nothing gated, ever (bits-secret-items.md)
       rating: botRating,
       joinedMs: now,
       bot: true,
@@ -627,6 +662,7 @@ export class RoomManager {
             name: account.name,
             announcer: account.announcer,
             title: account.title,
+            items: account.items,
             rating: account.rating,
             joinedMs: account.joinedMs,
           }),

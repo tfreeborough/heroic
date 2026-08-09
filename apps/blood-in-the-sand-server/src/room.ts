@@ -16,9 +16,9 @@ import {
   ARENA_00,
   LOADOUT_ABILITY_COUNT,
   PROTOCOL_VERSION,
+  FREE_WEAPON_IDS,
   SNAPSHOT_DIVISOR,
   TICK_DT,
-  WEAPON_IDS,
   addBot,
   addPlayer,
   armingComplete,
@@ -90,6 +90,9 @@ export interface RankedSeatAccount {
   announcer: string;
   /** Worn title (deed id, "" = bare) — entitlement-verified at queue time. */
   title: string;
+  /** Owned gated-item entitlements — the manager's pick validation reads
+   * these (bits-secret-items.md); bots own nothing gated, ever. */
+  items: string[];
   /** Bracket rating at queue time — rides along for a void's re-queue. */
   rating: number;
   /** Original queue-entry time — a void's re-queue keeps the wait earned. */
@@ -475,7 +478,10 @@ export class Room {
       const p = this.sim.state.players[id];
       if (!p || !p.bot) continue;
       if (p.weapon === null) {
-        setPlayerWeapon(this.sim, id, WEAPON_IDS[Math.floor(this.sim.rng.next() * WEAPON_IDS.length)]!);
+        // FREE roster only — an earned item in hand is proof of humanity
+        // (config.ts's FREE_WEAPON_IDS rule; a disguised bot must never
+        // wield a gated weapon, and the brains hold no trident band anyway).
+        setPlayerWeapon(this.sim, id, FREE_WEAPON_IDS[Math.floor(this.sim.rng.next() * FREE_WEAPON_IDS.length)]!);
       }
       const hand = [...p.abilities];
       while (hand.length < LOADOUT_ABILITY_COUNT) {

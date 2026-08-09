@@ -61,6 +61,7 @@ import {
 } from "../loadout/catalogue";
 import { loadLastLoadout, saveLastLoadout, type SavedLoadout } from "../settings";
 import { resolveTitleText } from "../deeds/wornTitle";
+import { getEntitlements } from "../deeds/entitlements";
 
 export interface RoomScreenProps {
   /** ArenaClient for real rooms; PracticeClient drives the same flow offline. */
@@ -809,7 +810,7 @@ const WizardStep = (props: WizardStepProps) => {
   const freeIn = (cat: AbilityCategory): AbilityId[] =>
     abilitiesByCategory(cat).filter((a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1]);
 
-  const options: IconId[] = wizard.step === 0 ? sortedWeaponIds() : wizard.cat !== null ? freeIn(wizard.cat) : [];
+  const options: IconId[] = wizard.step === 0 ? sortedWeaponIds(getEntitlements()) : wizard.cat !== null ? freeIn(wizard.cat) : [];
 
   return (
     <Animated.View

@@ -18,6 +18,8 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "bow": require("../../assets/icons/bow.png"),
   "staff": require("../../assets/icons/staff.png"),
   "hammer": require("../../assets/icons/hammer.png"),
+  // Forge art owed — harpoon's spear-head stands in until the trident lands.
+  "trident": require("../../assets/icons/trident.png"),
   // abilities
   "sandtrap": require("../../assets/icons/sandtrap.png"),
   "tremor": require("../../assets/icons/tremor.png"),
