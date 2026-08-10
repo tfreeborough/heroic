@@ -383,6 +383,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
       const gainAt = (x: number, y: number): number => gainFrom(listener, x, y);
       for (const e of events) {
         if (e.type === "hit") {
+          // Ambient dot ticks (bleed AND poison): tinted number, blood, and
+          // nothing else — no impact ring, no haptic, no strike SFX.
+          const dot = e.bleed === true || e.poison === true;
           // The attacker→victim line: every splash exits the far side of the
           // victim along it (the through-wound), and the kill spray fires out
           // of the BACK on the same line. The victim auto-faces their
@@ -451,12 +454,13 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               text: String(e.damage),
               crit: e.crit,
               bleed: e.bleed,
+              poison: e.poison,
             },
             bornMs: now,
             ttlMs: NUMBER_TTL,
           });
-          // Bleed ticks are ambient damage — a red number, no impact ring.
-          if (!e.bleed) {
+          // Dot ticks are ambient damage — a tinted number, no impact ring.
+          if (!dot) {
             fxRef.current.push({
               item: { kind: "ring", x: e.x, y: e.y, life: 1 },
               bornMs: now,
@@ -468,9 +472,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // Bleed ticks stay silent — ambient damage shouldn't buzz the hand.
           if (e.lethal && (e.attackerId === myId || e.targetId === myId)) {
             playStrikeHaptic("heavy", e.crit);
-          } else if (!e.bleed && e.attackerId === myId) {
+          } else if (!dot && e.attackerId === myId) {
             playStrikeHaptic(WEAPON_HAPTIC[client.myWeapon ?? "blade"], e.crit);
-          } else if (!e.bleed && e.targetId === myId) {
+          } else if (!dot && e.targetId === myId) {
             playStrikeHaptic("medium");
           }
           // SFX: your own pained grunt is reserved for CRITS — a normal hit on
@@ -480,7 +484,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // The impact thud, for every weapon incl. ranged — distinct from the
           // ranged release (the `shoot` event below). Your own pained grunt is
           // crit-only; getting hit otherwise just thuds.
-          if (!e.bleed && !isDeployableId(e.targetId)) {
+          if (!dot && !isDeployableId(e.targetId)) {
             if (e.targetId === myId) {
               if (e.crit) playSound("hitTaken"); // your own pain — always full, it's you
             } else {

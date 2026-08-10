@@ -60,6 +60,19 @@ const applySchema = async (db: Db): Promise<void> => {
       // (player_id, amount) without touching the table.
       `CREATE INDEX IF NOT EXISTS idx_glory_ledger_player
         ON glory_ledger (player_id, amount)`,
+      // Append-only Writ ledger (bits-store.md) — the universal unlock
+      // voucher, mirroring glory_ledger exactly. Sources: store:exchange
+      // (bought with Glory), iap:<store> (bought with money), dev-grant.
+      `CREATE TABLE IF NOT EXISTS writ_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id TEXT NOT NULL REFERENCES players(id),
+        amount INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_writ_ledger_player
+        ON writ_ledger (player_id, amount)`,
       // Per-bracket ladder rows (bits-ranked.md): one row per rated subject
       // per season per bracket — a 1v1 rating and a 2v2 rating are simply two
       // rows, fully independent. `subject_id` is a player id in solo-queue

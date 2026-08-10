@@ -14,6 +14,7 @@ import type {
   PlayerSnapshot,
   ProjectileSnapshot,
   RoundSnapshot,
+  ShellSnapshot,
   SnapshotMsg,
 } from "./protocol";
 
@@ -36,6 +37,9 @@ export interface InterpolatedView {
   projectiles: ProjectileSnapshot[];
   /** Static once placed — no lerp, straight from the newer snapshot. */
   deployables: DeployableSnapshot[];
+  /** Bombard shells: flight is fully derived from landIn/total, so the
+   * newer snapshot's rows serve as-is — no lerp (the deployables rule). */
+  shells: ShellSnapshot[];
 }
 
 interface Entry {
@@ -103,6 +107,7 @@ export class SnapshotBuffer {
     players: [],
     projectiles: [],
     deployables: [],
+    shells: [],
   };
 
   constructor(tickRate: number) {
@@ -185,6 +190,7 @@ export class SnapshotBuffer {
     view.tick = target;
     view.round = newer.round;
     view.deployables = newer.deployables;
+    view.shells = newer.shells;
     return view;
   }
 }

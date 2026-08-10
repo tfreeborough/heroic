@@ -5,7 +5,15 @@
  * here. Derived/non-serialisable runtime (zone geometry, the live Rng, the
  * spatial grid) lives beside it in `ArenaSim` (sim.ts).
  */
-import type { AbilityState, AttackCycleState, Combatant, DotState, Mover, ProjectileState } from "@heroic/core";
+import type {
+  AbilityState,
+  AttackCycleState,
+  Combatant,
+  DotState,
+  Mover,
+  ProjectileState,
+  StackingDotState,
+} from "@heroic/core";
 import { ABILITY_READY, ATTACK_CYCLE_READY, createMover, makeCombatant } from "@heroic/core";
 import type { Vec2 } from "@heroic/core";
 import {
@@ -115,6 +123,17 @@ export interface ArenaPlayer {
   abilities: AbilityId[];
   /** Active damage-over-time riders (the blade's bleed) — core stepDots ticks these. */
   dots: DotState[];
+  /** The stacking poison (the Fang's rider) — one shared state per victim,
+   * ticked by core stepStackingDot; null = clean. */
+  poison: StackingDotState | null;
+  /** Follow-up bolts still to loose this volley (the Scorpion's burst);
+   * 0 = no volley in flight. */
+  burstLeft: number;
+  /** Seconds until the next follow-up bolt. */
+  burstNext: number;
+  /** The volley's mark — each follow-up re-aims at its CURRENT position;
+   * a dead or smoked mark ends the volley. */
+  burstTargetId: number | null;
   /** Seconds of movement slow left (the hammer's debuff); 0 = unslowed. */
   slowLeft: number;
   /** Max-speed multiplier while slowLeft > 0 (from the slowing weapon's config). */
@@ -246,6 +265,30 @@ export interface Deployable {
 
 export const isDeployableId = (id: number): boolean => id >= DEPLOYABLE_ID_BASE;
 
+/** A bombard shell in flight (bits-store-arms.md): launched at the mark's
+ * fire-time position, it lands there after a FIXED flight time — no
+ * collision on the way (it flies above the fight; the client's arc is
+ * render flavour). The landing point + clock ARE the telegraph: both teams
+ * read the marked ring off the snapshot, and bots get their dodge data the
+ * same way. Blast on landing is the sandtrap idiom. */
+export interface ArenaShell {
+  /** Monotonic per-match (the projectile counter — clients key by id). */
+  id: number;
+  ownerId: number;
+  team: Team;
+  from: Vec2;
+  target: Vec2;
+  /** Seconds until it lands. */
+  landIn: number;
+  /** The full flight time — the client derives arc progress from landIn/flightTime. */
+  flightTime: number;
+  /** Blast numbers copied BY VALUE at launch — a shell must land intact
+   * even if its owner's seat is freed mid-flight. */
+  blastRadius: number;
+  damage: number;
+  knockback: number;
+}
+
 export interface ArenaState {
   tick: number;
   /** The two sides' faction names, indexed team − 1 (teamNames.ts). Assigned
@@ -269,6 +312,9 @@ export interface ArenaState {
   /** Placed things (mines/decoys/zones), stepped after projectiles, cleared each round. */
   deployables: Deployable[];
   nextDeployableId: number;
+  /** Bombard shells in flight (ids from the projectile counter), stepped
+   * after projectiles, cleared each round. */
+  shells: ArenaShell[];
 }
 
 export const createArenaState = (seed: number, seatCount: number, training = false): ArenaState => ({
@@ -283,6 +329,7 @@ export const createArenaState = (seed: number, seatCount: number, training = fal
   nextProjectileId: 0,
   deployables: [],
   nextDeployableId: DEPLOYABLE_ID_BASE,
+  shells: [],
 });
 
 /** The occupied seats, in id order. */
@@ -311,6 +358,10 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   weapon: null,
   abilities: [],
   dots: [],
+  poison: null,
+  burstLeft: 0,
+  burstNext: 0,
+  burstTargetId: null,
   slowLeft: 0,
   slowFactor: 1,
   moveFactor: 1,

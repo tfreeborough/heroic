@@ -99,9 +99,12 @@ export const buildSoundSet = (): SoundSetEntry[] => {
   const weaponHits = WEAPON_IDS.map((id) =>
     entry(`hit_${id}`, `${WEAPONS[id].name} — impact`, "combat"),
   );
-  // Ranged weapons (those that loose a projectile) also get a RELEASE bank —
-  // the bow twang / staff whoosh, distinct from the impact thud.
-  const weaponFires = WEAPON_IDS.filter((id) => WEAPONS[id].projectile).map((id) =>
+  // Ranged weapons also get a RELEASE bank — the bow twang / staff whoosh /
+  // bombard thoomp, distinct from the impact thud. The honest predicate is
+  // the attack SHAPE (fires on the sim's `shoot` event), not "has a
+  // projectile config" — the bombard looses a shell, not a projectile, and
+  // its fire_ row went missing under the old test (Tom hit this 2026-08-10).
+  const weaponFires = WEAPON_IDS.filter((id) => WEAPONS[id].attack.shape === "projectile").map((id) =>
     entry(`fire_${id}`, `${WEAPONS[id].name} — release`, "combat"),
   );
   const casts = ABILITY_IDS.map((id) =>

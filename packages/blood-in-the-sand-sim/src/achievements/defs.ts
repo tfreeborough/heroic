@@ -147,6 +147,24 @@ const weaponRounds = [
     { threshold: 50, title: "Spearside", description: "Win 50 rounds wielding the Trident." },
     { threshold: 200, title: "The Retiarius", description: "Win 200 rounds wielding the Trident.", rewards: [{ kind: "title" }] },
   ]),
+  // The WRIT weapons' ladders (bits-store-arms.md) — same rule as the
+  // trident's: the chain is visible to all, climbable once the Armory sells
+  // you the arm. PLACEHOLDER titles (Tom's naming pass).
+  ...weaponChain("fang", 5, [
+    { threshold: 5, title: "Just a Scratch", description: "Win 5 rounds wielding the Fang." },
+    { threshold: 50, title: "Venomous", description: "Win 50 rounds wielding the Fang." },
+    { threshold: 200, title: "The Adder's Kiss", description: "Win 200 rounds wielding the Fang.", rewards: [{ kind: "title" }] },
+  ]),
+  ...weaponChain("scorpion", 6, [
+    { threshold: 5, title: "Three of a Kind", description: "Win 5 rounds wielding the Scorpion." },
+    { threshold: 50, title: "Bolt-Counter", description: "Win 50 rounds wielding the Scorpion." },
+    { threshold: 200, title: "The Rain of Barbs", description: "Win 200 rounds wielding the Scorpion.", rewards: [{ kind: "title" }] },
+  ]),
+  ...weaponChain("bombard", 7, [
+    { threshold: 5, title: "Fire in the Hole", description: "Win 5 rounds wielding the Bombard." },
+    { threshold: 50, title: "The Long Arm", description: "Win 50 rounds wielding the Bombard." },
+    { threshold: 200, title: "Rain of Ruin", description: "Win 200 rounds wielding the Bombard.", rewards: [{ kind: "title" }] },
+  ]),
 ];
 
 /** Per-ability cast chains — WEST ribs, clustered BY CATEGORY (offensive /
@@ -267,7 +285,10 @@ const glory = milestoneChain<MatchSummary>({
   counter: COUNTERS.gloryEarned,
   icon: "deed-glory",
   parent: FIRST_MATCH.id,
-  origin: { x: 140, y: 745 },
+  // Shifted down per new weapon row above (745 → … → 1205 at the bombard,
+  // 2026-08-10) — keeps the ~215px inter-cluster air. M3's layout helper
+  // owns these numbers eventually.
+  origin: { x: 140, y: 1205 },
   step: { x: 115, y: 0 },
   tiers: [
     { threshold: 100, title: "I can go the distance", description: "Earn 100 lifetime Glory from ranked matches" },
@@ -304,7 +325,7 @@ const healing = milestoneChain<MatchSummary>({
   counter: COUNTERS.healingDone,
   icon: "deed-healing",
   parent: FIRST_MATCH.id,
-  origin: { x: 140, y: 960 },
+  origin: { x: 140, y: 1420 },
   step: { x: 115, y: 0 },
   tiers: [
     { threshold: 500, title: "Medic", description: "Restore 500 health.", rewards: [{ kind: "title" }]  },
@@ -343,7 +364,7 @@ const FEATS: BitsAchievementDef[] = [
     description: "Restore 200 health in a single ranked match.",
     icon: "deed-lifeblood",
     parent: healing[0]!.id,
-    pos: { x: 45, y: 1075 },
+    pos: { x: 45, y: 1535 },
     trigger: {
       kind: "feat",
       test: (s, p) => (s.stats[p]?.healingDealt ?? 0) >= 200,

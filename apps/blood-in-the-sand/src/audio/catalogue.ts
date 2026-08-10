@@ -78,6 +78,18 @@ const STRIKE_VARIANTS: Record<WeaponId, SoundBank> = {
   // Owed from the Forge — silent until hit_trident_1 lands: a wet piercing
   // punch-through, sharper and shorter than the blade's slice.
   trident: { clips: ["hit_trident_1"] },
+  // A 3-take bank (forged 2026-08-09) — the scheduler picks at random,
+  // never the same take twice running, so the fang's rapid cycle doesn't
+  // machine-stamp. Fast shallow nicks; the venom is the loud part.
+  fang: { clips: ["hit_fang_1", "hit_fang_2", "hit_fang_3"] },
+  // Owed from the Forge — silent until hit_scorpion_1 lands: a short hard
+  // bolt punch, snappier and smaller than the bow's thwack (three land in
+  // under half a second, so it must stay tight).
+  scorpion: { clips: ["hit_scorpion_1"] },
+  // Owed from the Forge — the blast concussion on a caught body. Plays
+  // UNDER the detonate boom (the shell reuses the sandtrap's detonate
+  // event), so keep it a short bodily thump, not a second explosion.
+  bombard: { clips: ["hit_bombard_1"] },
 };
 
 /** Per-weapon RELEASE banks (the bow twang / staff cast whoosh), played on the
@@ -86,6 +98,12 @@ const STRIKE_VARIANTS: Record<WeaponId, SoundBank> = {
 const FIRE_VARIANTS: Record<string, SoundBank> = {
   bow: { clips: ["fire_bow_1"] },
   staff: { clips: ["fire_staff_1"] },
+  // Owed from the Forge — the volley plays this THREE times ~0.13s apart
+  // (one shoot event per bolt), so forge a single dry clack, not a burst.
+  scorpion: { clips: ["fire_scorpion_1"] },
+  // Owed from the Forge — the launch thoomp; the landing boom is the
+  // detonate event's own sound, so no explosion here.
+  bombard: { clips: ["fire_bombard_1"] },
 };
 
 /** Per-ability cast banks. A missing entry falls back to the base `cast_*` bank. */

@@ -104,6 +104,8 @@ const randomHand = (): AbilityId[] => {
 
 export class PracticeClient implements LobbyClient {
   readonly buffer = new SnapshotBuffer(TICK_RATE);
+  /** Practice unlocks writ-gated items — the try-before-buy funnel. */
+  readonly practice = true;
   status: ConnectionStatus = "open";
   /** Offline, single-player-hosted — the crown never moves, so no notices. */
   readonly notice = null;

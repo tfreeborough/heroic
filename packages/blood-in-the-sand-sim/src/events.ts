@@ -20,6 +20,8 @@ export type ArenaEvent =
       lethal: boolean;
       /** Present on bleed ticks — the client tints these red and skips the ring. */
       bleed?: true;
+      /** Present on poison ticks (the Fang's stacking dot) — tinted green. */
+      poison?: true;
       x: number;
       y: number;
     }

@@ -20,6 +20,13 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "hammer": require("../../assets/icons/hammer.png"),
   // Forge art owed — harpoon's spear-head stands in until the trident lands.
   "trident": require("../../assets/icons/trident.png"),
+  // Forge art owed — the blade stands in until the fang lands (a copy of
+  // blade.png; replace the file, the key stays).
+  "fang": require("../../assets/icons/fang.png"),
+  // Forge art owed — the bow stands in until the scorpion lands (same rule).
+  "scorpion": require("../../assets/icons/scorpion.png"),
+  // Forge art owed — the sandtrap's charge stands in until the bombard lands.
+  "bombard": require("../../assets/icons/bombard.png"),
   // abilities
   "sandtrap": require("../../assets/icons/sandtrap.png"),
   "tremor": require("../../assets/icons/tremor.png"),

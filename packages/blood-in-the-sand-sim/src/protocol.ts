@@ -181,8 +181,26 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * entitled; ranked validates picks server-side against entitlements
  * loaded at queue time; bots draft from the FREE roster only,
  * permanently (Tom: an earned item in hand is proof of humanity).
+ * v21 (2026-08-09): the FANG — the first WRIT (store) weapon
+ * (bits-store-arms.md launch shelf, item 1) — and the poison status
+ * (core stacking dot: stacks share one refreshed clock, tick damage
+ * scales with stacks, all fall off together). PlayerSnapshot gains
+ * `poisonLeft` + `poisonStacks` (the green status ring; weight scales
+ * with stacks), hit events gain `poison?: true` (green tick tint). The
+ * new-weapon-id rule from v20 applies — old bundles index
+ * WEAPONS[weapon] off snapshots, hence the bump.
+ * v22 (2026-08-09): the SCORPION — writ weapon 2 (bits-store-arms.md) —
+ * and the burst mechanic (BurstConfig: follow-up bolts on their own
+ * clock, re-aimed per release). No message shapes changed; the bump is
+ * the new-weapon-id rule again (bolts also ride snapshots as projectile
+ * kind "scorpion", which old bundles couldn't render).
+ * v23 (2026-08-10): the BOMBARD — writ weapon 3 (bits-store-arms.md) —
+ * and the shell entity: snapshots gain `shells` (launch/landing points +
+ * landing clock — the telegraph ring both teams read, and the dodge data
+ * a future bot pass reads the same way). Blast is the sandtrap idiom and
+ * reuses the detonate event. New-weapon-id rule bumps as ever.
  */
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 23;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -287,6 +305,11 @@ export interface PlayerSnapshot {
   /** Seconds until the last pending bleed tick lands (0 = clean) — the red
    * status ring, same pulse rule. */
   bleedLeft: number;
+  /** Seconds until the poison stack expires (0 = clean) — the green status
+   * ring, same pulse rule. All stacks share one clock (core StackingDot). */
+  poisonLeft: number;
+  /** Current poison stack count (0 = clean) — ring weight scales with it. */
+  poisonStacks: number;
   /** Seconds left on a Straw Man's forced lock (0 = free aim) — the straw
    * status ring, same pulse rule. */
   tauntLeft: number;
@@ -363,6 +386,24 @@ export interface DeployableSnapshot {
   hp: number;
 }
 
+/** A bombard shell in flight (v23). The landing mark and clock ARE the
+ * telegraph: both teams draw the ring at (tx,ty) sweeping in over landIn,
+ * and the shell sprite lerps from→target with a render-side arc. No
+ * position is broadcast — flight is fully derived, keyed by id. */
+export interface ShellSnapshot {
+  id: number;
+  fx: number;
+  fy: number;
+  tx: number;
+  ty: number;
+  /** Seconds until it lands. */
+  landIn: number;
+  /** Full flight time (arc progress = 1 − landIn/total). */
+  total: number;
+  /** Blast radius — the telegraph ring's true size (honest, not decorative). */
+  blast: number;
+}
+
 /** Public directory entry — never carries the passcode. */
 export interface RoomListing {
   code: string;
@@ -380,6 +421,8 @@ export interface SnapshotMsg {
   players: PlayerSnapshot[];
   projectiles: ProjectileSnapshot[];
   deployables: DeployableSnapshot[];
+  /** Bombard shells in flight (v23). */
+  shells: ShellSnapshot[];
   events: ArenaEvent[];
 }
 

@@ -1,0 +1,20 @@
+{
+  "type": "sfx-bits",
+  "subject": "a small dagger's quick shallow stab into flesh — a thin fast wet nick, light and short, the quietest strike in the arena, with the faintest venomous hiss on the tail",
+  "prompt": "a small dagger's quick shallow stab into flesh — a thin fast wet nick, light and short, the quietest strike in the arena, with the faintest venomous hiss on the tail. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 0.5,
+    "promptInfluence": 0.65,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_fang_1.mp3",
+    "hit_fang_2.mp3",
+    "hit_fang_3.mp3"
+  ],
+  "created": "2026-08-09T22:17:07.579Z",
+  "updated": "2026-08-09T22:17:26.939Z"
+}

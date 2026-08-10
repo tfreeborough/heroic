@@ -45,6 +45,7 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
   // client keys both by id).
   state.projectiles.length = 0;
   state.deployables.length = 0;
+  state.shells.length = 0;
   for (const p of seatedPlayers(state)) {
     const spawn = spawnSlotPos(sim, p.team, teamSlotOf(state, p));
     p.mover.pos.x = spawn.x;
@@ -63,6 +64,10 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.thrustHits.length = 0;
     p.slots = createAbilitySlots(p.abilities); // every cooldown clean each round
     p.dots.length = 0;
+    p.poison = null;
+    p.burstLeft = 0;
+    p.burstNext = 0;
+    p.burstTargetId = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
     p.respawnLeft = 0; // a dummy mid-respawn is simply alive again

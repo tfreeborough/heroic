@@ -18,6 +18,9 @@ export const WEAPON_HAPTIC: Record<WeaponId, HapticWeight> = {
   staff: "light",
   hammer: "medium",
   trident: "soft", // a puncture, not a crunch — the blade's weight class
+  fang: "soft", // the lightest touch in the game — a nick, not a blow
+  scorpion: "light", // the bow's class — three quick taps, not one thud
+  bombard: "medium", // a blast landing is a thump, whoever it caught
 };
 
 const IMPACT: Record<HapticWeight, Haptics.ImpactFeedbackStyle> = {

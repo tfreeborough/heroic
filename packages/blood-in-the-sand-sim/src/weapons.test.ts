@@ -302,15 +302,195 @@ describe("bleed", () => {
     expect(ofType(events, "hit").filter((h) => h.event.bleed).length).toBeGreaterThan(0);
   });
 
-  test("round reset clears dots, slows, and projectiles", () => {
+  test("round reset clears dots, poisons, slows, and projectiles", () => {
     const sim = makeFight("blade", "blade");
     sim.state.players[1]!.dots.push({ ticksLeft: 3, tLeft: 1, interval: 1, damage: 3, sourceId: 0 });
+    sim.state.players[1]!.poison = {
+      stacks: 3, expiresLeft: 4, tLeft: 1, interval: 1, damagePerStack: 2, sourceId: 0,
+    };
     sim.state.players[1]!.slowLeft = 1.5;
     sim.state.projectiles.push(shot({ pos: { x: 40, y: 450 } }));
+    sim.state.shells.push({
+      id: 998, ownerId: 0, team: 1, from: { x: 96, y: 256 }, target: { x: 380, y: 256 },
+      landIn: 0.5, flightTime: 0.9, blastRadius: 120, damage: 22, knockback: 400,
+    });
     resetForRound(sim, []);
     expect(sim.state.players[1]!.dots).toHaveLength(0);
+    expect(sim.state.players[1]!.poison).toBeNull();
     expect(sim.state.players[1]!.slowLeft).toBe(0);
     expect(sim.state.projectiles).toHaveLength(0);
+    expect(sim.state.shells).toHaveLength(0);
+  });
+});
+
+describe("scorpion burst", () => {
+  test("one cycle looses exactly three bolts on the burst clock", () => {
+    const sim = makeFight("scorpion", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 300, y: 256 }; // 204 apart — in reach, out of blade's
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999; // one-sided
+    const events = run(sim, 30); // 1s — one windup + the whole volley, under the recovery
+    const shots = ofType(events, "shoot").filter((s) => s.event.ownerId === 0);
+    expect(shots).toHaveLength(3);
+    // Bolt 1 at the struck instant, follow-ups on the 0.12s clock — at 30Hz
+    // that quantises to every 4th tick.
+    expect(shots[1]!.tick - shots[0]!.tick).toBe(4);
+    expect(shots[2]!.tick - shots[1]!.tick).toBe(4);
+  });
+
+  test("follow-up bolts re-aim at the mark's position at their own release", () => {
+    const sim = makeFight("scorpion", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 300, y: 256 };
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999;
+    // Bob sprints hard perpendicular the whole time — the mark moves between
+    // releases, so each bolt leaves on a different line. Run just past the
+    // third release (struck ~tick 14, follow-ups +4/+8) so every bolt is
+    // still in flight when we read the directions.
+    const inputs: InputsFor = () => new Map([[1, { seq: 0, sx: 0, sy: 1, casts: [] }]]);
+    run(sim, 24, inputs);
+    const dirs = sim.state.projectiles.map((s) => Math.atan2(s.dir.y, s.dir.x));
+    expect(dirs.length).toBe(3);
+    for (let i = 1; i < dirs.length; i++) {
+      expect(Math.abs(dirs[i]! - dirs[0]!)).toBeGreaterThan(0.001);
+    }
+  });
+
+  test("a mark that dies mid-volley ends it — no bolts for a corpse", () => {
+    const sim = makeFight("scorpion", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 300, y: 256 };
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999;
+    // Kill bob the moment the first bolt is away (burst armed, two owed).
+    const inputs: InputsFor = (_tick, s) => {
+      if (s.state.players[0]!.burstLeft === 2) {
+        s.state.players[1]!.combatant.hp = 0;
+        s.state.players[1]!.alive = false;
+      }
+      return new Map();
+    };
+    const events = run(sim, 30, inputs);
+    const shots = ofType(events, "shoot").filter((s) => s.event.ownerId === 0);
+    expect(shots).toHaveLength(1);
+    expect(sim.state.players[0]!.burstLeft).toBe(0);
+    expect(sim.state.players[0]!.burstTargetId).toBeNull();
+  });
+});
+
+describe("bombard", () => {
+  test("the shell lands on the mark after its flight and blasts whoever stayed", () => {
+    const sim = makeFight("bombard", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 380, y: 256 }; // 284 apart — in band, out of blade's
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999; // one-sided
+    const events = run(sim, 60); // windup (~0.55s) + flight (0.9s) with room to spare
+    const shots = ofType(events, "shoot").filter((s) => s.event.ownerId === 0);
+    expect(shots.length).toBeGreaterThan(0);
+    const boom = ofType(events, "detonate");
+    expect(boom.length).toBeGreaterThan(0);
+    // Flight scales with launch distance (284 of the 400 reach); the first
+    // clock decrement shares the release tick, hence the −1.
+    const cfg = WEAPONS.bombard.shell!;
+    const flight = cfg.flightMin + (284 / WEAPONS.bombard.attack.reach) * (cfg.flightMax - cfg.flightMin);
+    expect(boom[0]!.tick - shots[0]!.tick).toBe(Math.ceil(flight / TICK_DT) - 1);
+    expect(boom[0]!.event.x).toBeCloseTo(380, 5); // dead on the mark
+    const hits = hitsBy(events, 0);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]!.event.damage).toBe(WEAPONS.bombard.shell!.damage); // fixed, no crit roll
+    expect(hits[0]!.event.crit).toBe(false);
+  });
+
+  test("walking off the mark dodges the shell entirely", () => {
+    const sim = makeFight("bombard", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    // Start bob high so his walk south has wall-free runway past the mark
+    // (a wall-stopped walker parks himself back inside the blast).
+    sim.state.players[1]!.mover.pos = { x: 380, y: 80 };
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999;
+    // Bob never stops moving — by landing he's far off the frozen mark.
+    const events = run(sim, 60, () => new Map([[1, { seq: 0, sx: 0, sy: 1, casts: [] }]]));
+    expect(ofType(events, "detonate").length).toBeGreaterThan(0); // it still lands…
+    expect(hitsBy(events, 0)).toHaveLength(0); // …on empty sand
+    expect(sim.state.players[1]!.combatant.hp).toBe(100);
+  });
+
+  test("the blast spares no one — the gunner's own team included", () => {
+    const sim = makeFight("bombard", "blade");
+    // Park both FAR apart so no real cycle fires; seed a shell landing on
+    // the GUNNER's own head.
+    sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    sim.state.shells.push({
+      id: 997, ownerId: 0, team: 1, from: { x: 96, y: 96 }, target: { x: 96, y: 96 },
+      landIn: 0.05, flightTime: 0.9, blastRadius: 120, damage: 22, knockback: 400,
+    });
+    const events = run(sim, 5);
+    const hits = ofType(events, "hit");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.event.attackerId).toBe(0);
+    expect(hits[0]!.event.targetId).toBe(0); // hoist by his own petard
+    expect(sim.state.players[0]!.combatant.hp).toBe(100 - 22);
+  });
+
+  test("inside the dead zone the bombard never even starts a swing", () => {
+    const sim = makeFight("bombard", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 176, y: 256 }; // 80 apart — under minReach 120
+    const events = run(sim, 60);
+    expect(ofType(events, "shoot").filter((s) => s.event.ownerId === 0)).toHaveLength(0);
+    expect(sim.state.shells).toHaveLength(0);
+  });
+});
+
+describe("fang poison", () => {
+  test("ticks scale with stacks, share one clock, and all fall off together", () => {
+    const sim = makeFight("fang", "blade");
+    // Parked out of engagement range so nothing else swings.
+    sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    sim.state.players[1]!.poison = {
+      stacks: 3, expiresLeft: 4, tLeft: 1, interval: 1, damagePerStack: 2, sourceId: 0,
+    };
+
+    const events = run(sim, 150); // 5 simulated seconds — one past expiry
+    const ticks = ofType(events, "hit").filter((h) => h.event.poison);
+    expect(ticks).toHaveLength(4); // a 4s clock at 1s intervals, then silence
+    for (const t of ticks) {
+      expect(t.event.damage).toBe(6); // 3 stacks × 2 — intensity, not count
+      expect(t.event.crit).toBe(false);
+      expect(t.event.bleed).toBeUndefined();
+      expect(t.event.attackerId).toBe(0);
+    }
+    expect(sim.state.players[1]!.combatant.hp).toBe(76);
+    expect(sim.state.players[1]!.poison).toBeNull(); // spent state is dropped
+  });
+
+  test("fang hits stack poison to the cap in a real duel", () => {
+    const sim = makeFight("fang", "blade", 0xfeed);
+    sim.state.players[0]!.mover.pos = { x: 210, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 260, y: 256 }; // 50 apart — inside the 70 reach
+    slotOf(sim.state.players[0]!, "dash")!.invulnLeft = 999; // one-sided, so bob just soaks
+    const events = run(sim, 90); // 3s — five-ish fang cycles
+    expect(sim.state.players[1]!.poison?.stacks).toBe(WEAPONS.fang.poison!.maxStacks);
+    // Later ticks carry the stacked intensity.
+    const dmg = ofType(events, "hit").filter((h) => h.event.poison).map((h) => h.event.damage);
+    expect(Math.max(...dmg)).toBeGreaterThanOrEqual(6);
+  });
+
+  test("a poison tick can kill — and scores the round like any other death", () => {
+    const sim = makeFight("fang", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    sim.state.players[1]!.combatant.hp = 2;
+    sim.state.players[1]!.poison = {
+      stacks: 2, expiresLeft: 4, tLeft: 0.1, interval: 1, damagePerStack: 2, sourceId: 0,
+    };
+    const events = run(sim, 30);
+    const ticks = ofType(events, "hit").filter((h) => h.event.poison);
+    expect(ticks).toHaveLength(1); // death clears the remaining ticks
+    expect(ticks[0]!.event.lethal).toBe(true);
+    expect(ofType(events, "death")).toHaveLength(1);
+    expect(ofType(events, "roundEnd")[0]!.event.winnerTeam).toBe(1);
   });
 });
 

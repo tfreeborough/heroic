@@ -495,6 +495,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
               key={`${wizard.step}:${wizard.cat ?? "-"}`}
               wizard={wizard}
               picks={picks}
+              practice={client.practice === true}
               screenW={screenW}
               focusedIconRef={focusedIconRef}
               onGate={(cat) => {
@@ -556,6 +557,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
             key={`${wizard.step}:${wizard.cat ?? "-"}`}
             wizard={wizard}
             picks={picks}
+            practice={client.practice === true}
             screenW={screenW}
             focusedIconRef={focusedIconRef}
             onGate={() => {}}
@@ -786,6 +788,8 @@ const SocketStrip = ({ picks, current, landed, refs, onTap, size = 72, separated
 interface WizardStepProps {
   wizard: WizardState;
   picks: Picks;
+  /** Practice unlocks writ-gated weapons in the carousel (try-before-buy). */
+  practice: boolean;
   screenW: number;
   focusedIconRef: React.MutableRefObject<View | null>;
   onGate: (cat: AbilityCategory) => void;
@@ -797,7 +801,7 @@ interface WizardStepProps {
 }
 
 const WizardStep = (props: WizardStepProps) => {
-  const { wizard, picks, screenW, focusedIconRef, onGate, onBackToGates, onChoose, onClose } = props;
+  const { wizard, picks, practice, screenW, focusedIconRef, onGate, onBackToGates, onChoose, onClose } = props;
   const gates = wizard.step > 0 && wizard.cat === null;
 
   // Slide the pane in on step/category changes (the component is keyed on both).
@@ -810,7 +814,7 @@ const WizardStep = (props: WizardStepProps) => {
   const freeIn = (cat: AbilityCategory): AbilityId[] =>
     abilitiesByCategory(cat).filter((a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1]);
 
-  const options: IconId[] = wizard.step === 0 ? sortedWeaponIds(getEntitlements()) : wizard.cat !== null ? freeIn(wizard.cat) : [];
+  const options: IconId[] = wizard.step === 0 ? sortedWeaponIds(getEntitlements(), practice) : wizard.cat !== null ? freeIn(wizard.cat) : [];
 
   return (
     <Animated.View

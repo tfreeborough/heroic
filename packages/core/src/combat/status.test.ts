@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { applyDot, stepDots, type DotState } from "./status";
+import {
+  applyDot,
+  applyStackingDot,
+  stepDots,
+  stepStackingDot,
+  type DotState,
+  type StackingDotConfig,
+  type StackingDotState,
+} from "./status";
 
 const bleed = (overrides: Partial<DotState> = {}): DotState => ({
   ticksLeft: 3,
@@ -53,5 +61,65 @@ describe("stepDots", () => {
     stepDots(dots, 0.1);
     expect(dots).toHaveLength(1);
     expect(dots[0]!.sourceId).toBe(1);
+  });
+});
+
+const POISON: StackingDotConfig = { maxStacks: 4, interval: 1, damagePerStack: 2, duration: 4 };
+
+describe("stepStackingDot", () => {
+  test("each application adds a stack and tick damage scales with stacks", () => {
+    let dot = applyStackingDot(null, POISON, 7);
+    dot = applyStackingDot(dot, POISON, 7);
+    dot = applyStackingDot(dot, POISON, 7);
+    expect(dot.stacks).toBe(3);
+    const ticks = stepStackingDot(dot, 1);
+    expect(ticks).toEqual([{ damage: 6, sourceId: 7 }]);
+  });
+
+  test("stacks cap at maxStacks", () => {
+    let dot = applyStackingDot(null, POISON, 0);
+    for (let i = 0; i < 10; i++) dot = applyStackingDot(dot, POISON, 0);
+    expect(dot.stacks).toBe(POISON.maxStacks);
+  });
+
+  test("an application refreshes the shared clock and all stacks expire together", () => {
+    let dot = applyStackingDot(null, POISON, 0);
+    stepStackingDot(dot, 3.5); // 0.5s from death…
+    dot = applyStackingDot(dot, POISON, 0); // …but a fresh hit resets the clock
+    expect(dot.expiresLeft).toBe(POISON.duration);
+    expect(dot.stacks).toBe(2);
+    // Run it dry: exactly duration seconds of ticks remain, then nothing.
+    const ticks = stepStackingDot(dot, 100);
+    expect(ticks).toHaveLength(4);
+    expect(dot.expiresLeft).toBe(0);
+    expect(stepStackingDot(dot, 100)).toHaveLength(0); // spent — no zombie ticks
+  });
+
+  test("a tick scheduled past the expiry instant never lands", () => {
+    const dot: StackingDotState = {
+      stacks: 2,
+      expiresLeft: 0.5, // dies before the next 1s tick is due
+      tLeft: 1,
+      interval: 1,
+      damagePerStack: 2,
+      sourceId: 0,
+    };
+    expect(stepStackingDot(dot, 10)).toHaveLength(0);
+    expect(dot.expiresLeft).toBe(0);
+  });
+
+  test("applying onto a spent state starts fresh at one stack", () => {
+    let dot = applyStackingDot(null, POISON, 1);
+    stepStackingDot(dot, 100);
+    dot = applyStackingDot(dot, POISON, 2);
+    expect(dot.stacks).toBe(1);
+    expect(dot.sourceId).toBe(2);
+    expect(dot.expiresLeft).toBe(POISON.duration);
+  });
+
+  test("kill credit follows the freshest applier", () => {
+    let dot = applyStackingDot(null, POISON, 1);
+    dot = applyStackingDot(dot, POISON, 2);
+    expect(stepStackingDot(dot, 1)[0]!.sourceId).toBe(2);
   });
 });

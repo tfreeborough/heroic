@@ -7,6 +7,7 @@ import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
+import { devGrant, ensureIdentity, fetchWallet, type Wallet } from "../net/api";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import type { RankedResultRow } from "../net/connection";
 import { DUST_EFFECT } from "./dustStorm";
@@ -354,9 +355,35 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
   const [announcer, setAnnouncer] = useState<AnnouncerPackId>("default");
   // Full post-match ceremony on fake data — see REHEARSAL_ROW above.
   const [deedRehearsal, setDeedRehearsal] = useState(false);
+  // Store testing (bits-store.md): live balances shown while the menu is
+  // open; the GRANT rows hit dev-only API endpoints (STORE_DEV_TOOLS=1) and
+  // are inert against a production API.
+  const [devWallet, setDevWallet] = useState<Wallet | null>(null);
   useEffect(() => {
     void loadAnnouncerPack().then(setAnnouncer);
   }, []);
+  useEffect(() => {
+    if (!devOpen) return;
+    let live = true;
+    void (async () => {
+      const identity = await ensureIdentity();
+      if (!identity || !live) return;
+      const wallet = await fetchWallet(identity);
+      if (live && wallet) setDevWallet(wallet);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [devOpen]);
+
+  const onDevGrant = (grant: { glory?: number; writs?: number }) => (): void => {
+    void (async () => {
+      const identity = await ensureIdentity();
+      if (!identity) return;
+      const wallet = await devGrant(identity, grant);
+      if (wallet) setDevWallet(wallet);
+    })();
+  };
   const knock = useRef({ count: 0, lastMs: 0 });
 
   // The forged backdrop owns the screen when it exists; the painted scene
@@ -682,6 +709,19 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
             <Text style={styles.devButtonText}>
               ITEMS {grantAllItems ? "◉ ALL GRANTED" : "○ EARNED ONLY"}
             </Text>
+          </Pressable>
+          {/* Store testing (bits-store.md): real server balances; the grant
+              rows need the API running with STORE_DEV_TOOLS=1. */}
+          <Pressable onPress={withTap("uiTap", onDevGrant({}))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              WALLET {devWallet ? `${devWallet.glory.toLocaleString()} GLORY · ${devWallet.writs} WRIT${devWallet.writs === 1 ? "" : "S"}` : "—"}
+            </Text>
+          </Pressable>
+          <Pressable onPress={withTap("uiConfirm", onDevGrant({ glory: 500 }))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>GRANT 500 GLORY</Text>
+          </Pressable>
+          <Pressable onPress={withTap("uiConfirm", onDevGrant({ writs: 1 }))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>GRANT 1 WRIT</Text>
           </Pressable>
         </View>
       )}

@@ -1,6 +1,15 @@
 export { createDb, ensureSchema, type Db } from "./db";
 export { registerPlayer, findPlayerByToken, type Registration } from "./players";
 export { gloryBalance, recordGlory, type GloryEntry } from "./glory";
+export { writBalance, recordWrit, type WritEntry } from "./writs";
+export {
+  exchangeGloryForWrit,
+  unlockWithWrit,
+  type ExchangeInput,
+  type ExchangeResult,
+  type UnlockInput,
+  type UnlockResult,
+} from "./store";
 export {
   RATING_START,
   RATING_FLOOR,

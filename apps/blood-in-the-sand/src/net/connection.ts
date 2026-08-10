@@ -149,6 +149,9 @@ export interface LobbyClient extends GameClient {
   phase: RoundPhase;
   readonly hostId: number | null;
   readonly isHost: boolean;
+  /** True on PracticeClient only — practice unlocks writ-gated items in the
+   * wizard (the try-before-buy funnel, bits-store.md); real rooms never do. */
+  readonly practice?: boolean;
   /** Latest transient lobby toast (host handoff), or null — the RoomScreen
    * banner reads this and fades it on its own timer. */
   readonly notice: Notice | null;

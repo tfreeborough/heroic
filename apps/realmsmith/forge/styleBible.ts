@@ -18,18 +18,21 @@
 /** Sound identity for Enter the Gauntlet — the tone every SFX prompt carries. */
 const SOUND_IDENTITY = "a dark-fantasy dungeon game — gritty and physical, never cartoonish or synthetic";
 
-/** Sound identity for Blood in the Sand — the desert-arena tone (its icons run
- * the same brief on the image side): sun-scoured, brutal, weighty, blood-and-sand. */
-const BITS_SOUND_IDENTITY =
-  "a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and " +
-  "dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic";
+// (Blood in the Sand's sound identity clause was RETIRED 2026-08-10 — see
+// SFX_BITS below. Its icon-side twin lives on in the image templates; sound
+// tone now lives in each SOUND_SUBJECTS brief's own words.)
 
 export interface SfxSpec {
   id: "sfx" | "sfx-bits";
   label: string;
   provider: "elevenlabs-sfx";
-  /** The game's sound tone — carried by the template AND the LLM expander. */
-  soundIdentity: string;
+  /** The game's sound tone, carried by the template and the LLM expander.
+   * OPTIONAL since 2026-08-10 (Tom): the BITS type dropped it — a ~30-word
+   * brand clause was drowning the ~25-word subject in every generation
+   * ("sun-baked and dusty" pulled wind textures into knife nicks, and
+   * "never cartoonish" is a negation the model ignores). Absent = the
+   * subject prompt IS the prompt; tone lives in each subject's own words. */
+  soundIdentity?: string;
   /** Repo-relative dir the app's manifest requires clips from — sets the paste line. */
   manifestDir: string;
   /** Takes generated per request — picking from a spread beats iterating prompts. */
@@ -75,14 +78,18 @@ export const SFX_BITS: SfxSpec = {
   id: "sfx-bits",
   label: "Sound (Blood in the Sand)",
   provider: "elevenlabs-sfx",
-  soundIdentity: BITS_SOUND_IDENTITY,
+  // No soundIdentity (Tom, 2026-08-10): generations kept needing many takes
+  // to land near the brief — the appended brand clause was out-shouting the
+  // subject. The subject briefs in SOUND_SUBJECTS carry their own tone now;
+  // only the one-shot format clause survives (it's what stops ElevenLabs
+  // drifting into music beds and ambient loops, not brand styling).
   candidates: 3,
   promptInfluence: 0.3,
   loudnessLufs: -16,
   truePeakDb: -1.5,
   destination: "apps/blood-in-the-sand/assets/audio/sfx",
   manifestDir: "../../assets/audio/sfx",
-  template: (subject) => `${subject}. A single one-shot sound effect for ${BITS_SOUND_IDENTITY}.`,
+  template: (subject) => `${subject}. A single one-shot sound effect, not music.`,
 };
 
 /**
@@ -104,6 +111,11 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   hit_staff: "a magic orb bursting on a body — a dry arcane crackle-thump with a brief low pressure whump",
   hit_hammer: "a massive warhammer slam into a body — a huge blunt crunch with a bassy shockwave",
   hit_trident: "a trident thrust punching into flesh — a sharp wet pierce, shorter and pointier than a slash, with a quick withdraw",
+  hit_fang: "a small dagger's quick shallow stab into flesh — a thin fast wet nick, light and short, the quietest strike in the arena, with the faintest venomous hiss on the tail",
+  hit_scorpion: "a small crossbow bolt punching into a body — a short hard thock with a brief wet edge, snappier and smaller than an arrow strike, tight with no tail",
+  fire_scorpion: "a repeating crossbow looses one bolt — a dry mechanical clack and a short sharp bolt whoosh, tight and quick with no tail (the game plays it three times in fast succession, so keep it to a single clack, no burst)",
+  fire_bombard: "a hand-mortar launching a shell — a deep hollow THOOMP with a short smoky huff and a faint rising whistle tail, no explosion (the landing boom is its own sound)",
+  hit_bombard: "a blast concussion thumping a body — a short bassy bodily whump with a grit spray edge, no fireball roar (it plays under a separate explosion boom)",
   fire_bow: "loosing an arrow from a bow — a taut bowstring release SNAP and a quick arrow whoosh, dry and punchy, no impact",
   fire_staff: "casting a magic orb from a staff — a short arcane whoosh-swell with a soft energy hum as it launches, no impact",
   player_hurt: "a single grunt of pain from a gladiator taking a blow — short, breathy, no words",
@@ -197,6 +209,9 @@ export const ICON_SUBJECTS: Record<string, string> = {
   staff: "a gnarled wooden staff crowned with a floating violet orb",
   hammer: "a massive square-headed warhammer, head heavy at the top",
   trident: "a three-pronged iron trident held at a dynamic diagonal, long barbed points, the retiarius's fishing spear",
+  fang: "a short curved dagger held at a dynamic diagonal, a sickly green venom sheen along the edge and one drop falling from the tip",
+  scorpion: "a compact repeating crossbow with a top-mounted bolt magazine, held at a dynamic diagonal, three short iron bolts fanned beside it",
+  bombard: "a squat bronze hand-mortar with a flared muzzle held at a dynamic diagonal, a round black shell arcing above it trailing a thin smoke line",
   sandtrap: "a spiked iron trap half-buried in a small mound of sand, one blade glinting above the surface",
   tremor: "a boot stamping down with cracked earth and two radiating shockwave rings",
   harpoon: "a barbed iron hook trailing a taut chain, mid-flight",
@@ -930,9 +945,11 @@ export const DEED: DeedSpec = {
  */
 export const EXPANDER_MODEL = "gpt-5-mini";
 
-/** The expander system prompt, parameterised by the game's sound identity so the
- * same prompt-craft serves both games' SFX types (plugin picks the identity). */
-export const expanderSystem = (soundIdentity: string): string =>
+/** The expander system prompt, parameterised by the game's sound identity so
+ * the same prompt-craft serves both games' SFX types (plugin passes the
+ * spec's identity; absent — the BITS type since 2026-08-10 — the identity
+ * rule is simply omitted and the subject stands alone). */
+export const expanderSystem = (soundIdentity?: string): string =>
   "You write prompts for ElevenLabs' sound-effects model. The user gives a rough description of a " +
   "game sound; you reply with ONE refined prompt and nothing else — no quotes, no preamble.\n" +
   "Rules:\n" +
@@ -942,5 +959,7 @@ export const expanderSystem = (soundIdentity: string): string =>
   '("a short dry burst", "a two-second swell that dies quickly").\n' +
   "- Say what should be heard, never what should not — the model ignores negations.\n" +
   "- Audio vocabulary works: impact, whoosh, layered, close-mic'd, dry, one-shot.\n" +
-  `- The sound is for ${soundIdentity}. Let that colour material and tone choices only where it fits the subject.\n` +
+  (soundIdentity !== undefined
+    ? `- The sound is for ${soundIdentity}. Let that colour material and tone choices only where it fits the subject.\n`
+    : "") +
   "- At most 40 words. It is a single sound effect, not music and not speech.";

@@ -12,6 +12,7 @@ import type {
   ProjectileSnapshot,
   RoomStatePlayer,
   RoundSnapshot,
+  ShellSnapshot,
   SnapshotMsg,
 } from "./protocol";
 import {
@@ -19,6 +20,7 @@ import {
   seatedPlayers,
   type ArenaPlayer,
   type ArenaProjectile,
+  type ArenaShell,
   type ArenaState,
   type Deployable,
   type Team,
@@ -55,6 +57,8 @@ const toPlayerSnapshot = (p: ArenaPlayer, hidePicks: boolean): PlayerSnapshot =>
   dashing: isDashing(p),
   slowLeft: p.slowLeft,
   bleedLeft: bleedRemaining(p),
+  poisonLeft: p.poison?.expiresLeft ?? 0,
+  poisonStacks: p.poison?.stacks ?? 0,
   tauntLeft: p.tauntLeft,
   abilities: hidePicks
     ? []
@@ -84,6 +88,17 @@ const toProjectileSnapshot = (p: ArenaProjectile): ProjectileSnapshot => ({
   kind: p.kind,
 });
 
+const toShellSnapshot = (s: ArenaShell): ShellSnapshot => ({
+  id: s.id,
+  fx: s.from.x,
+  fy: s.from.y,
+  tx: s.target.x,
+  ty: s.target.y,
+  landIn: s.landIn,
+  total: s.flightTime,
+  blast: s.blastRadius,
+});
+
 const toDeployableSnapshot = (d: Deployable): DeployableSnapshot => ({
   id: d.id,
   kind: d.kind,
@@ -107,6 +122,7 @@ export const toSnapshot = (state: ArenaState, events: ArenaEvent[]): SnapshotMsg
     players: seatedPlayers(state).map((p) => toPlayerSnapshot(p, hidePicks)),
     projectiles: state.projectiles.map(toProjectileSnapshot),
     deployables: state.deployables.map(toDeployableSnapshot),
+    shells: state.shells.map(toShellSnapshot),
     events,
   };
 };

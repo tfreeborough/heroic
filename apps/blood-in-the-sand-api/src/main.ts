@@ -12,7 +12,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { RANKED_BRACKETS } from "@heroic/blood-in-the-sand-sim";
+import { RANKED_BRACKETS, WRIT_ITEM_IDS } from "@heroic/blood-in-the-sand-sim";
 import {
   PLACEMENT_MATCHES,
   RATING_START,
@@ -23,13 +23,18 @@ import {
   displayRungFor,
   ensureSchema,
   entitlementsOf,
+  exchangeGloryForWrit,
   findPlayerByToken,
   gloryBalance,
   gloryEarned,
   rankedSummary,
   recentForm,
+  recordGlory,
+  recordWrit,
   registerPlayer,
   rungAbove,
+  unlockWithWrit,
+  writBalance,
 } from "@heroic/blood-in-the-sand-persistence";
 
 // Local fallback: the ONE repo-anchored file every service shares — never a
@@ -68,8 +73,118 @@ const authedPlayer = async (c: Context): Promise<string | null> => {
 app.get("/wallet", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
-  return c.json({ glory: await gloryBalance(db, playerId) });
+  const [glory, writs] = await Promise.all([
+    gloryBalance(db, playerId),
+    writBalance(db, playerId),
+  ]);
+  return c.json({ glory, writs });
 });
+
+/**
+ * The store (bits-store.md): one universal Writ unlocks any weapon or spell.
+ * The Glory price of a Writ is THE tunable economy knob — env-set,
+ * server-side, never client-trusted. Default derives from the ~4–5h grind
+ * target at current ranked earn rates (~14 Glory/match average).
+ */
+const WRIT_GLORY_PRICE = Math.max(1, Number(process.env.WRIT_GLORY_PRICE ?? 800));
+
+/** Everything the store screen needs to render prices and the shelf. */
+app.get("/store", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  return c.json({ writGloryPrice: WRIT_GLORY_PRICE, writItems: WRIT_ITEM_IDS });
+});
+
+/** Fresh balances after any store mutation — one shape, every response. */
+const walletOf = async (playerId: string) => {
+  const [glory, writs] = await Promise.all([
+    gloryBalance(db, playerId),
+    writBalance(db, playerId),
+  ]);
+  return { glory, writs };
+};
+
+/**
+ * Glory → 1 Writ, atomically. The client mints a uuid per tap (`key`) so a
+ * network retry of the same tap can never buy two Writs; a missing/odd key
+ * gets a server-minted one (that request is then simply non-retryable).
+ */
+app.post("/store/exchange", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { key?: unknown };
+  const key =
+    typeof body.key === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.key)
+      ? body.key
+      : crypto.randomUUID();
+  const result = await exchangeGloryForWrit(db, { playerId, price: WRIT_GLORY_PRICE, key });
+  if (result === "insufficient") {
+    return c.json({ error: "insufficient_glory", price: WRIT_GLORY_PRICE }, 409);
+  }
+  return c.json(await walletOf(playerId)); // "duplicate" = that tap already succeeded
+});
+
+/**
+ * 1 Writ → a permanent entitlement. Only writ-gated roster ids are for sale
+ * — deed items (secrets) are earned, never bought. Already-owned is a no-op
+ * success and never charges (the persistence layer guards this atomically).
+ */
+app.post("/store/unlock", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as { itemId?: unknown };
+  const itemId = typeof body.itemId === "string" ? body.itemId : "";
+  if (!WRIT_ITEM_IDS.includes(itemId)) return c.json({ error: "not_purchasable" }, 400);
+  const result = await unlockWithWrit(db, { playerId, itemId });
+  if (result === "insufficient") return c.json({ error: "insufficient_writs" }, 409);
+  return c.json({ ...(await walletOf(playerId)), owned: true });
+});
+
+/**
+ * Dev-only store tools (bits-store.md § testing): ledger grants + purchase
+ * resets so the whole Glory→Writ→unlock flow is testable without money.
+ * The routes DO NOT EXIST unless STORE_DEV_TOOLS=1 — never set in prod.
+ */
+if (process.env.STORE_DEV_TOOLS === "1") {
+  console.log("🛠  STORE_DEV_TOOLS on — /dev/grant + /dev/reset-purchases live");
+
+  app.post("/dev/grant", async (c) => {
+    const playerId = await authedPlayer(c);
+    if (!playerId) return c.json({ error: "unauthorized" }, 401);
+    const body = (await c.req.json().catch(() => ({}))) as { glory?: unknown; writs?: unknown };
+    const glory = Math.trunc(Number(body.glory ?? 0)) || 0;
+    const writs = Math.trunc(Number(body.writs ?? 0)) || 0;
+    if (glory !== 0) {
+      await recordGlory(db, {
+        playerId,
+        amount: glory,
+        source: "dev-grant",
+        idempotencyKey: `dev:${crypto.randomUUID()}`,
+      });
+    }
+    if (writs !== 0) {
+      await recordWrit(db, {
+        playerId,
+        amount: writs,
+        source: "dev-grant",
+        idempotencyKey: `dev:${crypto.randomUUID()}`,
+      });
+    }
+    return c.json(await walletOf(playerId));
+  });
+
+  /** Forget every store purchase (entitlements bought with Writs) — deed
+   * grants are untouched; Writ balances stay as they are. */
+  app.post("/dev/reset-purchases", async (c) => {
+    const playerId = await authedPlayer(c);
+    if (!playerId) return c.json({ error: "unauthorized" }, 401);
+    await db.execute({
+      sql: "DELETE FROM entitlements WHERE player_id = ? AND source LIKE 'purchase:%'",
+      args: [playerId],
+    });
+    return c.json({ ok: true });
+  });
+}
 
 /** Season config — must match the game server's (ranked.ts). One constant,
  * two readers; promote to shared config if it ever grows past a number. */

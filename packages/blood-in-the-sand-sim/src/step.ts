@@ -12,6 +12,8 @@ import {
   angleDiff,
   angleTo,
   applyDot,
+  applyStackingDot,
+  stepStackingDot,
   approachVelocity,
   ATTACK_CYCLE_READY,
   distance,
@@ -45,6 +47,7 @@ import {
 } from "./config";
 import {
   applyDashShove,
+  applyFixedHit,
   applyImpulse,
   damageDummy,
   dashInvulnerable,
@@ -183,6 +186,11 @@ const resolveArcStrike = (
           });
         }
       }
+      if (weapon.poison) {
+        // Stacking intensity, no rng draw (deterministic like the slow) and
+        // no Ironhide gate (a damage rider, like bleed — the venom's in you).
+        defender.poison = applyStackingDot(defender.poison, weapon.poison, p.id);
+      }
       if (weapon.slow && !ironhideActive(defender)) {
         // Refresh, never stack — repeated hammer hits extend the window.
         defender.slowLeft = Math.max(defender.slowLeft, weapon.slow.duration);
@@ -195,6 +203,30 @@ const resolveArcStrike = (
 /** The player's picked weapon config. The blade fallback only serves
  * hand-forced test states — real matches can't start with an empty pick. */
 const weaponOf = (p: ArenaPlayer) => WEAPONS[p.weapon ?? "blade"];
+
+/** Loose one shot at `aim`'s position NOW, release event included — the
+ * struck instant's projectile path, shared with the burst follow-ups. */
+const fireShot = (
+  state: ArenaSim["state"],
+  p: ArenaPlayer,
+  weapon: (typeof WEAPONS)[keyof typeof WEAPONS],
+  aim: { id: number; pos: { x: number; y: number } },
+  events: ArenaEvent[],
+): void => {
+  const shot: ArenaProjectile = {
+    ...spawnProjectile(p.mover.pos, aim.pos, {
+      speed: weapon.attack.projectileSpeed!,
+      radius: weapon.projectile!.radius,
+      maxRange: weapon.projectile!.maxRange,
+    }),
+    id: state.nextProjectileId++,
+    ownerId: p.id,
+    kind: p.weapon ?? "blade",
+    targetId: weapon.projectile!.homingTurnRate ? aim.id : null,
+  };
+  state.projectiles.push(shot);
+  events.push({ type: "shoot", ownerId: p.id, weapon: p.weapon!, x: p.mover.pos.x, y: p.mover.pos.y });
+};
 
 /**
  * Advance the match by one fixed step. `inputs` maps playerId → the latest
@@ -332,6 +364,35 @@ export const stepSim = (
       if (!p.alive || p.dummy) continue; // a dummy never swings
       const weapon = weaponOf(p);
 
+      // Follow-up volley bolts (the scorpion's burst): fired on their own
+      // clock during recovery, each RE-AIMED at the mark's position at its
+      // release instant — that's the harder-to-fully-sidestep promise.
+      // Runs BEFORE the cycle step so the tick that arms a volley never
+      // also advances its clock. The volley dies the MOMENT its mark dies
+      // or smokes (either end) — the windup-lock rules, applied eagerly so
+      // burst state never lingers on a corpse; a dead SHOOTER never
+      // reaches here (the loop's alive-check), so theirs dies with them.
+      if (p.burstLeft > 0 && weapon.burst) {
+        const mark = targetView(state, p.burstTargetId);
+        if (
+          mark === null ||
+          !mark.alive ||
+          inSandstorm(state, mark.pos) ||
+          inSandstorm(state, p.mover.pos)
+        ) {
+          p.burstLeft = 0;
+          p.burstTargetId = null;
+        } else {
+          p.burstNext -= dt;
+          while (p.burstNext <= 0 && p.burstLeft > 0) {
+            fireShot(state, p, weapon, mark, events);
+            p.burstLeft -= 1;
+            p.burstNext += weapon.burst.interval;
+          }
+          if (p.burstLeft === 0) p.burstTargetId = null;
+        }
+      }
+
       const target = targetView(state, p.targetId);
       // Range mirrors hitsInArc's band rule: within reach AND overlapping the
       // weapon's minReach band (a body between the trident's prongs and the
@@ -366,25 +427,40 @@ export const stepSim = (
 
       if (step.struck) {
         if (weapon.attack.shape === "projectile") {
-          // Fire at the locked target's position NOW (the windup tracked them).
+          // Fire at the locked target's position NOW (the windup tracked
+          // them). The release event rides fireShot — a shot went out (the
+          // client's fire SFX; plays on every loose, hit or miss).
           const aim = locked ?? target;
-          if (aim) {
-            const shot: ArenaProjectile = {
-              ...spawnProjectile(p.mover.pos, aim.pos, {
-                speed: weapon.attack.projectileSpeed!,
-                radius: weapon.projectile!.radius,
-                maxRange: weapon.projectile!.maxRange,
-              }),
+          if (aim && weapon.shell) {
+            // The bombard: mark the spot and lob a shell at it — the mark
+            // is frozen at launch (walking off it is the counterplay).
+            // Flight scales with distance: a close lob lands sooner (see
+            // ShellConfig — the floor keeps the walk-out alive).
+            const flight =
+              weapon.shell.flightMin +
+              Math.min(1, distance(p.mover.pos, aim.pos) / weapon.attack.reach) *
+                (weapon.shell.flightMax - weapon.shell.flightMin);
+            state.shells.push({
               id: state.nextProjectileId++,
               ownerId: p.id,
-              kind: p.weapon ?? "blade",
-              targetId: weapon.projectile!.homingTurnRate ? aim.id : null,
-            };
-            state.projectiles.push(shot);
-            // The release — a shot went out (the client's fire SFX; plays on
-            // every loose, hit or miss). `p.weapon` is set here (it's what
-            // routed us into the projectile branch).
+              team: p.team,
+              from: { x: p.mover.pos.x, y: p.mover.pos.y },
+              target: { x: aim.pos.x, y: aim.pos.y },
+              landIn: flight,
+              flightTime: flight,
+              blastRadius: weapon.shell.blastRadius,
+              damage: weapon.shell.damage,
+              knockback: weapon.shell.knockback,
+            });
             events.push({ type: "shoot", ownerId: p.id, weapon: p.weapon!, x: p.mover.pos.x, y: p.mover.pos.y });
+          } else if (aim) {
+            fireShot(state, p, weapon, aim, events);
+            if (weapon.burst) {
+              // The volley's follow-ups fire on their own clock below.
+              p.burstLeft = weapon.burst.count - 1;
+              p.burstNext = weapon.burst.interval;
+              p.burstTargetId = aim.id;
+            }
           }
         } else if (weapon.attack.thrustDuration) {
           // The travelling thrust (the trident): arm the front — resolution
@@ -417,6 +493,7 @@ export const stepSim = (
     }
 
     stepProjectiles(sim, players, events, dt);
+    stepShells(state, players, events, dt);
     stepDeployables(state, players, events, dt);
     stepBleeds(players, events, dt);
     if (state.training) respawnDummies(sim, players, dt);
@@ -568,6 +645,10 @@ const respawnDummies = (sim: ArenaSim, players: readonly ArenaPlayer[], dt: numb
     p.lockedFacing = p.facing;
     p.slots = createAbilitySlots(p.abilities);
     p.dots.length = 0;
+    p.poison = null;
+    p.burstLeft = 0;
+    p.burstNext = 0;
+    p.burstTargetId = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
     p.alive = true;
@@ -575,29 +656,95 @@ const respawnDummies = (sim: ArenaSim, players: readonly ArenaPlayer[], dt: numb
 };
 
 /**
- * Tick bleeds. Dot damage is fixed (no rng draws, no defense — see core
- * status.ts) and deliberately ignores dash i-frames AND Ironhide: the blade's
- * already in you.
+ * Advance bombard shells; land the due ones. The blast is the sandtrap
+ * idiom (deployables.ts detonate) with ONE deliberate break: it hits
+ * EVERYONE in the zone — enemies, allies, the gunner themself (Tom,
+ * 2026-08-10: artillery doesn't care). The game's first friendly-fire
+ * source, scoped to this weapon: it's what makes point-blank pressure on
+ * a gunner real — shelling a diver means shelling your own feet. Fixed
+ * damage (applyFixedHit runs Ironhide's reduction), radial shove, dash
+ * i-frames dodge the whole thing. The detonate event reuses the mine's
+ * boom FX/SFX on the client. Compacts in place (the projectile pattern).
  */
-const stepBleeds = (players: readonly ArenaPlayer[], events: ArenaEvent[], dt: number): void => {
-  for (const p of players) {
-    if (!p.alive || p.dots.length === 0) continue;
-    for (const tick of stepDots(p.dots, dt)) {
-      if (!p.alive) break; // an earlier tick this step was lethal
-      p.combatant.hp = Math.max(0, p.combatant.hp - tick.damage);
+const stepShells = (
+  state: ArenaSim["state"],
+  players: readonly ArenaPlayer[],
+  events: ArenaEvent[],
+  dt: number,
+): void => {
+  if (state.shells.length === 0) return;
+  let write = 0;
+  for (let read = 0; read < state.shells.length; read++) {
+    const s = state.shells[read]!;
+    s.landIn -= dt;
+    if (s.landIn > 0) {
+      state.shells[write++] = s;
+      continue;
+    }
+    events.push({ type: "detonate", x: s.target.x, y: s.target.y });
+    for (const p of players) {
+      if (!p.alive || dashInvulnerable(p)) continue;
+      if (distance(p.mover.pos, s.target) - PLAYER_RADIUS > s.blastRadius) continue;
+      const damage = applyFixedHit(p, s.damage);
       const lethal = p.combatant.hp <= 0;
       events.push({
         type: "hit",
-        attackerId: tick.sourceId,
+        attackerId: s.ownerId,
         targetId: p.id,
-        damage: tick.damage,
+        damage,
         crit: false,
         lethal,
-        bleed: true,
         x: p.mover.pos.x,
         y: p.mover.pos.y,
       });
-      if (lethal) killPlayer(p, events);
+      if (lethal) {
+        killPlayer(p, events);
+      } else {
+        let away = normalize(sub(p.mover.pos, s.target));
+        if (away.x === 0 && away.y === 0) away = { x: 1, y: 0 };
+        applyImpulse(p, away.x, away.y, s.knockback);
+      }
+    }
+  }
+  state.shells.length = write;
+};
+
+/**
+ * Tick bleeds + poisons. Dot damage is fixed (no rng draws, no defense — see
+ * core status.ts) and deliberately ignores dash i-frames AND Ironhide: the
+ * blade's already in you, and so is the venom.
+ */
+const stepBleeds = (players: readonly ArenaPlayer[], events: ArenaEvent[], dt: number): void => {
+  const applyTick = (p: ArenaPlayer, damage: number, sourceId: number, poison: boolean): void => {
+    p.combatant.hp = Math.max(0, p.combatant.hp - damage);
+    const lethal = p.combatant.hp <= 0;
+    events.push({
+      type: "hit",
+      attackerId: sourceId,
+      targetId: p.id,
+      damage,
+      crit: false,
+      lethal,
+      ...(poison ? { poison: true as const } : { bleed: true as const }),
+      x: p.mover.pos.x,
+      y: p.mover.pos.y,
+    });
+    if (lethal) killPlayer(p, events);
+  };
+  for (const p of players) {
+    if (!p.alive) continue;
+    if (p.dots.length > 0) {
+      for (const tick of stepDots(p.dots, dt)) {
+        if (!p.alive) break; // an earlier tick this step was lethal
+        applyTick(p, tick.damage, tick.sourceId, false);
+      }
+    }
+    if (p.poison !== null && p.alive) {
+      for (const tick of stepStackingDot(p.poison, dt)) {
+        if (!p.alive) break;
+        applyTick(p, tick.damage, tick.sourceId, true);
+      }
+      if (p.poison.expiresLeft <= 0) p.poison = null;
     }
   }
 };

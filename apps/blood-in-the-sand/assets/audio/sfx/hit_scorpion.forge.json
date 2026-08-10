@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a small crossbow bolt punching into a body — a short hard thock with a brief wet edge, snappier and smaller than an arrow strike, tight with no tail",
+  "prompt": "a small crossbow bolt punching into a body — a short hard thock with a brief wet edge, snappier and smaller than an arrow strike, tight with no tail. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.65,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "hit_scorpion_1.mp3"
+  ],
+  "created": "2026-08-09T22:39:59.161Z",
+  "updated": "2026-08-09T22:39:59.161Z"
+}

@@ -26,6 +26,7 @@ import {
   WEAPONS,
   WEAPON_IDS,
   GATED_WEAPONS,
+  WRIT_WEAPONS,
   weaponEntitlement,
   type AbilityCategory,
   type AbilityId,
@@ -62,33 +63,53 @@ export interface StatBar {
 
 export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc: string }> = {
   blade: {
-    hint: "fast swings, stacks bleeds — stay close",
-    quote: "Quick as a whisper, and it leaves the wound talking.",
-    desc: "Quick arcing swings in a thin cone. Hits can open a bleed that keeps ticking while you reposition.",
+    hint: "fast swings with a stacking bleed",
+    quote: "Nothing as classic as a keen edged blade",
+    desc: "Best used with a gap closing ability, fast to attack and can finish opponents off quickly",
   },
   bow: {
-    hint: "long-range poke with a fast arrow",
+    hint: "Long range and useful for kiting",
     quote: "One breath to draw. Make it count.",
-    desc: "A drawn shot at long range. The draw is the tell — once loosed, the arrow flies fast and hits hard.",
+    desc: "A drawn shot at long range, high damage",
   },
   staff: {
-    hint: "a slow orb that hunts you down",
-    quote: "You can run from the orb. The orb does not mind.",
+    hint: "a slow orb of electricity that hunts you down",
+    quote: "You do not seek the orb, for it seeks you.",
     desc: "Looses a seeking orb that steers toward its mark until it connects or expires.",
   },
   trident: {
-    hint: "only the head bites — hold your range",
+    hint: "applies a slow and bleed, tricky to master",
     quote: "The fish never learns how long the spear is.",
-    desc: "The longest melee reach — but only the head is dangerous. Catch them at the tip and they're shoved back, slowed, and bleeding. Let them inside the prongs and it can't touch them.",
+    desc: "Difficult to master, but when used correctly can be used with devastating effect to control the arena.",
   },
   hammer: {
-    hint: "slow, crushing, and it SLOWS them",
-    quote: "The first blow is a promise. The slow is how it’s kept.",
-    desc: "A wide, heavy sweep. Anyone caught is slowed — lining them up for the next one.",
+    hint: "large slow sweeping blows that slow enemies when hit",
+    quote: "Break their bones.",
+    desc: "A wide, heavy sweep. Anyone caught is slowed, less damage for more crowd control",
+  },
+  fang: {
+    hint: "lightning stabs that stack a deadly poison",
+    quote: "The bite is nothing. The venom is everything.",
+    desc: "The shortest reach in the arena and barely a scratch per stab — but every stab stacks poison, and stacked poison does the killing while you're already gone.",
+  },
+  scorpion: {
+    hint: "a three-bolt volley, each bolt aimed anew",
+    quote: "One sting is a warning. Three are a verdict.",
+    desc: "Looses three fast bolts in quick succession, each aimed at where you are the instant it leaves. Slow to reload — make the volley count.",
+  },
+  bombard: {
+    hint: "lobs a shell onto marked ground — the blast spares no one",
+    quote: "The sky does the killing. I merely point.",
+    desc: "Marks the ground beneath your foe and drops a shell on it. The mark is honest — anyone can walk clear — and the blast spares no one who stays: enemy, ally, or you. Useless up close: inside its dead zone it cannot fire at all.",
   },
 };
 
-const weaponDamage = (id: WeaponId): number => WEAPONS[id].stats.attack ?? PLAYER_STATS.attack;
+/** Damage per trigger-pull: a burst weapon's honest number is the full
+ * volley, not one feeble bolt (the bar would lie against single-hit
+ * rosters); a shell weapon's is its fixed blast. */
+const weaponDamage = (id: WeaponId): number =>
+  WEAPONS[id].shell?.damage ??
+  (WEAPONS[id].stats.attack ?? PLAYER_STATS.attack) * (WEAPONS[id].burst?.count ?? 1);
 const weaponCycle = (id: WeaponId): number => WEAPONS[id].attack.windup + WEAPONS[id].attack.recovery;
 const weaponReach = (id: WeaponId): number => WEAPONS[id].attack.reach;
 
@@ -105,7 +126,14 @@ const barFrac = (value: number, all: number[]): number => {
 
 /** Damage / speed / reach, straight from WEAPONS — the codex can never drift. */
 export const weaponBars = (id: WeaponId): StatBar[] => [
-  { label: "DAMAGE", frac: barFrac(weaponDamage(id), WEAPON_IDS.map(weaponDamage)), display: String(weaponDamage(id)) },
+  {
+    label: "DAMAGE",
+    frac: barFrac(weaponDamage(id), WEAPON_IDS.map(weaponDamage)),
+    // A burst shows its arithmetic (3×8) — the total is real but earned.
+    display: WEAPONS[id].burst
+      ? `${WEAPONS[id].burst!.count}×${WEAPONS[id].stats.attack ?? PLAYER_STATS.attack}`
+      : String(weaponDamage(id)),
+  },
   { label: "SPEED", frac: barFrac(-weaponCycle(id), WEAPON_IDS.map((w) => -weaponCycle(w))), display: `${weaponCycle(id).toFixed(1)}s cycle` },
   { label: "REACH", frac: barFrac(weaponReach(id), WEAPON_IDS.map(weaponReach)), display: `${weaponReach(id)}px` },
 ];
@@ -122,14 +150,34 @@ export const weaponChips = (id: WeaponId): CodexChip[] => {
       value: `${Math.round(cfg.bleed.chance * 100)}% · ${cfg.bleed.ticks} × ${cfg.bleed.damage}dmg · ${cfg.bleed.interval}s`,
     });
   }
+  if (cfg.poison) {
+    chips.push({
+      label: "POISON",
+      value: `stacks ×${cfg.poison.maxStacks} · ${cfg.poison.damagePerStack}dmg/stack · ${cfg.poison.interval}s`,
+    });
+  }
   if (cfg.slow) chips.push({ label: "SLOW", value: `${cfg.slow.duration}s · ×${cfg.slow.factor} speed` });
   if (cfg.attack.shape === "arc") chips.push({ label: "ARC", value: `${deg(cfg.attack.arcWidth ?? 0)}°` });
-  if (cfg.attack.minReach) {
+  if (cfg.attack.minReach && !cfg.shell) {
     // The floating hit band (the trident head) — only this range bites.
+    // (A shell weapon's minReach is its DEAD ZONE chip instead, above.)
     chips.push({ label: "BITE", value: `${cfg.attack.minReach}–${cfg.attack.reach}px` });
   }
+  if (cfg.burst) {
+    chips.push({ label: "VOLLEY", value: `${cfg.burst.count} bolts · ${cfg.burst.interval}s apart` });
+  }
+  if (cfg.shell) {
+    chips.push({ label: "BLAST", value: `${cfg.shell.blastRadius}px` });
+    chips.push({ label: "FLIGHT", value: `${cfg.shell.flightMin}–${cfg.shell.flightMax}s by range` });
+    // The bombard's minReach is a DEAD ZONE, not a floating band (no swing
+    // at all inside it) — its own label, not the trident's BITE.
+    if (cfg.attack.minReach) chips.push({ label: "DEAD ZONE", value: `under ${cfg.attack.minReach}px` });
+  }
   if (cfg.attack.shape === "projectile" && cfg.attack.projectileSpeed) {
-    chips.push({ label: id === "staff" ? "ORB" : "ARROW", value: `${cfg.attack.projectileSpeed} px/s` });
+    chips.push({
+      label: id === "staff" ? "ORB" : cfg.burst ? "BOLT" : "ARROW",
+      value: `${cfg.attack.projectileSpeed} px/s`,
+    });
   }
   if (cfg.projectile?.homingTurnRate) {
     chips.push({ label: "HOMING", value: `${cfg.projectile.homingTurnRate} rad/s` });
@@ -273,9 +321,15 @@ export const abilitiesByCategory = (category: AbilityCategory): AbilityId[] =>
   );
 
 /** Weapon ids alphabetical — same ordering rule as abilities. Gated items
- * (bits-secret-items.md) appear ONLY when entitled: hidden, never greyed —
- * a secret doesn't exist until it's yours. */
-export const sortedWeaponIds = (entitled: ReadonlySet<string>): WeaponId[] =>
-  WEAPON_IDS.filter((w) => !GATED_WEAPONS.has(w) || entitled.has(weaponEntitlement(w))).sort((a, b) =>
-    WEAPONS[a].name.localeCompare(WEAPONS[b].name),
-  );
+ * appear ONLY when entitled: hidden, never greyed — a secret doesn't exist
+ * until it's yours (bits-secret-items.md), and the wizard shows what you
+ * own, nothing else (bits-store.md). The one exception: PRACTICE unlocks
+ * writ-gated items for everyone — free practice use is the store's
+ * try-before-buy funnel. Deed items stay hidden even there (secrets rule). */
+export const sortedWeaponIds = (entitled: ReadonlySet<string>, practice = false): WeaponId[] =>
+  WEAPON_IDS.filter(
+    (w) =>
+      !GATED_WEAPONS.has(w) ||
+      entitled.has(weaponEntitlement(w)) ||
+      (practice && WRIT_WEAPONS.has(w)),
+  ).sort((a, b) => WEAPONS[a].name.localeCompare(WEAPONS[b].name));

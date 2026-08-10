@@ -3,7 +3,7 @@
  * leak into (or out of) the PvE games: same core systems, separate tuning
  * tables (see docs/design/pvp-arena.md).
  */
-import type { AbilityConfig, AttackConfig, CombatStats } from "@heroic/core";
+import type { AbilityConfig, AttackConfig, CombatStats, StackingDotConfig } from "@heroic/core";
 
 /** Server sim rate. Core primitives are dt-parameterised, so 30Hz "just works". */
 export const TICK_RATE = 30;
@@ -60,8 +60,25 @@ export const PLAYER_STATS: CombatStats = {
 // shots. The staff was near-unapproachable at a 0.9s cycle; it now telegraphs
 // longest and fires rarest.
 
-export type WeaponId = "blade" | "bow" | "staff" | "hammer" | "trident";
-export const WEAPON_IDS: readonly WeaponId[] = ["blade", "bow", "staff", "hammer", "trident"];
+export type WeaponId =
+  | "blade"
+  | "bow"
+  | "staff"
+  | "hammer"
+  | "trident"
+  | "fang"
+  | "scorpion"
+  | "bombard";
+export const WEAPON_IDS: readonly WeaponId[] = [
+  "blade",
+  "bow",
+  "staff",
+  "hammer",
+  "trident",
+  "fang",
+  "scorpion",
+  "bombard",
+];
 
 /** The FREE roster — what bots and forceStart's random-fill draft from.
  * Gated items (bits-secret-items.md) are earned through deeds and NEVER
@@ -83,6 +100,13 @@ export interface BleedConfig {
   refresh?: boolean;
 }
 
+/** A stacking-intensity DoT rider (the Fang's poison — bits-store-arms.md):
+ * every non-lethal hit adds a stack (capped) and refreshes ONE shared clock;
+ * tick damage = stacks × damagePerStack and all stacks fall off together.
+ * Bleed punishes getting tagged once; poison punishes staying in reach. No
+ * rng draw on application — deterministic like the slow. */
+export type PoisonConfig = StackingDotConfig;
+
 /** An on-arc-hit movement debuff (the hammer's slow). Applies on every
  * non-lethal hit — no rng draw, so the stream stays deterministic. */
 export interface SlowConfig {
@@ -99,6 +123,44 @@ export interface WeaponProjectileConfig {
   homingTurnRate?: number;
 }
 
+/** A lobbed AOE shell (the Bombard — bits-store-arms.md): the struck instant
+ * marks the mark's CURRENT position and a shell flies there over a FIXED
+ * flight time — no collision on the way (it's above the fight; the arc is
+ * render flavour), then a sandtrap-style blast at the marked point: fixed
+ * damage (no crit/defense — artillery is reliable, not lucky), radial
+ * knockback, hitting EVERYONE in the zone — allies and the gunner included
+ * (Tom, 2026-08-10) — dash i-frames dodge it, Ironhide tanks it. The
+ * landing ring renders for BOTH teams from the moment of launch — walking
+ * off the mark is the whole counterplay, and an unmarked artillery hit
+ * would read as cheating. */
+export interface ShellConfig {
+  /** Flight scales with launch distance (Tom, 2026-08-10 — a closer shell
+   * needn't travel as far): flightMin at point-blank, flightMax at full
+   * reach, linear between. The FLOOR is a balance line, not flavour: a
+   * dead-centred target needs blastRadius + body = 138px to walk clear,
+   * 0.49s at full sprint — flightMin 0.55 keeps the walk-out barely alive
+   * at any range; under it, close shells become dash-or-eat. */
+  flightMin: number;
+  flightMax: number;
+  blastRadius: number;
+  /** Fixed blast damage (the sandtrap idiom, not a weapon resolve). */
+  damage: number;
+  /** Radial impulse on everyone caught, px/s. */
+  knockback: number;
+}
+
+/** A multi-bolt volley per attack cycle (the Scorpion — bits-store-arms.md):
+ * the struck instant looses bolt 1, then `count - 1` follow-ups fire on this
+ * interval DURING recovery, each re-aimed at the mark's position at its own
+ * release instant — that's what makes the volley harder to fully sidestep
+ * than one bow shot, without any aim being networked. A dead or smoked mark
+ * ends the volley (the windup-lock rules). */
+export interface BurstConfig {
+  count: number;
+  /** Seconds between bolts. */
+  interval: number;
+}
+
 export interface WeaponConfig {
   name: string;
   attack: AttackConfig;
@@ -107,8 +169,11 @@ export interface WeaponConfig {
   /** Auto-target acquisition radius (gauntlet rule: reach + a margin). */
   engagementRadius: number;
   bleed?: BleedConfig;
+  poison?: PoisonConfig;
   slow?: SlowConfig;
   projectile?: WeaponProjectileConfig;
+  burst?: BurstConfig;
+  shell?: ShellConfig;
 }
 
 export const WEAPONS: Record<WeaponId, WeaponConfig> = {
@@ -229,6 +294,98 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     engagementRadius: 180 + 160,
     bleed: { chance: 1, ticks: 12, interval: 0.5, damage: 1, refresh: true },
     slow: { duration: 1, factor: 0.6 },
+  },
+  // The skirmisher's poison dagger (bits-store-arms.md — the first WRIT
+  // weapon, launch shelf item 1): ultra-short reach, the fastest cycle in
+  // the game, feeble raw hits — the kill is the poison working while you're
+  // already gone. Zero knockback on purpose (it wants the next stab), and
+  // deliberately IN-REACHED by everything: blade 90 / hammer 125 out-space
+  // it, so its whole game is closing through telegraphs and leaving before
+  // the answer lands.
+  // Device pass 2026-08-09 (Tom): reach 70 → 60 (even more knife-range),
+  // cycle 0.53 → 0.45 (windup 0.15 keeps it a flick you can still read),
+  // attack 7 → 5 — the raw hit is a formality, the venom is the weapon.
+  // Venom pass, same day (Tom: get in, stab a few times, get OUT): 2/stack
+  // → 3 and clock 4s → 5s, so a 3-stab pass leaves 9/s burning for 5s (45
+  // post-disengage) — and FULL stacks (12/s) now out-drip a Blood Font's
+  // 8/s: the fang is the roster's anti-heal pressure. The clock only
+  // refreshes while the knife keeps touching you, so leaving is still the
+  // whole counterplay.
+  fang: {
+    name: "Fang",
+    attack: {
+      shape: "arc",
+      school: "physical",
+      reach: 60,
+      arcWidth: (35 * Math.PI) / 180,
+      windup: 0.15,
+      recovery: 0.3,
+      knockback: 0,
+    },
+    stats: { attack: 5 },
+    engagementRadius: 60 + 160,
+    poison: { maxStacks: 4, interval: 1, damagePerStack: 3, duration: 5 },
+  },
+  // The burst repeater (bits-store-arms.md launch shelf item 2, WRIT): the
+  // third ranged identity — bow is one big earned hit, staff is slow homing
+  // pressure, the scorpion is a three-bolt volley on the slowest ranged
+  // cycle. Each bolt re-aims at release (BurstConfig above), so a strafer
+  // sheds SOME bolts but rarely all three; dash i-frames through the middle
+  // of the volley remain the clean answer, and Mirror Guard turns each bolt
+  // individually. Per-bolt damage is feeble — the full volley (3 × 8 raw)
+  // just out-pays one bow hit (20 raw at attack 20), the premium for
+  // landing every bolt. Bolts fly far faster than arrows (850 vs 650) but
+  // across a MID-RANGE band only — device pass 2026-08-09 (Tom): 320 reach
+  // was too dangerous, cut to 240 (well under staff's 320, above melee)
+  // with the bolt speed up 750 → 850 as the trade. It wants to skirmish at
+  // the seam between the melee bracket and the true ranged weapons.
+  scorpion: {
+    name: "Scorpion",
+    attack: {
+      shape: "projectile",
+      school: "physical",
+      reach: 240,
+      projectileSpeed: 850,
+      windup: 0.45,
+      recovery: 1.3,
+      knockback: 80,
+    },
+    stats: { attack: 8 },
+    engagementRadius: 240 + 20,
+    // maxRange deliberately breaks the roster's reach+60 idiom (Tom,
+    // 2026-08-09): the 240 band gates where a volley may BEGIN, but loosed
+    // bolts carry to double that — past even the bow's 420 arrow — so a
+    // volley fired at the edge still runs down a fleeing mark. The short
+    // acquisition band stays the balance lever; the flight is the flavour.
+    projectile: { radius: 5, maxRange: 480 },
+    burst: { count: 3, interval: 0.12 },
+  },
+  // The artillery piece (bits-store-arms.md launch shelf item 3, WRIT):
+  // the longest reach in the game behind the slowest cycle (400 → 380,
+  // Tom's device pass 2026-08-10 — just past the bow's 360, paired with
+  // the client's artillery zoom so the whole ring fits on screen), firing
+  // a lobbed
+  // shell that lands where the mark STOOD — flight time makes it dodgeable
+  // by walking, terrifying against anyone holding ground (a font, a quake,
+  // a choke). minReach reuses the trident's floating-band plumbing as a
+  // close-quarters DEAD ZONE: inside 120 it cannot even start a swing, so
+  // diving the gunner is total safety from the gun — that's the engine-free
+  // counterplay. stats.attack mirrors shell.damage for the codex bar only;
+  // the blast applies the fixed shell number (no crit, no defense).
+  bombard: {
+    name: "Bombard",
+    attack: {
+      shape: "projectile",
+      school: "physical",
+      reach: 380,
+      minReach: 120,
+      windup: 0.55,
+      recovery: 1.4,
+      knockback: 0,
+    },
+    stats: { attack: 22 },
+    engagementRadius: 380 + 20,
+    shell: { flightMin: 0.55, flightMax: 0.9, blastRadius: 120, damage: 22, knockback: 400 },
   },
 };
 

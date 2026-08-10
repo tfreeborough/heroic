@@ -41,6 +41,7 @@ import {
   type InterpolatedView,
   type PlayerSnapshot,
   type ProjectileSnapshot,
+  type ShellSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
 import {
   BLOOD_DRY_MS,
@@ -139,10 +140,18 @@ const C_BOLT = Skia.Color("#f0e8d8");
 const C_STAFF_ORB = Skia.Color("#9b6dd9");
 const C_STAFF_RING = Skia.Color("rgba(155, 109, 217, 0.45)");
 const C_FX_BLEED = Skia.Color("#e0503c");
+const C_FX_POISON = Skia.Color("#a2c437");
 const C_RANGE_RING = Skia.Color("#f0e8d8");
 // Status rings: pulse rate carries the "expiring soon" signal (statusRings.ts).
 const C_RING_SLOW = Skia.Color("#4da3d9");
 const C_RING_BLEED = Skia.Color("#e0503c");
+// Acid yellow-green, deliberately apart from the heal green (#5fc75f) so a
+// poisoned body never reads as a blessed one.
+const C_RING_POISON = Skia.Color("#a2c437");
+// The bombard's cannonball: iron-black with a sun glint (Tom, 2026-08-10) —
+// black reads perfectly against the sand, the glint keeps it a sphere.
+const C_SHELL = Skia.Color("#16130f");
+const C_SHELL_GLINT = Skia.Color("#8a7f70");
 // Straw Man's forced lock — straw yellow, so the aim-hijack reads as an effect.
 const C_RING_TAUNT = Skia.Color("#d9b34d");
 // Body-effect ring for Mirror Guard (Ironhide gets a full shield bubble).
@@ -271,6 +280,8 @@ export interface FxItem {
   crit?: boolean;
   /** Bleed-tick numbers render red (and the caller skips the ring). */
   bleed?: boolean;
+  /** Poison-tick numbers render acid green (ambient like bleed). */
+  poison?: boolean;
   /** Heal numbers render green. */
   heal?: boolean;
   /** A big ring (the sandtrap detonation) instead of the hit ping. */
@@ -674,6 +685,17 @@ const drawPlayer = (
   fill.setColor(bodyColorFor(p, friendTeam));
   canvas.drawCircle(p.x, p.y, r, fill);
 
+  // Poison sickness: the BODY greens as stacks build (Tom, 2026-08-09 — a
+  // stack-scaled ring width stole radius the other rings need; the flesh
+  // going bad carries the stack read instead). A wash over the team colour,
+  // never replacing it — allegiance stays legible at every stack.
+  if (p.alive && p.poisonStacks > 0) {
+    fill.setColor(C_RING_POISON);
+    fill.setAlphaf(Math.min(0.42, 0.11 * p.poisonStacks));
+    canvas.drawCircle(p.x, p.y, r, fill);
+    fill.setAlphaf(1);
+  }
+
   if (p.alive && p.dashing) {
     stroke.setColor(C_DASH_RING);
     stroke.setStrokeWidth(3);
@@ -739,12 +761,21 @@ const drawPlayer = (
       stroke.setStrokeWidth(2.5);
       canvas.drawCircle(p.x, p.y, r + 10, stroke);
     }
+    const poison = pulses.strength(p.id, "poison");
+    if (poison > 0) {
+      stroke.setColor(C_RING_POISON);
+      stroke.setAlphaf(0.25 + 0.6 * poison);
+      // Fixed width like every ring — the STACK read lives on the greening
+      // body wash above, not on ring weight (Tom, 2026-08-09).
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(p.x, p.y, r + 14, stroke);
+    }
     const taunt = pulses.strength(p.id, "taunt");
     if (taunt > 0) {
       stroke.setColor(C_RING_TAUNT);
       stroke.setAlphaf(0.25 + 0.6 * taunt);
       stroke.setStrokeWidth(2.5);
-      canvas.drawCircle(p.x, p.y, r + 14, stroke);
+      canvas.drawCircle(p.x, p.y, r + 18, stroke);
     }
     // Body-effect ring: Mirror Guard, one radius step further out. (Ironhide
     // draws its shield dome above instead of a ring.)
@@ -753,7 +784,7 @@ const drawPlayer = (
       stroke.setColor(C_RING_MIRROR);
       stroke.setAlphaf(0.3 + 0.55 * mirror);
       stroke.setStrokeWidth(2.5);
-      canvas.drawCircle(p.x, p.y, r + 18, stroke);
+      canvas.drawCircle(p.x, p.y, r + 22, stroke);
     }
     stroke.setAlphaf(1);
   }
@@ -955,9 +986,11 @@ const drawFx = (
           ? C_FX_CRIT
           : f.bleed
             ? C_FX_BLEED
-            : f.heal
-              ? C_FX_HEAL
-              : C_FX_NUM,
+            : f.poison
+              ? C_FX_POISON
+              : f.heal
+                ? C_FX_HEAL
+                : C_FX_NUM,
       );
       fill.setAlphaf(Math.min(1, f.life * 2));
       canvas.drawText(
@@ -1522,6 +1555,19 @@ const drawProjectiles = (
       stroke.setColor(C_STAFF_RING);
       stroke.setStrokeWidth(2);
       canvas.drawCircle(p.x, p.y, 14, stroke);
+    } else if (p.kind === "scorpion") {
+      // A shorter, thinner dart than the arrow — three of these in the air
+      // at once is the scorpion's whole silhouette.
+      stroke.setColor(C_BOLT);
+      stroke.setStrokeWidth(2.5);
+      stroke.setStrokeCap(StrokeCap.Round);
+      canvas.drawLine(
+        p.x - Math.cos(p.angle) * 5,
+        p.y - Math.sin(p.angle) * 5,
+        p.x + Math.cos(p.angle) * 5,
+        p.y + Math.sin(p.angle) * 5,
+        stroke,
+      );
     } else {
       stroke.setColor(C_BOLT);
       stroke.setStrokeWidth(3);
@@ -1534,6 +1580,39 @@ const drawProjectiles = (
         stroke,
       );
     }
+  }
+};
+
+/** Bombard shells (bits-store-arms.md): the landing ring is the WHOLE
+ * telegraph and renders for BOTH teams at the blast's true size — it firms
+ * up as the shell falls (an unmarked artillery hit would read as cheating).
+ * The shell itself flies a derived arc: ground shadow tracks the straight
+ * line, the shell lifts off it on a sine hump — pure render flavour, the
+ * sim only knows the clock. */
+const drawShells = (canvas: SkCanvas, shells: readonly ShellSnapshot[]): void => {
+  for (const s of shells) {
+    const t = 1 - Math.max(0, s.landIn) / s.total; // 0 launch → 1 landing
+    // The mark: a ring at true blast size + a fill that firms toward landing.
+    stroke.setColor(C_TELEGRAPH);
+    stroke.setStrokeWidth(2);
+    stroke.setAlphaf(0.35 + 0.45 * t);
+    canvas.drawCircle(s.tx, s.ty, s.blast, stroke);
+    fill.setColor(C_TELEGRAPH);
+    fill.setAlphaf(0.06 + 0.18 * t);
+    canvas.drawCircle(s.tx, s.ty, s.blast, fill);
+    // The shell: shadow on the line, an iron-black cannonball lifted on the
+    // arc hump, with a high-sun glint so the sphere reads at speed.
+    const x = s.fx + (s.tx - s.fx) * t;
+    const y = s.fy + (s.ty - s.fy) * t;
+    fill.setColor(C_SHELL);
+    fill.setAlphaf(0.25);
+    canvas.drawCircle(x, y, 4, fill); // ground shadow
+    fill.setAlphaf(1);
+    const sy = y - Math.sin(Math.PI * t) * 90;
+    canvas.drawCircle(x, sy, 6, fill);
+    fill.setColor(C_SHELL_GLINT);
+    canvas.drawCircle(x - 2, sy - 2, 1.5, fill);
+    stroke.setAlphaf(1);
   }
 };
 
@@ -1639,6 +1718,19 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
           : undefined;
     if (follow) {
       zoom = FOLLOW_ZOOM;
+      // Artillery zoom (Tom, 2026-08-10): a shell weapon's range ring must
+      // FIT the screen — its whole game is played on the ring, and at
+      // FOLLOW_ZOOM the bombard's ring ran off both side edges. Zoom out
+      // exactly enough for ring + margin to clear the narrower width;
+      // derived from the followed player's weapon, so spectating an
+      // artillery ally shows their game too. Weapons are fixed per match,
+      // so within a life this is constant (it may snap between spectate
+      // targets — acceptable, the camera already jumps there).
+      const fw = follow.weapon ? WEAPONS[follow.weapon] : null;
+      if (fw?.shell) {
+        const ringR = fw.attack.reach + config.playerRadius + 16;
+        zoom = Math.min(zoom, viewW / 2 / ringR);
+      }
       const halfW = viewW / 2 / zoom;
       const halfH = viewH / 2 / zoom;
       // Clamp is relaxed by CROWD_REVEAL past the sand edge, so fighting near a
@@ -1767,6 +1859,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs, r.titles?.get(byFeet[pi]!.id));
 
     drawProjectiles(canvas, view.projectiles);
+    drawShells(canvas, view.shells);
     drawReelChains(canvas, view.players);
     drawFlyingBlood(canvas, r.blood.flying, r.nowMs);
     // The storm's swirling body sits OVER bodies and shots — it obscures.

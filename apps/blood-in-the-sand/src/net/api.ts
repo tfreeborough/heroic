@@ -95,6 +95,54 @@ export const fetchGlory = async (identity: Identity): Promise<number | null> => 
   }
 };
 
+/** Both server-authoritative balances (bits-store.md). `writs` tolerates an
+ * older API that doesn't serve it yet — the field just reads 0. */
+export interface Wallet {
+  glory: number;
+  writs: number;
+}
+
+/** The full wallet; null = unavailable right now. */
+export const fetchWallet = async (identity: Identity): Promise<Wallet | null> => {
+  if (!API_URL) return null;
+  try {
+    const res = await apiFetch("/wallet", {
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    if (!res.ok) return null;
+    const wallet = (await res.json()) as { glory?: unknown; writs?: unknown };
+    if (typeof wallet.glory !== "number") return null;
+    return { glory: wallet.glory, writs: typeof wallet.writs === "number" ? wallet.writs : 0 };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Dev-menu ledger grant (bits-store.md § testing) — hits POST /dev/grant,
+ * which only exists when the API runs with STORE_DEV_TOOLS=1. Against a
+ * production API this 404s and quietly returns null, so the dev-menu row is
+ * inert exactly where it should be.
+ */
+export const devGrant = async (
+  identity: Identity,
+  grant: { glory?: number; writs?: number },
+): Promise<Wallet | null> => {
+  if (!API_URL) return null;
+  try {
+    const res = await apiFetch("/dev/grant", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify(grant),
+    });
+    if (!res.ok) return null;
+    const wallet = (await res.json()) as Wallet;
+    return typeof wallet.glory === "number" && typeof wallet.writs === "number" ? wallet : null;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Self-heal a stored identity the backend no longer recognises (a dev
  * database reset, a wiped row). Anonymous identity has no second factor, so

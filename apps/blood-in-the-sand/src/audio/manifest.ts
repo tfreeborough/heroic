@@ -28,6 +28,17 @@ export const AUDIO_MANIFEST: AudioManifest = {
     hit_staff_1: require("../../assets/audio/sfx/hit_staff_1.mp3"),
     hit_hammer_1: require("../../assets/audio/sfx/hit_hammer_1.mp3"),
     hit_trident_1: require("../../assets/audio/sfx/hit_trident_1.mp3"),
+
+    hit_fang_1: require("../../assets/audio/sfx/hit_fang_1.mp3"),
+    hit_fang_2: require("../../assets/audio/sfx/hit_fang_2.mp3"),
+    hit_fang_3: require("../../assets/audio/sfx/hit_fang_3.mp3"),
+
+    fire_scorpion_1: require("../../assets/audio/sfx/fire_scorpion_1.mp3"),
+    hit_scorpion_1: require("../../assets/audio/sfx/hit_scorpion_1.mp3"),
+
+    fire_bombard_1: require("../../assets/audio/sfx/fire_bombard_1.mp3"),
+    hit_bombard_1: require("../../assets/audio/sfx/hit_bombard_1.mp3"),
+
     hit_generic_1: require("../../assets/audio/sfx/hit_generic_1.mp3"),
     player_hurt_1: require("../../assets/audio/sfx/player_hurt_1.mp3"),
     death_1: require("../../assets/audio/sfx/death_1.mp3"),

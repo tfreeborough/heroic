@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a repeating crossbow looses one bolt — a dry mechanical clack and a short sharp bolt whoosh, tight and quick with no tail (the game plays it three times in fast succession, so keep it to a single clack, no burst)",
+  "prompt": "a repeating crossbow looses one bolt — a dry mechanical clack and a short sharp bolt whoosh, tight and quick with no tail (the game plays it three times in fast succession, so keep it to a single clack, no burst). A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 0.5,
+    "promptInfluence": 0.65,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "fire_scorpion_1.mp3"
+  ],
+  "created": "2026-08-09T22:39:00.050Z",
+  "updated": "2026-08-09T22:39:00.050Z"
+}
