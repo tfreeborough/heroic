@@ -810,9 +810,12 @@ const WizardStep = (props: WizardStepProps) => {
     Animated.timing(slide, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [slide]);
 
-  /** Abilities still free for this step within a category. */
+  /** Abilities still free for this step within a category — entitlement-
+   * gated like the weapon list (practice unlocks writ items). */
   const freeIn = (cat: AbilityCategory): AbilityId[] =>
-    abilitiesByCategory(cat).filter((a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1]);
+    abilitiesByCategory(cat, getEntitlements(), practice).filter(
+      (a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1],
+    );
 
   const options: IconId[] = wizard.step === 0 ? sortedWeaponIds(getEntitlements(), practice) : wizard.cat !== null ? freeIn(wizard.cat) : [];
 

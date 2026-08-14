@@ -5,13 +5,23 @@
  * never be.
  */
 import { describe, expect, test } from "bun:test";
-import { FREE_WEAPON_IDS, WEAPON_IDS, WEAPONS } from "./config";
+import {
+  ABILITIES,
+  ABILITY_IDS,
+  FREE_ABILITY_IDS,
+  FREE_WEAPON_IDS,
+  WEAPON_IDS,
+  WEAPONS,
+} from "./config";
 import {
   DEED_WEAPONS,
+  GATED_ABILITIES,
   GATED_WEAPONS,
   ITEM_NAMES,
+  WRIT_ABILITIES,
   WRIT_ITEM_IDS,
   WRIT_WEAPONS,
+  abilityEntitlement,
   itemDisplayName,
   weaponEntitlement,
 } from "./items";
@@ -24,6 +34,13 @@ describe("gated items", () => {
     }
     // Every gated id is a real weapon (a typo here would gate nothing).
     for (const w of GATED_WEAPONS) expect(WEAPON_IDS).toContain(w);
+    // The ability twin — FREE_ABILITY_IDS is a literal exclusion list in
+    // config (it can't import items.ts), so THIS is what keeps the two
+    // files honest: an ability gated here must be excluded there.
+    for (const a of ABILITY_IDS) {
+      expect(FREE_ABILITY_IDS.includes(a) !== GATED_ABILITIES.has(a)).toBe(true);
+    }
+    for (const a of GATED_ABILITIES) expect(ABILITY_IDS).toContain(a);
   });
 
   test("a gated weapon has exactly one gate kind — deed XOR writ", () => {
@@ -56,8 +73,15 @@ describe("gated items", () => {
 
   test("the store shelf lists every writ item and nothing else", () => {
     for (const w of WRIT_WEAPONS) expect(WRIT_ITEM_IDS).toContain(weaponEntitlement(w));
+    for (const a of WRIT_ABILITIES) expect(WRIT_ITEM_IDS).toContain(abilityEntitlement(a));
     for (const w of DEED_WEAPONS) expect(WRIT_ITEM_IDS).not.toContain(weaponEntitlement(w));
     expect(WRIT_ITEM_IDS.length).toBe(new Set(WRIT_ITEM_IDS).size);
+  });
+
+  test("every gated ability has a display name", () => {
+    for (const a of GATED_ABILITIES) {
+      expect(ITEM_NAMES[abilityEntitlement(a)]).toBe(ABILITIES[a].name);
+    }
   });
 
   test("every gated weapon has a display name; deed weapons also a codex chain", () => {

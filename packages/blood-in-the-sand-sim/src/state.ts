@@ -81,6 +81,10 @@ export interface AbilityRuntime {
    * hauled, toward `targetId` (the guard, who stays free), instead of the owner
    * rooting and dragging the target in. Same slow speed, opposite direction. */
   reelReversed: boolean;
+  /** Tar Pit: where the last blob dropped — the trail lays a fresh one each
+   * TAR_PIT.spacing px of travel while the window is open. */
+  dropX: number;
+  dropY: number;
 }
 
 export const createAbilityRuntime = (id: AbilityId): AbilityRuntime => ({
@@ -93,6 +97,8 @@ export const createAbilityRuntime = (id: AbilityId): AbilityRuntime => ({
   targetId: null,
   reelLeft: 0,
   reelReversed: false,
+  dropX: 0,
+  dropY: 0,
 });
 
 /** Fresh slots for a drafted hand — every cooldown clean (each round resets). */
@@ -236,7 +242,14 @@ export interface ArenaProjectile extends ProjectileState {
   reflected?: boolean;
 }
 
-export type DeployableKind = "sandtrap" | "straw-man" | "blood-font" | "sandstorm" | "quake";
+export type DeployableKind =
+  | "sandtrap"
+  | "straw-man"
+  | "blood-font"
+  | "sandstorm"
+  | "quake"
+  | "sinkhole"
+  | "tar";
 
 /**
  * A placed thing (docs/design/pvp-abilities.md): one entity array carries the
@@ -299,6 +312,10 @@ export interface ArenaState {
   /** Training mode (the dev menu's target-dummy range): rounds never end —
    * checkRoundOver stands down and dead dummies respawn in place instead. */
   training: boolean;
+  /** Practice matches (offline vs bots, and the dummy range): casts never
+   * spend the per-round charge budget — cooldown is the only gate, so you
+   * can drill an ability freely. Real rooms never set this. */
+  practice: boolean;
   /** RNG identity: the seed plus how many draws have happened. The live Rng sits
    * in ArenaSim; restoreRng(seed, rngDraws) rebuilds it from these two numbers. */
   seed: number;
@@ -317,10 +334,16 @@ export interface ArenaState {
   shells: ArenaShell[];
 }
 
-export const createArenaState = (seed: number, seatCount: number, training = false): ArenaState => ({
+export const createArenaState = (
+  seed: number,
+  seatCount: number,
+  training = false,
+  practice = false,
+): ArenaState => ({
   tick: 0,
   teamNames: pickTeamNames(seed),
   training,
+  practice,
   seed,
   rngDraws: 0,
   players: Array.from({ length: seatCount }, () => null),

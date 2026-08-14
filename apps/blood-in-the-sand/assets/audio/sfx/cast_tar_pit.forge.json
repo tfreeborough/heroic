@@ -1,0 +1,20 @@
+{
+  "type": "sfx-bits",
+  "subject": "thick tar glugging out onto sand — a viscous heavy pour with fat sticky bubbles popping and a wet spatter tail, oozing not splashing",
+  "prompt": "thick tar glugging out onto sand — a viscous heavy pour with fat sticky bubbles popping and a wet spatter tail, oozing not splashing. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 4,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_tar_pit_1.mp3",
+    "cast_tar_pit_2.mp3",
+    "cast_tar_pit_3.mp3"
+  ],
+  "created": "2026-08-10T22:45:58.402Z",
+  "updated": "2026-08-10T22:46:41.941Z"
+}

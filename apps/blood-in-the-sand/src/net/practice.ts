@@ -22,7 +22,7 @@
  * before. The lobby interval re-arms itself on the return from a match.
  */
 import {
-  ABILITY_IDS,
+  FREE_ABILITY_IDS,
   addDummy,
   addPlayer,
   ARENA_00,
@@ -92,9 +92,11 @@ const randomWeapon = (): WeaponId => FREE_WEAPON_IDS[Math.floor(Math.random() * 
 
 /** A fully random distinct hand — the brain plays its whole kit now
  * (botCasts.ts), so bots draft like players do: anything goes, dash is a
- * pick not a given. Varied hands also exercise every cast rule in practice. */
+ * pick not a given. Varied hands also exercise every cast rule in practice.
+ * FREE roster only (was ABILITY_IDS — harmless while nothing was gated,
+ * a leak the moment the sinkhole shipped: bots never draft gated items). */
 const randomHand = (): AbilityId[] => {
-  const pool = [...ABILITY_IDS];
+  const pool = [...FREE_ABILITY_IDS];
   const hand: AbilityId[] = [];
   while (hand.length < LOADOUT_ABILITY_COUNT) {
     hand.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
@@ -142,8 +144,9 @@ export class PracticeClient implements LobbyClient {
     difficulty: DifficultyId = DEFAULT_DIFFICULTY,
   ) {
     this.mode = mode;
-    // Practice needn't be replayable — wall-clock seeding is fine here.
-    this.sim = createSim(ARENA_00, Date.now() >>> 0, teamSize, mode === "dummies");
+    // Practice needn't be replayable — wall-clock seeding is fine here. The
+    // practice flag lifts the per-round charge budget (cooldown-only casts).
+    this.sim = createSim(ARENA_00, Date.now() >>> 0, teamSize, mode === "dummies", true);
     this.nav = createBotNav(this.sim.zone);
 
     // The human takes seat 0. In bot mode, bots fill every other seat, BOTH

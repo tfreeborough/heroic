@@ -4,11 +4,11 @@
  * fixed-damage pattern (no variance, no crit, no defense, NO rng draws — the
  * BleedConfig rule) that every ability number uses.
  */
-import { resolveAttack, type AttackResult, type Combatant, type Rng } from "@heroic/core";
+import { resolveAttack, type AttackResult, type Rng } from "@heroic/core";
 import { IRONHIDE } from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaPlayer } from "../state";
-import { ironhideActive, knockbackImmune } from "./statuses";
+import { damageFactorOf, ironhideActive, knockbackImmune } from "./statuses";
 
 /** Stop a corpse: zero motion, drop riders, emit the death. */
 export const killPlayer = (p: ArenaPlayer, events: ArenaEvent[]): void => {
@@ -20,15 +20,19 @@ export const killPlayer = (p: ArenaPlayer, events: ArenaEvent[]): void => {
 };
 
 /**
- * resolveAttack with Ironhide folded in. The full roll happens either way —
- * identical rng draws whether the status is up or not, so the stream never
- * forks on a defender's buff — then the applied damage is re-scaled.
+ * resolveAttack with the status bends folded in: the attacker's Titan's
+ * Draught (outgoing ×) and the defender's Ironhide (incoming ×). The full
+ * roll happens either way — identical rng draws whether any status is up
+ * or not, so the stream never forks on a buff — then the applied damage
+ * is re-scaled. Takes the attacking PLAYER now (it needs their statuses).
  */
-export const resolvePlayerHit = (attacker: Combatant, defender: ArenaPlayer, rng: Rng): AttackResult => {
-  if (!ironhideActive(defender)) return resolveAttack(attacker, defender.combatant, rng);
+export const resolvePlayerHit = (attacker: ArenaPlayer, defender: ArenaPlayer, rng: Rng): AttackResult => {
+  const out = damageFactorOf(attacker);
+  const taken = ironhideActive(defender) ? IRONHIDE.damageTakenFactor : 1;
+  if (out === 1 && taken === 1) return resolveAttack(attacker.combatant, defender.combatant, rng);
   const hpBefore = defender.combatant.hp;
-  const rolled = resolveAttack(attacker, defender.combatant, rng);
-  const damage = Math.max(1, Math.round(rolled.damage * IRONHIDE.damageTakenFactor));
+  const rolled = resolveAttack(attacker.combatant, defender.combatant, rng);
+  const damage = Math.max(1, Math.round(rolled.damage * out * taken));
   const hp = Math.max(0, hpBefore - damage);
   defender.combatant.hp = hp;
   return { ...rolled, damage, defenderHp: hp, lethal: hp === 0 };

@@ -199,8 +199,25 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * landing clock — the telegraph ring both teams read, and the dodge data
  * a future bot pass reads the same way). Blast is the sandtrap idiom and
  * reuses the detonate event. New-weapon-id rule bumps as ever.
+ * v24 (2026-08-10): the SINKHOLE — the first WRIT ability
+ * (bits-store-arms.md): a thrown both-teams pull zone, deployable kind
+ * "sinkhole" (old bundles can't index the new ability id off slot
+ * snapshots, hence the bump). FREE_ABILITY_IDS now genuinely excludes a
+ * gated id for the first time — bots and random-fill never draft it.
+ * Amended same day — additive, NO bump: cast events gain `tx`/`ty` (a
+ * thrown cast's landing point, the lob-FX endpoint — carried ON the
+ * event because the sampled view lags the interp delay; the harpoon
+ * precedent). Absent for every at-the-feet cast.
+ * v25 (2026-08-10): the TAR PIT — writ ability 2 (bits-store-arms.md,
+ * REDESIGNED at build from a placed circle to a movement-painted TRAIL):
+ * deployable kind "tar", many small growing blobs laid behind the caster
+ * during the cast's active window. New ability id ⇒ bump, as ever.
+ * v26 (2026-08-11): TITAN'S DRAUGHT — writ ability 3 (bits-store-arms.md):
+ * a status buff (the Ironhide family). No new wire shapes — the client
+ * derives the grow scale from the slot's broadcast active window, and the
+ * sim's radiusOf/damageFactorOf read the same status. New id ⇒ bump.
  */
-export const PROTOCOL_VERSION = 23;
+export const PROTOCOL_VERSION = 26;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a

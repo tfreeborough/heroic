@@ -29,8 +29,12 @@ export type ArenaEvent =
   /** A ranged weapon loosed a projectile — the release sound (bow twang / staff
    * whoosh), fired on every shot whether or not it ever connects. */
   | { type: "shoot"; ownerId: number; weapon: WeaponId; x: number; y: number }
-  /** An ability slot fired — drives per-ability cast SFX/haptics. */
-  | { type: "cast"; playerId: number; ability: AbilityId }
+  /** An ability slot fired — drives per-ability cast SFX/haptics. A THROWN
+   * cast (the sinkhole) also carries its landing point: the client's lob
+   * FX needs it ON the event, because events are drained on snapshot
+   * ARRIVAL while the rendered view lags the interp delay — a same-tick
+   * deployable isn't in the sampled view yet (the harpoon's precedent). */
+  | { type: "cast"; playerId: number; ability: AbilityId; tx?: number; ty?: number }
   /** The harpoon's chain snapped out — endpoints for the line flash (drawn
    * whether or not it stuck; a dash-dodged throw still whips through air). */
   | { type: "harpoon"; casterId: number; fromX: number; fromY: number; toX: number; toY: number }

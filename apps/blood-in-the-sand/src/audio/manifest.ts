@@ -61,6 +61,14 @@ export const AUDIO_MANIFEST: AudioManifest = {
     heal_tick_1: require("../../assets/audio/sfx/heal_tick_1.mp3"),
     quake_rumble_1: require("../../assets/audio/sfx/quake_rumble_1.mp3"),
     reflect_1: require("../../assets/audio/sfx/reflect_1.mp3"),
+    cast_sinkhole_1: require("../../assets/audio/sfx/cast_sinkhole_1.mp3"),
+    cast_tar_pit_1: require("../../assets/audio/sfx/cast_tar_pit_1.mp3"),
+    cast_tar_pit_2: require("../../assets/audio/sfx/cast_tar_pit_2.mp3"),
+    cast_tar_pit_3: require("../../assets/audio/sfx/cast_tar_pit_3.mp3"),
+
+    cast_titans_draught_1: require("../../assets/audio/sfx/cast_titans_draught_1.mp3"),
+    cast_titans_draught_2: require("../../assets/audio/sfx/cast_titans_draught_2.mp3"),
+    cast_titans_draught_3: require("../../assets/audio/sfx/cast_titans_draught_3.mp3"),
 
     countdown_tick_1: require("../../assets/audio/sfx/countdown_tick_1.mp3"),
     round_start_1: require("../../assets/audio/sfx/round_start_1.mp3"),

@@ -169,10 +169,11 @@ const weaponRounds = [
 
 /** Per-ability cast chains — WEST ribs, clustered BY CATEGORY (offensive /
  * defensive / support — thematic grouping, Tom 2026-08-04) with a wide gap
- * between clusters. Rows 0-2 offensive, 3-7 defensive, 8-10 support match
- * the authored order below. */
+ * between clusters. Rows 0-4 offensive, 5-9 defensive, 10-13 support
+ * (the WRIT spells joined 2026-08-10/11: sinkhole + titans-draught
+ * offensive, tar-pit support) match the authored order below. */
 const abilityRowY = (row: number): number =>
-  185 + row * 115 + (row >= 3 ? 100 : 0) + (row >= 8 ? 100 : 0);
+  185 + row * 115 + (row >= 5 ? 100 : 0) + (row >= 10 ? 100 : 0);
 
 const abilityChain = (ability: string, row: number, tiers: readonly ChainTier[]) =>
   milestoneChain<MatchSummary>({
@@ -202,42 +203,60 @@ const abilityCasts = [
     { threshold: 50, title: "Reel Them In", description: "Cast Harpoon 50 times." },
     { threshold: 250, title: "The Butcher's Gaff", description: "Cast Harpoon 250 times." },
   ]),
-  ...abilityChain("dash", 3, [
+  // The first WRIT spell's ladder (bits-store-arms.md) — climbable once the
+  // Armory sells you the throw. PLACEHOLDER titles (Tom's naming pass).
+  ...abilityChain("sinkhole", 3, [
+    { threshold: 10, title: "Undertow", description: "Cast Sinkhole 10 times." },
+    { threshold: 50, title: "The Ground Hungers", description: "Cast Sinkhole 50 times." },
+    { threshold: 250, title: "The Swallowing Sands", description: "Cast Sinkhole 250 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("titans-draught", 4, [
+    { threshold: 10, title: "A Head Taller", description: "Drink Titan's Draught 10 times." },
+    { threshold: 50, title: "Giant's Thirst", description: "Drink Titan's Draught 50 times." },
+    { threshold: 250, title: "The Colossus of the Pit", description: "Drink Titan's Draught 250 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("dash", 5, [
     { threshold: 25, title: "Quickstep", description: "Cast Dash 25 times." },
     { threshold: 100, title: "Dust Devil", description: "Cast Dash 100 times." },
     { threshold: 500, title: "Gone in a Blink", description: "Cast Dash 500 times." },
   ]),
-  ...abilityChain("mirror-guard", 4, [
+  ...abilityChain("mirror-guard", 6, [
     { threshold: 15, title: "Polished Bronze", description: "Cast Mirror Guard 15 times." },
     { threshold: 100, title: "Turnabout", description: "Cast Mirror Guard 100 times." },
     { threshold: 300, title: "The Mirror's Edge", description: "Cast Mirror Guard 300 times." },
   ]),
-  ...abilityChain("ironhide", 5, [
+  ...abilityChain("ironhide", 7, [
     { threshold: 10, title: "Thick-Skinned", description: "Cast Ironhide 10 times." },
     { threshold: 50, title: "Man of Iron", description: "Cast Ironhide 50 times." },
     { threshold: 250, title: "The Anvil", description: "Cast Ironhide 250 times.", rewards: [{ kind: "title" }] },
   ]),
-  ...abilityChain("straw-man", 6, [
+  ...abilityChain("straw-man", 8, [
     { threshold: 10, title: "Decoy", description: "Cast Straw Man 10 times." },
     { threshold: 75, title: "Misdirection", description: "Cast Straw Man 75 times." },
     { threshold: 200, title: "The Puppeteer", description: "Cast Straw Man 200 times." },
   ]),
-  ...abilityChain("warding-shout", 7, [
+  ...abilityChain("warding-shout", 9, [
     { threshold: 20, title: "Stand Back", description: "Cast Warding Shout 20 times." },
     { threshold: 100, title: "Hold the Line", description: "Cast Warding Shout 100 times." },
     { threshold: 250, title: "The Herald's Roar", description: "Cast Warding Shout 250 times." },
   ]),
-  ...abilityChain("war-drums", 8, [
+  // The second WRIT spell's ladder (bits-store-arms.md) — PLACEHOLDER titles.
+  ...abilityChain("tar-pit", 10, [
+    { threshold: 10, title: "Slow Going", description: "Cast Tar Pit 10 times." },
+    { threshold: 50, title: "Black Wake", description: "Cast Tar Pit 50 times." },
+    { threshold: 250, title: "The Unfollowable", description: "Cast Tar Pit 250 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("war-drums", 11, [
     { threshold: 10, title: "Drummer Boy", description: "Cast War Drums 10 times." },
     { threshold: 50, title: "March to War", description: "Cast War Drums 50 times." },
     { threshold: 150, title: "The Rhythm of Ruin", description: "Cast War Drums 250 times." },
   ]),
-  ...abilityChain("blood-font", 9, [
+  ...abilityChain("blood-font", 12, [
     { threshold: 10, title: "First Aid", description: "Cast Blood Font 10 times." },
     { threshold: 50, title: "Haemophiliac", description: "Cast Blood Font 50 times." },
     { threshold: 250, title: "The Red Spring", description: "Cast Blood Font 250 times.", rewards: [{ kind: "title" }] },
   ]),
-  ...abilityChain("sandstorm", 10, [
+  ...abilityChain("sandstorm", 13, [
     { threshold: 10, title: "Dust Kicker", description: "Cast Sandstorm 10 times." },
     { threshold: 50, title: "Eye of the Storm", description: "Cast Sandstorm 50 times." },
     { threshold: 250, title: "The Desert's Wrath", description: "Cast Sandstorm 250 times." },
@@ -532,9 +551,12 @@ export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
   },
   { title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
   { title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
-  { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 9)) },
-  { title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(9, 24)), "return-to-sender"] },
-  { title: "Support Arts", ids: idsOf(abilityCasts.slice(24)) },
+  // Slice bounds = 3 tiers × chains per category cluster (offensive grew
+  // to 4 chains with the sinkhole, support to 4 with the tar pit —
+  // 2026-08-10).
+  { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 15)) },
+  { title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(15, 30)), "return-to-sender"] },
+  { title: "Support Arts", ids: idsOf(abilityCasts.slice(30)) },
   { title: "Glory", ids: idsOf(glory) },
   { title: "Blood & Mercy", ids: [...idsOf(healing), "lifeblood"] },
 ];

@@ -1,7 +1,8 @@
 # BITS — The Writ Shelf: launch arms & the drop pool
 
 Status: **designed 2026-08-09 · Fang (v21) + Scorpion (v22) BUILT 08-09,
-Bombard (v23) BUILT 08-10 — items 4–7 owed** ·
+Bombard (v23) + Sinkhole (v24) + Tar Pit (v25, redesigned to a TRAIL)
+BUILT 08-10, Titan's Draught (v26) BUILT 08-11 — only the Lifeline owed** ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-09 ·
 Companion to [bits-store.md](./bits-store.md) (the Writ economy these stock),
@@ -145,12 +146,14 @@ target's **fire-time position**; flight time makes it dodgeable by walking.
 Terrifying vs groups holding ground, honest vs individuals — scales with
 team size without being dead at 1v1.
 
-- Lobbed projectile, physical. reach 380 — longest in the game, just past
-  the bow's 360 (400 → 360 → 380 across Tom's device pass 2026-08-10,
-  paired with the ARTILLERY ZOOM:
-  the client zooms the follow camera out just far enough that a shell
-  weapon's whole range ring fits the screen width, derived from the
-  followed player's weapon so spectating a gunner shows their game too).
+- Lobbed projectile, physical. reach 360 — ties the bow (settled after a
+  400 → 360 → 380 → 360 device pass, Tom 2026-08-10). Camera outcome: the
+  **UNIVERSAL follow zoom** — every camera, every loadout, fits the
+  roster's longest range ring across the screen width (derived from the
+  WEAPONS table, so reach retunes re-fit it automatically). Born as a
+  bombard-only artillery zoom and made universal the same day: a
+  per-weapon zoom handed ranged players a wider view than melee — an
+  information advantage nobody chose (Tom's fairness call).
   **minReach ~120** — the trident's floating-band plumbing reused as a
   close-quarters dead zone: get inside the bombard's arc and it cannot
   fire at you at all. That's the dive counterplay, engine-free.
@@ -218,18 +221,85 @@ Thrown ~200px along the facing (Warding Shout's aimable-so-whiffable rule);
 a deployable that **pulls everything** — both teams — toward its centre with
 strength ramping over 4s.
 
-- radius 260, total life ~6s (4s ramp + 2s at peak). Pull is knockback
-  plumbing with the sign flipped: an inward accel ramping 60→360 px/s²,
-  with the resulting inward speed capped ~240 (under PLAYER_MAX_SPEED 280 —
-  at full strength you can still *barely* walk out at the rim; dash always
-  escapes). No damage — it's a setup piece (a sinkhole feeding a teammate's
-  bombard is the combo the store can sell on sight).
+- radius 260, total life ~6s (4s ramp + 2s at peak). The pull is a
+  **position drag**, not a velocity impulse *(discovered at build: the
+  mover's idle damping — PLAYER_DECEL 2800 — crushes any added velocity
+  before it moves a body, so a force-based pull literally cannot budge an
+  idle player)*: an inward drag speed ramping 60 → 240 px/s, always under
+  the 280 sprint, so running straight out nets 40 px/s at full strength —
+  barely — and dash always escapes. No damage — it's a setup piece (a
+  sinkhole feeding a teammate's bombard is the combo the store can sell on
+  sight).
 - category offensive, charges 1, cooldown 16.
 - Bot-facing: zone-awareness pass — treat like a tremor zone (leave early,
   don't fight uphill against the pull).
+- **BUILT 2026-08-10** (protocol v24) — the first WRIT ability, so this
+  build also grew the ability side of gating: FREE_ABILITY_IDS genuinely
+  excludes an id for the first time (literal list in config — a runtime
+  import cycle forbids reading items.ts; items.test.ts keeps the two files
+  honest), `abilitiesByCategory(cat, entitled, practice)` mirrors the
+  weapon picker's writ/practice split, and the server's setAbilities gate
+  (built ready with the trident) now has a real id to catch. Deployable
+  kind `sinkhole`, thrown along the facing clamped into the sand, drag in
+  stepDeployables (both teams, Ironhide immune, dash-skipped, never
+  crosses the centre); vortex render = honest boundary + darkening throat
+  + INFALL LINES streaming rim → throat, quickening with the ramp (arc
+  sweeps cut on Tom's device pass — the lines are the show; their phase
+  is the closed-form INTEGRAL of the speed curve, never time/speed with a
+  changing speed — the statusRings lesson, it strobed). Cast telegraph
+  (Tom, same pass — the bombard's grammar): the cast THROWS A POT arcing
+  to the spot over a 0.6s arm window under a closing ground sweep, THEN
+  the hole opens — deployable armLeft carries it (no pull while arming,
+  no protocol change; active duration preserved by seeding lifeLeft
+  duration+arm). Deed chain (Undertow / The Ground Hungers / The Swallowing Sands,
+  placeholders) joins the offensive cluster — ability rows reflowed.
+  Owed: forge icon (sandstorm swirl stands in) + cast_sinkhole SFX,
+  on-device + tuning pass, bot zone-awareness. NOTE for the tuning pass:
+  the test arena taught us the 260-radius hole's 520px diameter is a THIRD
+  of the real arena's width — on-device, watch whether radius or the
+  1-per-round charge is the right lever if it dominates.
 
-### Tar Pit — the creeping zone *(was Pitch Barrel; the zone is the item,
-not the barrel you throw)*
+### Tar Pit — the trail you paint *(REDESIGNED at build, Tom 2026-08-10:
+was "the creeping zone" — a placed circle expanding over the round. Tom's
+call: too close to "ANOTHER circular ability"; instead the caster RELEASES
+TAR BEHIND THEM as they run — the roster's only movement-expressed
+ability, an anti-chase tool whose placement is literally your own path.
+Original creeping-zone design below kept for the record.)*
+
+**As built (v25):** cast opens a 2.5s laying window — a tar blob drops at
+the feet plus one per 80px travelled (sprinting the window lays ~700px of
+trail; standing still lays one puddle). Each blob spreads 20 → 60px over
+1.5s, **grips for the REST OF THE ROUND** (Tom's second pass, same day:
+thrown tar doesn't dry mid-fight — lifetime went 20s → round-long), and
+slows EVERYONE inside 30% — both teams, the caster's own doubling-back
+included (the spares-no-one rule). **The round reset stays the mechanical
+clean-slate**: live tar never crosses it — instead the client DRIES each
+cluster into a permanent matte stain (alpha 0.18 vs live 0.88 — Tom
+faded it further same day: history, not signage; dark and glossy grips,
+faint ghost is safe) baked
+into an accumulating picture that persists ALL MATCH, the blood-scar
+rule. Cross-round LIVE tar was considered and DECLINED: rounds snowball
+into a maze, and tarring the enemy spawn late in a round is a degenerate
+line nobody should lose to. Dash i-frames skip
+it, Ironhide shrugs it. SUPPORT (recategorised from defensive same day,
+Tom: terrain-shaping is the War Drums family), 1 charge, cooldown 14. Blobs are
+deployables (kind `tar`) so rejoin/late clients resync free; ~9 blobs per
+cast is the snapshot weight to watch. **Visuals (Tom: "sticky and chaotic
+like the blood splatter", never circles):** client-side TarField (tar.ts)
+on the blood system's own primitives — each sim blob grows a SEEDED SPLAT
+CLUSTER (irregular wobbled body + satellite spatters breaching the rim +
+outward teardrop streaks, frozen at birth, scaled live on the sim's exact
+growth curve, wet sheen while spreading, dry-out fade on expiry) — plus
+black droplets SPLUTTERING off the caster's heels through the laying
+window, landing as capped long-lived specks. Deliberately NO splat-map
+bake: blood bakes because of thousands of decals; ≤ ~10 clusters draw
+live for nothing (revisit only if counts grow). Deed chain (Slow Going /
+Black Wake / The Unfollowable, placeholders). cast_tar_pit forged as a 3-take random bank (2026-08-10). Owed: forge
+icon (blood font stands in; subject = toppled cauldron pouring tar),
+on-device + tuning pass, bot zone-awareness (the standing bucket).
+ALSO fixed at this build: practice bots drafted hands from ABILITY_IDS,
+not FREE_ABILITY_IDS — harmless until abilities gated, a leak since the
+sinkhole; server-side fill was already correct.
 
 Reworked from a cut (Tom, 2026-08-09): not a big instant slow field (that
 was Tremor's job) but a **slowly expanding** one — placed small, it creeps
@@ -261,6 +331,35 @@ downside that keeps it honest.
   scale with it), damageFactor 1.35. Nothing else — no speed, no armour;
   the trade is pure reach-and-power vs hittability.
 - category offensive, charges 2, cooldown 14.
+- **BUILT 2026-08-11** (protocol v26): a status ability (the Ironhide
+  family — the active window IS the effect), zero new wire shapes. Sim:
+  `radiusOf(p)`/`damageFactorOf(p)` in statuses.ts — hurt circles, target
+  views, and the mover's crowd/wall radius (re-stamped idempotently each
+  tick) all read the grown size, so a titan is honestly bigger to every
+  arc, bolt, blast and shove; `resolvePlayerHit` now takes the attacking
+  PLAYER and folds outgoing ×1.35 beside Ironhide's incoming reduction
+  (same rng draws either way — the stream never forks on a buff, verified
+  by a same-seed test); a bombard shell stamps titan damage at launch.
+  Damage factor deliberately touches WEAPON damage only — fixed ability
+  numbers and dot riders never scale (the venom is the venom). MELEE
+  REACH scales too (Tom's play pass, 2026-08-11): without it the grown
+  crowd radius shoved enemies out while reach stayed fixed — melee
+  giants got WORSE at their own range. Arc weapons only, reach AND
+  minReach ×1.6 (bands keep their character; note: a giant trident's
+  band outgrows dash's 75px hop — the dash-inside-the-prongs escape
+  doesn't clear a titan's band); a giant's bow is the same bow, which
+  keeps ranged balance and the universal camera fit intact. Client:
+  body + every ring derive from a grow-in-eased radius read off the
+  slot's broadcast active window (0.25s swell, pop back on expiry) —
+  but telegraphs/range rings scale INSTANTLY (the sim doesn't ease;
+  the drawn promise never under-states the strike). MENACE PASS (Tom,
+  same day — "oh crap, run away"): the drink lands as a 70px tremor
+  crack-slam, every ~90px stride fractures the ground (38px webs,
+  permanent like all scars), and the giant presses a heavy contact
+  shadow into the sand — ordinary bodies float, titans have WEIGHT. Deed
+  chain (A Head Taller / Giant's Thirst / The Colossus of the Pit,
+  placeholders) joins the offensive cluster. Owed: forge icon (ironhide
+  stands in; subject = stone drinking horn) + cast SFX, on-device pass.
 - A giant mid-arena is the kill-feed advert (the rented-steel logic from
   bits-store.md): every opponent who sees one has seen the store.
 

@@ -115,6 +115,12 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   hit_scorpion: "a small crossbow bolt punching into a body — a short hard thock with a brief wet edge, snappier and smaller than an arrow strike, tight with no tail",
   fire_scorpion: "a repeating crossbow looses one bolt — a dry mechanical clack and a short sharp bolt whoosh, tight and quick with no tail (the game plays it three times in fast succession, so keep it to a single clack, no burst)",
   fire_bombard: "a hand-mortar launching a shell — a deep hollow THOOMP with a short smoky huff and a faint rising whistle tail, no explosion (the landing boom is its own sound)",
+  cast_sinkhole: "the ground collapsing into a spiralling sink of sand — a deep grinding pour of grain sliding inward, swelling over a second then settling to a low hungry churn",
+  cast_tar_pit: "thick tar glugging out onto sand — a viscous heavy pour with fat sticky bubbles popping and a wet spatter tail, oozing not splashing",
+  // "bassy" cut from this brief (2026-08-14): sub-heavy takes vanish on
+  // phone speakers — the growth must live in MIDRANGE grit (creak, pop,
+  // crack) that a small driver can actually reproduce.
+  cast_titans_draught: "a deep greedy gulp from a horn then a bodily SWELL told through gritty midrange texture — leather creaking hard, joints cracking and popping as a body grows a size, ending on a heavy planted stomp with a dry sandy slap",
   hit_bombard: "a blast concussion thumping a body — a short bassy bodily whump with a grit spray edge, no fireball roar (it plays under a separate explosion boom)",
   fire_bow: "loosing an arrow from a bow — a taut bowstring release SNAP and a quick arrow whoosh, dry and punchy, no impact",
   fire_staff: "casting a magic orb from a staff — a short arcane whoosh-swell with a soft energy hum as it launches, no impact",
@@ -212,6 +218,16 @@ export const ICON_SUBJECTS: Record<string, string> = {
   fang: "a short curved dagger held at a dynamic diagonal, a sickly green venom sheen along the edge and one drop falling from the tip",
   scorpion: "a compact repeating crossbow with a top-mounted bolt magazine, held at a dynamic diagonal, three short iron bolts fanned beside it",
   bombard: "a squat bronze hand-mortar with a flared muzzle held at a dynamic diagonal, a round black shell arcing above it trailing a thin smoke line",
+  // Subject rule learned here (Tom, 2026-08-10): the icon template demands
+  // ONE BOLD CENTRAL SUBJECT — a pure-scene brief makes the model invent
+  // an object (it kept planting weapons mid-swirl). Zone abilities anchor
+  // on a concrete object instead (tremor's boot, sandstorm's eye).
+  sinkhole:
+    "a whirlpool of collapsing golden sand seen from above, spiral ridges streaming down into a dark central throat, a cracked clay pot tipping half-swallowed into the centre",
+  "tar-pit":
+    "a toppled iron cauldron pouring thick black tar across sand, the spill spreading into a glossy splattered pool with fat sticky drips",
+  "titans-draught":
+    "a rough-hewn stone drinking horn overflowing with golden liquid, oversized fists' worth of cracks glowing up the horn from a giant's grip",
   sandtrap: "a spiked iron trap half-buried in a small mound of sand, one blade glinting above the surface",
   tremor: "a boot stamping down with cracked earth and two radiating shockwave rings",
   harpoon: "a barbed iron hook trailing a taut chain, mid-flight",

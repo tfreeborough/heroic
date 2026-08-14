@@ -10,6 +10,8 @@ import {
   ABILITIES,
   isDeployableId,
   LOADOUT_ABILITY_COUNT,
+  SINKHOLE,
+  TAR_PIT,
   TICK_DT,
   TREMOR,
   type AbilityId,
@@ -17,6 +19,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
+import { TarField } from "../game/tar";
 import { CrackField } from "../game/cracks";
 import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
 import {
@@ -192,6 +195,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const bloodRef = useRef<BloodField | null>(null);
   bloodRef.current ??= new BloodField();
   const blood = bloodRef.current;
+  const tarRef = useRef<TarField | null>(null);
+  tarRef.current ??= new TarField();
+  const tar = tarRef.current;
+  /** Where each drunk titan last cracked the ground — the footfall cadence. */
+  const titanStrides = useRef(new Map<number, { x: number; y: number }>());
   // Tremor's cracked earth — same lifecycle as the blood (arena remembers).
   const cracksRef = useRef<CrackField | null>(null);
   cracksRef.current ??= new CrackField();
@@ -548,6 +556,24 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
                 gainAt(caster.x, caster.y),
               );
             }
+            // Sinkhole: the thrown POT arcs caster → landing over the arm
+            // window (the bombard's grammar — see it coming, then it
+            // opens). The landing point rides ON the event (harpoon
+            // precedent): events drain on snapshot arrival, but the
+            // sampled view lags the interp delay, so the same-tick
+            // deployable can't be looked up here.
+            if (e.ability === "sinkhole" && e.tx !== undefined && e.ty !== undefined) {
+              fxRef.current.push({
+                item: { kind: "lob", x: caster.x, y: caster.y, x2: e.tx, y2: e.ty, life: 1 },
+                bornMs: now,
+                ttlMs: SINKHOLE.armSeconds * 1000,
+              });
+            }
+            // Tar Pit: black splutter flicks off the caster's heels for the
+            // whole laying window (tar.ts owns the emitter).
+            if (e.ability === "tar-pit") {
+              tar.noteLay(e.playerId, now + TAR_PIT.laySeconds * 1000);
+            }
             // Warding Shout: the bellow's wedge, out of the caster's facing.
             if (e.ability === "warding-shout") {
               fxRef.current.push({
@@ -678,6 +704,29 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         if (view && w > 0 && client.welcome) {
           const recStart = perfOn ? performance.now() : 0;
           blood.update(view.players, now);
+          tar.update(view.players, view.deployables, now);
+          // Titan footfalls (Tom, 2026-08-11 — the "oh crap, run away"
+          // read): while the draught is up, the ground FRACTURES under the
+          // giant's strides — small tremor-tech crack webs, one per ~90px
+          // of travel, permanent like every scar in this game.
+          for (const p of view.players) {
+            const drunk =
+              p.alive && p.abilities.some((s) => s.id === "titans-draught" && s.active > 0);
+            const last = titanStrides.current.get(p.id);
+            if (!drunk) {
+              if (last) titanStrides.current.delete(p.id);
+              continue;
+            }
+            if (!last) {
+              titanStrides.current.set(p.id, { x: p.x, y: p.y });
+              cracks.addSlam(p.x, p.y, 70, now); // the drink lands HEAVY
+              continue;
+            }
+            if (Math.hypot(p.x - last.x, p.y - last.y) >= 90) {
+              cracks.addSlam(p.x, p.y, 38, now);
+              titanStrides.current.set(p.id, { x: p.x, y: p.y });
+            }
+          }
           // Bloody-footprint squelches (bits-blood.md §6): one per wet-pool
           // crossing, attenuated like every other positional sound.
           if (blood.crossings.length > 0) {
@@ -777,6 +826,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             fx: fxItems(fx),
             blood,
             cracks,
+            tar,
             scarEpoch: blood.epoch,
             pulses,
             nowMs: now,

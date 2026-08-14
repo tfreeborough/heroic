@@ -31,7 +31,11 @@ export const DEED_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([]);
  * content drops (bits-store-arms.md); a roster id lives in exactly one gate
  * kind, never both. */
 export const WRIT_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>(["fang", "scorpion", "bombard"]);
-export const WRIT_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([]);
+export const WRIT_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
+  "sinkhole",
+  "tar-pit",
+  "titans-draught",
+]);
 
 /** All gated ids regardless of kind — what pick validation and the
  * free-roster partition care about. */
@@ -61,6 +65,9 @@ export const ITEM_NAMES: Record<string, string> = {
   "weapon:fang": "Fang",
   "weapon:scorpion": "Scorpion",
   "weapon:bombard": "Bombard",
+  "ability:sinkhole": "Sinkhole",
+  "ability:tar-pit": "Tar Pit",
+  "ability:titans-draught": "Titan's Draught",
 };
 
 /** Display name for an entitlement itemId, with the legacy kebab fallback

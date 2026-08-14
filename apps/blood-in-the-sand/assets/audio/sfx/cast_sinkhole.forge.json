@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "the ground collapsing into a spiralling sink of sand — a deep grinding pour of grain sliding inward, swelling over a second then settling to a low hungry churn",
+  "prompt": "the ground collapsing into a spiralling sink of sand — a deep grinding pour of grain sliding inward, swelling over a second then settling to a low hungry churn. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 7,
+    "promptInfluence": 0.5,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "cast_sinkhole_1.mp3"
+  ],
+  "created": "2026-08-10T21:50:10.722Z",
+  "updated": "2026-08-10T21:50:10.722Z"
+}

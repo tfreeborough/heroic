@@ -361,10 +361,10 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     burst: { count: 3, interval: 0.12 },
   },
   // The artillery piece (bits-store-arms.md launch shelf item 3, WRIT):
-  // the longest reach in the game behind the slowest cycle (400 → 380,
-  // Tom's device pass 2026-08-10 — just past the bow's 360, paired with
-  // the client's artillery zoom so the whole ring fits on screen), firing
-  // a lobbed
+  // ties the bow for the longest reach behind the slowest cycle (400 → 360
+  // across Tom's device pass 2026-08-10, settled at 360 with the client's
+  // UNIVERSAL follow zoom — every camera fits the longest range ring, so
+  // no loadout sees more arena than another), firing a lobbed
   // shell that lands where the mark STOOD — flight time makes it dodgeable
   // by walking, terrifying against anyone holding ground (a font, a quake,
   // a choke). minReach reuses the trident's floating-band plumbing as a
@@ -377,14 +377,14 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     attack: {
       shape: "projectile",
       school: "physical",
-      reach: 380,
+      reach: 360,
       minReach: 120,
       windup: 0.55,
       recovery: 1.4,
       knockback: 0,
     },
     stats: { attack: 22 },
-    engagementRadius: 380 + 20,
+    engagementRadius: 360 + 20,
     shell: { flightMin: 0.55, flightMax: 0.9, blastRadius: 120, damage: 22, knockback: 400 },
   },
 };
@@ -411,7 +411,10 @@ export type AbilityId =
   | "warding-shout"
   | "war-drums"
   | "blood-font"
-  | "sandstorm";
+  | "sandstorm"
+  | "sinkhole"
+  | "tar-pit"
+  | "titans-draught";
 
 export interface AbilityDef extends AbilityConfig {
   name: string;
@@ -527,6 +530,93 @@ export const BLOOD_FONT = { radius: 100, duration: 4, healPerTick: 4, tickInterv
 /** Sandstorm: nothing inside can be auto-targeted, friend or foe. */
 export const SANDSTORM = { radius: 120, duration: 3 };
 
+/** Sinkhole (bits-store-arms.md launch shelf item 4 — the first WRIT
+ * spell): a thrown zone that PULLS everything — both teams — toward its
+ * centre, strength ramping over rampSeconds then holding to the end. The
+ * roster's only group-displacer; every other zone is stand-here. The pull
+ * is a POSITION DRAG, not a velocity impulse — the mover's idle damping
+ * (PLAYER_DECEL 2800) would crush any added velocity before it moved a
+ * body, so the sand drags feet directly: an inward speed ramping over
+ * rampSeconds, always UNDER a sprint (280), so running out remains
+ * possible at full strength — barely — and dash always escapes.
+ * No damage — a setup piece (a sinkhole feeding a teammate's bombard is
+ * the sales pitch). Ironhide plants its feet (pulls don't take), dash
+ * i-frames ignore it, and it spares NO ONE — the bombard's rule. */
+/** Titan's Draught (bits-store-arms.md launch shelf item 6, WRIT): drink,
+ * GROW, hit harder — the cheapest spectacle of the seven, self-balancing
+ * because a bigger body is a bigger target for every telegraph, blast and
+ * zone in the game (hurt radii scale WITH you, deliberately). Nothing
+ * else changes: no speed, no armour — pure reach-and-power vs
+ * hittability. Status ability (the Ironhide family: the active window IS
+ * the effect). Damage factor applies to WEAPON damage — arc, projectile,
+ * and a shell's blast stamped at launch — never to fixed ability numbers
+ * or dot riders (the venom is the venom). */
+export const TITANS_DRAUGHT = {
+  duration: 5,
+  /** Multiplier on PLAYER_RADIUS — body, hurtbox, crowd, and every
+   * zone/blast edge check read the grown radius. */
+  sizeFactor: 1.6,
+  /** Multiplier on outgoing weapon damage (rounded, post-resolve — the
+   * rng stream never forks on a buff, the Ironhide rule). */
+  damageFactor: 1.35,
+};
+
+/** Tar Pit (bits-store-arms.md launch shelf item 5, WRIT — REDESIGNED at
+ * build, Tom 2026-08-10: a trail you PAINT, not another placed circle):
+ * while the cast's active window runs, the caster releases tar blobs
+ * behind them as they MOVE — one blob per `spacing` px travelled, plus one
+ * at the feet on cast. Each blob grows from radiusMin to radiusMax over
+ * growSeconds ("wet"), then sits for the rest of its life slowing EVERYONE
+ * inside — both teams, the spares-no-one rule: double back through your
+ * own trail and it grabs you too. The roster's only movement-expressed
+ * ability: where it goes is where you went, which makes it the anti-chase
+ * tool — lay it while fleeing and the chaser wades or goes around. Dash
+ * i-frames skip the slow; Ironhide shrugs it (slows don't take). */
+export const TAR_PIT = {
+  /** Seconds the trail-laying window stays open (= the ability's active
+   * duration; sprinting the whole window lays ~700px of trail). */
+  laySeconds: 2.5,
+  /** A new blob every this many px travelled — sets trail density AND the
+   * blob count (a full sprint lays ~9; snapshot weight, keep an eye). */
+  spacing: 80,
+  radiusMin: 20,
+  radiusMax: 60,
+  /** Seconds a fresh blob takes to spread to full size. */
+  growSeconds: 1.5,
+  /** Blob lifetime — effectively "until round end" (the sandtrap idiom;
+   * Tom 2026-08-10: thrown tar doesn't dry mid-fight). Rounds stay
+   * MECHANICALLY clean: the reset clears the zones, and the client dries
+   * each cluster into a permanent cosmetic stain (the blood rule).
+   * Cross-round LIVE tar was considered and declined — rounds would
+   * snowball into a maze, and tarring the enemy spawn late in a round is
+   * a degenerate line nobody should lose to. */
+  lifetime: 600,
+  /** Move-speed multiplier while inside any blob (the quake plumbing). */
+  slowFactor: 0.7,
+  /** Refreshed every step inside — also the step-out linger. */
+  slowLinger: 0.3,
+};
+
+export const SINKHOLE = {
+  /** Thrown this far along the facing (aimable, so whiffable — the
+   * Warding Shout rule); clamped inside the arena. */
+  throwDistance: 200,
+  /** The pot's flight (Tom, 2026-08-10 — the bombard's grammar): cast →
+   * a thrown pot arcs to the spot under a closing ground telegraph, THEN
+   * the hole opens and the ramp begins. Deployable armLeft carries it —
+   * no pull while arming. */
+  armSeconds: 0.6,
+  radius: 260,
+  /** Seconds over which the drag ramps pullSpeedMin → pullSpeedMax. */
+  rampSeconds: 4,
+  /** Total life — ramp plus a held peak. */
+  duration: 6,
+  /** Inward drag, px/s, at birth → at full ramp. The max sits under
+   * PLAYER_MAX_SPEED (280): full-ramp escape at the rim nets 40 px/s. */
+  pullSpeedMin: 60,
+  pullSpeedMax: 240,
+};
+
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
   sandtrap: { name: "Sandtrap", category: "offensive", cooldown: 10, activeDuration: 0, charges: 2 },
   tremor: { name: "Tremor", category: "offensive", cooldown: 9, activeDuration: 0, charges: 2 },
@@ -549,15 +639,33 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
   // ONE pour per round — healing is enormous in a one-life mode.
   "blood-font": { name: "Blood Font", category: "support", cooldown: 16, activeDuration: 0, charges: 1 },
   sandstorm: { name: "Sandstorm", category: "support", cooldown: 14, activeDuration: 0, charges: 2 },
+  // ONE throw per round — a fight-warping moment, not a rotation piece.
+  sinkhole: { name: "Sinkhole", category: "offensive", cooldown: 16, activeDuration: 0, charges: 1 },
+  // The active window IS the laying window — one trail per round. Support,
+  // not defensive (Tom, 2026-08-10): it shapes ground for the TEAM, the
+  // War Drums family — a peel is what you do, terrain is what you leave.
+  "tar-pit": {
+    name: "Tar Pit", category: "support", cooldown: 14, activeDuration: TAR_PIT.laySeconds, charges: 1,
+  },
+  // Two swallows per round — the moment is the product, twice.
+  "titans-draught": {
+    name: "Titan's Draught",
+    category: "offensive",
+    cooldown: 14,
+    activeDuration: TITANS_DRAUGHT.duration,
+    charges: 2,
+  },
 };
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
 
-/** The FREE ability roster (see FREE_WEAPON_IDS — same drafting rule). No
- * abilities are gated yet; the split exists so a future gated ability can't
- * leak through the random-fill sweep. Kept in config (not items.ts) beside
- * its weapon twin — items.ts owns the entitlement side. */
-export const FREE_ABILITY_IDS = ABILITY_IDS;
+/** The FREE ability roster (see FREE_WEAPON_IDS — same drafting rule):
+ * what bots and forceStart's random-fill draft from. The literal exclusion
+ * list lives here (config can't import items.ts — that's a runtime cycle);
+ * items.test.ts holds the two files consistent. */
+export const FREE_ABILITY_IDS: readonly AbilityId[] = ABILITY_IDS.filter(
+  (id) => id !== "sinkhole" && id !== "tar-pit" && id !== "titans-draught",
+);
 
 /** Abilities per loadout; pick order = button order in the match. Two, not
  * three: rounds are short and one-life, so a third button read as chaos in

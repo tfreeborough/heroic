@@ -5,10 +5,33 @@
  * so there's nothing to apply or tear down, only questions to answer.
  */
 import { distance } from "@heroic/core";
-import { IRONHIDE, WAR_DRUMS } from "../config";
+import { IRONHIDE, PLAYER_RADIUS, TITANS_DRAUGHT, WAR_DRUMS } from "../config";
 import { abilityActive, type ArenaPlayer } from "../state";
 
 export const ironhideActive = (p: ArenaPlayer): boolean => abilityActive(p, "ironhide");
+
+export const titansDraughtActive = (p: ArenaPlayer): boolean =>
+  abilityActive(p, "titans-draught");
+
+/** Outgoing WEAPON-damage multiplier (Titan's Draught). Fixed ability
+ * numbers and dot riders never scale — the venom is the venom. */
+export const damageFactorOf = (p: ArenaPlayer): number =>
+  titansDraughtActive(p) ? TITANS_DRAUGHT.damageFactor : 1;
+
+/** The player's CURRENT body/hurt radius — a drunk titan is bigger in
+ * every check that can touch them: arc wedges, projectile paths, blast
+ * and zone edges, crowd shoving. Self-balancing by design. */
+export const radiusOf = (p: ArenaPlayer): number =>
+  PLAYER_RADIUS * (titansDraughtActive(p) ? TITANS_DRAUGHT.sizeFactor : 1);
+
+/** MELEE reach multiplier (Tom, 2026-08-11): a titan's arms grow with the
+ * body — without this, the grown crowd radius shoves enemies further out
+ * while reach stays fixed, and melee giants get WORSE at their own range.
+ * Arc weapons only, applied to reach AND minReach (the whole band scales,
+ * bands keep their character): a giant's bow is still the same bow, which
+ * keeps ranged balance and the universal camera fit intact. */
+export const reachFactorOf = (p: ArenaPlayer): number =>
+  titansDraughtActive(p) ? TITANS_DRAUGHT.sizeFactor : 1;
 
 export const mirrorGuardActive = (p: ArenaPlayer): boolean => abilityActive(p, "mirror-guard");
 

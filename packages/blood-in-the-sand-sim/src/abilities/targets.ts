@@ -9,6 +9,7 @@ import { distance } from "@heroic/core";
 import type { Vec2 } from "@heroic/core";
 import { PLAYER_RADIUS, SANDSTORM } from "../config";
 import { isDeployableId, type ArenaState, type Team } from "../state";
+import { radiusOf } from "./statuses";
 
 /** What targeting/attacks need to know about a mark, whatever it is. */
 export interface TargetView {
@@ -29,7 +30,9 @@ export const targetView = (state: ArenaState, id: number | null): TargetView | n
     return { id: d.id, team: d.team, pos: d.pos, radius: PLAYER_RADIUS, alive: d.hp > 0 };
   }
   const p = state.players[id];
-  return p ? { id: p.id, team: p.team, pos: p.mover.pos, radius: PLAYER_RADIUS, alive: p.alive } : null;
+  return p
+    ? { id: p.id, team: p.team, pos: p.mover.pos, radius: radiusOf(p), alive: p.alive }
+    : null;
 };
 
 /** Inside ANY sandstorm (friend or foe — the cloud doesn't care): can't be

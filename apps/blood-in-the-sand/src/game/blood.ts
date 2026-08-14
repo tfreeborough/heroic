@@ -128,7 +128,7 @@ const wobble = (seed: number, a: number): number =>
   0.2 * Math.sin(a * 2 + seed * 0.6);
 
 /** A closed, smoothly-rounded irregular blob (no circular edge). */
-const blobPath = (
+export const blobPath = (
   cx: number,
   cy: number,
   r: number,
@@ -155,7 +155,7 @@ const blobPath = (
 
 /** A flung droplet: rounded fat back at (x,y) tapering to a point at
  *  (x+dx,y+dy) — spray reads as thrown blood, not round dots. */
-const teardropPath = (
+export const teardropPath = (
   x: number,
   y: number,
   dx: number,

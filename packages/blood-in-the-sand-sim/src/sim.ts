@@ -94,9 +94,15 @@ export const deriveArenaZone = (file: ZoneFile): ArenaZone => {
   };
 };
 
-export const createSim = (zoneFile: ZoneFile, seed: number, teamSize: number = 1, training = false): ArenaSim => {
+export const createSim = (
+  zoneFile: ZoneFile,
+  seed: number,
+  teamSize: number = 1,
+  training = false,
+  practice = false,
+): ArenaSim => {
   const zone = deriveArenaZone(zoneFile);
-  const state = createArenaState(seed, teamSize * 2, training);
+  const state = createArenaState(seed, teamSize * 2, training, practice);
   return {
     state,
     zone,

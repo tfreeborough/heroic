@@ -5,28 +5,50 @@
  * arming, triggering, healing, and expiry. Everything is fixed-number and
  * rng-free except dummy hits, which route through resolveAttack elsewhere.
  */
-import { distance, normalize, resolveAttack, sub, type AttackResult, type Rng } from "@heroic/core";
-import { BLOOD_FONT, PLAYER_RADIUS, SANDSTORM, SANDTRAP, STRAW_MAN, STRAW_MAN_STATS, TREMOR } from "../config";
+import { distance, normalize, resolveAttack, sub, type AttackResult, type Rng, type Vec2 } from "@heroic/core";
+import {
+  BLOOD_FONT,
+  PLAYER_RADIUS,
+  SANDSTORM,
+  SANDTRAP,
+  SINKHOLE,
+  STRAW_MAN,
+  STRAW_MAN_STATS,
+  TAR_PIT,
+  TREMOR,
+} from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaPlayer, ArenaState, Deployable, DeployableKind } from "../state";
 import { dashInvulnerable } from "./dash";
 import { applyFixedHit, applyImpulse, killPlayer } from "./damage";
 import { ironhideActive } from "./statuses";
 
-/** Place a deployable at the caster's feet. Sandtrap enforces its one-live-
- * mine rule here: planting a new one fizzles (removes) the old, silently. */
-export const castDeployable = (state: ArenaState, kind: DeployableKind, caster: ArenaPlayer): Deployable => {
+/** Place a deployable at the caster's feet (or `at`, for thrown kinds —
+ * the sinkhole). Sandtrap enforces its one-live-mine rule here: planting a
+ * new one fizzles (removes) the old, silently. */
+export const castDeployable = (
+  state: ArenaState,
+  kind: DeployableKind,
+  caster: ArenaPlayer,
+  at?: Vec2,
+): Deployable => {
   if (kind === "sandtrap") {
     const old = state.deployables.findIndex((d) => d.kind === "sandtrap" && d.ownerId === caster.id);
     if (old !== -1) state.deployables.splice(old, 1);
   }
+  const pos = at ?? caster.mover.pos;
   const placed: Deployable = {
     id: state.nextDeployableId++,
     kind,
     ownerId: caster.id,
     team: caster.team,
-    pos: { x: caster.mover.pos.x, y: caster.mover.pos.y },
-    armLeft: kind === "sandtrap" ? SANDTRAP.armSeconds : 0,
+    pos: { x: pos.x, y: pos.y },
+    armLeft:
+      kind === "sandtrap"
+        ? SANDTRAP.armSeconds
+        : kind === "sinkhole"
+          ? SINKHOLE.armSeconds
+          : 0,
     lifeLeft:
       kind === "sandtrap"
         ? SANDTRAP.lifetime
@@ -36,7 +58,13 @@ export const castDeployable = (state: ArenaState, kind: DeployableKind, caster: 
             ? BLOOD_FONT.duration
             : kind === "quake"
               ? TREMOR.duration
-              : SANDSTORM.duration,
+              : kind === "sinkhole"
+                ? // The pot's flight rides lifeLeft too, so the ACTIVE
+                  // window stays the full duration after landing.
+                  SINKHOLE.duration + SINKHOLE.armSeconds
+                : kind === "tar"
+                  ? TAR_PIT.lifetime
+                  : SANDSTORM.duration,
     hp: kind === "straw-man" ? STRAW_MAN.hp : 0,
     // The quake's 0 means its FIRST tick fires on the next step — the ground
     // bites the moment it opens, and all 4 ticks (0/1/2/3s) land safely
@@ -192,6 +220,46 @@ export const stepDeployables = (
           if (lethal) killPlayer(p, events);
         }
         d.tickLeft += TREMOR.tickInterval;
+      }
+    } else if (d.kind === "sinkhole" && d.armLeft > 0 && !spent) {
+      // The pot's still in the air — the telegraph window, no pull yet.
+      d.armLeft = Math.max(0, d.armLeft - dt);
+    } else if (d.kind === "sinkhole" && !spent) {
+      // The pull: an inward POSITION DRAG ramping over rampSeconds — feet
+      // dragged through the sand, not a velocity nudge (the mover's idle
+      // damping eats those; see SINKHOLE's config note). Movement inputs
+      // integrate on top, so sprinting outward at 280 beats the 240 peak
+      // drag and walking out at the rim stays possible at full strength.
+      // It spares NO ONE (both teams — the bombard's rule). Dash i-frames
+      // skip it outright; Ironhide plants its feet — pulls don't take.
+      // The next tick's mover step resolves any wall contact the drag
+      // creates, the same as every shove.
+      // Elapsed ACTIVE time: lifeLeft was seeded duration + armSeconds,
+      // so this reads 0 exactly at the pot's landing.
+      const elapsed = Math.max(0, SINKHOLE.duration - d.lifeLeft);
+      const ramp = Math.min(1, elapsed / SINKHOLE.rampSeconds);
+      const speed = SINKHOLE.pullSpeedMin + ramp * (SINKHOLE.pullSpeedMax - SINKHOLE.pullSpeedMin);
+      for (const p of players) {
+        if (!p.alive || dashInvulnerable(p) || ironhideActive(p)) continue;
+        const gap = distance(p.mover.pos, d.pos);
+        if (gap - PLAYER_RADIUS > SINKHOLE.radius || gap < 1) continue;
+        const drag = Math.min(speed * dt, gap - 1); // never crosses the centre
+        p.mover.pos.x += ((d.pos.x - p.mover.pos.x) / gap) * drag;
+        p.mover.pos.y += ((d.pos.y - p.mover.pos.y) / gap) * drag;
+      }
+    } else if (d.kind === "tar" && !spent) {
+      // A tar blob: grows radiusMin → radiusMax over growSeconds, then
+      // sits, slowing EVERYONE inside — both teams, the caster included
+      // (double back through your own trail and it grabs you). The quake's
+      // slow plumbing: strongest factor wins, refreshed every step.
+      const age = TAR_PIT.lifetime - d.lifeLeft;
+      const grow = Math.min(1, age / TAR_PIT.growSeconds);
+      const radius = TAR_PIT.radiusMin + grow * (TAR_PIT.radiusMax - TAR_PIT.radiusMin);
+      for (const p of players) {
+        if (!p.alive || dashInvulnerable(p) || ironhideActive(p)) continue;
+        if (distance(p.mover.pos, d.pos) - PLAYER_RADIUS > radius) continue;
+        p.slowFactor = p.slowLeft > 0 ? Math.min(p.slowFactor, TAR_PIT.slowFactor) : TAR_PIT.slowFactor;
+        p.slowLeft = Math.max(p.slowLeft, TAR_PIT.slowLinger);
       }
     } else if (d.kind === "straw-man" && d.hp <= 0) {
       spent = true;

@@ -121,6 +121,18 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
   "war-drums": { clips: ["cast_war_drums_1"] },
   "blood-font": { clips: ["cast_blood_font_1"] },
   sandstorm: { clips: ["cast_sandstorm_1"] },
+  // Owed from the Forge — silent until cast_sinkhole_1 lands: sand
+  // collapsing inward into a hungry spiral, a deep grinding pour.
+  sinkhole: { clips: ["cast_sinkhole_1"] },
+  // A 3-take bank (forged 2026-08-10) — random pick per cast, never the
+  // same take twice running (the scheduler's rule).
+  "tar-pit": { clips: ["cast_tar_pit_1", "cast_tar_pit_2", "cast_tar_pit_3"] },
+  // A 3-take bank (grew from 2, 2026-08-14) — random pick per cast, never
+  // the same take twice running; the third take breaks the strict
+  // alternation two forced.
+  "titans-draught": {
+    clips: ["cast_titans_draught_1"],
+  },
 };
 
 export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {

@@ -29,6 +29,8 @@ import {
   BLOOD_FONT,
   PLAYER_RADIUS as SIM_PLAYER_RADIUS,
   SANDSTORM,
+  SINKHOLE,
+  TITANS_DRAUGHT,
   SANDTRAP,
   STRAW_MAN,
   TREMOR,
@@ -61,6 +63,7 @@ import {
 } from "./cracks";
 import { buildCrowd, CROWD_REVEAL } from "./crowd";
 import type { StatusPulses } from "./statusRings";
+import type { TarField } from "./tar";
 
 // Zone geometry is static — derive once at module scope (loadZone is pure).
 const ZONE = loadZone(ARENA_00);
@@ -116,6 +119,9 @@ const hiddenBehind = (
  * 0.85 (2026-07-12, tester feedback): the old zoom hid approaching enemies.
  * 0.71 → 0.64 (2026-07-23): a little more battlefield awareness again. */
 const FOLLOW_ZOOM = 0.64;
+/** The roster's longest reach — the universal follow zoom fits this ring
+ * on every screen (see the camera block). */
+const MAX_WEAPON_REACH = Math.max(...Object.values(WEAPONS).map((w) => w.attack.reach));
 
 // Palette parsed once (never re-string rgba per frame — floods the colour cache).
 const C_VOID = Skia.Color("#141210");
@@ -152,6 +158,10 @@ const C_RING_POISON = Skia.Color("#a2c437");
 // black reads perfectly against the sand, the glint keeps it a sphere.
 const C_SHELL = Skia.Color("#16130f");
 const C_SHELL_GLINT = Skia.Color("#8a7f70");
+// The sinkhole's vortex: deep umber — sand going wrong, not magic.
+const C_SINKHOLE = Skia.Color("#4a3520");
+// The titan's pressed-into-the-sand contact shadow.
+const C_TITAN_SHADOW = Skia.Color("#241b10");
 // Straw Man's forced lock — straw yellow, so the aim-hijack reads as an effect.
 const C_RING_TAUNT = Skia.Color("#d9b34d");
 // Body-effect ring for Mirror Guard (Ironhide gets a full shield bubble).
@@ -271,7 +281,7 @@ const WALL_RECTS = ZONE.walls.map((w) => ({
  * the cast flash (an ability icon popping above its caster), the warding
  * shout's cone blast. */
 export interface FxItem {
-  kind: "number" | "ring" | "line" | "castFlash" | "cone" | "strawBurst";
+  kind: "number" | "ring" | "line" | "castFlash" | "cone" | "strawBurst" | "lob";
   x: number;
   y: number;
   /** 1 → 0 over the effect's life. */
@@ -355,6 +365,10 @@ export interface ArenaRenderInput {
    *  (one prebuilt path each), settled ones are stamped into the splat
    *  surface — cracks never ride a scar rebuild (bits-blood.md §7). */
   cracks: CrackField;
+  /** The tar trail's splat clusters + heel splutter (tar.ts) — live-drawn
+   *  ground grime, no bake (counts are tiny; the blood bake exists for
+   *  thousands of decals). */
+  tar: TarField;
   /** The blood field's epoch (total decals ever added) — the scar cache's
    *  dirty signal: unchanged → fades step at 1Hz; bumped → the new marks
    *  land within 200ms. */
@@ -527,15 +541,21 @@ const drawMyRangeRing = (
 ): void => {
   if (!me.alive) return;
   // reach is measured to the victim's rim, so the strike circle extends one
-  // body radius past it (matching hitsInArc's rule).
+  // body radius past it (matching hitsInArc's rule). A titan's melee band
+  // scales with the drink (arc weapons only — the sim's reachFactorOf rule).
   const attack = WEAPONS[me.weapon ?? "blade"].attack;
-  const ring = attack.reach + playerRadius;
+  const reachF =
+    attack.shape === "arc" &&
+    me.abilities.some((s) => s.id === "titans-draught" && s.active > 0)
+      ? TITANS_DRAUGHT.sizeFactor
+      : 1;
+  const ring = attack.reach * reachF + playerRadius;
   rangeStroke.setAlphaf(RANGE_RING_ALPHA);
   canvas.drawCircle(me.x, me.y, ring, rangeStroke);
   // A min-reach weapon (the trident) gets a second ring at its dead-zone
   // edge — the band between the two circles is where the head bites.
   if (attack.minReach) {
-    canvas.drawCircle(me.x, me.y, Math.max(0, attack.minReach - playerRadius), rangeStroke);
+    canvas.drawCircle(me.x, me.y, Math.max(0, attack.minReach * reachF - playerRadius), rangeStroke);
   }
 };
 
@@ -596,7 +616,20 @@ const drawPlayer = (
   nowMs: number,
   title?: string,
 ): void => {
-  const r = config.playerRadius;
+  // Titan's Draught: the body (and every ring that hangs off r) grows with
+  // the buff — derived from the slot's broadcast active window, no extra
+  // wire. A quick ease-in sells the swelling; expiry pops back (comedic,
+  // and honest — the sim's hitbox pops with it).
+  const titans = p.abilities.find((s) => s.id === "titans-draught");
+  const growT =
+    titans && titans.active > 0
+      ? Math.min(1, (TITANS_DRAUGHT.duration - titans.active) / 0.25)
+      : 0;
+  const r = config.playerRadius * (1 + (TITANS_DRAUGHT.sizeFactor - 1) * growT);
+  // Melee reach scales with the buff INSTANTLY (the sim doesn't ease — the
+  // telegraph must never under-promise the strike); the body's ease is
+  // cosmetic only.
+  const reachF = titans && titans.active > 0 ? TITANS_DRAUGHT.sizeFactor : 1;
 
   // Windup telegraph, from the striker's own weapon table: melee grows an arc
   // wedge; ranged draws an aim line toward the locked target. Both ramp opaque
@@ -607,10 +640,12 @@ const drawPlayer = (
     if (weapon.attack.shape === "arc") {
       const halfDeg = ((weapon.attack.arcWidth ?? 0) / 2) * (180 / Math.PI);
       const facingDeg = p.lockedFacing * (180 / Math.PI);
-      const reach = weapon.attack.reach + r;
+      const reach = weapon.attack.reach * reachF + r;
       // minReach floats the danger zone off the wielder (the trident band) —
       // the telegraph stays honest to the hitbox: only the band warns.
-      const inner = weapon.attack.minReach ? Math.max(0, weapon.attack.minReach - r) : 0;
+      const inner = weapon.attack.minReach
+        ? Math.max(0, weapon.attack.minReach * reachF - r)
+        : 0;
       const wedge = strikeRegionPath(p.x, p.y, inner, reach, facingDeg, halfDeg);
       fill.setColor(C_TELEGRAPH);
       fill.setAlphaf(0.12 + 0.28 * progress);
@@ -646,10 +681,12 @@ const drawPlayer = (
       if (progress <= 1) {
         const halfDeg = ((weapon.attack.arcWidth ?? 0) / 2) * (180 / Math.PI);
         const facingDeg = p.lockedFacing * (180 / Math.PI);
-        const front = weapon.attack.reach * progress + r;
+        const front = weapon.attack.reach * reachF * progress + r;
         // The band weapon's front only bites past minReach — nothing draws
         // while the point is still crossing the harmless shaft-zone.
-        const inner = weapon.attack.minReach ? Math.max(0, weapon.attack.minReach - r) : 0;
+        const inner = weapon.attack.minReach
+          ? Math.max(0, weapon.attack.minReach * reachF - r)
+          : 0;
         if (front > inner) {
           const wedge = strikeRegionPath(p.x, p.y, inner, front, facingDeg, halfDeg);
           fill.setColor(C_TELEGRAPH);
@@ -679,6 +716,16 @@ const drawPlayer = (
         }
       }
     }
+  }
+
+  // Titan's weight: a heavy contact shadow under the giant — ordinary
+  // bodies float on the sand, a titan PRESSES into it. Part of the
+  // "oh crap" read (Tom, 2026-08-11) with the footfall cracks.
+  if (p.alive && growT > 0) {
+    fill.setColor(C_TITAN_SHADOW);
+    fill.setAlphaf(0.28 * growT);
+    canvas.drawCircle(p.x, p.y + 5, r * 1.12, fill);
+    fill.setAlphaf(1);
   }
 
   // Body disc (grey ghost when down; else friend blue / foe red).
@@ -907,6 +954,18 @@ const drawFx = (
       stroke.setColor(C_DASH_RING);
       stroke.setStrokeWidth(2 + 2 * f.life);
       canvas.drawCircle(f.x, f.y, 20 + (1 - f.life) * 26, stroke);
+    } else if (f.kind === "lob" && f.x2 !== undefined && f.y2 !== undefined) {
+      // The sinkhole's thrown pot: caster → landing on a sine hump over
+      // the arm window (life 1 → 0 IS the flight). The ground telegraph
+      // under it is the deployable's own arming render.
+      const t = 1 - f.life;
+      const x = f.x + (f.x2 - f.x) * t;
+      const y = f.y + (f.y2 - f.y) * t;
+      fill.setColor(C_SINKHOLE);
+      fill.setAlphaf(0.25);
+      canvas.drawCircle(x, y, 3, fill); // ground shadow
+      fill.setAlphaf(1);
+      canvas.drawCircle(x, y - Math.sin(Math.PI * t) * 60, 5, fill);
     } else if (f.kind === "strawBurst") {
       // The dummy soaking a blow: a puff of straw flecks thrown out of the
       // impact — the "sword fell on straw" tell (Tom, 2026-07-20). Each fleck
@@ -1087,6 +1146,69 @@ const drawDeployables = (
         TREMOR.radius * (0.6 + 0.02 * shudder),
         stroke,
       );
+    } else if (d.kind === "sinkhole") {
+      // The vortex, three layers (Tom, 2026-08-10 — arcs cut, lines are
+      // the show): an honest boundary ring, a darkening throat, and
+      // INFALL LINES streaming rim → throat, speeding up as the pull
+      // ramps. Their phase is the CLOSED-FORM INTEGRAL of the speed curve
+      // over the hole's own elapsed life — never `time / speed` with a
+      // changing speed, which teleports the phase every frame while the
+      // ramp runs (the statusRings.ts lesson; it strobed).
+      if (d.armLeft > 0) {
+        // The pot's still in the air: a faint boundary ring plus a closing
+        // sweep at the landing point (the sandtrap arming idiom) — "this
+        // ground is about to go wrong", before any pull exists.
+        stroke.setColor(C_SINKHOLE);
+        stroke.setAlphaf(0.22 * a);
+        stroke.setStrokeWidth(1.5);
+        canvas.drawCircle(d.x, d.y, SINKHOLE.radius, stroke);
+        const sweep = 360 * (1 - d.armLeft / SINKHOLE.armSeconds);
+        stroke.setAlphaf(0.6 * a);
+        stroke.setStrokeWidth(2.5);
+        const arc = Skia.PathBuilder.Make()
+          .addArc(Skia.XYWHRect(d.x - 16, d.y - 16, 32, 32), -90, sweep)
+          .detach();
+        canvas.drawPath(arc, stroke);
+        continue;
+      }
+      const elapsed = Math.max(0, SINKHOLE.duration - d.lifeLeft);
+      const ramp = Math.min(1, elapsed / SINKHOLE.rampSeconds);
+      stroke.setColor(C_SINKHOLE);
+      stroke.setAlphaf((0.3 + 0.3 * ramp) * a);
+      stroke.setStrokeWidth(2);
+      canvas.drawCircle(d.x, d.y, SINKHOLE.radius, stroke);
+      fill.setColor(C_SINKHOLE);
+      fill.setAlphaf((0.05 + 0.1 * ramp) * a);
+      canvas.drawCircle(d.x, d.y, SINKHOLE.radius, fill);
+      const throat = 24 + 10 * ramp;
+      fill.setAlphaf((0.25 + 0.45 * ramp) * a);
+      canvas.drawCircle(d.x, d.y, throat, fill);
+      // Loop rates, rim→throat trips per second: 0.6 at birth → 1.2 at
+      // full pull. Integrating the linear ramp gives the quadratic below;
+      // past the ramp the rate is constant.
+      const S0 = 0.6;
+      const S1 = 1.2;
+      const T = SINKHOLE.rampSeconds;
+      const trips =
+        elapsed <= T
+          ? S0 * elapsed + ((S1 - S0) * elapsed * elapsed) / (2 * T)
+          : (S0 * T + ((S1 - S0) * T) / 2) + S1 * (elapsed - T);
+      stroke.setStrokeWidth(1.5);
+      for (let i = 0; i < 12; i++) {
+        const ang = d.id * 0.7 + i * (Math.PI / 6) + (i % 3) * 0.35;
+        const phase = (trips + i * 0.618) % 1;
+        const rr = SINKHOLE.radius - (SINKHOLE.radius - throat) * phase;
+        const len = 10 + 8 * (1 - phase);
+        // sin(π·phase): born faint at the rim, dies into the mouth.
+        stroke.setAlphaf((0.3 + 0.25 * ramp) * Math.sin(Math.PI * phase) * a);
+        canvas.drawLine(
+          d.x + Math.cos(ang) * (rr + len),
+          d.y + Math.sin(ang) * (rr + len),
+          d.x + Math.cos(ang) * rr,
+          d.y + Math.sin(ang) * rr,
+          stroke,
+        );
+      }
     } else if (d.kind === "sandtrap") {
       const arming = d.armLeft > 0;
       const mine = d.team === myTeam;
@@ -1144,7 +1266,12 @@ const drawDeployables = (
           canvas.drawCircle(d.x, d.y, 12, stroke); // the glint itself
         }
       }
-    } else {
+    } else if (d.kind === "straw-man") {
+      // EXPLICIT branch, not the chain's catch-all (it was — and the first
+      // unhandled kind, tar, dressed up as a straw dummy, target chest and
+      // all). A kind with no branch here now draws NOTHING, which is the
+      // right default: tar is TarField's to draw, and a future kind's
+      // missing art should be invisible, not impersonating the decoy.
       // Straw man, sized UP and made unmissable (Tom, 2026-07-20 — it now
       // taunts, so it has to LOOK like the thing everyone's blades snapped
       // to): a fat straw body on a cross-frame with scarecrow arms poking
@@ -1717,20 +1844,15 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
           ? view.players.find((p) => p.id === spectateId)
           : undefined;
     if (follow) {
-      zoom = FOLLOW_ZOOM;
-      // Artillery zoom (Tom, 2026-08-10): a shell weapon's range ring must
-      // FIT the screen — its whole game is played on the ring, and at
-      // FOLLOW_ZOOM the bombard's ring ran off both side edges. Zoom out
-      // exactly enough for ring + margin to clear the narrower width;
-      // derived from the followed player's weapon, so spectating an
-      // artillery ally shows their game too. Weapons are fixed per match,
-      // so within a life this is constant (it may snap between spectate
-      // targets — acceptable, the camera already jumps there).
-      const fw = follow.weapon ? WEAPONS[follow.weapon] : null;
-      if (fw?.shell) {
-        const ringR = fw.attack.reach + config.playerRadius + 16;
-        zoom = Math.min(zoom, viewW / 2 / ringR);
-      }
+      // UNIVERSAL follow zoom (Tom, 2026-08-10): every camera — every
+      // loadout — fits the roster's LONGEST range ring across the screen
+      // width. Born as a bombard-only artillery zoom, made universal the
+      // same day: a per-weapon zoom handed ranged players a wider view of
+      // the arena than melee, an information advantage nobody chose. On a
+      // screen wide enough that FOLLOW_ZOOM already fits the ring, the
+      // clamp never bites. Derived from the WEAPONS table, so a reach
+      // retune or a new long arm re-fits every camera by itself.
+      zoom = Math.min(FOLLOW_ZOOM, viewW / 2 / (MAX_WEAPON_REACH + config.playerRadius + 16));
       const halfW = viewW / 2 / zoom;
       const halfH = viewH / 2 / zoom;
       // Clamp is relaxed by CROWD_REVEAL past the sand edge, so fighting near a
@@ -1803,6 +1925,9 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     canvas.drawPicture(scarLayer(r.blood, r.cracks, r.scarEpoch, r.nowMs));
     // Live quake webs ride per frame (expanding reveal), outside the cache.
     drawLiveCracks(canvas, r.cracks.decals, r.nowMs);
+    // The tar trail: sticky ground grime over the blood scars, under
+    // everything that stands or is placed on the sand.
+    r.tar.draw(canvas, r.nowMs);
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:

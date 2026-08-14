@@ -40,6 +40,12 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "war-drums": require("../../assets/icons/war-drums.png"),
   "blood-font": require("../../assets/icons/blood-font.png"),
   "sandstorm": require("../../assets/icons/sandstorm.png"),
+  // Forge art owed — the sandstorm swirl stands in until the sinkhole lands.
+  "sinkhole": require("../../assets/icons/sinkhole.png"),
+  // Forge art owed — the blood font's pool stands in until the tar lands.
+  "tar-pit": require("../../assets/icons/tar-pit.png"),
+  // Forge art owed — ironhide's stand stands in until the draught lands.
+  "titans-draught": require("../../assets/icons/titans-draught.png"),
 };
 
 export interface LoadoutIconProps {

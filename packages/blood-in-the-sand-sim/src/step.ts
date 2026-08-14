@@ -48,6 +48,7 @@ import {
 import {
   applyDashShove,
   applyFixedHit,
+  damageFactorOf,
   applyImpulse,
   damageDummy,
   dashInvulnerable,
@@ -56,6 +57,8 @@ import {
   isDashing,
   killPlayer,
   mirrorGuardActive,
+  radiusOf,
+  reachFactorOf,
   resolvePlayerHit,
   speedFactorOf,
   stepDeployables,
@@ -105,19 +108,24 @@ const resolveArcStrike = (
   hurtScratch.length = 0;
   for (const e of seatedPlayers(state)) {
     if (e.team === p.team || !e.alive) continue;
-    hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: PLAYER_RADIUS });
+    hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: radiusOf(e) });
   }
   for (const d of state.deployables) {
     if (d.kind !== "straw-man" || d.team === p.team || d.hp <= 0) continue;
     hurtScratch.push({ id: d.id, pos: d.pos, radius: PLAYER_RADIUS });
   }
+  // A titan's arms grow with the body: the whole band (reach AND minReach)
+  // scales, so a thrust's travelling front and the trident's floating band
+  // keep their character at giant size. `reach` arrives pre-progress from
+  // the thrust caller — scaling here keeps that math intact.
+  const reachF = reachFactorOf(p);
   const hits = hitsInArc(
     p.mover.pos,
     p.lockedFacing,
-    reach,
+    reach * reachF,
     weapon.attack.arcWidth!,
     hurtScratch,
-    weapon.attack.minReach ?? 0,
+    (weapon.attack.minReach ?? 0) * reachF,
   );
   for (const hitId of hits) {
     if (alreadyHit) {
@@ -144,7 +152,7 @@ const resolveArcStrike = (
     const defender = seats[hitId];
     if (!defender || dashInvulnerable(defender)) continue; // dodged through it
 
-    const result = resolvePlayerHit(p.combatant, defender, sim.rng);
+    const result = resolvePlayerHit(p, defender, sim.rng);
     const knockback = weapon.attack.knockback ?? 0;
     let away = normalize(sub(defender.mover.pos, p.mover.pos));
     if (away.x === 0 && away.y === 0) {
@@ -256,6 +264,10 @@ export const stepSim = (
     // committed roll overwrites velocity wholesale (in stepPlayerAbilities),
     // so the escape hop stays a real answer to being slowed.
     p.slowLeft = Math.max(0, p.slowLeft - dt);
+    // The body IS the status (Titan's Draught): the mover's crowd/wall
+    // radius tracks the grown size each tick — idempotent, and expiry or a
+    // round reset shrinks it back on the next pass for free.
+    p.mover.radius = radiusOf(p);
     // Ticked BEFORE the ability pass, so a taunt applied this tick keeps its
     // full duration through the targeting stage below.
     p.tauntLeft = Math.max(0, p.tauntLeft - dt);
@@ -398,11 +410,15 @@ export const stepSim = (
       // weapon's minReach band (a body between the trident's prongs and the
       // hands never even triggers a swing — the dead zone is total safety).
       const targetGap = target === null ? Infinity : distance(p.mover.pos, target.pos);
+      // Melee reach grows with Titan's Draught (arc weapons only — a
+      // giant's bow is still the same bow); the strike resolve applies
+      // the same factor, so the swing that starts is the swing that hits.
+      const reachF = weapon.attack.shape === "arc" ? reachFactorOf(p) : 1;
       const targetInRange =
         target !== null &&
         target.alive &&
-        targetGap - target.radius <= weapon.attack.reach &&
-        targetGap + target.radius >= (weapon.attack.minReach ?? 0);
+        targetGap - target.radius <= weapon.attack.reach * reachF &&
+        targetGap + target.radius >= (weapon.attack.minReach ?? 0) * reachF;
       const locked = targetView(state, p.lockedTargetId);
       // A smoked mark counts as lost (the sandstorm rule) — mid-windup too,
       // and stepping into the cloud yourself breaks your own windup.
@@ -449,7 +465,9 @@ export const stepSim = (
               landIn: flight,
               flightTime: flight,
               blastRadius: weapon.shell.blastRadius,
-              damage: weapon.shell.damage,
+              // Stamped at launch — a titan's shell hits titan-hard even
+              // if the draught runs out mid-flight.
+              damage: Math.round(weapon.shell.damage * damageFactorOf(p)),
               knockback: weapon.shell.knockback,
             });
             events.push({ type: "shoot", ownerId: p.id, weapon: p.weapon!, x: p.mover.pos.x, y: p.mover.pos.y });
@@ -547,7 +565,7 @@ const stepProjectiles = (
     hurtScratch.length = 0;
     for (const e of players) {
       if (e.team === owner.team || !e.alive || dashInvulnerable(e)) continue;
-      hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: PLAYER_RADIUS });
+      hurtScratch.push({ id: e.id, pos: e.mover.pos, radius: radiusOf(e) });
     }
     for (const d of state.deployables) {
       if (d.kind !== "straw-man" || d.team === owner.team || d.hp <= 0) continue;
@@ -586,7 +604,7 @@ const stepProjectiles = (
         break;
       }
 
-      const rolled = resolvePlayerHit(owner.combatant, defender, sim.rng);
+      const rolled = resolvePlayerHit(owner, defender, sim.rng);
       const impulse = projectileKnockback(shot, weapon.attack.knockback ?? 0);
       applyImpulse(defender, impulse.x, impulse.y, 1);
       events.push({

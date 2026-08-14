@@ -7,6 +7,10 @@ import {
   IRONHIDE,
   PLAYER_MAX_SPEED,
   SANDTRAP,
+  PLAYER_RADIUS,
+  SINKHOLE,
+  TAR_PIT,
+  TITANS_DRAUGHT,
   STRAW_MAN,
   TICK_DT,
   TREMOR,
@@ -746,6 +750,22 @@ describe("slots and rounds", () => {
     expect(slotOf(alice, "dash")!.chargesLeft).toBe(4);
   });
 
+  test("practice lifts the budget: cooldown is the only gate, charges never spend", () => {
+    const sim = makeFight(); // dash in slot 0, 4 charges, 3s cooldown
+    sim.state.practice = true;
+    const alice = sim.state.players[0]!;
+    sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+
+    // Same cadence as above — every press past the budget still fires.
+    const events = run(sim, 30 * 30, (tick) =>
+      tick % 120 === 0 ? press(sim, 0, "dash") : new Map(),
+    );
+    const dashes = ofType(events, "cast").filter((e) => e.event.ability === "dash");
+    expect(dashes.length).toBeGreaterThan(4); // past where real rooms go dead
+    expect(slotOf(alice, "dash")!.chargesLeft).toBe(4); // untouched
+  });
+
   test("state with deployables and slots survives a JSON round-trip", () => {
     const sim = makeFight({ a0: ["sandtrap", "blood-font"] });
     sim.state.players[0]!.mover.pos = { x: 96, y: 400 };
@@ -754,5 +774,235 @@ describe("slots and rounds", () => {
     run(sim, 30);
     expect(sim.state.deployables.length).toBeGreaterThan(0);
     expect(JSON.parse(JSON.stringify(sim.state))).toEqual(sim.state);
+  });
+});
+
+describe("sinkhole", () => {
+  test("the throw plants the zone ~200px along the facing", () => {
+    const sim = makeFight({ a0: ["sinkhole", "dash"] });
+    const alice = sim.state.players[0]!;
+    alice.mover.pos = { x: 96, y: 256 };
+    alice.facing = 0; // due east
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    const events = run(sim, 1, () => press(sim, 0, "sinkhole"));
+    const hole = sim.state.deployables.find((d) => d.kind === "sinkhole");
+    expect(hole).toBeDefined();
+    expect(hole!.pos.x).toBeCloseTo(96 + SINKHOLE.throwDistance, 3);
+    expect(hole!.pos.y).toBeCloseTo(256, 3);
+    // The cast event carries the landing point (the client's lob FX —
+    // the sampled view lags the interp delay, so it can't be looked up).
+    const cast = ofType(events, "cast").find((c) => c.event.ability === "sinkhole");
+    expect(cast?.event.tx).toBeCloseTo(hole!.pos.x, 3);
+    expect(cast?.event.ty).toBeCloseTo(hole!.pos.y, 3);
+    // One deployable step already ran on the cast tick; the pot's flight
+    // (armSeconds) rides lifeLeft on top of the active duration.
+    expect(hole!.lifeLeft).toBeCloseTo(SINKHOLE.duration + SINKHOLE.armSeconds - TICK_DT, 3);
+    expect(hole!.armLeft).toBeCloseTo(SINKHOLE.armSeconds - TICK_DT, 3);
+  });
+
+  test("no pull while the pot is still in the air", () => {
+    const sim = makeFight({ a0: ["sinkhole", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    alice.mover.pos = { x: 100, y: 256 };
+    alice.facing = 0; // hole lands at x=300
+    bob.mover.pos = { x: 400, y: 256 }; // 100 from the mark
+    run(sim, 1, () => press(sim, 0, "sinkhole"));
+    const bobStart = bob.mover.pos.x;
+    // Inside the arm window (0.6s = 18 ticks): the telegraph, not the maw.
+    run(sim, 12);
+    expect(bob.mover.pos.x).toBeCloseTo(bobStart, 3);
+    // Past the landing the drag begins.
+    run(sim, 20);
+    expect(bob.mover.pos.x).toBeLessThan(bobStart);
+  });
+
+  test("pulls BOTH teams toward the centre, and the pull strengthens as it ramps", () => {
+    const sim = makeFight({ a0: ["sinkhole", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    alice.mover.pos = { x: 100, y: 256 };
+    alice.facing = 0; // hole lands at x=300
+    bob.mover.pos = { x: 460, y: 256 }; // 160 from centre — inside the 260 radius
+    run(sim, 1, () => press(sim, 0, "sinkhole"));
+    sim.state.deployables.find((d) => d.kind === "sinkhole")!.armLeft = 0; // pot already landed
+
+    // Idle drift: both bodies get dragged toward x=300 from opposite sides.
+    const aliceStart = alice.mover.pos.x;
+    const bobStart = bob.mover.pos.x;
+    run(sim, 15); // half a second, early-ramp
+    const alicePulled = alice.mover.pos.x - aliceStart; // caster pulled EAST
+    const bobPulled = bobStart - bob.mover.pos.x; // enemy pulled WEST
+    expect(alicePulled).toBeGreaterThan(0);
+    expect(bobPulled).toBeGreaterThan(0);
+
+    // Late-ramp drag over the same window is stronger than the early drag.
+    const hole = sim.state.deployables.find((d) => d.kind === "sinkhole")!;
+    hole.lifeLeft = SINKHOLE.duration - SINKHOLE.rampSeconds; // fully ramped
+    hole.armLeft = 0; // pot already landed
+    bob.mover.pos = { x: 460, y: 256 };
+    bob.mover.vel = { x: 0, y: 0 };
+    const bobStart2 = bob.mover.pos.x;
+    run(sim, 15);
+    expect(bobStart2 - bob.mover.pos.x).toBeGreaterThan(bobPulled);
+  });
+
+  test("Ironhide plants its feet — the pull doesn't take", () => {
+    const sim = makeFight({ a0: ["sinkhole", "dash"], a1: ["ironhide", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    alice.mover.pos = { x: 100, y: 256 };
+    alice.facing = 0;
+    bob.mover.pos = { x: 400, y: 256 }; // 100 from the hole's centre
+    forceActive(bob, "ironhide", 5);
+    run(sim, 1, () => press(sim, 0, "sinkhole"));
+    const bobStart = bob.mover.pos.x;
+    run(sim, 20);
+    expect(bob.mover.pos.x).toBeCloseTo(bobStart, 1);
+  });
+
+  test("a full sprint outward beats the drag even at full ramp", () => {
+    // NOTE the test arena (512px) is narrower than the sinkhole's own
+    // diameter (520), so a literal rim-escape run doesn't fit — assert the
+    // NET OUTWARD DRIFT instead: sprint (280) minus peak drag (240) must
+    // move a body away from the centre, which is the whole escape promise.
+    const sim = makeFight({ a0: ["sinkhole", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    alice.mover.pos = { x: 60, y: 256 };
+    alice.facing = 0; // hole at x=260
+    bob.mover.pos = { x: 350, y: 256 }; // 90 east of the centre, well inside
+    run(sim, 1, () => press(sim, 0, "sinkhole"));
+    const hole = sim.state.deployables.find((d) => d.kind === "sinkhole")!;
+    hole.lifeLeft = SINKHOLE.duration - SINKHOLE.rampSeconds; // worst case: full strength
+    hole.armLeft = 0; // pot already landed
+    // Bob sprints due east, dead away from the pull, one full second.
+    run(sim, 30, () => new Map([[1, { seq: 0, sx: 1, sy: 0, casts: [] }]]));
+    expect(bob.mover.pos.x).toBeGreaterThan(365); // ~+40px/s net, minus spin-up
+  });
+});
+
+describe("tar pit", () => {
+  test("the trail lays by distance travelled: sprint = a trail, standing = one blob", () => {
+    const sim = makeFight({ a0: ["tar-pit", "dash"] });
+    const alice = sim.state.players[0]!;
+    alice.mover.pos = { x: 80, y: 400 };
+    sim.state.players[1]!.mover.pos = { x: 460, y: 96 }; // far — nobody interferes
+    const start = sim.state.tick;
+    // Cast, then sprint east for the whole laying window.
+    run(sim, Math.ceil(TAR_PIT.laySeconds / TICK_DT) + 2, (t) =>
+      t === start
+        ? new Map([[0, { seq: 0, sx: 1, sy: 0, casts: [true, false] }]])
+        : new Map([[0, { seq: 0, sx: 1, sy: 0, casts: [] }]]),
+    );
+    const trail = sim.state.deployables.filter((d) => d.kind === "tar");
+    expect(trail.length).toBeGreaterThanOrEqual(5); // a real trail, not a puddle
+    // Consecutive blobs sit ~spacing apart along the run.
+    for (let i = 1; i < trail.length; i++) {
+      const gap = Math.hypot(trail[i]!.pos.x - trail[i - 1]!.pos.x, trail[i]!.pos.y - trail[i - 1]!.pos.y);
+      expect(gap).toBeGreaterThanOrEqual(TAR_PIT.spacing * 0.9);
+      expect(gap).toBeLessThan(TAR_PIT.spacing * 1.6);
+    }
+
+    // Standing still: the window opens and closes over one blob at the feet.
+    const still = makeFight({ a0: ["tar-pit", "dash"] });
+    still.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    still.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    const s2 = still.state.tick;
+    run(still, Math.ceil(TAR_PIT.laySeconds / TICK_DT) + 2, (t) =>
+      t === s2 ? press(still, 0, "tar-pit") : new Map(),
+    );
+    expect(still.state.deployables.filter((d) => d.kind === "tar")).toHaveLength(1);
+  });
+
+  test("a blob only reaches full grip once it has spread — then slows whoever wades in, caster included", () => {
+    const sim = makeFight({ a0: ["tar-pit", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    alice.mover.pos = { x: 96, y: 96 };
+    bob.mover.pos = { x: 416, y: 450 };
+    // Hand-place a FRESH blob near bob: centre 70px away — outside the young
+    // radius (20+18=38), inside the grown one (60+18=78).
+    sim.state.deployables.push({
+      id: 900, kind: "tar", ownerId: 0, team: 1,
+      pos: { x: bob.mover.pos.x - 70, y: bob.mover.pos.y },
+      armLeft: 0, lifeLeft: TAR_PIT.lifetime, hp: 0, tickLeft: 0,
+    });
+    run(sim, 2);
+    expect(bob.slowLeft).toBe(0); // still spreading — no grip yet
+    run(sim, Math.ceil(TAR_PIT.growSeconds / TICK_DT) + 2);
+    expect(bob.slowLeft).toBeGreaterThan(0); // the spread reached him
+    expect(bob.slowFactor).toBe(TAR_PIT.slowFactor);
+
+    // The caster's own boots stick too: walk alice onto her own tar.
+    alice.mover.pos = { x: bob.mover.pos.x - 70, y: bob.mover.pos.y };
+    run(sim, 2);
+    expect(alice.slowLeft).toBeGreaterThan(0);
+  });
+
+  test("tar lives out the round (no mid-fight drying) and the reset clears it", () => {
+    const sim = makeFight({ a0: ["tar-pit", "dash"] });
+    sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    const start = sim.state.tick;
+    run(sim, 60, (t) => (t === start ? press(sim, 0, "tar-pit") : new Map()));
+    expect(sim.state.deployables.filter((d) => d.kind === "tar").length).toBeGreaterThan(0);
+    // The round reset is the mechanical clean-slate — trails don't cross it
+    // (the client dries them into cosmetic stains; tar.ts owns that).
+    resetForRound(sim, []);
+    expect(sim.state.deployables.filter((d) => d.kind === "tar")).toHaveLength(0);
+  });
+});
+
+describe("titan's draught", () => {
+  test("a titan is a bigger target: the same blade whiffs on the sober, bites the drunk", () => {
+    // 115 apart: gap − 18 = 97 > blade's 90 reach; gap − 28.8 = 86 ≤ 90.
+    const sober = makeFight({ a1: ["titans-draught", "dash"] });
+    sober.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    sober.state.players[1]!.mover.pos = { x: 315, y: 256 };
+    slotOf(sober.state.players[0]!, "dash")!.invulnLeft = 999;
+    const quiet = run(sober, 40);
+    expect(ofType(quiet, "hit")).toHaveLength(0);
+
+    const drunk = makeFight({ a1: ["titans-draught", "dash"] });
+    drunk.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    drunk.state.players[1]!.mover.pos = { x: 315, y: 256 };
+    slotOf(drunk.state.players[0]!, "dash")!.invulnLeft = 999;
+    forceActive(drunk.state.players[1]!, "titans-draught", 999);
+    const events = run(drunk, 40);
+    expect(ofType(events, "hit").length).toBeGreaterThan(0);
+  });
+
+  test("the drink multiplies weapon damage — same seed, same roll, bigger number", () => {
+    const base = makeFight({ seed: 0xf00d });
+    base.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    base.state.players[1]!.mover.pos = { x: 260, y: 256 };
+    slotOf(base.state.players[0]!, "dash")!.invulnLeft = 999;
+    const baseHit = ofType(run(base, 20), "hit")[0]!.event;
+
+    const buffed = makeFight({ seed: 0xf00d, a0: ["titans-draught", "dash"] });
+    buffed.state.players[0]!.mover.pos = { x: 200, y: 256 };
+    buffed.state.players[1]!.mover.pos = { x: 260, y: 256 };
+    slotOf(buffed.state.players[0]!, "dash")!.invulnLeft = 999;
+    forceActive(buffed.state.players[0]!, "titans-draught", 999);
+    const buffedHit = ofType(run(buffed, 20), "hit")[0]!.event;
+
+    // Identical rng stream (the Ironhide rule) — the multiplier is the
+    // only difference, applied post-roll and rounded.
+    expect(buffedHit.damage).toBe(Math.max(1, Math.round(baseHit.damage * TITANS_DRAUGHT.damageFactor)));
+  });
+
+  test("the body grows with the status and shrinks back when it ends", () => {
+    const sim = makeFight({ a0: ["titans-draught", "dash"] });
+    const alice = sim.state.players[0]!;
+    sim.state.players[0]!.mover.pos = { x: 96, y: 96 };
+    sim.state.players[1]!.mover.pos = { x: 416, y: 450 };
+    run(sim, 2);
+    expect(alice.mover.radius).toBe(PLAYER_RADIUS);
+    forceActive(alice, "titans-draught", 0.5);
+    run(sim, 2);
+    expect(alice.mover.radius).toBeCloseTo(PLAYER_RADIUS * TITANS_DRAUGHT.sizeFactor, 5);
+    run(sim, 30); // the half-second window expires
+    expect(alice.mover.radius).toBe(PLAYER_RADIUS);
   });
 });

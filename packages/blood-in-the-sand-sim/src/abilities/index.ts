@@ -5,7 +5,7 @@
  * player per tick drives all three drafted slots.
  */
 import { distance, segmentClear, stepAbility } from "@heroic/core";
-import { ABILITIES, HARPOON } from "../config";
+import { ABILITIES, HARPOON, PLAYER_RADIUS, SINKHOLE, TAR_PIT } from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaSim } from "../sim";
 import { seatedPlayers, type ArenaPlayer, type PlayerInput } from "../state";
@@ -52,8 +52,17 @@ export const stepPlayerAbilities = (
     slot.ability = step.state;
 
     if (step.activated) {
-      slot.chargesLeft -= 1;
-      events.push({ type: "cast", playerId: p.id, ability: slot.id });
+      // Practice never spends the budget — cooldown is the only gate there,
+      // so a slot can be drilled all match (chargesLeft stays at full).
+      if (!sim.state.practice) slot.chargesLeft -= 1;
+      // Kept by reference: a thrown cast (sinkhole below) stamps its
+      // landing point onto this event for the client's lob FX.
+      const castEvent: Extract<ArenaEvent, { type: "cast" }> = {
+        type: "cast",
+        playerId: p.id,
+        ability: slot.id,
+      };
+      events.push(castEvent);
       switch (slot.id) {
         case "dash": {
           const mag = Math.hypot(input.sx, input.sy);
@@ -85,9 +94,51 @@ export const stepPlayerAbilities = (
         case "sandstorm":
           castDeployable(sim.state, slot.id, p);
           break;
+        // The sinkhole is THROWN along the facing (aimable, so whiffable —
+        // the Warding Shout rule), clamped inside the sand so a wall-facing
+        // throw plants at the rim instead of vanishing into the crowd.
+        case "sinkhole": {
+          const w = sim.zone.size.x;
+          const h = sim.zone.size.y;
+          const at = {
+            x: Math.min(
+              Math.max(p.mover.pos.x + Math.cos(p.facing) * SINKHOLE.throwDistance, PLAYER_RADIUS),
+              w - PLAYER_RADIUS,
+            ),
+            y: Math.min(
+              Math.max(p.mover.pos.y + Math.sin(p.facing) * SINKHOLE.throwDistance, PLAYER_RADIUS),
+              h - PLAYER_RADIUS,
+            ),
+          };
+          castDeployable(sim.state, "sinkhole", p, at);
+          castEvent.tx = at.x;
+          castEvent.ty = at.y;
+          break;
+        }
+        // The tar trail opens its laying window: first blob at the feet,
+        // the rest drop by DISTANCE TRAVELLED below while the window runs.
+        case "tar-pit":
+          castDeployable(sim.state, "tar", p);
+          slot.dropX = p.mover.pos.x;
+          slot.dropY = p.mover.pos.y;
+          break;
         // mirror-guard / ironhide / war-drums: the active phase IS the status.
         default:
           break;
+      }
+    }
+
+    // The tar trail lays while its window is open: a fresh blob every
+    // TAR_PIT.spacing px of travel — where it goes is where you went (the
+    // roster's only movement-expressed ability; standing still lays just
+    // the one blob under you).
+    if (slot.id === "tar-pit" && slot.ability.phase === "active") {
+      const dx = p.mover.pos.x - slot.dropX;
+      const dy = p.mover.pos.y - slot.dropY;
+      if (dx * dx + dy * dy >= TAR_PIT.spacing * TAR_PIT.spacing) {
+        castDeployable(sim.state, "tar", p);
+        slot.dropX = p.mover.pos.x;
+        slot.dropY = p.mover.pos.y;
       }
     }
 

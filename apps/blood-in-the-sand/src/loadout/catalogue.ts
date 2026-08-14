@@ -19,14 +19,20 @@ import {
   PLAYER_STATS,
   SANDSTORM,
   SANDTRAP,
+  SINKHOLE,
   STRAW_MAN,
+  TAR_PIT,
+  TITANS_DRAUGHT,
   TREMOR,
   WAR_DRUMS,
   WARDING_SHOUT,
   WEAPONS,
   WEAPON_IDS,
+  GATED_ABILITIES,
   GATED_WEAPONS,
+  WRIT_ABILITIES,
   WRIT_WEAPONS,
+  abilityEntitlement,
   weaponEntitlement,
   type AbilityCategory,
   type AbilityId,
@@ -304,6 +310,37 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
       { label: "EFFECT", value: "no aim in or out" },
     ],
   },
+  "titans-draught": {
+    hint: "drink deep — grow huge, hit harder, get hit easier",
+    quote: "The titans never died. They are merely thirsty.",
+    desc: "Drain the draught and swell to half again your size: your blows land heavier, your arms reach further, and the ground cracks beneath your stride. So does your body grow — a titan is a bigger mark for every arrow, blast and blade in the arena. The trade is the whole drink.",
+    chips: [
+      { label: "DURATION", value: `${TITANS_DRAUGHT.duration}s` },
+      { label: "DAMAGE", value: `×${TITANS_DRAUGHT.damageFactor}` },
+      { label: "SIZE", value: `×${TITANS_DRAUGHT.sizeFactor} — hittable too` },
+    ],
+  },
+  "tar-pit": {
+    hint: "paint a trail of tar behind you as you run",
+    quote: "Let them follow. The road remembers me, and it does not care for them.",
+    desc: "Opens a spout of tar at your heels: everywhere you run is left slick and black for the rest of the round, and anyone who wades through it — friend, foe, or you doubling back — is slowed to a trudge. Where the trail goes is wherever you went. The stains never wash out; the grip dies with the round.",
+    chips: [
+      { label: "LAYS FOR", value: `${TAR_PIT.laySeconds}s of running` },
+      { label: "SLOW", value: `${Math.round((1 - TAR_PIT.slowFactor) * 100)}%` },
+      { label: "LINGERS", value: "all round" },
+    ],
+  },
+  sinkhole: {
+    hint: "throw a hole in the world — it pulls everyone in",
+    quote: "Open the ground where they stand. The sand is patient, and it is always hungry.",
+    desc: "Hurls a vortex that drags everyone near it toward its centre — friend, foe, and you. The pull deepens the longer it lives; sprinting directly away barely beats it at full strength, and a dash always clears it. No damage — what kills you is where it puts you.",
+    chips: [
+      { label: "RADIUS", value: `${SINKHOLE.radius}px` },
+      { label: "THROW", value: `${SINKHOLE.throwDistance}px · lands in ${SINKHOLE.armSeconds}s` },
+      { label: "PULL", value: `${SINKHOLE.pullSpeedMin}–${SINKHOLE.pullSpeedMax} px/s` },
+      { label: "LASTS", value: `${SINKHOLE.duration}s` },
+    ],
+  },
 };
 
 // Every ability carries its round budget (the charge economy, Tom 2026-07-15)
@@ -314,11 +351,22 @@ for (const id of ABILITY_IDS) {
 
 export const categoryOf = (id: AbilityId): AbilityCategory => ABILITIES[id].category;
 
-/** Ability ids grouped by category, alphabetical (Tom 2026-07-15) — the pick lists' order. */
-export const abilitiesByCategory = (category: AbilityCategory): AbilityId[] =>
-  ABILITY_IDS.filter((id) => categoryOf(id) === category).sort((a, b) =>
-    ABILITIES[a].name.localeCompare(ABILITIES[b].name),
-  );
+/** Ability ids grouped by category, alphabetical (Tom 2026-07-15) — the
+ * pick lists' order. Gating mirrors sortedWeaponIds exactly: gated items
+ * appear only when entitled — except writ items in PRACTICE, the
+ * try-before-buy door (deed secrets stay hidden even there). */
+export const abilitiesByCategory = (
+  category: AbilityCategory,
+  entitled: ReadonlySet<string>,
+  practice = false,
+): AbilityId[] =>
+  ABILITY_IDS.filter(
+    (id) =>
+      categoryOf(id) === category &&
+      (!GATED_ABILITIES.has(id) ||
+        entitled.has(abilityEntitlement(id)) ||
+        (practice && WRIT_ABILITIES.has(id))),
+  ).sort((a, b) => ABILITIES[a].name.localeCompare(ABILITIES[b].name));
 
 /** Weapon ids alphabetical — same ordering rule as abilities. Gated items
  * appear ONLY when entitled: hidden, never greyed — a secret doesn't exist
