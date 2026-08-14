@@ -216,8 +216,14 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * a status buff (the Ironhide family). No new wire shapes — the client
  * derives the grow scale from the slot's broadcast active window, and the
  * sim's radiusOf/damageFactorOf read the same status. New id ⇒ bump.
+ * v27 (2026-08-14): the LIFELINE — writ weapon 4, the LAST launch-shelf
+ * item (bits-store-arms.md): the first beam weapon (core combat/beam.ts
+ * link primitive; no attack cycle). PlayerSnapshot gains `beamTargetId`
+ * + `beamLink` (the drawn beam + its ramp glow). Heals ride the existing
+ * heal event (casterId = the healer — the healing deed chain now has a
+ * real team engine); snap ticks are plain hit events. New id ⇒ bump.
  */
-export const PROTOCOL_VERSION = 26;
+export const PROTOCOL_VERSION = 27;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -337,6 +343,12 @@ export interface PlayerSnapshot {
   /** The player id this player's harpoon chain is currently REELING in, or
    * null — the client draws the taut chain between the two for the haul. */
   reeling: number | null;
+  /** The Lifeline's linked player (v27), or null — the client draws the
+   * beam between the two; ally = heal green, enemy = the snap. */
+  beamTargetId: number | null;
+  /** Unbroken link seconds — the beam's glow ramps with it (client reads
+   * this, never re-derives the ramp). */
+  beamLink: number;
   /** Last input seq the sim applied for this player — latency debugging. */
   lastSeq: number;
 }

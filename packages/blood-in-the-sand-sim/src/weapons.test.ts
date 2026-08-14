@@ -504,3 +504,102 @@ describe("per-weapon engagement", () => {
     expect(sim.state.players[1]!.targetId).toBeNull(); // blade: 270 engagement
   });
 });
+
+describe("lifeline", () => {
+  /** 2v2 with forced seats: healer+ally vs two foes, parked as each test likes. */
+  const makeTeams = () => {
+    const sim = createSim(makeZone(), 0xbeef, 2);
+    const healer = addPlayer(sim, "healer", 1)!;
+    const ally = addPlayer(sim, "ally", 1)!;
+    const foe1 = addPlayer(sim, "foe1", 2)!;
+    const foe2 = addPlayer(sim, "foe2", 2)!;
+    for (const p of [healer, ally, foe1, foe2]) {
+      setPlayerWeapon(sim, p.id, p === healer ? "lifeline" : "blade");
+      setPlayerAbilities(sim, p.id, ["dash", "tremor"]);
+    }
+    sim.state.round.phase = "active";
+    // Park the foes far out of everyone's way by default.
+    foe1.mover.pos = { x: 470, y: 60 };
+    foe2.mover.pos = { x: 470, y: 470 };
+    return { sim, healer, ally, foe1, foe2 };
+  };
+
+  test("heals the wounded ally on the tick clock, ramping with the unbroken link", () => {
+    const { sim, healer, ally } = makeTeams();
+    healer.mover.pos = { x: 96, y: 256 };
+    ally.mover.pos = { x: 200, y: 256 };
+    ally.combatant.hp = 10;
+    // Re-wound the patient every tick: the 9s ramp outlasts the 90 missing
+    // hp, and a topped-off ally would clamp (and then break) the link.
+    const events = run(sim, 30 * 11, () => {
+      ally.combatant.hp = Math.min(ally.combatant.hp, 40);
+      return new Map();
+    });
+    const heals = ofType(events, "heal").filter((h) => h.event.casterId === healer.id);
+    expect(heals.length).toBeGreaterThan(14);
+    // Ramp: early ticks heal base-rate amounts, late ticks the capped 6
+    // (12/s × 0.5s — Tom's 2026-08-14 tune: a NINE-second climb to full).
+    expect(heals[0]!.event.amount).toBe(2); // round(3.5/s × 0.5s)
+    expect(heals[heals.length - 1]!.event.amount).toBe(6);
+    expect(ally.combatant.hp).toBeGreaterThan(10);
+    expect(healer.beam?.targetId).toBe(ally.id);
+  });
+
+  test("the beam touches no enemy, ever — an adjacent foe neither takes damage nor breaks the heal", () => {
+    const { sim, healer, ally, foe1 } = makeTeams();
+    healer.mover.pos = { x: 96, y: 400 };
+    ally.mover.pos = { x: 200, y: 400 };
+    ally.combatant.hp = 20;
+    foe1.mover.pos = { x: 130, y: 430 }; // right on top of the healer
+    const events = run(sim, 45); // 1.5s
+    const beamHits = ofType(events, "hit").filter((h) => h.event.attackerId === healer.id);
+    expect(beamHits).toHaveLength(0); // no snap, no sting — allies or nothing
+    const heals = ofType(events, "heal").filter((h) => h.event.casterId === healer.id);
+    expect(heals.length).toBeGreaterThan(0); // the heal held through the dive
+    expect(healer.beam?.targetId).toBe(ally.id);
+  });
+
+  test("a brief break holds the ramp in grace — the same patient resumes it intact", () => {
+    const { sim, healer, ally } = makeTeams();
+    healer.mover.pos = { x: 96, y: 256 };
+    ally.mover.pos = { x: 200, y: 256 };
+    ally.combatant.hp = 10;
+    run(sim, 30 * 6); // 6s held — rate 9/s
+    const ramped = healer.beam!.linkSeconds;
+    ally.mover.pos = { x: 470, y: 256 }; // out of the 300 range — grace begins
+    run(sim, 30); // 1s — inside the 1.5s grace
+    expect(healer.beam).not.toBeNull(); // the memory holds…
+    expect(healer.beam!.linkSeconds).toBeCloseTo(ramped, 5); // …frozen, not grown
+    ally.mover.pos = { x: 200, y: 256 }; // back in time
+    const events = run(sim, 40);
+    const heals = ofType(events, "heal");
+    expect(heals.length).toBeGreaterThan(0);
+    expect(heals[0]!.event.amount).toBeGreaterThanOrEqual(5); // ~9/s resumed, not base
+  });
+
+  test("past the grace the ramp is gone — the link must be re-earned", () => {
+    const { sim, healer, ally } = makeTeams();
+    healer.mover.pos = { x: 96, y: 256 };
+    ally.mover.pos = { x: 200, y: 256 };
+    ally.combatant.hp = 10;
+    run(sim, 30 * 6); // ramp well up
+    ally.mover.pos = { x: 470, y: 256 }; // out of range
+    run(sim, 60); // 2s — past the 1.5s grace
+    expect(healer.beam).toBeNull();
+    ally.mover.pos = { x: 200, y: 256 }; // back in, too late
+    const events = run(sim, 40);
+    const heals = ofType(events, "heal");
+    expect(heals.length).toBeGreaterThan(0);
+    expect(heals[0]!.event.amount).toBe(2); // base rate again, not the cap
+  });
+
+  test("no ally: the beam links nothing at all (the honest 1v1 story)", () => {
+    const sim = makeFight("lifeline", "blade");
+    sim.state.players[0]!.mover.pos = { x: 96, y: 256 };
+    sim.state.players[1]!.mover.pos = { x: 400, y: 256 };
+    const events = run(sim, 60);
+    expect(ofType(events, "heal")).toHaveLength(0);
+    expect(ofType(events, "hit")).toHaveLength(0);
+    expect(sim.state.players[0]!.beam).toBeNull();
+  });
+});

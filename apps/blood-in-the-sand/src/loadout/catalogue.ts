@@ -93,6 +93,11 @@ export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc:
     quote: "Break their bones.",
     desc: "A wide, heavy sweep. Anyone caught is slowed, less damage for more crowd control",
   },
+  lifeline: {
+    hint: "a mending thread to your most wounded ally — no weapon at all",
+    quote: "Hold the line. I will hold you together.",
+    desc: "Links a mending thread to your most wounded ally: the longer the link holds unbroken, the faster it heals. It never touches an enemy — your abilities and your allies are all that stand between you and a blade. In a lone duel it links nothing: this is a choice, not a gun.",
+  },
   fang: {
     hint: "lightning stabs that stack a deadly poison",
     quote: "The bite is nothing. The venom is everything.",
@@ -112,10 +117,13 @@ export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc:
 
 /** Damage per trigger-pull: a burst weapon's honest number is the full
  * volley, not one feeble bolt (the bar would lie against single-hit
- * rosters); a shell weapon's is its fixed blast. */
+ * rosters); a shell weapon's is its fixed blast; a beam deals NOTHING —
+ * zero, the honest floor of every damage bar. */
 const weaponDamage = (id: WeaponId): number =>
-  WEAPONS[id].shell?.damage ??
-  (WEAPONS[id].stats.attack ?? PLAYER_STATS.attack) * (WEAPONS[id].burst?.count ?? 1);
+  WEAPONS[id].beam
+    ? 0
+    : WEAPONS[id].shell?.damage ??
+      (WEAPONS[id].stats.attack ?? PLAYER_STATS.attack) * (WEAPONS[id].burst?.count ?? 1);
 const weaponCycle = (id: WeaponId): number => WEAPONS[id].attack.windup + WEAPONS[id].attack.recovery;
 const weaponReach = (id: WeaponId): number => WEAPONS[id].attack.reach;
 
@@ -135,12 +143,20 @@ export const weaponBars = (id: WeaponId): StatBar[] => [
   {
     label: "DAMAGE",
     frac: barFrac(weaponDamage(id), WEAPON_IDS.map(weaponDamage)),
-    // A burst shows its arithmetic (3×8) — the total is real but earned.
+    // A burst shows its arithmetic (3×8) — the total is real but earned;
+    // a beam deals nothing and says so.
     display: WEAPONS[id].burst
       ? `${WEAPONS[id].burst!.count}×${WEAPONS[id].stats.attack ?? PLAYER_STATS.attack}`
-      : String(weaponDamage(id)),
+      : WEAPONS[id].beam
+        ? "none"
+        : String(weaponDamage(id)),
   },
-  { label: "SPEED", frac: barFrac(-weaponCycle(id), WEAPON_IDS.map((w) => -weaponCycle(w))), display: `${weaponCycle(id).toFixed(1)}s cycle` },
+  {
+    label: "SPEED",
+    frac: barFrac(-weaponCycle(id), WEAPON_IDS.map((w) => -weaponCycle(w))),
+    // A beam has no cycle at all — "continuous" beats a lying "0.0s".
+    display: WEAPONS[id].beam ? "continuous" : `${weaponCycle(id).toFixed(1)}s cycle`,
+  },
   { label: "REACH", frac: barFrac(weaponReach(id), WEAPON_IDS.map(weaponReach)), display: `${weaponReach(id)}px` },
 ];
 
@@ -169,6 +185,13 @@ export const weaponChips = (id: WeaponId): CodexChip[] => {
     // (A shell weapon's minReach is its DEAD ZONE chip instead, above.)
     chips.push({ label: "BITE", value: `${cfg.attack.minReach}–${cfg.attack.reach}px` });
   }
+  if (cfg.beam) {
+    chips.push({
+      label: "HEAL",
+      value: `${cfg.beam.healPerSecondBase}–${cfg.beam.healPerSecondMax} hp/s · ramps while linked`,
+    });
+    chips.push({ label: "GRACE", value: `${cfg.beam.graceSeconds}s to relink` });
+  }
   if (cfg.burst) {
     chips.push({ label: "VOLLEY", value: `${cfg.burst.count} bolts · ${cfg.burst.interval}s apart` });
   }
@@ -188,7 +211,7 @@ export const weaponChips = (id: WeaponId): CodexChip[] => {
   if (cfg.projectile?.homingTurnRate) {
     chips.push({ label: "HOMING", value: `${cfg.projectile.homingTurnRate} rad/s` });
   }
-  chips.push({ label: "WINDUP", value: `${cfg.attack.windup}s` });
+  if (!cfg.beam) chips.push({ label: "WINDUP", value: `${cfg.attack.windup}s` });
   if (cfg.attack.knockback) chips.push({ label: "KNOCKBACK", value: String(cfg.attack.knockback) });
   return chips;
 };

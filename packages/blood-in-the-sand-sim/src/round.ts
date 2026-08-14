@@ -68,6 +68,7 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.burstLeft = 0;
     p.burstNext = 0;
     p.burstTargetId = null;
+    p.beam = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
     p.respawnLeft = 0; // a dummy mid-respawn is simply alive again

@@ -21,6 +21,7 @@ export const WEAPON_HAPTIC: Record<WeaponId, HapticWeight> = {
   fang: "soft", // the lightest touch in the game — a nick, not a blow
   scorpion: "light", // the bow's class — three quick taps, not one thud
   bombard: "medium", // a blast landing is a thump, whoever it caught
+  lifeline: "soft", // never fires — the lifeline deals no damage at all
 };
 
 const IMPACT: Record<HapticWeight, Haptics.ImpactFeedbackStyle> = {

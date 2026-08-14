@@ -1,8 +1,9 @@
 # Blood in the Sand — Guided Loadout Flow ("The Arming")
 
-Status: **BUILT 2026-07-15 (protocol v9)** — on-device polish pass owed ·
+Status: **BUILT 2026-07-15 (protocol v9)** — pick surface REWORKED to the war
+table 2026-08-14 (see "The wizard" below); on-device polish pass owed ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-15 ·
+Last decided: 2026-08-14 ·
 Supersedes: [pvp-pick-ceremony](./pvp-pick-ceremony.md) (draft → reveal → counterpick)
 
 > **As built (2026-07-15):** the arming countdown lives IN the sim
@@ -14,8 +15,8 @@ Supersedes: [pvp-pick-ceremony](./pvp-pick-ceremony.md) (draft → reveal → co
 > DISARMS everyone** (weapon/hand clear at matchEnd → lobby), so an instant
 > auto-rematch is impossible by construction and a rematch re-runs the wizard —
 > run-it-back makes that one tap. RoomScreen = the wizard (local optimistic
-> picks, idempotent sends; carousel via Animated.ScrollView interpolation;
-> measured fly-to-socket) + lobby + countdown veil (the full-screen armed
+> picks, idempotent sends; war-table grid + animated codex sheet since
+> 2026-08-14; measured fly-to-socket) + lobby + countdown veil (the full-screen armed
 > splash was CUT 2026-07-17 — repeated ceremony; haptic + confirm sound + the
 > lobby's arsenal box mark the moment); a mid-lobby single-slot edit returns
 > straight to the lobby. The
@@ -56,18 +57,29 @@ loadout — no empty picks, no random fills in the happy path, no lobby-holding.
 - **Triggers immediately on joining the room (Tom, 2026-07-15)** — you're
   *doing* something the instant you're in; the compact roster ticker keeps
   the party-filling-up visible while you arm.
-- **One decision per screen.** Full-bleed step; swipeable snap-to card
-  carousel. The focused card shows the codex content we already have
-  (`loadout/catalogue.ts`): big icon, flavour quote, stat bars / number chips.
-  Same copy rules as ever — everything derived from sim config, nothing that
-  rots.
-- **Category gates keep the carousel thumb-sized (Tom, 2026-07-15).** The
-  weapon step is one carousel. Each ability step opens on a **category
-  choice** (offensive / defensive / support — each gate shows a mini icon
-  preview of what's inside), then a carousel *within* that category — so the
-  carousel never outgrows a swipe as the roster grows. Everything lists
-  **alphabetically** (weapons too); a revisited socket opens straight inside
-  its pick's category.
+- **One decision per screen — on a war table, not a carousel (Tom,
+  2026-08-14; Claude Design concept B, "Blood in the Sand UI" project).**
+  Each step is a full-bleed **tile grid of every option at once**: icon,
+  name, gold charge pips + cooldown (pips lead — the round budget matters
+  more than the CD to most players, Tom 2026-08-14), a category-coloured
+  top-edge glow. Tap a tile → its **codex
+  sheet** springs up from the bottom (the full `loadout/catalogue.ts`
+  content: quote, hint, stat bars / number chips) with CHOOSE; tap the scrim
+  to keep browsing. Same copy rules as ever — everything derived from sim
+  config, nothing that rots. The full grid is deliberate shelf-appeal: a new
+  player's first screen says "look how much game there is".
+  *(Supersedes the swipe carousel of 2026-07-15 — one-card-at-a-time swiping
+  stopped scaling past ~8 options, and comparing non-adjacent options meant
+  blind shuttling.)*
+- **Categories are filter pills, never places (Tom, 2026-08-14).** Ability
+  steps carry an always-visible pill row — ALL / OFFENSIVE / DEFENSIVE /
+  SUPPORT, with live counts; ALL is home and the default, and a pill narrows
+  the grid in place. There is **no drill-in navigation and nothing to back
+  out of**. *(Supersedes the category gates of 2026-07-15: testers inside a
+  category couldn't find the small "‹ ALL CATEGORIES" caption — the
+  drill-in was the bug, not the link styling.)* Grid order stays
+  **alphabetical within category**, ALL grouped off → def → sup so the tile
+  colours cluster; the current pick's tile is gold-ringed with a ✓.
 - **Stat bars are roster-normalised (Tom, 2026-07-15):** the roster's best
   value fills the bar, the worst floors at ~20% (never empty), and the scale
   re-derives itself as weapons join the roster. Built into

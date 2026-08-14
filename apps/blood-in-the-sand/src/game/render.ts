@@ -162,6 +162,11 @@ const C_SHELL_GLINT = Skia.Color("#8a7f70");
 const C_SINKHOLE = Skia.Color("#4a3520");
 // The titan's pressed-into-the-sand contact shadow.
 const C_TITAN_SHADOW = Skia.Color("#241b10");
+// The lifeline's heal thread: warm gold, apart from the heal-number green
+// (a beam is a held act; the number is its result). Beads run brighter,
+// near bone-white — sparks of life on the wire.
+const C_BEAM_HEAL = Skia.Color("#e8c164");
+const C_BEAM_BEAD = Skia.Color("#f7e9c3");
 // Straw Man's forced lock — straw yellow, so the aim-hijack reads as an effect.
 const C_RING_TAUNT = Skia.Color("#d9b34d");
 // Body-effect ring for Mirror Guard (Ironhide gets a full shield bubble).
@@ -1710,6 +1715,98 @@ const drawProjectiles = (
   }
 };
 
+/** The Lifeline's beams (bits-store-arms.md; visual pass Tom 2026-08-14):
+ * a living golden THREAD, not a laser. Three reads in one drawing:
+ *  - the thread WAVES like a slack rope and TIGHTENS as the link ramps —
+ *    a fresh link is a loose lifeline tossed across the sand, a held one
+ *    is a taut humming wire (sag amplitude shrinks with beamLink);
+ *  - beads of light stream ALONG it toward the patient — life flowing;
+ *  - the patient wears a soft breathing halo where the thread attaches.
+ * All phases are constant-rate off nowMs (no changing-speed division —
+ * the sinkhole strobe lesson); beamLink is monotonic, so the tighten
+ * never jumps. Targets are allies only — one warm palette. */
+const drawBeams = (
+  canvas: SkCanvas,
+  players: readonly PlayerSnapshot[],
+  nowMs: number,
+): void => {
+  for (const p of players) {
+    if (!p.alive || p.beamTargetId === null) continue;
+    const t = players.find((q) => q.id === p.beamTargetId);
+    if (!t || !t.alive) continue;
+    // Ramp normalized to the CONFIG's time-to-full-heal (Tom's 12/s tune:
+    // 9 held seconds) — the drawing saturates exactly when the numbers do.
+    const cfg = WEAPONS[p.weapon ?? "blade"].beam;
+    const rampT = cfg
+      ? (cfg.healPerSecondMax - cfg.healPerSecondBase) / cfg.healPerSecondRamp
+      : 5;
+    const ramp = Math.min(1, p.beamLink / rampT);
+    // Flow phase: the beads/wave SPEED UP with the ramp (Tom, 2026-08-14 —
+    // full power must look fast), so the phase is the closed-form INTEGRAL
+    // of the speed curve over the link clock — never time × a changing
+    // speed (the sinkhole strobe lesson). 1.1 trips/s fresh → 3 at full.
+    const S0 = 1.1;
+    const S1 = 3.0;
+    const link = p.beamLink;
+    const flow =
+      link <= rampT
+        ? S0 * link + ((S1 - S0) * link * link) / (2 * rampT)
+        : S0 * rampT + ((S1 - S0) * rampT) / 2 + S1 * (link - rampT);
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    // The waving thread: perpendicular sine offsets travelling toward the
+    // patient, damped to zero at both anchors. Loose rope → taut wire with
+    // the ramp; the wave itself rides the flow phase, so it hurries too.
+    const amp = (1 - ramp) * 9 + 1.5;
+    const path = Skia.PathBuilder.Make();
+    path.moveTo(p.x, p.y);
+    const SEGS = 14;
+    for (let i = 1; i <= SEGS; i++) {
+      const u = i / SEGS;
+      const damp = Math.sin(Math.PI * u); // pinned at both ends
+      const wave = Math.sin(u * Math.PI * 3 - flow * Math.PI * 2 + p.id);
+      const off = wave * amp * damp;
+      path.lineTo(p.x + dx * u + nx * off, p.y + dy * u + ny * off);
+    }
+    const thread = path.detach();
+    stroke.setStrokeCap(StrokeCap.Round);
+    stroke.setStrokeJoin(StrokeJoin.Round);
+    // Glow → core, both swelling HARD with the ramp: a fresh link is a
+    // thread, a full one is a river of light (glow 7 → 16, core 1.8 → 4.5).
+    stroke.setColor(C_BEAM_HEAL);
+    stroke.setAlphaf(0.12 + 0.26 * ramp);
+    stroke.setStrokeWidth(7 + 9 * ramp);
+    canvas.drawPath(thread, stroke);
+    stroke.setAlphaf(0.5 + 0.45 * ramp);
+    stroke.setStrokeWidth(1.8 + 2.7 * ramp);
+    canvas.drawPath(thread, stroke);
+    // Beads of life streaming toward the patient — more, bigger, and
+    // faster as the link ramps (count 3 → 5 rides the same flow phase).
+    fill.setColor(C_BEAM_BEAD);
+    const beads = 3 + Math.round(2 * ramp);
+    for (let b = 0; b < beads; b++) {
+      const u = (((flow + b / beads + p.id * 0.37) % 1) + 1) % 1;
+      const damp = Math.sin(Math.PI * u);
+      const wave = Math.sin(u * Math.PI * 3 - flow * Math.PI * 2 + p.id);
+      const off = wave * amp * damp;
+      fill.setAlphaf(0.9 * damp);
+      canvas.drawCircle(p.x + dx * u + nx * off, p.y + dy * u + ny * off, 2.6 + 2.2 * ramp, fill);
+    }
+    // The patient's halo: a soft breathing ring at the attach point,
+    // swelling with the ramp like everything else.
+    const breath = 0.5 + 0.5 * Math.sin((nowMs / 700) * Math.PI * 2 + t.id);
+    stroke.setColor(C_BEAM_HEAL);
+    stroke.setAlphaf((0.25 + 0.35 * ramp) * (0.6 + 0.4 * breath));
+    stroke.setStrokeWidth(2 + 1.5 * ramp);
+    canvas.drawCircle(t.x, t.y, 24 + 2.5 * breath + 6 * ramp, stroke);
+    fill.setAlphaf(1);
+    stroke.setAlphaf(1);
+  }
+};
+
 /** Bombard shells (bits-store-arms.md): the landing ring is the WHOLE
  * telegraph and renders for BOTH teams at the blast's true size — it firms
  * up as the shell falls (an unmarked artillery hit would read as cheating).
@@ -1985,6 +2082,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
 
     drawProjectiles(canvas, view.projectiles);
     drawShells(canvas, view.shells);
+    drawBeams(canvas, view.players, r.nowMs);
     drawReelChains(canvas, view.players);
     drawFlyingBlood(canvas, r.blood.flying, r.nowMs);
     // The storm's swirling body sits OVER bodies and shots — it obscures.

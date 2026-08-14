@@ -228,6 +228,12 @@ export const ICON_SUBJECTS: Record<string, string> = {
     "a toppled iron cauldron pouring thick black tar across sand, the spill spreading into a glossy splattered pool with fat sticky drips",
   "titans-draught":
     "a rough-hewn stone drinking horn overflowing with golden liquid, oversized fists' worth of cracks glowing up the horn from a giant's grip",
+  // Re-briefed 2026-08-14 (Tom: the reliquary-CANNON read as artillery,
+  // not aid) — the anchor object is now unambiguously a healer's tool:
+  // lantern body, linen wrap, radiance. The thread stays (it IS the
+  // weapon's in-game silhouette).
+  lifeline:
+    "an ornate bronze healer's lantern wound with white linen bandage, held aloft at a dynamic diagonal, a taut golden thread of mending light streaming from its glowing heart",
   sandtrap: "a spiked iron trap half-buried in a small mound of sand, one blade glinting above the surface",
   tremor: "a boot stamping down with cracked earth and two radiating shockwave rings",
   harpoon: "a barbed iron hook trailing a taut chain, mid-flight",

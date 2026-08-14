@@ -165,6 +165,11 @@ const weaponRounds = [
     { threshold: 50, title: "The Long Arm", description: "Win 50 rounds wielding the Bombard." },
     { threshold: 200, title: "Rain of Ruin", description: "Win 200 rounds wielding the Bombard.", rewards: [{ kind: "title" }] },
   ]),
+  ...weaponChain("lifeline", 8, [
+    { threshold: 5, title: "Field Medicine", description: "Win 5 rounds wielding the Lifeline." },
+    { threshold: 50, title: "The Thin Gold Thread", description: "Win 50 rounds wielding the Lifeline." },
+    { threshold: 200, title: "Death's Paperwork", description: "Win 200 rounds wielding the Lifeline.", rewards: [{ kind: "title" }] },
+  ]),
 ];
 
 /** Per-ability cast chains — WEST ribs, clustered BY CATEGORY (offensive /
@@ -304,10 +309,10 @@ const glory = milestoneChain<MatchSummary>({
   counter: COUNTERS.gloryEarned,
   icon: "deed-glory",
   parent: FIRST_MATCH.id,
-  // Shifted down per new weapon row above (745 → … → 1205 at the bombard,
+  // Shifted down per new weapon row above (latest: 1320 at the lifeline,
   // 2026-08-10) — keeps the ~215px inter-cluster air. M3's layout helper
   // owns these numbers eventually.
-  origin: { x: 140, y: 1205 },
+  origin: { x: 140, y: 1320 },
   step: { x: 115, y: 0 },
   tiers: [
     { threshold: 100, title: "I can go the distance", description: "Earn 100 lifetime Glory from ranked matches" },
@@ -344,7 +349,7 @@ const healing = milestoneChain<MatchSummary>({
   counter: COUNTERS.healingDone,
   icon: "deed-healing",
   parent: FIRST_MATCH.id,
-  origin: { x: 140, y: 1420 },
+  origin: { x: 140, y: 1535 },
   step: { x: 115, y: 0 },
   tiers: [
     { threshold: 500, title: "Medic", description: "Restore 500 health.", rewards: [{ kind: "title" }]  },
@@ -383,7 +388,7 @@ const FEATS: BitsAchievementDef[] = [
     description: "Restore 200 health in a single ranked match.",
     icon: "deed-lifeblood",
     parent: healing[0]!.id,
-    pos: { x: 45, y: 1535 },
+    pos: { x: 45, y: 1650 },
     trigger: {
       kind: "feat",
       test: (s, p) => (s.stats[p]?.healingDealt ?? 0) >= 200,

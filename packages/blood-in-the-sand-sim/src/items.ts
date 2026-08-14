@@ -30,7 +30,12 @@ export const DEED_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([]);
 /** Writ-purchasable store items (bits-store.md) — stocked by the pre-launch
  * content drops (bits-store-arms.md); a roster id lives in exactly one gate
  * kind, never both. */
-export const WRIT_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>(["fang", "scorpion", "bombard"]);
+export const WRIT_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>([
+  "fang",
+  "scorpion",
+  "bombard",
+  "lifeline",
+]);
 export const WRIT_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
   "sinkhole",
   "tar-pit",
@@ -65,6 +70,7 @@ export const ITEM_NAMES: Record<string, string> = {
   "weapon:fang": "Fang",
   "weapon:scorpion": "Scorpion",
   "weapon:bombard": "Bombard",
+  "weapon:lifeline": "Lifeline",
   "ability:sinkhole": "Sinkhole",
   "ability:tar-pit": "Tar Pit",
   "ability:titans-draught": "Titan's Draught",

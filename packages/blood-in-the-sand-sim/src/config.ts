@@ -68,7 +68,8 @@ export type WeaponId =
   | "trident"
   | "fang"
   | "scorpion"
-  | "bombard";
+  | "bombard"
+  | "lifeline";
 export const WEAPON_IDS: readonly WeaponId[] = [
   "blade",
   "bow",
@@ -78,6 +79,7 @@ export const WEAPON_IDS: readonly WeaponId[] = [
   "fang",
   "scorpion",
   "bombard",
+  "lifeline",
 ];
 
 /** The FREE roster — what bots and forceStart's random-fill draft from.
@@ -149,6 +151,41 @@ export interface ShellConfig {
   knockback: number;
 }
 
+/** A continuous beam weapon (the Lifeline — bits-store-arms.md): no attack
+ * cycle at all — a maintained LINK (core combat/beam.ts) that re-nominates
+ * its target every tick and heals on the interval. The beam targets
+ * ALLIES OR NOTHING — it touches no enemy, ever (Tom, 2026-08-14: the
+ * original enemy-snap hijack was cut after play — a heal interrupt was
+ * too punishing on an already-niche weapon). Target: the MOST-WOUNDED
+ * wounded ally in range — sticky once linked (an eligible current patient
+ * is never dropped for a newly more-wounded one; re-targeting would reset
+ * the ramp every time the tide shifted and the ramp would never mean
+ * anything). The heal RAMPS with unbroken link time and ANY break resets
+ * it — range, LOS, sandstorm (either end), or the patient topping off.
+ * Counterplay is the healer's BODY: kill them, pressure them, smoke them
+ * — never the beam itself. No self-heal (in 1v1 the beam links nothing —
+ * a codex-honest loadout choice). Mirror Guard reflects projectiles, not
+ * links — irrelevant anyway: the beam carries nothing to reflect. */
+export interface BeamWeaponConfig {
+  /** Heal-link reach, px to the target's rim. */
+  range: number;
+  /** Seconds between heal ticks. */
+  tickInterval: number;
+  /** The link's forgiveness (Tom, 2026-08-14): a broken link — range, a
+   * clipped pillar, a smoke crossing — holds its RAMP in memory this long
+   * and resumes intact if the same patient re-qualifies in time (no
+   * healing during the gap; the ramp is frozen, not growing). Past it,
+   * or if a different ally needs the beam meanwhile, the ramp is gone —
+   * a nine-second climb shouldn't die to a half-second pillar clip, but
+   * memory never beats a present patient. */
+  graceSeconds: number;
+  /** Heal rate at link start / added per unbroken second / cap, hp per
+   * second (per-tick amounts derive: rate × interval, rounded). */
+  healPerSecondBase: number;
+  healPerSecondRamp: number;
+  healPerSecondMax: number;
+}
+
 /** A multi-bolt volley per attack cycle (the Scorpion — bits-store-arms.md):
  * the struck instant looses bolt 1, then `count - 1` follow-ups fire on this
  * interval DURING recovery, each re-aimed at the mark's position at its own
@@ -174,6 +211,7 @@ export interface WeaponConfig {
   projectile?: WeaponProjectileConfig;
   burst?: BurstConfig;
   shell?: ShellConfig;
+  beam?: BeamWeaponConfig;
 }
 
 export const WEAPONS: Record<WeaponId, WeaponConfig> = {
@@ -386,6 +424,30 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     stats: { attack: 22 },
     engagementRadius: 360 + 20,
     shell: { flightMin: 0.55, flightMax: 0.9, blastRadius: 120, damage: 22, knockback: 400 },
+  },
+  // The healer's gun (bits-store-arms.md launch shelf item 7, WRIT — the
+  // last of the seven): the game's first support WEAPON, and the first
+  // beam. See BeamWeaponConfig above for the whole rule set. Numbers
+  // (Tom's tune, 2026-08-14): heal 3/s ramping +1/s to a 12/s cap — NINE
+  // held seconds to full. Passes Blood Font parity (8/s) at 5s and ends
+  // half again beyond it: a protected healer OUT-heals the font, on
+  // purpose — the font is fire-and-forget, this is the longest held
+  // commitment in the game, and the client renders the full-power state
+  // unmistakably. Deals NO damage, ever.
+  // windup/recovery 0 are dead fields — beams have no cycle.
+  lifeline: {
+    name: "Lifeline",
+    attack: { shape: "beam", school: "magic", reach: 300, windup: 0, recovery: 0, knockback: 0 },
+    stats: {},
+    engagementRadius: 300 + 20,
+    beam: {
+      range: 300,
+      tickInterval: 0.5,
+      graceSeconds: 1.5,
+      healPerSecondBase: 3,
+      healPerSecondRamp: 1,
+      healPerSecondMax: 12,
+    },
   },
 };
 

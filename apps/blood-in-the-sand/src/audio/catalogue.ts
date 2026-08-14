@@ -90,6 +90,10 @@ const STRIKE_VARIANTS: Record<WeaponId, SoundBank> = {
   // UNDER the detonate boom (the shell reuses the sandtrap's detonate
   // event), so keep it a short bodily thump, not a second explosion.
   bombard: { clips: ["hit_bombard_1"] },
+  // The lifeline deals NO damage (the snap was cut, Tom 2026-08-14) — no
+  // hit event ever carries this weapon, so the bank is deliberately empty.
+  // Its audio IS the heal event's own tick (heal_tick_1), already wired.
+  lifeline: { clips: [] },
 };
 
 /** Per-weapon RELEASE banks (the bow twang / staff cast whoosh), played on the

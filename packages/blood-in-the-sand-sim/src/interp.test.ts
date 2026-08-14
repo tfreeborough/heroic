@@ -25,6 +25,8 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   bleedLeft: 0,
   poisonLeft: 0,
   poisonStacks: 0,
+  beamTargetId: null,
+  beamLink: 0,
   tauntLeft: 0,
   abilities: [],
   reeling: null,

@@ -9,8 +9,13 @@
  */
 import type { FlightId } from "./flight";
 
-/** What geometry the hit uses: a melee cone or a travelling projectile. */
-export type AttackShape = "arc" | "projectile";
+/** What geometry the hit uses: a melee cone, a travelling projectile, or a
+ * continuous beam. A beam has NO cycle — no windup, strike, or recovery;
+ * stepAttackCycle is never called for it. Its lifecycle is the link
+ * (combat/beam.ts): a maintained connection to one target that ticks on an
+ * interval while eligibility holds. Target selection and tick effects are
+ * the game's to define — core owns only the link/tick clockwork. */
+export type AttackShape = "arc" | "projectile" | "beam";
 
 /** Where the numbers come from: physical reads strength/agility, magic reads intellect. */
 export type AttackSchool = "physical" | "magic";

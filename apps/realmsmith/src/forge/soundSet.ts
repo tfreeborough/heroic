@@ -96,7 +96,9 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
 
 /** Combat first, then abilities (derived), then the flow/UI statics. */
 export const buildSoundSet = (): SoundSetEntry[] => {
-  const weaponHits = WEAPON_IDS.map((id) =>
+  // Beam weapons deal no damage — no hit event ever carries them, so no
+  // impact bank exists to forge (the lifeline's audio is the heal tick).
+  const weaponHits = WEAPON_IDS.filter((id) => WEAPONS[id].attack.shape !== "beam").map((id) =>
     entry(`hit_${id}`, `${WEAPONS[id].name} — impact`, "combat"),
   );
   // Ranged weapons also get a RELEASE bank — the bow twang / staff whoosh /

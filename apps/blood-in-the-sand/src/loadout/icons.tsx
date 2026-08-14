@@ -27,6 +27,8 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "scorpion": require("../../assets/icons/scorpion.png"),
   // Forge art owed — the sandtrap's charge stands in until the bombard lands.
   "bombard": require("../../assets/icons/bombard.png"),
+  // Forge art owed — the blood font's pool stands in until the lifeline lands.
+  "lifeline": require("../../assets/icons/lifeline.png"),
   // abilities
   "sandtrap": require("../../assets/icons/sandtrap.png"),
   "tremor": require("../../assets/icons/tremor.png"),

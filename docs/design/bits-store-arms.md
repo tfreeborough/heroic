@@ -1,8 +1,11 @@
 # BITS — The Writ Shelf: launch arms & the drop pool
 
-Status: **designed 2026-08-09 · Fang (v21) + Scorpion (v22) BUILT 08-09,
-Bombard (v23) + Sinkhole (v24) + Tar Pit (v25, redesigned to a TRAIL)
-BUILT 08-10, Titan's Draught (v26) BUILT 08-11 — only the Lifeline owed** ·
+Status: **ALL SEVEN BUILT — the launch shelf is stocked.** Fang (v21) +
+Scorpion (v22) 08-09 · Bombard (v23) + Sinkhole (v24) + Tar Pit (v25,
+redesigned to a TRAIL) 08-10 · Titan's Draught (v26) 08-11 · Lifeline
+(v27, the core beam shape) 08-14. Owed across the set: forge art/SFX per
+item where flagged, on-device tuning passes, and the combined bot pass
+(shell-dodge + sinkhole/tar zone-awareness + healer-priority observation) ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-09 ·
 Companion to [bits-store.md](./bits-store.md) (the Writ economy these stock),
@@ -193,9 +196,23 @@ silences the healing.
   never a real gun). Otherwise → the **most-wounded ally** in beamRange 300
   (most-wounded, not nearest — that's the healer fantasy).
 - The ramp: heal starts at 3/s, +1/s per full second of unbroken link,
-  capped at 8/s (Blood Font parity). ANY break — range, ally topped off, an
-  enemy forcing the snap — resets the ramp to base. Protecting the link is
-  the team's job; breaking it is the dive's whole purpose.
+  capped at **12/s after NINE held seconds** (Tom's tune 2026-08-14, up
+  from the original 8/s font-parity cap: it passes the Blood Font at 5s
+  and ends half again beyond it — a protected healer OUT-heals the font,
+  deliberately; the font is fire-and-forget, this is the longest held
+  commitment in the game). ANY break — range, LOS, sandstorm, the ally
+  topping off — resets the ramp to base. Protecting the link is the
+  team's job; breaking it is the dive's whole purpose. At full power the
+  beam is unmistakable: the thread swells from a wire to a river of
+  light and its flow visibly accelerates (widths, bead count/size, and
+  flow speed all scale with the ramp; the flow phase is the closed-form
+  integral of the speed curve — the sinkhole strobe lesson). One
+  forgiveness (Tom, same day): a broken link holds its ramp in a **1.5s
+  GRACE** — frozen, tickless, undrawn — and resumes intact if the same
+  patient re-qualifies in time (a nine-second climb shouldn't die to a
+  half-second pillar clip); a different wounded ally mid-grace takes the
+  beam fresh instead — memory never beats a present patient. Grace lives
+  in core's stepBeamLink (any future beam inherits it).
 - 1v1: degrades to a feeble damage beam by design — a loadout choice, not a
   trap (free practice use means nobody pays to discover this).
 - Monetisation posture: a support *role*, not a stat advantage — sits inside
@@ -204,6 +221,35 @@ silences the healing.
   focus-fire already prefers weakest — a beam-healed target stops being
   weakest, which naturally drags bot attention around. Watch whether an
   explicit healer-priority rule is needed; do nothing until observed.
+- **BUILT 2026-08-14** (protocol v27) — the last shelf item, and the
+  engine lift it promised: core gains the `beam` attack shape +
+  `combat/beam.ts` (BeamState/stepBeamLink — a maintained LINK that
+  accumulates unbroken seconds and ticks on an interval; ANY change of
+  nomination is a fresh link, which is what makes ramp-over-link effects
+  mean something; epsilon-tolerant tick clock). Sim: no attack cycle at
+  all — stepLifelineBeam nominates the most-wounded wounded ally in
+  range per tick (LOS + sandstorm rules; STICKY on the current patient
+  so a shifting tide doesn't reset the ramp), heal per tick =
+  round(min(8, 3 + link) × 0.5) capped by missing hp, heals ride the
+  existing heal event with casterId = healer (the healing deed chain
+  finally has a team engine). **The ENEMY SNAP was CUT on Tom's play
+  pass, same day** — the original design's proximity hijack (nearest
+  enemy inside 160 steals the beam, token 2/s sting) read as too
+  punishing on an already-niche weapon in play. The beam now targets
+  **allies or nothing** and deals no damage, ever: counterplay is the
+  healer's BODY (kill, pressure, smoke), never the beam. Fallout of the
+  cut: no strike bank exists (heal audio = the heal event's own tick;
+  soundSet excludes beam weapons from hit_ derivation), DAMAGE bar reads
+  "none", and 1v1 links literally nothing (codex says so plainly).
+  Snapshot: `beamTargetId` + `beamLink`; visual pass (Tom, same day): a
+  living golden THREAD, not a laser — it waves like a slack rope and
+  TIGHTENS as the link ramps (sag → taut wire), bone-bright beads stream
+  along it toward the patient, and the patient wears a soft breathing
+  halo; all constant-rate phases (the sinkhole strobe lesson). Codex:
+  HEAL chip, DAMAGE "none", SPEED "continuous". Deed chain (Field
+  Medicine / The Thin Gold Thread / Death's Paperwork, placeholders).
+  Owed: forge icon (blood font stands in; subject = reliquary-cannon),
+  on-device pass, and the standing healer-priority bot observation.
 
 ---
 

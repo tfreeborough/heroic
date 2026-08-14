@@ -5,11 +5,15 @@
  * seat is armed. Nobody presses START; the host's only control is the
  * force-start backstop for AFK stragglers.
  *
- * Layout per approved mock: roster ticker (who's armed — never WHAT they
- * picked) · socket strip (◆①②③, tap to revisit) · snap carousel with codex
- * content (ability steps open on a category gate) · CHOOSE → stamp + the icon
- * flies into its socket → auto-advance → lobby (the full-screen "YOU ARE
- * ARMED" splash was cut 2026-07-17 — pure ceremony by the tenth arming).
+ * Layout: roster ticker (who's armed — never WHAT they picked) · socket strip
+ * (◆①②③, the fly target) · the WAR TABLE takeover (concept B, Claude Design
+ * 2026-08-14): every option in one tile grid — category filter pills on
+ * ability steps, never drill-in navigation (the old gates' "‹ back" link was
+ * invisible to testers) — tap a tile for its codex sheet · CHOOSE → stamp +
+ * the icon flies into its socket → auto-advance → lobby (the full-screen
+ * "YOU ARE ARMED" splash was cut 2026-07-17 — pure ceremony by the tenth
+ * arming; the snap carousel was cut 2026-08-14 — one-card-at-a-time swiping
+ * stopped scaling past ~8 options per list).
  * Returning players get SAME ARMS (last loadout, one tap; CHOOSE ANEW clears).
  *
  * The wizard owns its picks LOCALLY and sends the full state on every choose
@@ -31,7 +35,7 @@ import {
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import { Canvas, Path, Skia } from "@shopify/react-native-skia";
+import { Canvas, LinearGradient, Path, RoundedRect, Skia, vec } from "@shopify/react-native-skia";
 import {
   ABILITIES,
   FORCE_START_GRACE_SECONDS,
@@ -87,13 +91,15 @@ const BUTTON_POSITIONS =
     ? ["ONLY"]
     : ["TOP", ...Array.from({ length: LOADOUT_ABILITY_COUNT - 2 }, () => "MIDDLE"), "BOTTOM"];
 const STEP_TITLES = ["CHOOSE YOUR WEAPON", ...BUTTON_POSITIONS.map((p) => `YOUR ${p} BUTTON`)];
-const CATEGORY_DESC: Record<AbilityCategory, string> = {
-  offensive: "pressure, damage, and drags",
-  defensive: "escapes, armour, misdirection",
-  support: "auras and zones for your team",
-};
-const CARD_W = 250;
-const CARD_GAP = 14;
+const CATEGORIES: AbilityCategory[] = ["offensive", "defensive", "support"];
+/** War-table grid geometry: 3 tiles per row inside the takeover's padding. */
+const GRID_COLS = 3;
+const GRID_PAD = 24;
+const GRID_GAP = 9;
+/** The tile's category glow: a hairline at the very top edge, then a soft
+ * fade — total height of the Skia canvas that draws both. */
+const TILE_BAND_H = 22;
+const TILE_BAND_LINE = 2;
 /** Below this window height (iPhone SE = 667pt) the lobby renders COMPACT:
  * tighter rows/headers, a smaller socket strip, and multiple open seats
  * collapsed into one row — a full 4v4 roster otherwise overflows. */
@@ -116,7 +122,6 @@ interface Picks {
 
 interface WizardState {
   step: number; // 0 = weapon, 1..LOADOUT_ABILITY_COUNT = abilities
-  cat: AbilityCategory | null; // ability steps: null = the category gate
   /** true = a single-slot edit from the lobby (returns straight there). */
   edit: boolean;
 }
@@ -162,7 +167,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
   const [wizard, setWizard] = useState<WizardState | null>(() =>
     client.myWeapon !== null && client.myAbilities.length === LOADOUT_ABILITY_COUNT
       ? null
-      : { step: 0, cat: null, edit: false },
+      : { step: 0, edit: false },
   );
   const [rib, setRib] = useState<SavedLoadout | null>(null);
   // Bumped each time the player BECOMES armed — the lobby's arsenal box glints
@@ -177,20 +182,20 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
   const socketRefs = useRef<(View | null)[]>(SLOT_INDICES.map(() => null));
   const focusedIconRef = useRef<View | null>(null);
 
-  // The card picker is a full-screen TAKEOVER above the ticker/sockets (Tom
-  // 2026-07-17 — in-flow cards squished small screens). On CHOOSE it fades
-  // out so the flying icon lands on a VISIBLE socket; a fresh carousel
-  // (step/category change) resets the fade.
-  const pickerOpen = wizard !== null && (wizard.step === 0 || wizard.cat !== null);
+  // The war table is a full-screen TAKEOVER above the ticker/sockets (Tom
+  // 2026-07-17 — in-flow content squished small screens). On CHOOSE it fades
+  // out so the flying icon lands on a VISIBLE socket; a fresh step resets
+  // the fade. (`wizard?.step` is undefined between walks, so re-opening the
+  // same slot from the lobby still fires the reset.)
   const pickerFade = useRef(new Animated.Value(1)).current;
   const [pickerFading, setPickerFading] = useState(false);
   useEffect(() => {
-    if (pickerOpen) {
+    if (wizard !== null) {
       pickerFade.setValue(1);
       setPickerFading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the picker identity
-  }, [wizard?.step, wizard?.cat]);
+  }, [wizard?.step]);
 
   // The SAME ARMS offer — once, on entering an unarmed lobby.
   const startedUnarmed = useRef(wizard !== null);
@@ -291,18 +296,13 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
       // scratch, so there is no prefilled walk): next empty slot, or armed.
       const nextEmpty = SLOT_INDICES.find((i) => !slotComplete(after, i));
       if (nextEmpty !== undefined) {
-        setWizard({ step: nextEmpty, cat: null, edit: false });
+        setWizard({ step: nextEmpty, edit: false });
       } else {
         armedNow(after);
       }
     },
     [armedNow],
   );
-
-  const catOfSlot = (p: Picks, step: number): AbilityCategory | null => {
-    const id = step > 0 ? p.hand[step - 1] : undefined;
-    return id ? categoryOf(id) : null;
-  };
 
   // Choosing an ability plays its actual cast sound (harpoon brings its chain
   // whip along, as in-game) — the pick doubles as an ear-training moment, so
@@ -384,7 +384,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
 
   const jumpToSlot = (i: number, edit: boolean): void => {
     playSound("uiTap");
-    setWizard({ step: i, cat: catOfSlot(picks, i), edit });
+    setWizard({ step: i, edit });
   };
 
   const askLeave = useCallback((): void => {
@@ -426,7 +426,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
     playSound("uiTap");
     setPicks({ weapon: null, hand: [] });
     setRib(null);
-    setWizard({ step: 0, cat: null, edit: false });
+    setWizard({ step: 0, edit: false });
   };
 
   if (!welcome) return null;
@@ -488,30 +488,6 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
           {timer > 0 ? (
             <Text style={styles.wizardCountdown}>{`MATCH STARTS IN ${timerCeil} — picks stay live`}</Text>
           ) : null}
-          {!pickerOpen ? (
-            // The category gates render in-flow, under the socket strip; the
-            // card carousel itself is the full-screen takeover further down.
-            <WizardStep
-              key={`${wizard.step}:${wizard.cat ?? "-"}`}
-              wizard={wizard}
-              picks={picks}
-              practice={client.practice === true}
-              screenW={screenW}
-              focusedIconRef={focusedIconRef}
-              onGate={(cat) => {
-                unlockAudio();
-                playSound("uiTap");
-                playStrikeHaptic("soft");
-                setWizard({ ...wizard, cat });
-              }}
-              onBackToGates={() => {
-                playSound("uiBack");
-                setWizard({ ...wizard, cat: null });
-              }}
-              onChoose={(id) => choose(wizard, id)}
-              onClose={closeWizard}
-            />
-          ) : null}
         </>
       ) : (
         <LobbyView
@@ -538,11 +514,11 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
       )}
       </View>
 
-      {/* The card picker: a full-screen takeover above the ticker/sockets so
-          the cards get the whole viewport (in-flow they squished small
+      {/* The war table: a full-screen takeover above the ticker/sockets so
+          the grid gets the whole viewport (in-flow it squished small
           screens). Fades out on CHOOSE while the icon flies to its socket;
           rib/fly render later, so they stay above it. */}
-      {wizard !== null && pickerOpen ? (
+      {wizard !== null ? (
         <Animated.View
           pointerEvents={pickerFading ? "none" : "auto"}
           style={[
@@ -554,17 +530,12 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
             <Text style={styles.wizardCountdown}>{`MATCH STARTS IN ${timerCeil} — picks stay live`}</Text>
           ) : null}
           <WizardStep
-            key={`${wizard.step}:${wizard.cat ?? "-"}`}
+            key={wizard.step}
             wizard={wizard}
             picks={picks}
             practice={client.practice === true}
             screenW={screenW}
             focusedIconRef={focusedIconRef}
-            onGate={() => {}}
-            onBackToGates={() => {
-              playSound("uiBack");
-              setWizard({ ...wizard, cat: null });
-            }}
             onChoose={(id) => choose(wizard, id)}
             onClose={closeWizard}
           />
@@ -783,28 +754,36 @@ const SocketStrip = ({ picks, current, landed, refs, onTap, size = 72, separated
   );
 };
 
-// ── Wizard step (gates or carousel) ─────────────────────────────────────────
+// ── Wizard step (the war table) ─────────────────────────────────────────────
 
 interface WizardStepProps {
   wizard: WizardState;
   picks: Picks;
-  /** Practice unlocks writ-gated weapons in the carousel (try-before-buy). */
+  /** Practice unlocks writ-gated items in the grid (try-before-buy). */
   practice: boolean;
   screenW: number;
   focusedIconRef: React.MutableRefObject<View | null>;
-  onGate: (cat: AbilityCategory) => void;
-  onBackToGates: () => void;
   onChoose: (id: IconId) => void;
   /** The step ✕: dismisses the wizard back to the lobby — leaving the ROOM
    * lives on the lobby/rib/veil ✕, behind the confirm. */
   onClose: () => void;
 }
 
-const WizardStep = (props: WizardStepProps) => {
-  const { wizard, picks, practice, screenW, focusedIconRef, onGate, onBackToGates, onChoose, onClose } = props;
-  const gates = wizard.step > 0 && wizard.cat === null;
+/** The grid's category filter. Pills, not places: "all" is home, a pill tap
+ * narrows in place, and there is never anything to back out of — the failure
+ * mode of the old gate/carousel drill-in (testers couldn't find its "‹ back"
+ * caption; the navigation was the bug, not the link styling). */
+type GridFilter = AbilityCategory | "all";
 
-  // Slide the pane in on step/category changes (the component is keyed on both).
+const WizardStep = (props: WizardStepProps) => {
+  const { wizard, picks, practice, screenW, focusedIconRef, onChoose, onClose } = props;
+  const isWeapon = wizard.step === 0;
+  const [filter, setFilter] = useState<GridFilter>("all");
+  // The codex sheet: which tile's sheet is up (null = browsing the grid).
+  const [sheet, setSheet] = useState<IconId | null>(null);
+  const sheetT = useRef(new Animated.Value(0)).current;
+
+  // Slide the pane in on step changes (the component is keyed on step).
   const slide = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(slide, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
@@ -817,7 +796,33 @@ const WizardStep = (props: WizardStepProps) => {
       (a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1],
     );
 
-  const options: IconId[] = wizard.step === 0 ? sortedWeaponIds(getEntitlements(), practice) : wizard.cat !== null ? freeIn(wizard.cat) : [];
+  // ALL keeps the category grouping (off → def → sup) so the tile colours
+  // cluster instead of shuffling — the full grid doubles as a roster tour.
+  const options: IconId[] = isWeapon
+    ? sortedWeaponIds(getEntitlements(), practice)
+    : filter === "all"
+      ? CATEGORIES.flatMap(freeIn)
+      : freeIn(filter);
+
+  const current: IconId | null = isWeapon ? picks.weapon : (picks.hand[wizard.step - 1] ?? null);
+  const tileW = Math.floor((screenW - GRID_PAD * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
+
+  const openSheet = (id: IconId): void => {
+    unlockAudio();
+    playSound("uiTap");
+    playStrikeHaptic("soft");
+    setSheet(id);
+    sheetT.setValue(0);
+    Animated.timing(sheetT, { toValue: 1, duration: 300, easing: Easing.out(Easing.back(1.1)), useNativeDriver: true }).start();
+  };
+  const closeSheet = (): void => {
+    playSound("uiBack");
+    Animated.timing(sheetT, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(
+      ({ finished }) => {
+        if (finished) setSheet(null);
+      },
+    );
+  };
 
   return (
     <Animated.View
@@ -840,44 +845,92 @@ const WizardStep = (props: WizardStepProps) => {
         <LeaveX onPress={onClose} />
       </View>
 
-      {gates ? (
-        <View style={styles.gates}>
-          {(["offensive", "defensive", "support"] as AbilityCategory[]).map((cat) => {
-            const free = freeIn(cat);
-            const meta = CATEGORY_META[cat];
+      {!isWeapon ? (
+        <View style={styles.pills}>
+          {(["all", ...CATEGORIES] as GridFilter[]).map((f) => {
+            const meta = f === "all" ? null : CATEGORY_META[f];
+            const count = f === "all" ? CATEGORIES.reduce((n, c) => n + freeIn(c).length, 0) : freeIn(f).length;
+            const on = filter === f;
             return (
               <Pressable
-                key={cat}
-                onPress={() => free.length > 0 && onGate(cat)}
-                style={[styles.gate, free.length === 0 && styles.gateEmpty]}
+                key={f}
+                onPress={() => {
+                  if (f === filter) return;
+                  playSound("uiTap");
+                  setFilter(f);
+                }}
+                style={[styles.pill, on && styles.pillOn, on && meta !== null && { borderColor: meta.color }]}
               >
-                <View style={styles.gateText}>
-                  <Text style={[styles.gateLabel, { color: meta.color }]}>{meta.label}</Text>
-                  <Text style={styles.gateDesc}>{CATEGORY_DESC[cat]}</Text>
-                </View>
-                <View style={styles.gateIcons}>
-                  {free.slice(0, 4).map((a) => (
-                    <LoadoutIcon key={a} id={a} size={28} />
-                  ))}
-                </View>
-                <Text style={styles.gateChev}>›</Text>
+                <Text style={[styles.pillText, on && { color: meta?.color ?? C_GOLD }]}>
+                  {`${meta?.label ?? "ALL"} ${count}`}
+                </Text>
               </Pressable>
             );
           })}
         </View>
-      ) : (
-        <PickCarousel
-          key={options.join(",")}
-          options={options}
-          isWeapon={wizard.step === 0}
-          initial={wizard.step === 0 ? picks.weapon : (picks.hand[wizard.step - 1] ?? null)}
-          screenW={screenW}
-          category={wizard.cat}
+      ) : null}
+
+      <ScrollView style={styles.gridScroll} contentContainerStyle={styles.grid}>
+        {options.map((id) => {
+          const cat = isWeapon ? null : categoryOf(id as AbilityId);
+          return (
+            <Pressable
+              key={id}
+              onPress={() => openSheet(id)}
+              style={[styles.tile, { width: tileW }, id === current && styles.tileCur]}
+            >
+              {/* The category glow (the mode-card Skia idiom): one rounded
+                  rect whose top corners MATCH the tile's inner radius, so the
+                  gradient follows the corner curve instead of being cut by
+                  the tile's overflow clip. Vertically: a bright hairline at
+                  the edge falling fast into a soft wash, one shader. */}
+              <View pointerEvents="none" style={styles.tileBand}>
+                <Canvas style={StyleSheet.absoluteFill}>
+                  {/* Taller than the band view on purpose: RoundedRect only
+                      rounds uniformly, so the bottom corners are pushed past
+                      the canvas clip — top corners follow the tile's curve,
+                      the sides stay straight through the fade. The gradient
+                      still dies at TILE_BAND_H (clamped past its end). */}
+                  <RoundedRect x={0} y={0} width={tileW - 3} height={TILE_BAND_H + 12} r={10.5}>
+                    <LinearGradient
+                      start={vec(0, 0)}
+                      end={vec(0, TILE_BAND_H)}
+                      colors={[bandColor(cat, "e6"), bandColor(cat, "45"), bandColor(cat, "00")]}
+                      positions={[0, TILE_BAND_LINE / TILE_BAND_H, 1]}
+                    />
+                  </RoundedRect>
+                </Canvas>
+              </View>
+              <LoadoutIcon id={id} size={44} />
+              <Text style={styles.tileName} numberOfLines={1}>
+                {nameOf(id)}
+              </Text>
+              {cat !== null ? (
+                // Charge pips lead (the round budget matters more than the
+                // cooldown to most players — Tom 2026-08-14), CD trails.
+                <Text style={styles.tileSub}>
+                  <Text style={styles.tilePips}>{"●".repeat(ABILITIES[id as AbilityId].charges)}</Text>
+                  {` · ${ABILITIES[id as AbilityId].cooldown}S`}
+                </Text>
+              ) : null}
+              {id === current ? <Text style={styles.tileCurBadge}>✓</Text> : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {sheet !== null ? (
+        <CodexSheet
+          id={sheet}
+          isWeapon={isWeapon}
+          keeping={sheet === current}
+          hasPick={current !== null}
+          sheetT={sheetT}
           focusedIconRef={focusedIconRef}
-          onBackToGates={wizard.step > 0 ? onBackToGates : null}
           onChoose={onChoose}
+          onDismiss={closeSheet}
         />
-      )}
+      ) : null}
     </Animated.View>
   );
 };
@@ -895,162 +948,103 @@ const ButtonColumnHint = ({ slot, picks }: { slot: number; picks: Picks }) => (
   </View>
 );
 
-// ── Carousel ────────────────────────────────────────────────────────────────
+// ── Codex sheet (tap a tile → the full sheet + CHOOSE) ──────────────────────
 
-interface PickCarouselProps {
-  options: IconId[];
+interface CodexSheetProps {
+  id: IconId;
   isWeapon: boolean;
-  initial: IconId | null;
-  screenW: number;
-  category: AbilityCategory | null;
+  /** Sheet is up for the slot's CURRENT pick — CHOOSE reads KEEP, ghosted. */
+  keeping: boolean;
+  /** The slot already holds something (≠ this) — CHOOSE reads SWAP TO. */
+  hasPick: boolean;
+  /** Owned by WizardStep so open/close/choose all animate the same value. */
+  sheetT: Animated.Value;
   focusedIconRef: React.MutableRefObject<View | null>;
-  onBackToGates: (() => void) | null;
   onChoose: (id: IconId) => void;
+  onDismiss: () => void;
 }
 
-const PickCarousel = (props: PickCarouselProps) => {
-  const { options, isWeapon, initial, screenW, category, focusedIconRef, onBackToGates, onChoose } = props;
-  const snap = CARD_W + CARD_GAP;
-  const sidePad = (screenW - CARD_W) / 2;
-  const initialIdx = Math.max(0, initial !== null ? options.indexOf(initial) : 0);
-  const [focusIdx, setFocusIdx] = useState(initialIdx);
-  const scrollX = useRef(new Animated.Value(initialIdx * snap)).current;
-  const scrollRef = useRef<ScrollView | null>(null);
-
-  const onScroll = Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
-    useNativeDriver: true,
-    listener: (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-      const i = Math.max(0, Math.min(options.length - 1, Math.round(e.nativeEvent.contentOffset.x / snap)));
-      setFocusIdx((prev) => {
-        if (prev !== i) {
-          playSound("uiTap");
-          playStrikeHaptic("soft");
-        }
-        return i;
-      });
-    },
-  });
-
-  const focused = options[focusIdx]!;
-  const keeping = initial !== null && focused === initial;
-  const meta = category !== null ? CATEGORY_META[category] : null;
-
+const CodexSheet = (props: CodexSheetProps) => {
+  const { id, isWeapon, keeping, hasPick, sheetT, focusedIconRef, onChoose, onDismiss } = props;
+  const meta = isWeapon ? null : CATEGORY_META[categoryOf(id as AbilityId)];
+  const charges = isWeapon ? 0 : ABILITIES[id as AbilityId].charges;
   return (
-    <View style={styles.carouselWrap}>
-      {onBackToGates !== null && meta !== null ? (
-        <Pressable onPress={onBackToGates} style={styles.catBack} hitSlop={8}>
-          <Text style={styles.catBackText}>
-            {"‹ ALL CATEGORIES · "}
-            <Text style={{ color: meta.color }}>{meta.label}</Text>
+    <>
+      <Animated.View style={[styles.sheetScrim, { opacity: sheetT }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
+      </Animated.View>
+      <Animated.View
+        style={[
+          styles.sheet,
+          { transform: [{ translateY: sheetT.interpolate({ inputRange: [0, 1], outputRange: [440, 0] }) }] },
+        ]}
+      >
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetTop}>
+          <View
+            ref={(el) => {
+              focusedIconRef.current = el;
+            }}
+            collapsable={false}
+          >
+            <LoadoutIcon id={id} size={64} />
+          </View>
+          <View style={styles.sheetHeadText}>
+            <Text style={styles.sheetName}>{nameOf(id)}</Text>
+            {meta !== null ? (
+              <Text style={[styles.sheetMeta, { color: meta.color }]}>
+                {`${meta.label} · CD ${ABILITIES[id as AbilityId].cooldown}S · ${charges} / ROUND`}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+        {isWeapon ? (
+          <>
+            <Text style={styles.cardQuote}>{`“${WEAPON_CODEX[id as WeaponId].quote}”`}</Text>
+            <Text style={styles.cardHint}>{WEAPON_CODEX[id as WeaponId].hint}</Text>
+            <View style={styles.bars}>
+              {weaponBars(id as WeaponId).map((bar) => (
+                <View key={bar.label} style={styles.bar}>
+                  <Text style={styles.barLabel}>{bar.label}</Text>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { width: `${Math.round(bar.frac * 100)}%` }]} />
+                  </View>
+                  <Text style={styles.barValue}>{bar.display}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.cardQuote}>{`“${ABILITY_CODEX[id as AbilityId].quote}”`}</Text>
+            <Text style={styles.cardHint}>{ABILITY_CODEX[id as AbilityId].hint}</Text>
+            <View style={styles.chips}>
+              {ABILITY_CODEX[id as AbilityId].chips.slice(0, 4).map((chip) => (
+                <View key={chip.label} style={styles.chip}>
+                  <Text style={styles.chipLabel}>{chip.label}</Text>
+                  <Text style={styles.chipValue}>{chip.value}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+        <Pressable onPress={() => onChoose(id)} style={[styles.cta, styles.sheetCta, keeping && styles.ctaGhost]}>
+          <Text style={[styles.ctaText, keeping && styles.ctaGhostText]}>
+            {keeping ? `KEEP ${nameOf(id)}` : hasPick ? `SWAP TO ${nameOf(id)}` : `CHOOSE ${nameOf(id)}`}
           </Text>
         </Pressable>
-      ) : null}
-
-      <Animated.ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={snap}
-        decelerationRate="fast"
-        contentOffset={{ x: initialIdx * snap, y: 0 }}
-        contentContainerStyle={{ paddingHorizontal: sidePad, alignItems: "center", gap: CARD_GAP }}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        style={styles.carousel}
-      >
-        {options.map((id, i) => {
-          const inputRange = [(i - 1) * snap, i * snap, (i + 1) * snap];
-          const scale = scrollX.interpolate({ inputRange, outputRange: [0.88, 1, 0.88], extrapolate: "clamp" });
-          const opacity = scrollX.interpolate({ inputRange, outputRange: [0.42, 1, 0.42], extrapolate: "clamp" });
-          return (
-            <Animated.View key={id} style={[styles.card, { transform: [{ scale }], opacity }]}>
-              <Pressable
-                onPress={() => {
-                  if (i !== focusIdx) scrollRef.current?.scrollTo({ x: i * snap, animated: true });
-                }}
-                style={styles.cardInner}
-              >
-                <View
-                  ref={(el) => {
-                    if (i === focusIdx) focusedIconRef.current = el;
-                  }}
-                  collapsable={false}
-                >
-                  <LoadoutIcon id={id} size={116} />
-                </View>
-                {isWeapon ? (
-                  <WeaponCardBody id={id as WeaponId} />
-                ) : (
-                  <AbilityCardBody id={id as AbilityId} />
-                )}
-              </Pressable>
-            </Animated.View>
-          );
-        })}
-      </Animated.ScrollView>
-
-      <View style={styles.dots}>
-        {options.map((id, i) => (
-          <View key={id} style={[styles.dot, i === focusIdx && styles.dotOn]} />
-        ))}
-      </View>
-
-      <Pressable onPress={() => onChoose(focused)} style={[styles.cta, keeping && styles.ctaGhost]}>
-        <Text style={[styles.ctaText, keeping && styles.ctaGhostText]}>
-          {keeping
-            ? `KEEP ${nameOf(focused)}`
-            : initial !== null
-              ? `SWAP TO ${nameOf(focused)}`
-              : `CHOOSE ${nameOf(focused)}`}
-        </Text>
-      </Pressable>
-    </View>
+      </Animated.View>
+    </>
   );
 };
 
 const nameOf = (id: IconId): string =>
   (id in WEAPONS ? WEAPONS[id as WeaponId].name : ABILITIES[id as AbilityId].name).toUpperCase();
 
-const WeaponCardBody = ({ id }: { id: WeaponId }) => (
-  <>
-    <Text style={styles.cardName}>{WEAPONS[id].name.toUpperCase()}</Text>
-    <Text style={styles.cardQuote}>{`“${WEAPON_CODEX[id].quote}”`}</Text>
-    <Text style={styles.cardHint}>{WEAPON_CODEX[id].hint}</Text>
-    <View style={styles.bars}>
-      {weaponBars(id).map((bar) => (
-        <View key={bar.label} style={styles.bar}>
-          <Text style={styles.barLabel}>{bar.label}</Text>
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${Math.round(bar.frac * 100)}%` }]} />
-          </View>
-          <Text style={styles.barValue}>{bar.display}</Text>
-        </View>
-      ))}
-    </View>
-  </>
-);
-
-const AbilityCardBody = ({ id }: { id: AbilityId }) => {
-  const meta = CATEGORY_META[categoryOf(id)];
-  return (
-    <>
-      <Text style={styles.cardName}>{ABILITIES[id].name.toUpperCase()}</Text>
-      <Text style={[styles.cardCat, { color: meta.color, borderColor: meta.color }]}>
-        {`${meta.label} · CD ${ABILITIES[id].cooldown}S`}
-      </Text>
-      <Text style={styles.cardQuote}>{`“${ABILITY_CODEX[id].quote}”`}</Text>
-      <Text style={styles.cardHint}>{ABILITY_CODEX[id].hint}</Text>
-      <View style={styles.chips}>
-        {ABILITY_CODEX[id].chips.slice(0, 3).map((chip) => (
-          <View key={chip.label} style={styles.chip}>
-            <Text style={styles.chipLabel}>{chip.label}</Text>
-            <Text style={styles.chipValue}>{chip.value}</Text>
-          </View>
-        ))}
-      </View>
-    </>
-  );
-};
+/** Tile-band colour with an alpha suffix — category colour for abilities,
+ * gold for weapons (all CATEGORY_META colours are plain #rrggbb). */
+const bandColor = (cat: AbilityCategory | null, alpha: string): string =>
+  `${cat !== null ? CATEGORY_META[cat].color : C_GOLD}${alpha}`;
 
 // ── Leave (✕ + confirm) ─────────────────────────────────────────────────────
 
@@ -1531,68 +1525,95 @@ const styles = StyleSheet.create({
   btnColLit: { borderColor: C_GOLD, backgroundColor: "rgba(217,154,65,0.22)" },
   btnColDone: { backgroundColor: "#2e2820", borderColor: "#2e2820" },
 
-  gates: { flex: 1, justifyContent: "center", gap: 12, paddingHorizontal: 24 },
-  gate: {
-    flexDirection: "row",
+  // The war table: filter pills over the tile grid.
+  pills: { flexDirection: "row", gap: 7, paddingHorizontal: GRID_PAD, paddingTop: 12 },
+  pill: {
+    flex: 1,
     alignItems: "center",
-    gap: 13,
-    backgroundColor: "#1d1915",
     borderWidth: 1.5,
     borderColor: "#2e2820",
     borderRadius: 16,
-    paddingVertical: 15,
-    paddingHorizontal: 17,
+    paddingVertical: 8,
+    backgroundColor: "#1d1915",
   },
-  gateEmpty: { opacity: 0.35 },
-  gateText: { flex: 1, gap: 4 },
-  gateLabel: { fontSize: 12, fontWeight: "900", letterSpacing: 2.5 },
-  gateDesc: { color: C_MUTED, fontSize: 10.5, fontStyle: "italic" },
-  gateIcons: { flexDirection: "row", gap: 4 },
-  gateChev: { color: "#4a4238", fontSize: 16, fontWeight: "700" },
-
-  carouselWrap: { flex: 1, minHeight: 0 },
-  catBack: { paddingHorizontal: 24, paddingTop: 8 },
-  catBackText: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 2 },
-  carousel: { flexGrow: 1 },
-  card: { width: CARD_W },
-  cardInner: {
+  pillOn: { borderColor: C_GOLD, backgroundColor: "#26201a" },
+  pillText: { color: C_MUTED, fontSize: 9, fontWeight: "900", letterSpacing: 1.4, fontVariant: ["tabular-nums"] },
+  gridScroll: { flex: 1, minHeight: 0, marginTop: 12 },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+    paddingHorizontal: GRID_PAD,
+    paddingBottom: 16,
+  },
+  tile: {
+    alignItems: "center",
+    gap: 5,
     backgroundColor: "#1d1915",
     borderWidth: 1.5,
     borderColor: "#2e2820",
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  cardName: { color: C_BONE, fontSize: 16, fontWeight: "900", letterSpacing: 2.5, marginTop: 4 },
-  cardCat: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 2,
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    marginTop: 6,
+    borderRadius: 12,
+    paddingTop: 13,
+    paddingBottom: 9,
+    paddingHorizontal: 4,
+    // Clips the band canvas to the rounded corners — the snug-fit rule.
     overflow: "hidden",
   },
+  tileBand: { position: "absolute", top: 0, left: 0, right: 0, height: TILE_BAND_H },
+  tileCur: { borderColor: C_GOLD, backgroundColor: "#26201a" },
+  tileCurBadge: { position: "absolute", top: 3, right: 6, color: C_GOLD, fontSize: 10, fontWeight: "900" },
+  tileName: { color: C_BONE, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  tileSub: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1, fontVariant: ["tabular-nums"] },
+  tilePips: { color: C_GOLD, letterSpacing: 1.5 },
+
+  // The codex sheet (the sheet content reuses the codex quote/hint/bars/chips
+  // styles below — the old card's typography, re-homed).
+  sheetScrim: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#201b15",
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    borderColor: "#3a332a",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingTop: 10,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    gap: 4,
+  },
+  sheetHandle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "#3a332a", marginBottom: 6 },
+  sheetTop: { flexDirection: "row", alignItems: "center", gap: 14 },
+  sheetHeadText: { flex: 1, gap: 4 },
+  sheetName: { color: C_BONE, fontSize: 19, fontWeight: "900", letterSpacing: 2 },
+  sheetMeta: { fontSize: 8.5, fontWeight: "900", letterSpacing: 1.6, fontVariant: ["tabular-nums"] },
+  sheetCta: { marginHorizontal: 0, marginTop: 12 },
+
   cardQuote: {
     color: "#c9bfae",
     fontSize: 11.5,
     lineHeight: 16,
     fontStyle: "italic",
-    textAlign: "center",
     marginTop: 8,
-    minHeight: 32,
   },
-  cardHint: { color: C_MUTED, fontSize: 10, textAlign: "center", marginTop: 4 },
+  cardHint: { color: C_MUTED, fontSize: 10, marginTop: 4 },
   bars: { alignSelf: "stretch", marginTop: 10, gap: 5 },
   bar: { flexDirection: "row", alignItems: "center", gap: 8 },
   barLabel: { width: 46, color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1.2 },
   barTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "#16130f", overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 3, backgroundColor: C_GOLD },
   barValue: { width: 52, textAlign: "right", color: C_BONE, fontSize: 9, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, justifyContent: "center", marginTop: 10 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 10 },
   chip: {
     flexDirection: "row",
     gap: 4,
@@ -1604,10 +1625,6 @@ const styles = StyleSheet.create({
   },
   chipLabel: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1 },
   chipValue: { color: C_BONE, fontSize: 9, fontWeight: "700" },
-
-  dots: { flexDirection: "row", gap: 6, justifyContent: "center", paddingVertical: 8 },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#3a332a" },
-  dotOn: { backgroundColor: C_GOLD, transform: [{ scale: 1.3 }] },
 
   cta: {
     marginHorizontal: 22,

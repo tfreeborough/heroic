@@ -69,6 +69,10 @@ const toPlayerSnapshot = (p: ArenaPlayer, hidePicks: boolean): PlayerSnapshot =>
         charges: s.chargesLeft,
       })),
   reeling: reelingTargetOf(p),
+  // A link in GRACE is a memory, not a beam — nothing to draw (the thread
+  // pops back at full ramped size on resume, which reads as "remembered").
+  beamTargetId: p.beam !== null && p.beam.graceLeft === 0 ? p.beam.targetId : null,
+  beamLink: p.beam !== null && p.beam.graceLeft === 0 ? p.beam.linkSeconds : 0,
   lastSeq: p.lastSeq,
 });
 

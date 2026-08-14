@@ -26,6 +26,7 @@ import {
   selectTarget,
   spawnProjectile,
   stepAttackCycle,
+  stepBeamLink,
   stepCrowd,
   stepDots,
   stepProjectile,
@@ -211,6 +212,85 @@ const resolveArcStrike = (
 /** The player's picked weapon config. The blade fallback only serves
  * hand-forced test states — real matches can't start with an empty pick. */
 const weaponOf = (p: ArenaPlayer) => WEAPONS[p.weapon ?? "blade"];
+
+/**
+ * The Lifeline's tick (BeamWeaponConfig has the full rule set): nominate a
+ * patient — the most-wounded wounded ally in range, sticky on the current
+ * one — then advance the core link and pour this tick's heals. Allies or
+ * NOTHING: the beam touches no enemy, ever (the snap hijack was cut,
+ * Tom 2026-08-14 — counterplay is the healer's body, not the beam).
+ * Eligibility is the standing rules everywhere: alive, line of sight, no
+ * sandstorm at either end; a dashing ally keeps their heal (i-frames
+ * dodge harm, and this is the opposite).
+ */
+const stepLifelineBeam = (
+  sim: ArenaSim,
+  p: ArenaPlayer,
+  beam: NonNullable<(typeof WEAPONS)[keyof typeof WEAPONS]["beam"]>,
+  players: readonly ArenaPlayer[],
+  dt: number,
+  events: ArenaEvent[],
+): void => {
+  const state = sim.state;
+  let nominee: ArenaPlayer | null = null;
+
+  if (!inSandstorm(state, p.mover.pos)) {
+    const patient = (e: ArenaPlayer): boolean =>
+      e.team === p.team &&
+      e.id !== p.id &&
+      e.alive &&
+      !inSandstorm(state, e.mover.pos) &&
+      canSeePos(sim, p, e.mover.pos) &&
+      e.combatant.hp < e.combatant.stats.maxHp &&
+      distance(p.mover.pos, e.mover.pos) - radiusOf(e) <= beam.range;
+    // Sticky on the current patient while they stay eligible — re-picking
+    // most-wounded every tick would reset the ramp whenever the tide
+    // shifted, and the ramp would never mean anything.
+    const held = p.beam === null ? undefined : players.find((e) => e.id === p.beam!.targetId);
+    if (held && patient(held)) {
+      nominee = held;
+    } else {
+      let worst = Infinity;
+      for (const e of players) {
+        if (!patient(e)) continue;
+        const frac = e.combatant.hp / e.combatant.stats.maxHp;
+        if (frac < worst) {
+          worst = frac;
+          nominee = e;
+        }
+      }
+    }
+  }
+
+  const step = stepBeamLink(p.beam, nominee?.id ?? null, beam.tickInterval, dt, beam.graceSeconds);
+  p.beam = step.state;
+  if (step.ticks === 0 || nominee === null) return;
+
+  for (let i = 0; i < step.ticks; i++) {
+    if (!nominee.alive) break;
+    // Ramp: base + growth per unbroken second, capped — read at the
+    // link clock, so a protected healer climbs to font parity.
+    const rate = Math.min(
+      beam.healPerSecondMax,
+      beam.healPerSecondBase + beam.healPerSecondRamp * p.beam!.linkSeconds,
+    );
+    const amount = Math.min(
+      Math.round(rate * beam.tickInterval),
+      nominee.combatant.stats.maxHp - nominee.combatant.hp,
+    );
+    if (amount <= 0) continue; // topped off — eligibility drops them next tick
+    nominee.combatant.hp += amount;
+    // casterId = the healer: healing credits its SOURCE (achievements.md).
+    events.push({
+      type: "heal",
+      targetId: nominee.id,
+      casterId: p.id,
+      amount,
+      x: nominee.mover.pos.x,
+      y: nominee.mover.pos.y,
+    });
+  }
+};
 
 /** Loose one shot at `aim`'s position NOW, release event included — the
  * struck instant's projectile path, shared with the burst follow-ups. */
@@ -403,6 +483,13 @@ export const stepSim = (
           }
           if (p.burstLeft === 0) p.burstTargetId = null;
         }
+      }
+
+      // The beam weapon has NO cycle — its whole life is the link
+      // (stepLifelineBeam); everything below is cycle machinery.
+      if (weapon.attack.shape === "beam" && weapon.beam) {
+        stepLifelineBeam(sim, p, weapon.beam, players, dt, events);
+        continue;
       }
 
       const target = targetView(state, p.targetId);
@@ -667,6 +754,7 @@ const respawnDummies = (sim: ArenaSim, players: readonly ArenaPlayer[], dt: numb
     p.burstLeft = 0;
     p.burstNext = 0;
     p.burstTargetId = null;
+    p.beam = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
     p.alive = true;

@@ -8,6 +8,7 @@
 import type {
   AbilityState,
   AttackCycleState,
+  BeamState,
   Combatant,
   DotState,
   Mover,
@@ -140,6 +141,9 @@ export interface ArenaPlayer {
   /** The volley's mark — each follow-up re-aims at its CURRENT position;
    * a dead or smoked mark ends the volley. */
   burstTargetId: number | null;
+  /** The Lifeline's live link (core stepBeamLink); null = no beam weapon
+   * or nothing eligible. Cleared on round reset and respawn. */
+  beam: BeamState | null;
   /** Seconds of movement slow left (the hammer's debuff); 0 = unslowed. */
   slowLeft: number;
   /** Max-speed multiplier while slowLeft > 0 (from the slowing weapon's config). */
@@ -385,6 +389,7 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   burstLeft: 0,
   burstNext: 0,
   burstTargetId: null,
+  beam: null,
   slowLeft: 0,
   slowFactor: 1,
   moveFactor: 1,
