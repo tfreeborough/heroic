@@ -60,7 +60,7 @@ describe("name/passcode hygiene", () => {
 });
 
 describe("join rules", () => {
-  const base = { freeSeatInLobby: true, disconnectedSeat: false, passcode: null, offeredPass: null };
+  const base = { freeSeatInLobby: true, reclaimableSeat: false, passcode: null, offeredPass: null };
 
   test("open room with a free lobby seat admits", () => {
     expect(canJoin(base)).toBe("ok");
@@ -72,11 +72,13 @@ describe("join rules", () => {
     expect(canJoin({ ...base, passcode: "pw", offeredPass: "pw" })).toBe("ok");
   });
 
-  test("a disconnected seat admits even with no free lobby seat (rejoin-resume)", () => {
-    expect(canJoin({ ...base, freeSeatInLobby: false, disconnectedSeat: true })).toBe("ok");
+  test("a token-proven reclaimable seat admits even with no free lobby seat (rejoin-resume)", () => {
+    expect(canJoin({ ...base, freeSeatInLobby: false, reclaimableSeat: true })).toBe("ok");
   });
 
-  test("no seat at all is full", () => {
+  test("no seat at all is full — an unproven disconnected seat included (v28)", () => {
+    // The caller only sets reclaimableSeat on a MATCHING seat token, so a
+    // ghost seat without the proof reads exactly like an ordinary full room.
     expect(canJoin({ ...base, freeSeatInLobby: false })).toBe("room full");
   });
 });

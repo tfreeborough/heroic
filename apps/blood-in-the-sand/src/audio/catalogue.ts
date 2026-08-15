@@ -60,8 +60,9 @@ export type BitsSoundEvent =
   | "ceremonyShift" //  the ceremony's fade from Glory to the rating reveal
   | "deedUnlock" //     a deed card stamps in on the ceremony (achievements.md)
   // ── Store (bits-store.md § premium bar) ───────────────────────────────────
-  | "writExchange" //   Glory becomes a Writ — the licence is stamped
-  | "writUnlock" //     a Writ is spent — the seal breaks, the item is yours
+  | "signetExchange" //   Glory becomes a Signet — the licence is stamped
+  | "signetUnlock" //     a Signet is spent — the seal breaks, the item is yours
+  | "signetPurchase" //   a bought Signet pack banks (IAP credit / crash-replay)
   // ── UI ────────────────────────────────────────────────────────────────────
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
@@ -290,15 +291,19 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   deedUnlock: { clips: ["deed_unlock_1"] },
 
   // ── Store (bits-store.md § premium bar) ─────────────────────────────────
-  // THE STRIKE at the top of the Writ Forge's hold-to-forge ritual
-  // (WritForge.tsx) — plays the instant the held charge completes and the
+  // THE STRIKE at the top of the Signet Forge's hold-to-forge ritual
+  // (SignetForge.tsx) — plays the instant the held charge completes and the
   // stamp slams. The 850ms hold before it is deliberately silent (haptics
   // carry the climb; a charge-loop hiss is a possible later layer).
-  writExchange: { clips: ["writ_exchange_1"] },
+  signetExchange: { clips: ["signet_exchange_1"] },
   // The SEAL BREAKS on the unlock ceremony — forged 2026-08-15 (brief
   // lesson lives in the forge styleBible: build crack sounds from real
   // crackable sources; "wax seal" alone generates mush).
-  writUnlock: { clips: ["writ_unlock_1"] },
+  signetUnlock: { clips: ["signet_unlock_1"] },
+  // A bought pack lands (S3): 1–6 sealed Signets thudding onto the counter.
+  // STAND-IN until signet_purchase_1 is forged — the strike reads close
+  // enough that the moment isn't silent meanwhile.
+  signetPurchase: { clips: ["signet_exchange_1"] },
 
   // ── UI ──────────────────────────────────────────────────────────────────
   uiTap: { clips: ["ui_tap_1"], volume: 0.7 },

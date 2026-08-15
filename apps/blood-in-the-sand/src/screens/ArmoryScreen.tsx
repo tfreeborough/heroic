@@ -30,8 +30,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ABILITIES,
   WEAPONS,
-  WRIT_ABILITIES,
-  WRIT_WEAPONS,
+  SIGNET_ABILITIES,
+  SIGNET_WEAPONS,
   abilityEntitlement,
   weaponEntitlement,
   type AbilityId,
@@ -45,9 +45,20 @@ import {
   fetchWallet,
   mintPurchaseKey,
   storeExchange,
+  storeIapCredit,
   storeUnlock,
   type Wallet,
 } from "../net/api";
+import {
+  buySignetPack,
+  connectIap,
+  disconnectIap,
+  fetchSignetPackListings,
+  iapAvailable,
+  type IapEvent,
+  type SignetPackListing,
+} from "../net/iap";
+import { SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
 import { getEntitlements, grantEntitlement } from "../deeds/entitlements";
 import {
   ABILITY_CODEX,
@@ -61,7 +72,8 @@ import {
 import { CodexBody } from "../loadout/CodexBody";
 import { ItemTile, tileTextStyles } from "../loadout/ItemTile";
 import { useBackClose, useSheetDrag } from "../components/sheetGestures";
-import { WritForge, type ForgeOutcome } from "./WritForge";
+import { SignetForge, type ForgeOutcome } from "./SignetForge";
+import { SignetPacks } from "./SignetPacks";
 import { LoadoutIcon, type IconId } from "../loadout/icons";
 import { DISPLAY_FONT } from "../typography";
 
@@ -94,7 +106,47 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   const [notice, setNotice] = useState<string | null>(null);
   const [ceremony, setCeremony] = useState<ArmoryItem | null>(null);
   const [forgeOpen, setForgeOpen] = useState(false);
+  const [packsOpen, setPacksOpen] = useState(false);
+  const [packListings, setPackListings] = useState<SignetPackListing[] | null>(null);
+  const [packNotice, setPackNotice] = useState<string | null>(null);
+  const [packBusy, setPackBusy] = useState(false);
+  /** The shelf is running on fake receipts (module-less client, or a dev
+   * build whose .dev bundle id can never see the real products). Routes
+   * buys to the API's mock arm and labels the shelf DEV. */
+  const [packsMock, setPacksMock] = useState(false);
   const busy = useRef(false);
+
+  /** A store answer landing — from a live purchase OR the crash-recovery
+   * replay on entry. `credited: 0` = an already-banked replay: refresh
+   * silently, no fanfare for Signets the player was already paid. */
+  const onIapEvent = (event: IapEvent): void => {
+    setPackBusy(false);
+    switch (event.t) {
+      case "credited":
+        setWallet(event.wallet);
+        if (event.credited > 0) {
+          playSound("signetPurchase");
+          playStrikeHaptic("heavy");
+          setPackNotice(
+            event.credited === 1 ? "1 SIGNET BANKED." : `${event.credited} SIGNETS BANKED.`,
+          );
+        }
+        return;
+      case "cancelled":
+        return; // the player closed the sheet — not an error, not a notice
+      case "deferred":
+        setPackNotice("CHARGE RECORDED — THE SIGNETS LAND WHEN THE LEDGER RETURNS.");
+        return;
+      case "failed":
+        playSound("uiError");
+        setPackNotice("THE STORE REFUSED — NOTHING WAS CHARGED.");
+        return;
+    }
+  };
+  // Effects read the latest handler through a ref — the IAP listeners are
+  // wired once, not per render.
+  const onIapEventRef = useRef(onIapEvent);
+  onIapEventRef.current = onIapEvent;
 
   useEffect(() => {
     let live = true;
@@ -104,22 +156,50 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
       const [w, s] = await Promise.all([fetchWallet(identity), fetchStore(identity)]);
       if (!live) return;
       if (w) setWallet(w);
-      if (s) setPrice(s.writGloryPrice);
+      if (s) setPrice(s.signetGloryPrice);
+      // Store connection + unfinished-purchase replay ride Armory entry —
+      // a purchase that charged just before a crash credits HERE, even if
+      // the player never opens the pack shelf again.
+      const up = await connectIap(identity, (event) => {
+        if (live) onIapEventRef.current(event);
+      });
+      if (!live) return;
+      if (up) {
+        const listings = await fetchSignetPackListings();
+        if (!live) return;
+        if (listings) {
+          setPackListings(listings);
+        } else if (__DEV__) {
+          // Native store present but no products — on a DEV build that's
+          // structural, not transient: the .dev bundle id can never see the
+          // prod app's products. Fall back to the mock shelf so the flow
+          // stays testable; a release build keeps the honest closed state.
+          setPackListings(mockPackListings());
+          setPacksMock(true);
+        }
+      } else if (!iapAvailable()) {
+        // No native store on this client (pre-rebuild dev client / Expo Go):
+        // offer the dev-mock shelf — the prod API refuses its receipts, so
+        // this is inert everywhere real (bits-store.md § testing).
+        setPackListings(mockPackListings());
+        setPacksMock(true);
+      }
     })();
     return () => {
       live = false;
+      disconnectIap();
     };
   }, []);
 
-  // ── The stock: writ items you don't own yet. Nothing else is for sale,
+  // ── The stock: signet items you don't own yet. Nothing else is for sale,
   //    so nothing else appears — a storefront, not a codex. ────────────────
   const { steel, sorcery } = useMemo(() => {
     const entitled = getEntitlements();
     return {
-      steel: [...WRIT_WEAPONS]
+      steel: [...SIGNET_WEAPONS]
         .filter((id) => !entitled.has(weaponEntitlement(id)))
         .map((id): ArmoryItem => ({ id, isWeapon: true, entitlementId: weaponEntitlement(id) })),
-      sorcery: [...WRIT_ABILITIES]
+      sorcery: [...SIGNET_ABILITIES]
         .filter((id) => !entitled.has(abilityEntitlement(id)))
         .map((id): ArmoryItem => ({ id, isWeapon: false, entitlementId: abilityEntitlement(id) })),
     };
@@ -183,12 +263,12 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   };
 
   /**
-   * Forge one Writ from Glory — the ONLY place Glory is ever spent (Tom,
-   * 2026-08-15: the Glory↔Writ boundary lives on the forge screen; the
-   * rest of the Armory deals in Writs alone). Pure commerce, deliberately
-   * silent — the WritForge ritual owns every sound and haptic.
+   * Forge one Signet from Glory — the ONLY place Glory is ever spent (Tom,
+   * 2026-08-15: the Glory↔Signet boundary lives on the forge screen; the
+   * rest of the Armory deals in Signets alone). Pure commerce, deliberately
+   * silent — the SignetForge ritual owns every sound and haptic.
    */
-  const forgeWrit = async (): Promise<ForgeOutcome> => {
+  const forgeSignet = async (): Promise<ForgeOutcome> => {
     if (busy.current || wallet === null || price === null) return "unavailable";
     if (wallet.glory < price) return "insufficient";
     busy.current = true;
@@ -207,10 +287,55 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
-  /** The unlock: spends a HELD Writ, nothing else — no Writ, no sale (the
-   * sheet routes writless players to the forge instead). */
+  /** The dev shelf's stock — real pack table, fake DEV prices. */
+  const mockPackListings = (): SignetPackListing[] =>
+    Object.entries(SIGNET_PACKS).map(([sku, signets]) => ({ sku, signets, displayPrice: "DEV" }));
+
+  /**
+   * Buy a Signet pack. Native path: open the store sheet — money moves there,
+   * and the outcome (charged, cancelled, deferred) comes back through the
+   * connectIap listeners. Mock path (`packsMock` — module-less client or a
+   * productless dev build): the same server flow with a fake receipt the
+   * prod API refuses. Routes on the shelf's OWN mode, not iapAvailable() —
+   * a dev build can hold a live native store that simply has no products,
+   * and requestPurchase against a missing sku is just an error sting.
+   */
+  const buyPack = (sku: string): void => {
+    setPackNotice(null);
+    setPackBusy(true);
+    if (!packsMock && iapAvailable()) {
+      void buySignetPack(sku);
+      return;
+    }
+    void (async () => {
+      const identity = await ensureIdentity();
+      if (!identity) {
+        setPackBusy(false);
+        return;
+      }
+      const res = await storeIapCredit(identity, {
+        platform: "mock",
+        productId: sku,
+        key: mintPurchaseKey(),
+      });
+      if (res.ok) {
+        onIapEventRef.current({ t: "credited", wallet: res.wallet, credited: res.credited });
+        return;
+      }
+      setPackBusy(false);
+      playSound("uiError");
+      setPackNotice(
+        res.reason === "invalid"
+          ? "THE DEV SHELF NEEDS A DEV LEDGER (STORE_DEV_TOOLS=1)."
+          : "THE LEDGER IS OUT OF REACH — NOTHING WAS CHARGED.",
+      );
+    })();
+  };
+
+  /** The unlock: spends a HELD Signet, nothing else — no Signet, no sale (the
+   * sheet routes signetless players to the forge instead). */
   const unlock = (item: ArmoryItem): void => {
-    if (busy.current || wallet === null || wallet.writs < 1) return;
+    if (busy.current || wallet === null || wallet.signets < 1) return;
     busy.current = true;
     void (async () => {
       const identity = await ensureIdentity();
@@ -222,7 +347,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
       if (!res.ok) {
         setNotice(
           res.reason === "insufficient"
-            ? "NO WRIT IN HAND — THE FORGE AWAITS."
+            ? "NO SIGNET IN HAND — THE FORGE AWAITS."
             : "THE LEDGER IS OUT OF REACH — NOTHING WAS SPENT.",
         );
         playSound("uiError");
@@ -250,7 +375,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
           id={item.id}
           width={tileW}
           onPress={() => openSheet(item)}
-          sub={<Text style={tileTextStyles.price}>1 WRIT</Text>}
+          sub={<Text style={tileTextStyles.price}>1 SIGNET</Text>}
         />
       ))}
     </View>
@@ -284,8 +409,8 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
                 <View style={styles.gloryGem} />
                 <Text style={styles.purseText}>{wallet.glory.toLocaleString()}</Text>
                 <View style={styles.purseDivider} />
-                <View style={styles.writSeal} />
-                <Text style={styles.purseText}>{wallet.writs}</Text>
+                <View style={styles.signetSeal} />
+                <Text style={styles.purseText}>{wallet.signets}</Text>
               </>
             ) : (
               <Text style={styles.purseOffline}>—</Text>
@@ -294,22 +419,39 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
         </Animated.View>
 
         {/* The counter: what this place IS, and the clear door to making the
-            money it takes (Tom, 2026-08-15: one obvious "create Writs"
-            button; Glory↔Writ talk lives on the forge screen it opens). */}
+            money it takes (Tom, 2026-08-15: one obvious "create Signets"
+            button; Glory↔Signet talk lives on the forge screen it opens). */}
         <Animated.View style={[styles.counter, rise(0.05, 0.4)]}>
           <Text style={styles.tagline}>NEW ARMS FOR THE PIT</Text>
-          {wallet !== null && price !== null ? (
-            <Pressable
-              onPress={() => {
-                unlockAudio();
-                playSound("uiTap");
-                setForgeOpen(true);
-              }}
-              style={styles.forgeBtn}
-            >
-              <View style={styles.writSeal} />
-              <Text style={styles.forgeBtnText}>FORGE WRITS</Text>
-            </Pressable>
+          {wallet !== null ? (
+            <View style={styles.counterBtns}>
+              {/* Money door — quieter than the forge; Glory play stays the
+                  headline path, sponsorship the alternative. */}
+              <Pressable
+                onPress={() => {
+                  unlockAudio();
+                  playSound("uiTap");
+                  setPackNotice(null);
+                  setPacksOpen(true);
+                }}
+                style={styles.packsBtn}
+              >
+                <Text style={styles.packsBtnText}>BUY SIGNETS</Text>
+              </Pressable>
+              {price !== null ? (
+                <Pressable
+                  onPress={() => {
+                    unlockAudio();
+                    playSound("uiTap");
+                    setForgeOpen(true);
+                  }}
+                  style={styles.forgeBtn}
+                >
+                  <View style={styles.signetSeal} />
+                  <Text style={styles.forgeBtnText}>FORGE SIGNETS</Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
         </Animated.View>
 
@@ -325,8 +467,8 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
                   {hintOf(featured)}
                 </Text>
                 <View style={styles.heroPrice}>
-                  <View style={styles.writSeal} />
-                  <Text style={styles.heroPriceText}>1 WRIT</Text>
+                  <View style={styles.signetSeal} />
+                  <Text style={styles.heroPriceText}>1 SIGNET</Text>
                 </View>
               </View>
               <View style={styles.heroIcon}>
@@ -357,7 +499,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
         ) : null}
 
         <Animated.Text style={[styles.footNote, rise(0.5, 0.9)]}>
-          EVERY ARM IS FREE TO TRY IN PRACTICE — A WRIT UNLOCKS MATCHMADE USE, FOREVER.
+          EVERY ARM IS FREE TO TRY IN PRACTICE — A SIGNET UNLOCKS MATCHMADE USE, FOREVER.
         </Animated.Text>
       </ScrollView>
 
@@ -381,14 +523,29 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
         />
       ) : null}
 
-      {/* ── The Writ Forge — over the sheet, so closing it lands the player
-          back on the item they wanted, now holding the Writ to break. ── */}
+      {/* ── The Signet Forge — over the sheet, so closing it lands the player
+          back on the item they wanted, now holding the Signet to break. ── */}
       {forgeOpen && wallet !== null && price !== null ? (
-        <WritForge wallet={wallet} price={price} onForge={forgeWrit} onClose={() => setForgeOpen(false)} />
+        <SignetForge wallet={wallet} price={price} onForge={forgeSignet} onClose={() => setForgeOpen(false)} />
+      ) : null}
+
+      {/* ── The pack shelf — the one surface where money enters. ── */}
+      {packsOpen ? (
+        <SignetPacks
+          listings={packListings}
+          mock={packsMock}
+          notice={packNotice}
+          busy={packBusy}
+          onBuy={buyPack}
+          onClose={() => {
+            playSound("uiBack");
+            setPacksOpen(false);
+          }}
+        />
       ) : null}
 
       {/* ── The seal breaks. ── */}
-      {ceremony !== null ? <WritCeremony item={ceremony} onDone={() => setCeremony(null)} /> : null}
+      {ceremony !== null ? <SignetCeremony item={ceremony} onDone={() => setCeremony(null)} /> : null}
     </View>
   );
 };
@@ -401,7 +558,7 @@ interface ArmorySheetProps {
   notice: string | null;
   sheetT: Animated.Value;
   onUnlock: () => void;
-  /** No Writ in hand → the CTA routes to the Writ Forge instead of selling. */
+  /** No Signet in hand → the CTA routes to the Signet Forge instead of selling. */
   onForge: () => void;
   onDismiss: () => void;
   /** Instant removal (state null + anim reset) — the drag exit's landing. */
@@ -415,13 +572,13 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
   const { dragY, panHandlers } = useSheetDrag(onGone);
   const meta = item.isWeapon ? null : CATEGORY_META[categoryOf(item.id as AbilityId)];
   const charges = item.isWeapon ? 0 : ABILITIES[item.id as AbilityId].charges;
-  // The one CTA — and it speaks WRITS ONLY (Tom, 2026-08-15): Glory never
-  // appears on an item; a writless player is sent to the forge, where the
+  // The one CTA — and it speaks SIGNETS ONLY (Tom, 2026-08-15): Glory never
+  // appears on an item; a signetless player is sent to the forge, where the
   // two currencies are allowed to meet.
   const cta = ((): { label: string; live: boolean; action: () => void } => {
     if (wallet === null) return { label: "CONNECT TO UNLOCK", live: false, action: () => {} };
-    if (wallet.writs >= 1) return { label: "BREAK THE SEAL — 1 WRIT", live: true, action: onUnlock };
-    return { label: "FORGE A WRIT", live: true, action: onForge };
+    if (wallet.signets >= 1) return { label: "BREAK THE SEAL — 1 SIGNET", live: true, action: onUnlock };
+    return { label: "FORGE A SIGNET", live: true, action: onForge };
   })();
   return (
     <>
@@ -459,14 +616,14 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
             </View>
             {wallet !== null ? (
               <View style={styles.sheetPurse}>
-                <View style={styles.writSeal} />
-                <Text style={styles.sheetPurseText}>{`${wallet.writs} HELD`}</Text>
+                <View style={styles.signetSeal} />
+                <Text style={styles.sheetPurseText}>{`${wallet.signets} HELD`}</Text>
               </View>
             ) : null}
           </View>
         </View>
         <CodexBody id={item.id} isWeapon={item.isWeapon} />
-        <Text style={styles.practiceNote}>FREE TO TRY IN PRACTICE — THE WRIT UNLOCKS MATCHMADE USE.</Text>
+        <Text style={styles.practiceNote}>FREE TO TRY IN PRACTICE — THE SIGNET UNLOCKS MATCHMADE USE.</Text>
         {notice !== null ? <Text style={styles.notice}>{notice}</Text> : null}
         <Pressable
           onPress={() => {
@@ -489,12 +646,12 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
  * sting from being skipped by the purchase tap's own bounce. */
 const CEREMONY_MIN_DWELL_MS = 1100;
 
-const WritCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void }) => {
+const SignetCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void }) => {
   const reveal = useRef(new Animated.Value(0)).current;
   const bornAt = useRef(0);
   useEffect(() => {
     bornAt.current = Date.now();
-    playSound("writUnlock");
+    playSound("signetUnlock");
     playStrikeHaptic("heavy");
     Animated.timing(reveal, { toValue: 1, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
   }, [reveal, item]);
@@ -595,8 +752,8 @@ const styles = StyleSheet.create({
   purseDivider: { width: 1, height: 10, backgroundColor: "rgba(138,109,68,0.5)" },
   purseOffline: { color: C_MUTED, fontSize: 11, fontWeight: "800" },
   gloryGem: { width: 6, height: 6, backgroundColor: "#8c2f2f", transform: [{ rotate: "45deg" }] },
-  // The Writ's mark: a wax dot in a gold ring — the seal before it breaks.
-  writSeal: {
+  // The Signet's mark: a wax dot in a gold ring — the seal before it breaks.
+  signetSeal: {
     width: 9,
     height: 9,
     borderRadius: 5,
@@ -607,7 +764,17 @@ const styles = StyleSheet.create({
 
   counter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   tagline: { flexShrink: 1, color: C_MUTED, fontSize: 9, fontWeight: "900", letterSpacing: 2 },
-  // The clear "make Writs" door — solid gold, unmissable (Tom, 2026-08-15).
+  counterBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // The money door: outlined, not solid — present, never shouting.
+  packsBtn: {
+    borderColor: C_GOLD,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  packsBtnText: { color: C_GOLD, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  // The clear "make Signets" door — solid gold, unmissable (Tom, 2026-08-15).
   forgeBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -691,7 +858,7 @@ const styles = StyleSheet.create({
   ctaGhost: { backgroundColor: "transparent", borderWidth: 1.5, borderColor: "#3a332a" },
   ctaGhostText: { color: C_MUTED },
 
-  // The forge itself moved to WritForge.tsx (the ritual owns its styles).
+  // The forge itself moved to SignetForge.tsx (the ritual owns its styles).
 
   ceremonyScrim: {
     position: "absolute",

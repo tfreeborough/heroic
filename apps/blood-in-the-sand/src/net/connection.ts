@@ -55,6 +55,19 @@ export const resolveServerUrl = (input: string): string => {
   return port ? `wss://${host}:${port}` : `wss://${host}`;
 };
 
+/**
+ * The seat's rejoin secret (bits-reconnect.md § seat tokens), stamped by
+ * every `welcome` and cleared only on DELIBERATE exits (leaveRoom,
+ * roomClosed). Module state, not ArenaClient state, on purpose: the client
+ * dies with its socket (the silent-redial layer builds a fresh one per dial
+ * — useArenaConnection), and the whole point of the token is surviving that
+ * death so a rejoin by code can prove the seat is ours. Since protocol v28
+ * the server reclaims a disconnected seat ONLY on a matching token — ranked
+ * rooms admit nobody without one. Memory-only by design (v1): an app restart
+ * forfeits the seat; AsyncStorage persistence is the design doc's "later".
+ */
+let lastSeat: { code: string; seatToken: string } | null = null;
+
 export interface WelcomeInfo {
   playerId: number;
   team: Team;
@@ -149,7 +162,7 @@ export interface LobbyClient extends GameClient {
   phase: RoundPhase;
   readonly hostId: number | null;
   readonly isHost: boolean;
-  /** True on PracticeClient only — practice unlocks writ-gated items in the
+  /** True on PracticeClient only — practice unlocks signet-gated items in the
    * wizard (the try-before-buy funnel, bits-store.md); real rooms never do. */
   readonly practice?: boolean;
   /** Latest transient lobby toast (host handoff), or null — the RoomScreen
@@ -270,6 +283,9 @@ export class ArenaClient {
           zoneId: msg.zoneId,
           config: msg.config,
         };
+        // Remember how to prove this seat is ours across a socket death — a
+        // later joinRoom on the same code sends it back (see lastSeat).
+        lastSeat = { code: msg.roomCode, seatToken: msg.seatToken };
         this.roomState = null;
         this.phase = "lobby";
         this.lastError = null;
@@ -307,6 +323,7 @@ export class ArenaClient {
         this.welcome = null;
         this.roomState = null;
         this.phase = "lobby";
+        lastSeat = null; // the room is gone — the seat can never be reclaimed
         this.lastError = this.rankedMatch && this.rankedResult ? null : msg.reason;
         this.rankedMatch = null;
         this.buffer.reset();
@@ -448,14 +465,18 @@ export class ArenaClient {
   joinRoom(playerName: string, code: string, pass: string): void {
     this.lastError = null;
     this.queued = false; // ditto createRoom
+    const normalized = code.trim().toUpperCase();
     this.send({
       t: "joinRoom",
       v: PROTOCOL_VERSION,
-      code: code.trim().toUpperCase(),
+      code: normalized,
       playerName,
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
+      // Rejoining the room we lost a socket in: the seat token proves the
+      // disconnected seat is OURS (any other room gets a plain fresh join).
+      ...(lastSeat?.code === normalized ? { seatToken: lastSeat.seatToken } : {}),
     });
   }
 
@@ -504,6 +525,7 @@ export class ArenaClient {
 
   leaveRoom(): void {
     this.send({ t: "leaveRoom" });
+    lastSeat = null; // a deliberate leave forfeits the seat — never rejoin it
     this.welcome = null;
     this.roomState = null;
     this.phase = "lobby";

@@ -10,6 +10,7 @@
  * - ability presses: an OR-latch per slot — a press that lands between ticks
  *   is held until the next simulated step, so a tap is never lost to timing.
  */
+import { randomUUID } from "node:crypto";
 import type { Server, ServerWebSocket } from "bun";
 import {
   ABILITY_IDS,
@@ -147,6 +148,13 @@ export class Room {
 
   private readonly server: Server<ClientData>;
   private readonly seats = new Map<number, Socket>();
+  /** Per-seat rejoin secrets (bits-reconnect.md § seat tokens): minted when a
+   * seat is first taken, carried in that client's `welcome`, and REQUIRED to
+   * reclaim the seat after a disconnect — the room code alone stopped being a
+   * key at protocol v28 (it was a courtesy lock: anyone holding it could take
+   * over an idling body and play out the owner's ranked match). Keyed by
+   * playerId; a freed-and-retaken seat overwrites with a fresh secret. */
+  private readonly seatTokens = new Map<number, string>();
   /** Last time (ms) we heard ANYTHING from each seated socket — the heartbeat
    * sweep frees a seat gone silent past HEARTBEAT_TIMEOUT_MS (a ghost that
    * never sent a close frame). Keyed by playerId, mirrors `seats`. */
@@ -229,20 +237,38 @@ export class Room {
     return this.sim.state.players.includes(null) || seatedPlayers(this.sim.state).some((p) => p.bot);
   }
 
-  hasDisconnectedSeat(): boolean {
-    return seatedPlayers(this.sim.state).some((p) => !p.connected);
+  /** A disconnected seat the offered token PROVES ownership of. This is the
+   * one reclaim test everywhere (canJoin's `reclaimableSeat`, the manager's
+   * ranked door): no token — or a token minted for some other seat — finds
+   * nothing, so a ghost seat without the proof reads like a full room. */
+  hasReclaimableSeat(seatToken: string | null): boolean {
+    return this.findGhost(seatToken) !== undefined;
+  }
+
+  /** The exact seat a token reclaims: disconnected AND minted this secret. */
+  private findGhost(seatToken: string | null) {
+    if (seatToken === null) return undefined;
+    return seatedPlayers(this.sim.state).find((p) => !p.connected && this.seatTokens.get(p.id) === seatToken);
   }
 
   /**
-   * Seat a validated joiner: a disconnected seat is reclaimed first (mid-match
-   * rejoin takes over the live body), else a free lobby seat. Returns the
-   * player id, or null if the room filled up in the meantime.
+   * Seat a validated joiner: a token-proven disconnected seat is reclaimed
+   * first (mid-match rejoin takes over the live body), else a free lobby
+   * seat. Returns the player id, or null if the room filled up in the
+   * meantime.
    */
-  seat(ws: Socket, name: string, announcer: string, title: string, nowMs: number): number | null {
-    const ghost = seatedPlayers(this.sim.state).find((p) => !p.connected);
+  seat(ws: Socket, name: string, announcer: string, title: string, seatToken: string | null, nowMs: number): number | null {
+    const ghost = this.findGhost(seatToken);
+    // A rejoiner RESUMES an identity, never creates one: on a ranked reclaim
+    // the seat's name/title/announcer were entitlement-verified at queue time
+    // (verifyAndEnqueue), so the client-supplied claims are ignored wholesale
+    // — the verbatim path would let a rejoin wear an unearned title or
+    // rename mid-match. Skirmish reclaims keep taking the client's word, the
+    // announcer-pack stance (the seat is token-proven theirs either way).
+    const resumeIdentity = ghost !== undefined && this.ranked !== null;
     let playerId: number | null = null;
     if (ghost) {
-      reconnectPlayer(this.sim, ghost.id, name);
+      reconnectPlayer(this.sim, ghost.id, resumeIdentity ? ghost.name : name);
       playerId = ghost.id;
     } else {
       // A human arriving during the bot-filled window: the bots stand down
@@ -256,11 +282,16 @@ export class Room {
       playerId = addPlayer(this.sim, name)?.id ?? null;
     }
     if (playerId === null) return null;
-    // The cosmetics ride both paths — a rejoiner's picks land like a
-    // joiner's (reconnectPlayer refreshes name; these are its cosmetic
-    // siblings).
-    this.sim.state.players[playerId]!.announcer = announcer;
-    this.sim.state.players[playerId]!.title = title;
+    // A fresh seat mints its rejoin secret here — a reclaim keeps (and
+    // re-receives) the one the seat was born with.
+    if (!ghost) this.seatTokens.set(playerId, randomUUID());
+    // The cosmetics ride both non-ranked-reclaim paths — a rejoiner's picks
+    // land like a joiner's (reconnectPlayer refreshes name; these are its
+    // cosmetic siblings). A ranked reclaim keeps the seat's own (see above).
+    if (!resumeIdentity) {
+      this.sim.state.players[playerId]!.announcer = announcer;
+      this.sim.state.players[playerId]!.title = title;
+    }
 
     // A stale socket may still hold the seat (rejoin racing the close event).
     this.seats.get(playerId)?.close();
@@ -284,6 +315,7 @@ export class Room {
       hostId: this.meta.hostId,
       zoneId: this.sim.zone.id,
       config: makeClientConfig(),
+      seatToken: this.seatTokens.get(playerId)!,
     });
     this.syncRoomState(nowMs);
     return playerId;
@@ -297,6 +329,7 @@ export class Room {
     for (const ws of this.watchers) this.detach(ws, msg);
     this.seats.clear();
     this.lastSeen.clear();
+    this.seatTokens.clear();
     this.watchers.clear();
   }
 
@@ -338,6 +371,7 @@ export class Room {
     if (id === this.meta.hostId) this.departedHostName = this.sim.state.players[id]?.name ?? null;
     if (this.sim.state.round.phase === "lobby") {
       removePlayer(this.sim, id);
+      this.seatTokens.delete(id); // the seat is gone — its secret dies with it
     } else {
       markDisconnected(this.sim, id);
       console.log(`[${this.meta.code}] player ${id} dropped — body idles on`);

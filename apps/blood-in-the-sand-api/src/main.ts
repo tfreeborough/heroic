@@ -12,30 +12,33 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { RANKED_BRACKETS, WRIT_ITEM_IDS } from "@heroic/blood-in-the-sand-sim";
+import { RANKED_BRACKETS, SIGNET_ITEM_IDS, SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
 import {
   PLACEMENT_MATCHES,
   RATING_START,
   achievementCounters,
   achievementUnlocks,
   createDb,
+  creditIapSignets,
   displayFloorOf,
   displayRungFor,
   ensureSchema,
   entitlementsOf,
-  exchangeGloryForWrit,
+  exchangeGloryForSignet,
   findPlayerByToken,
   gloryBalance,
   gloryEarned,
   rankedSummary,
   recentForm,
   recordGlory,
-  recordWrit,
+  recordSignet,
   registerPlayer,
   rungAbove,
-  unlockWithWrit,
-  writBalance,
+  unlockWithSignet,
+  signetBalance,
 } from "@heroic/blood-in-the-sand-persistence";
+import { verifyAppleTransaction } from "./iapApple";
+import { verifyGooglePurchase } from "./iapGoogle";
 
 // Local fallback: the ONE repo-anchored file every service shares — never a
 // cwd-relative path (see the game server's main.ts for the 2026-07-29 story).
@@ -51,6 +54,55 @@ if (!process.env.TURSO_DATABASE_URL) {
 // The game server owns 7777; the API sits beside it on 7780 in dev.
 const port = Number(process.env.PORT ?? 7780);
 
+/**
+ * Belt-and-braces against the one deploy foot-gun the dev tools have: Bun
+ * auto-loads .env.local, so a deploy that copies a working tree (instead of
+ * building from git, as Render does) would silently ship /dev/grant — an
+ * infinite-currency faucet. A Turso URL means production data; refuse the
+ * combination outright.
+ */
+if (
+  process.env.STORE_DEV_TOOLS === "1" &&
+  process.env.TURSO_DATABASE_URL &&
+  !process.env.TURSO_DATABASE_URL.startsWith("file:")
+) {
+  // A hard exit, not a throw — an unhandled module-level throw under Bun has
+  // been observed to leave a half-initialised process alive, which is exactly
+  // what this guard must never allow.
+  console.error(
+    "FATAL: STORE_DEV_TOOLS=1 with a remote TURSO_DATABASE_URL — dev grant tools must never run against production data. Unset one.",
+  );
+  process.exit(1);
+}
+
+/**
+ * Minimal fixed-window rate limiting, in-memory (the API is a single
+ * instance by design — promote to a shared store if that ever changes).
+ * Buckets are `route:principal` (IP for unauthenticated routes, playerId
+ * once a token resolved). Returns true when the caller is over budget.
+ */
+const rateWindows = new Map<string, { count: number; resetAt: number }>();
+const overLimit = (bucket: string, max: number, windowMs = 60_000): boolean => {
+  const now = Date.now();
+  // Lazy prune: the map only grows while abuse is in progress; sweep expired
+  // windows once it's big enough to care about.
+  if (rateWindows.size > 10_000) {
+    for (const [key, w] of rateWindows) if (now >= w.resetAt) rateWindows.delete(key);
+  }
+  const w = rateWindows.get(bucket);
+  if (!w || now >= w.resetAt) {
+    rateWindows.set(bucket, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+  w.count += 1;
+  return w.count > max;
+};
+
+/** The caller's network identity for pre-auth limits — Render terminates
+ * TLS, so the client address rides x-forwarded-for. */
+const callerIp = (c: Context): string =>
+  c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+
 const app = new Hono();
 
 /** Health check (Render pings this). */
@@ -61,7 +113,13 @@ app.get("/", (c) => c.json({ ok: true }));
  * comes back exactly once; the client keeps it in the device keychain and
  * everything else authenticates with it.
  */
-app.post("/register", async (c) => c.json(await registerPlayer(db)));
+app.post("/register", async (c) => {
+  // Identity minting is free by design — but not unbounded: a mint costs us
+  // a permanent row, and smurf fleets feed every farming scheme. 5/min/IP
+  // is a lifetime's worth of legitimate first launches.
+  if (overLimit(`register:${callerIp(c)}`, 5)) return c.json({ error: "rate_limited" }, 429);
+  return c.json(await registerPlayer(db));
+});
 
 /** Resolve the bearer token, or null → the route 401s. */
 const authedPlayer = async (c: Context): Promise<string | null> => {
@@ -73,76 +131,161 @@ const authedPlayer = async (c: Context): Promise<string | null> => {
 app.get("/wallet", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
-  const [glory, writs] = await Promise.all([
+  const [glory, signets] = await Promise.all([
     gloryBalance(db, playerId),
-    writBalance(db, playerId),
+    signetBalance(db, playerId),
   ]);
-  return c.json({ glory, writs });
+  return c.json({ glory, signets });
 });
 
 /**
- * The store (bits-store.md): one universal Writ unlocks any weapon or spell.
- * The Glory price of a Writ is THE tunable economy knob — env-set,
+ * The store (bits-store.md): one universal Signet unlocks any weapon or spell.
+ * The Glory price of a Signet is THE tunable economy knob — env-set,
  * server-side, never client-trusted. Default derives from the ~4–5h grind
  * target at current ranked earn rates (~14 Glory/match average).
  */
-const WRIT_GLORY_PRICE = Math.max(1, Number(process.env.WRIT_GLORY_PRICE ?? 800));
+const SIGNET_GLORY_PRICE = Math.max(1, Number(process.env.SIGNET_GLORY_PRICE ?? 800));
 
 /** Everything the store screen needs to render prices and the shelf. */
 app.get("/store", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
-  return c.json({ writGloryPrice: WRIT_GLORY_PRICE, writItems: WRIT_ITEM_IDS });
+  return c.json({ signetGloryPrice: SIGNET_GLORY_PRICE, signetItems: SIGNET_ITEM_IDS });
 });
 
 /** Fresh balances after any store mutation — one shape, every response. */
 const walletOf = async (playerId: string) => {
-  const [glory, writs] = await Promise.all([
+  const [glory, signets] = await Promise.all([
     gloryBalance(db, playerId),
-    writBalance(db, playerId),
+    signetBalance(db, playerId),
   ]);
-  return { glory, writs };
+  return { glory, signets };
 };
 
 /**
- * Glory → 1 Writ, atomically. The client mints a uuid per tap (`key`) so a
- * network retry of the same tap can never buy two Writs; a missing/odd key
+ * Glory → 1 Signet, atomically. The client mints a uuid per tap (`key`) so a
+ * network retry of the same tap can never buy two Signets; a missing/odd key
  * gets a server-minted one (that request is then simply non-retryable).
  */
 app.post("/store/exchange", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  if (overLimit(`store:${playerId}`, 60)) return c.json({ error: "rate_limited" }, 429);
   const body = (await c.req.json().catch(() => ({}))) as { key?: unknown };
   const key =
     typeof body.key === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.key)
       ? body.key
       : crypto.randomUUID();
-  const result = await exchangeGloryForWrit(db, { playerId, price: WRIT_GLORY_PRICE, key });
+  const result = await exchangeGloryForSignet(db, { playerId, price: SIGNET_GLORY_PRICE, key });
   if (result === "insufficient") {
-    return c.json({ error: "insufficient_glory", price: WRIT_GLORY_PRICE }, 409);
+    return c.json({ error: "insufficient_glory", price: SIGNET_GLORY_PRICE }, 409);
   }
   return c.json(await walletOf(playerId)); // "duplicate" = that tap already succeeded
 });
 
 /**
- * 1 Writ → a permanent entitlement. Only writ-gated roster ids are for sale
+ * 1 Signet → a permanent entitlement. Only signet-gated roster ids are for sale
  * — deed items (secrets) are earned, never bought. Already-owned is a no-op
  * success and never charges (the persistence layer guards this atomically).
  */
 app.post("/store/unlock", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  if (overLimit(`store:${playerId}`, 60)) return c.json({ error: "rate_limited" }, 429);
   const body = (await c.req.json().catch(() => ({}))) as { itemId?: unknown };
   const itemId = typeof body.itemId === "string" ? body.itemId : "";
-  if (!WRIT_ITEM_IDS.includes(itemId)) return c.json({ error: "not_purchasable" }, 400);
-  const result = await unlockWithWrit(db, { playerId, itemId });
-  if (result === "insufficient") return c.json({ error: "insufficient_writs" }, 409);
+  if (!SIGNET_ITEM_IDS.includes(itemId)) return c.json({ error: "not_purchasable" }, 400);
+  const result = await unlockWithSignet(db, { playerId, itemId });
+  if (result === "insufficient") return c.json({ error: "insufficient_signets" }, 409);
   return c.json({ ...(await walletOf(playerId)), owned: true });
 });
 
 /**
+ * Real-money Signet packs (bits-store.md § S3, ratified 2026-08-15). The
+ * client hands over the STORE's proof of purchase — an Apple signed
+ * transaction (JWS) or a Google purchase token — and every fact the credit
+ * uses comes from server-side verification of that proof: the product from
+ * the verified payload, the pack size from SIGNET_PACKS, the idempotency key
+ * from the store's own transaction id (globally unique in the ledger, so a
+ * receipt replayed from any account credits at most once, ever).
+ *
+ * Response contract the client's finishTransaction logic leans on:
+ *  - 200 `{ glory, signets, credited }` — verified; credited is 0 when this
+ *    transaction had already been credited (both cases: FINISH the store
+ *    transaction, the Signets are banked).
+ *  - 400 `invalid_receipt` / `unknown_product` — affirmatively not a valid
+ *    purchase of ours; nothing credited.
+ *  - 503 `store_unavailable` — verification infrastructure unreachable;
+ *    KEEP the transaction unfinished and retry later (the replay-on-launch
+ *    path re-submits it).
+ */
+app.post("/store/iap", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  if (overLimit(`iap:${playerId}`, 20)) return c.json({ error: "rate_limited" }, 429);
+  const body = (await c.req.json().catch(() => ({}))) as {
+    platform?: unknown;
+    jws?: unknown;
+    productId?: unknown;
+    purchaseToken?: unknown;
+    key?: unknown;
+  };
+
+  let platform: "apple" | "google" | "mock";
+  let productId: string;
+  let transactionId: string;
+  if (body.platform === "apple" && typeof body.jws === "string") {
+    const verified = await verifyAppleTransaction(body.jws);
+    if (!verified.ok) {
+      return verified.reason === "invalid"
+        ? c.json({ error: "invalid_receipt" }, 400)
+        : c.json({ error: "store_unavailable" }, 503);
+    }
+    platform = "apple";
+    productId = verified.productId;
+    transactionId = verified.transactionId;
+  } else if (
+    body.platform === "google" &&
+    typeof body.productId === "string" &&
+    typeof body.purchaseToken === "string"
+  ) {
+    // The product must be one of ours BEFORE we spend a Play API call on it;
+    // the lookup then proves the token really is a purchase of that product.
+    if (!(body.productId in SIGNET_PACKS)) return c.json({ error: "unknown_product" }, 400);
+    const verified = await verifyGooglePurchase(body.productId, body.purchaseToken);
+    if (!verified.ok) {
+      return verified.reason === "invalid"
+        ? c.json({ error: "invalid_receipt" }, 400)
+        : c.json({ error: "store_unavailable" }, 503);
+    }
+    platform = "google";
+    productId = body.productId;
+    transactionId = verified.transactionId;
+  } else if (
+    body.platform === "mock" &&
+    process.env.STORE_DEV_TOOLS === "1" &&
+    typeof body.productId === "string" &&
+    typeof body.key === "string" &&
+    /^[A-Za-z0-9_-]{1,64}$/.test(body.key)
+  ) {
+    // The tier-2 test path (bits-store.md § testing): full client flow, fake
+    // receipt, dev API only — the route arm doesn't exist in production.
+    platform = "mock";
+    productId = body.productId;
+    transactionId = body.key;
+  } else {
+    return c.json({ error: "invalid_receipt" }, 400);
+  }
+
+  const signets = SIGNET_PACKS[productId];
+  if (!signets) return c.json({ error: "unknown_product" }, 400);
+  const result = await creditIapSignets(db, { playerId, signets, platform, transactionId, productId });
+  return c.json({ ...(await walletOf(playerId)), credited: result === "ok" ? signets : 0 });
+});
+
+/**
  * Dev-only store tools (bits-store.md § testing): ledger grants + purchase
- * resets so the whole Glory→Writ→unlock flow is testable without money.
+ * resets so the whole Glory→Signet→unlock flow is testable without money.
  * The routes DO NOT EXIST unless STORE_DEV_TOOLS=1 — never set in prod.
  */
 if (process.env.STORE_DEV_TOOLS === "1") {
@@ -151,9 +294,9 @@ if (process.env.STORE_DEV_TOOLS === "1") {
   app.post("/dev/grant", async (c) => {
     const playerId = await authedPlayer(c);
     if (!playerId) return c.json({ error: "unauthorized" }, 401);
-    const body = (await c.req.json().catch(() => ({}))) as { glory?: unknown; writs?: unknown };
+    const body = (await c.req.json().catch(() => ({}))) as { glory?: unknown; signets?: unknown };
     const glory = Math.trunc(Number(body.glory ?? 0)) || 0;
-    const writs = Math.trunc(Number(body.writs ?? 0)) || 0;
+    const signets = Math.trunc(Number(body.signets ?? 0)) || 0;
     if (glory !== 0) {
       await recordGlory(db, {
         playerId,
@@ -162,10 +305,10 @@ if (process.env.STORE_DEV_TOOLS === "1") {
         idempotencyKey: `dev:${crypto.randomUUID()}`,
       });
     }
-    if (writs !== 0) {
-      await recordWrit(db, {
+    if (signets !== 0) {
+      await recordSignet(db, {
         playerId,
-        amount: writs,
+        amount: signets,
         source: "dev-grant",
         idempotencyKey: `dev:${crypto.randomUUID()}`,
       });
@@ -173,8 +316,8 @@ if (process.env.STORE_DEV_TOOLS === "1") {
     return c.json(await walletOf(playerId));
   });
 
-  /** Forget every store purchase (entitlements bought with Writs) — deed
-   * grants are untouched; Writ balances stay as they are. */
+  /** Forget every store purchase (entitlements bought with Signets) — deed
+   * grants are untouched; Signet balances stay as they are. */
   app.post("/dev/reset-purchases", async (c) => {
     const playerId = await authedPlayer(c);
     if (!playerId) return c.json({ error: "unauthorized" }, 401);

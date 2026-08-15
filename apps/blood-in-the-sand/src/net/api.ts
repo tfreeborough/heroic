@@ -95,11 +95,11 @@ export const fetchGlory = async (identity: Identity): Promise<number | null> => 
   }
 };
 
-/** Both server-authoritative balances (bits-store.md). `writs` tolerates an
+/** Both server-authoritative balances (bits-store.md). `signets` tolerates an
  * older API that doesn't serve it yet — the field just reads 0. */
 export interface Wallet {
   glory: number;
-  writs: number;
+  signets: number;
 }
 
 /** The full wallet; null = unavailable right now. */
@@ -110,9 +110,9 @@ export const fetchWallet = async (identity: Identity): Promise<Wallet | null> =>
       headers: { authorization: `Bearer ${identity.token}` },
     });
     if (!res.ok) return null;
-    const wallet = (await res.json()) as { glory?: unknown; writs?: unknown };
+    const wallet = (await res.json()) as { glory?: unknown; signets?: unknown };
     if (typeof wallet.glory !== "number") return null;
-    return { glory: wallet.glory, writs: typeof wallet.writs === "number" ? wallet.writs : 0 };
+    return { glory: wallet.glory, signets: typeof wallet.signets === "number" ? wallet.signets : 0 };
   } catch {
     return null;
   }
@@ -126,7 +126,7 @@ export const fetchWallet = async (identity: Identity): Promise<Wallet | null> =>
  */
 export const devGrant = async (
   identity: Identity,
-  grant: { glory?: number; writs?: number },
+  grant: { glory?: number; signets?: number },
 ): Promise<Wallet | null> => {
   if (!API_URL) return null;
   try {
@@ -137,7 +137,7 @@ export const devGrant = async (
     });
     if (!res.ok) return null;
     const wallet = (await res.json()) as Wallet;
-    return typeof wallet.glory === "number" && typeof wallet.writs === "number" ? wallet : null;
+    return typeof wallet.glory === "number" && typeof wallet.signets === "number" ? wallet : null;
   } catch {
     return null;
   }
@@ -145,9 +145,9 @@ export const devGrant = async (
 
 /** GET /store — the shelf and the one tunable price (bits-store.md). */
 export interface StoreInfo {
-  writGloryPrice: number;
+  signetGloryPrice: number;
   /** Entitlement ids the server will sell (`weapon:*` / `ability:*`). */
-  writItems: string[];
+  signetItems: string[];
 }
 
 export const fetchStore = async (identity: Identity): Promise<StoreInfo | null> => {
@@ -158,7 +158,7 @@ export const fetchStore = async (identity: Identity): Promise<StoreInfo | null> 
     });
     if (!res.ok) return null;
     const store = (await res.json()) as StoreInfo;
-    return typeof store.writGloryPrice === "number" && Array.isArray(store.writItems)
+    return typeof store.signetGloryPrice === "number" && Array.isArray(store.signetItems)
       ? store
       : null;
   } catch {
@@ -191,7 +191,7 @@ const storePost = async (path: string, identity: Identity, body: object): Promis
     if (res.status === 409) return { ok: false, reason: "insufficient" };
     if (!res.ok) return { ok: false, reason: "unavailable" };
     const wallet = (await res.json()) as Wallet;
-    if (typeof wallet.glory !== "number" || typeof wallet.writs !== "number") {
+    if (typeof wallet.glory !== "number" || typeof wallet.signets !== "number") {
       return { ok: false, reason: "unavailable" };
     }
     return { ok: true, wallet };
@@ -200,16 +200,63 @@ const storePost = async (path: string, identity: Identity, body: object): Promis
   }
 };
 
-/** Debit the Glory price, credit 1 Writ — atomic server-side. */
+/** Debit the Glory price, credit 1 Signet — atomic server-side. */
 export const storeExchange = (identity: Identity, key: string): Promise<StoreResult> =>
   storePost("/store/exchange", identity, { key });
 
-/** Spend 1 Writ for a permanent entitlement. Already-owned is a no-op
+/**
+ * A real-money purchase's proof, as the API's /store/iap wants it: Apple
+ * sends the StoreKit 2 signed transaction, Google the purchase token, and
+ * the mock arm is the dev-API test path (bits-store.md § testing, tier 2 —
+ * the server refuses it unless STORE_DEV_TOOLS=1).
+ */
+export type IapProof =
+  | { platform: "apple"; jws: string }
+  | { platform: "google"; productId: string; purchaseToken: string }
+  | { platform: "mock"; productId: string; key: string };
+
+export type IapCreditResult =
+  | { ok: true; wallet: Wallet; credited: number }
+  /** `invalid` = the server affirmatively rejected the receipt (finish the
+   * transaction — it will never credit); `unavailable` = verification
+   * couldn't complete (keep it unfinished, the replay path retries). */
+  | { ok: false; reason: "invalid" | "unavailable" };
+
+/** Submit a store receipt for verification + Signet credit. `credited` is 0
+ * when this transaction was already banked — still a success. */
+export const storeIapCredit = async (
+  identity: Identity,
+  proof: IapProof,
+): Promise<IapCreditResult> => {
+  if (!API_URL) return { ok: false, reason: "unavailable" };
+  try {
+    const res = await apiFetch("/store/iap", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify(proof),
+    });
+    if (res.status === 400) return { ok: false, reason: "invalid" };
+    if (!res.ok) return { ok: false, reason: "unavailable" };
+    const body = (await res.json()) as { glory?: unknown; signets?: unknown; credited?: unknown };
+    if (typeof body.glory !== "number" || typeof body.signets !== "number") {
+      return { ok: false, reason: "unavailable" };
+    }
+    return {
+      ok: true,
+      wallet: { glory: body.glory, signets: body.signets },
+      credited: typeof body.credited === "number" ? body.credited : 0,
+    };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+};
+
+/** Spend 1 Signet for a permanent entitlement. Already-owned is a no-op
  * success server-side — it never double-charges, whatever the client thinks. */
 export const storeUnlock = (identity: Identity, itemId: string): Promise<StoreResult> =>
   storePost("/store/unlock", identity, { itemId });
 
-/** Dev-only (STORE_DEV_TOOLS=1): forget every Writ purchase so an unlock
+/** Dev-only (STORE_DEV_TOOLS=1): forget every Signet purchase so an unlock
  * flow can be re-tested. Deed grants are untouched. */
 export const devResetPurchases = async (identity: Identity): Promise<boolean> => {
   if (!API_URL) return false;

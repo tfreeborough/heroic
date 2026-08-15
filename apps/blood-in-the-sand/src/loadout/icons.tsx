@@ -50,6 +50,20 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "titans-draught": require("../../assets/icons/titans-draught.png"),
 };
 
+/**
+ * The Signet (bits-store.md § the Signet) — the premium currency's forged
+ * mark, deliberately OUTSIDE IconId/ICON_SOURCES: that union derives from
+ * the sim roster and gates the loadout surfaces, and a currency must never
+ * be pickable there. Render via <SignetIcon>. Note the tiny purse dot
+ * stays a styled View on purpose — a helmet-crest seal is mush at 9px;
+ * this art is for the 16px+ surfaces (pack shelf, forge, featured card).
+ */
+export const SIGNET_ICON: number = require("../../assets/icons/signet.png");
+
+export const SignetIcon = ({ size }: { size: number }) => (
+  <Image source={SIGNET_ICON} style={{ width: size, height: size }} resizeMode="contain" />
+);
+
 export interface LoadoutIconProps {
   id: IconId;
   size: number;

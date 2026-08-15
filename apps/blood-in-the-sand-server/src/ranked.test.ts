@@ -183,7 +183,7 @@ describe("ranked flow", () => {
     expect(b.of("reject")[0]!["reason"]).toBe("no such bracket");
   });
 
-  test("ranked rooms are unlisted and unjoinable from outside", async () => {
+  test("ranked rooms are unlisted, unjoinable, and unwatchable from outside", async () => {
     const a = makeSocket();
     const b = makeSocket();
     await queueBoth(a, b);
@@ -193,8 +193,75 @@ describe("ranked flow", () => {
     const outsider = makeSocket();
     say(manager, outsider, { t: "listRooms" });
     expect(outsider.of("rooms")[0]!["rooms"]).toEqual([]);
+    // Tokenless join AND watch both collapse to the code-guesser's reject —
+    // a ranked room doesn't exist to outsiders (v28: no oracle, and a
+    // watcher's snapshot feed would be live wallhack intel).
     say(manager, outsider, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Eve" });
-    expect(outsider.of("reject")[0]!["reason"]).toBe("that match can't be joined");
+    expect(outsider.of("reject")[0]!["reason"]).toBe("no such room");
+    say(manager, outsider, { t: "watchRoom", code });
+    expect(outsider.of("reject").at(-1)!["reason"]).toBe("no such room");
+    expect(outsider.of("watching")).toHaveLength(0);
+  });
+
+  test("a mid-match rejoin needs the seat token, and resumes the seat's own identity", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    await queueBoth(a, b);
+    internals(manager).rankedBeat();
+    const room = [...internals(manager).rooms.values()][0]!;
+    const code = room.meta.code;
+    const seatId = a.ws.data.playerId!;
+    const seatToken = String(a.of("welcome")[0]!["seatToken"]);
+
+    // Alice's socket dies mid-match: the body idles, the seat stays reserved.
+    room.sim.state.round.phase = "active";
+    manager.close(a.ws);
+    expect(room.sim.state.players[seatId]!.connected).toBe(false);
+
+    // No token, then a forged one: both read as a guessed code (v28).
+    const hijacker = makeSocket();
+    say(manager, hijacker, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Eve" });
+    expect(hijacker.of("reject").at(-1)!["reason"]).toBe("no such room");
+    say(manager, hijacker, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Eve", seatToken: "forged" });
+    expect(hijacker.of("reject").at(-1)!["reason"]).toBe("no such room");
+    expect(hijacker.of("welcome")).toHaveLength(0);
+    expect(room.sim.state.players[seatId]!.connected).toBe(false);
+
+    // The real token reclaims the exact seat — and the rejoin's claimed
+    // name/title are IGNORED: a ranked rejoin resumes the queue-verified
+    // identity, never creates one (the mid-match rename/unearned-title hole).
+    const back = makeSocket();
+    say(manager, back, {
+      t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Imposter", title: "the-world-serpent", seatToken,
+    });
+    expect(back.of("welcome")).toHaveLength(1);
+    expect(back.ws.data.playerId).toBe(seatId);
+    expect(room.sim.state.players[seatId]!.connected).toBe(true);
+    expect(room.sim.state.players[seatId]!.name).toBe("Alice");
+    expect(room.sim.state.players[seatId]!.title).toBe("");
+  });
+
+  test("one live ranked seat per account: a second queueJoin waits for the settle", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    await queueBoth(a, b);
+    internals(manager).rankedBeat();
+    const room = [...internals(manager).rooms.values()][0]!;
+
+    // A second socket on the SAME bearer token while the first match is live
+    // — the parallel bot-backfill farm's entry move.
+    const twin = makeSocket();
+    queueJoin(manager, twin, tokenA, "Alice");
+    await until(() => twin.of("reject").length > 0);
+    expect(twin.of("reject")[0]!["reason"]).toBe("you're already in a live ranked match");
+
+    // The settle frees the account — the same re-queue now lands in line.
+    const winnerTeam = room.sim.state.players[a.ws.data.playerId!]!.team as Team;
+    room.onRankedMatchEnd!(winnerTeam);
+    await until(() => room.ranked!.settled);
+    queueJoin(manager, twin, tokenA, "Alice");
+    await until(() => twin.of("queueStatus").length > 0);
+    expect(twin.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }]);
   });
 
   test("the arm deadline voids the match and locks the idlers out", async () => {

@@ -624,6 +624,7 @@ body {
 .forge .icon-cat-offensive { color: #d94141; }
 .forge .icon-cat-defensive { color: #4da3d9; }
 .forge .icon-cat-support { color: #5fc75f; }
+.forge .icon-cat-currency { color: #a03030; }
 
 /* Blood in the Sand sound-manifest categories (reuses .icon-cat layout). */
 .forge .sound-cat-combat { color: #d94141; }

@@ -169,17 +169,21 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   deed_unlock:
     "an achievement unlock stamp — a heavy wax-seal thunk onto parchment with a short bright metallic shimmer tail, " +
     "triumphant but compact, under a second",
-  writ_exchange:
+  signet_exchange:
     "a seal-press STRIKE at the end of a held charge — one deep heavy stamp-slam with a bright metal ring and a " +
     "soft molten-wax hiss in the tail, weightier and punchier than a document stamp, final, about 0.8 seconds, " +
     "no coins",
   // (Rejigged 2026-08-15 — the first brief asked for "a wax seal cracking",
   // which has no real-world audio anchor and generated mush. Concrete
   // sources only: things that actually crack on tape.)
-  writ_unlock:
+  signet_unlock:
     "a thick disc of hard brittle wax snapping clean in half — one sharp dry CRACK like ceramic breaking, a few " +
     "small crumbs scattering, then a single short bright bell ding, close-mic, punchy, about one second, " +
     "no voices, no music",
+  signet_purchase:
+    "a small stack of stiff parchment documents dropped onto a wooden counter — two or three quick heavy paper " +
+    "thumps landing in a pile, a leather strap cinching, then one warm low bell tone settling it, about one " +
+    "second, prosperous but understated, no coins, no voices",
   reflect:
     "a magical parry — a bright glassy metallic TING as a mirror shield turns a projectile around, with a quick " +
     "whip of departure as the shot leaves the other way, sharp attack, under half a second",
@@ -198,14 +202,17 @@ export const SOUND_SUBJECTS: Record<string, string> = {
 // from the same brand language. Acceptance test (the panel shows it): every
 // icon must stay readable at 32px — that's roster-row size in the game.
 
-export type IconCategory = "weapon" | "offensive" | "defensive" | "support";
+export type IconCategory = "weapon" | "offensive" | "defensive" | "support" | "currency";
 
-/** Accent colour per category — the game's category-colour system, baked in. */
+/** Accent colour per category — the game's category-colour system, baked in.
+ * `currency` is the store's Signet (bits-store.md): not a roster row, so its
+ * icon is a STATIC entry in iconSet.ts rather than a derived one. */
 export const ICON_ACCENTS: Record<IconCategory, { name: string; hex: string }> = {
   weapon: { name: "antique gold", hex: "#d99a41" },
   offensive: { name: "arena red", hex: "#d94141" },
   defensive: { name: "steel blue", hex: "#4da3d9" },
   support: { name: "arena green", hex: "#5fc75f" },
+  currency: { name: "sealing-wax red", hex: "#a03030" },
 };
 
 /**
@@ -256,6 +263,11 @@ export const ICON_SUBJECTS: Record<string, string> = {
   "war-drums": "a rope-bound war drum with radiating rhythm rings rising from its skin",
   "blood-font": "a bronze chalice overflowing with deep red droplets",
   sandstorm: "a swirling spiral of sand with a single closed eye barely visible inside it",
+  // The premium currency (bits-store.md § the Signet): the subject IS a
+  // round wax seal, which is fine under the no-frames rule — that rule
+  // forbids framing AROUND a subject, not round subjects.
+  signet:
+    "a thick round seal of deep red sealing wax stamped with an embossed gladiator-helmet crest, a heavy molten rim with one cooled drip at the edge, a warm gold glint raking across the impression",
 };
 
 export interface IconSpec {

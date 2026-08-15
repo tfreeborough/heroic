@@ -38,7 +38,15 @@ const entry = (id: string, name: string, category: IconCategory): IconSetEntry =
   };
 };
 
-/** Weapons first, then abilities by category — the panel's display order. */
+/** Icons with no roster row to derive from — the soundSet STATIC pattern.
+ * Currently just the store's premium currency (bits-store.md § the Signet):
+ * the in-game mark is a styled-View placeholder until this is forged. */
+const STATIC: ReadonlyArray<{ id: string; name: string; category: IconCategory }> = [
+  { id: "signet", name: "Signet (currency)", category: "currency" },
+];
+
+/** Weapons first, then abilities by category, then statics — the panel's
+ * display order. */
 export const buildIconSet = (): IconSetEntry[] => [
   ...WEAPON_IDS.map((id) => entry(id, WEAPONS[id].name, "weapon")),
   ...(["offensive", "defensive", "support"] as const).flatMap((cat) =>
@@ -46,4 +54,5 @@ export const buildIconSet = (): IconSetEntry[] => [
       entry(id, ABILITIES[id].name, cat),
     ),
   ),
+  ...STATIC.map((s) => entry(s.id, s.name, s.category)),
 ];

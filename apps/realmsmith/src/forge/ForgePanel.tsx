@@ -68,7 +68,7 @@ const post = async <T,>(url: string, body: unknown): Promise<T> => {
   return data;
 };
 
-const CATEGORY_ORDER = ["weapon", "offensive", "defensive", "support"] as const;
+const CATEGORY_ORDER = ["weapon", "offensive", "defensive", "support", "currency"] as const;
 const SOUND_CATEGORY_ORDER: readonly SoundCategory[] = ["combat", "ability", "flow", "ui"];
 
 export const ForgePanel = ({ onClose }: Props) => {

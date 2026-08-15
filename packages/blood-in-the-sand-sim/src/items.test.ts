@@ -1,7 +1,7 @@
 /**
  * Gated items (bits-secret-items.md, bits-store.md): the roster split, the
  * two gate kinds, and the content wiring each kind demands — a deed item
- * must be earnable (The Sand snake pays the trident), a writ item must
+ * must be earnable (The Sand snake pays the trident), a signet item must
  * never be.
  */
 import { describe, expect, test } from "bun:test";
@@ -18,9 +18,9 @@ import {
   GATED_ABILITIES,
   GATED_WEAPONS,
   ITEM_NAMES,
-  WRIT_ABILITIES,
-  WRIT_ITEM_IDS,
-  WRIT_WEAPONS,
+  SIGNET_ABILITIES,
+  SIGNET_ITEM_IDS,
+  SIGNET_WEAPONS,
   abilityEntitlement,
   itemDisplayName,
   weaponEntitlement,
@@ -43,9 +43,9 @@ describe("gated items", () => {
     for (const a of GATED_ABILITIES) expect(ABILITY_IDS).toContain(a);
   });
 
-  test("a gated weapon has exactly one gate kind — deed XOR writ", () => {
+  test("a gated weapon has exactly one gate kind — deed XOR signet", () => {
     for (const w of GATED_WEAPONS) {
-      expect(DEED_WEAPONS.has(w) !== WRIT_WEAPONS.has(w)).toBe(true);
+      expect(DEED_WEAPONS.has(w) !== SIGNET_WEAPONS.has(w)).toBe(true);
     }
   });
 
@@ -62,8 +62,8 @@ describe("gated items", () => {
     }
   });
 
-  test("no writ weapon is ever paid out by a deed — Writs cannot buy secrets, deeds cannot leak the shelf", () => {
-    for (const w of WRIT_WEAPONS) {
+  test("no signet weapon is ever paid out by a deed — Signets cannot buy secrets, deeds cannot leak the shelf", () => {
+    for (const w of SIGNET_WEAPONS) {
       const payers = ACHIEVEMENT_DEFS.filter((d) =>
         (d.rewards ?? []).some((r) => r.kind === "entitlement" && r.itemId === weaponEntitlement(w)),
       );
@@ -71,11 +71,11 @@ describe("gated items", () => {
     }
   });
 
-  test("the store shelf lists every writ item and nothing else", () => {
-    for (const w of WRIT_WEAPONS) expect(WRIT_ITEM_IDS).toContain(weaponEntitlement(w));
-    for (const a of WRIT_ABILITIES) expect(WRIT_ITEM_IDS).toContain(abilityEntitlement(a));
-    for (const w of DEED_WEAPONS) expect(WRIT_ITEM_IDS).not.toContain(weaponEntitlement(w));
-    expect(WRIT_ITEM_IDS.length).toBe(new Set(WRIT_ITEM_IDS).size);
+  test("the store shelf lists every signet item and nothing else", () => {
+    for (const w of SIGNET_WEAPONS) expect(SIGNET_ITEM_IDS).toContain(weaponEntitlement(w));
+    for (const a of SIGNET_ABILITIES) expect(SIGNET_ITEM_IDS).toContain(abilityEntitlement(a));
+    for (const w of DEED_WEAPONS) expect(SIGNET_ITEM_IDS).not.toContain(weaponEntitlement(w));
+    expect(SIGNET_ITEM_IDS.length).toBe(new Set(SIGNET_ITEM_IDS).size);
   });
 
   test("every gated ability has a display name", () => {
@@ -88,7 +88,7 @@ describe("gated items", () => {
     for (const w of GATED_WEAPONS) {
       expect(ITEM_NAMES[weaponEntitlement(w)]).toBe(WEAPONS[w].name);
     }
-    // The per-weapon rounds codex is the DEED breadcrumb trail — writ items
+    // The per-weapon rounds codex is the DEED breadcrumb trail — signet items
     // are advertised by the Armory instead, not hinted by achievements.
     for (const w of DEED_WEAPONS) {
       expect(ACHIEVEMENT_DEFS.some((d) => d.id.startsWith(`rounds-${w}-`))).toBe(true);

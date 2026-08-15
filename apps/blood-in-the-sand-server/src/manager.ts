@@ -83,6 +83,9 @@ const MAX_PLAYER_NAME = 16;
 const MAX_ANNOUNCER_ID = 32;
 /** Deed ids are short kebab slugs; anything longer than this is garbage. */
 const MAX_TITLE_ID = 64;
+/** Seat tokens are server-minted UUIDs (36 chars) — anything longer is
+ * garbage, and clamping keeps a hostile join from carrying a payload. */
+const MAX_SEAT_TOKEN = 64;
 /** Disguised ranked bots occasionally wear a plausible low-tier title —
  * bare bots would become a backfill tell once titles are common (the same
  * principle as bots counting toward deeds). Curated LOW-tier ids only: a
@@ -340,7 +343,7 @@ export class RoomManager {
       performance.now(),
     );
     this.rooms.set(code, room);
-    room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), performance.now());
+    room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), null, performance.now());
     console.log(
       `⚔ room ${code} "${room.meta.name}" (${teamSize}v${teamSize}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
     );
@@ -350,23 +353,27 @@ export class RoomManager {
     if (!this.versionOk(ws, msg.v) || this.leaveFirst(ws)) return;
     const room = this.rooms.get((msg.code ?? "").trim().toUpperCase());
     if (!room) return this.send(ws, { t: "reject", reason: "no such room" });
-    // A ranked room admits exactly the matched pair. The one outside door is
-    // the rejoin: a disconnected seat may be reclaimed (the client knows its
-    // code from the welcome), so "the rejoin window stands" holds for ranked.
-    if (room.ranked && !room.hasDisconnectedSeat()) {
-      return this.send(ws, { t: "reject", reason: "that match can't be joined" });
+    const seatToken = sanitizeSeatToken(msg.seatToken);
+    // A ranked room admits exactly the matched pair. The ONE outside door is
+    // the token-proven rejoin (bits-reconnect.md § seat tokens): the client
+    // knows its code AND its seat token from the welcome. Everything else —
+    // no token, a wrong token, no disconnected seat — collapses to the same
+    // "no such room" a guessed code gets: a ranked room doesn't exist to
+    // outsiders, and the reject must not become an oracle saying otherwise.
+    if (room.ranked && !room.hasReclaimableSeat(seatToken)) {
+      return this.send(ws, { t: "reject", reason: "no such room" });
     }
 
     const verdict = canJoin({
       freeSeatInLobby: room.ranked ? false : room.hasFreeSeatInLobby(),
-      disconnectedSeat: room.hasDisconnectedSeat(),
+      reclaimableSeat: room.hasReclaimableSeat(seatToken),
       passcode: room.meta.passcode,
       offeredPass: typeof msg.pass === "string" ? msg.pass.trim() : null,
     });
     if (verdict !== "ok") return this.send(ws, { t: "reject", reason: verdict });
 
     const playerName = sanitizeName(msg.playerName);
-    const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), performance.now());
+    const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), seatToken, performance.now());
     if (id === null) return this.send(ws, { t: "reject", reason: "room full" });
     console.log(`⚔ ${playerName} joined room ${room.meta.code} as player ${id}`);
   }
@@ -374,7 +381,12 @@ export class RoomManager {
   private onWatch(ws: Socket, code: string): void {
     if (this.leaveFirst(ws)) return;
     const room = this.rooms.get((code ?? "").trim().toUpperCase());
-    if (!room) return this.send(ws, { t: "reject", reason: "no such room" });
+    // Ranked matches are never watchable: a watcher gets full-position
+    // snapshots — live wallhack intel an accomplice could feed a seated
+    // player mid-ladder-match. Same generic reject as a bad code, so the
+    // refusal never confirms the room exists. (Skirmish/friend rooms stay
+    // watchable — that's a feature, not an oversight.)
+    if (!room || room.ranked) return this.send(ws, { t: "reject", reason: "no such room" });
     room.watch(ws);
   }
 
@@ -427,6 +439,15 @@ export class RoomManager {
     if (lockLeft > 0) {
       return this.trySend(ws, { t: "reject", reason: `queue lockout — try again in ${lockLeft}s` });
     }
+    // One live ranked seat per account: the queue itself dedupes by account,
+    // but a SECOND socket on the same bearer token used to sail through here
+    // while the first sat in a live room — N parallel bot-backfill matches
+    // farmed from one account. Derived straight from the room registry (a
+    // settle or close frees the account by construction — no side registry
+    // to clean), so a finished match never locks anyone out.
+    if (this.inLiveRankedMatch(accountId)) {
+      return this.trySend(ws, { t: "reject", reason: "you're already in a live ranked match" });
+    }
     // One entitlement read serves two verifications: the worn title (an
     // unowned claim is SILENTLY stripped, never a rejection — a cosmetic
     // must not cost a match) and the GATED-ITEM list carried to the seat
@@ -461,6 +482,21 @@ export class RoomManager {
       });
     }
     this.trySend(ws, { t: "queueStatus", brackets: this.queueStatusFor(ws, now) });
+  }
+
+  /** True while `accountId` holds a HUMAN seat in a ranked room whose match
+   * is still live — i.e. unsettled: `settled` covers every exit (a normal
+   * settle, a conclusive settle failure, and voidRanked's abandonment paths
+   * all set it), and a closed room leaves the registry entirely. Rejoining
+   * that match stays open the whole time — this only bars a fresh queue. */
+  private inLiveRankedMatch(accountId: string): boolean {
+    for (const room of this.rooms.values()) {
+      if (!room.ranked || room.ranked.settled) continue;
+      for (const account of room.ranked.accounts.values()) {
+        if (!account.bot && account.accountId === accountId) return true;
+      }
+    }
+    return false;
   }
 
   /** The slow beat: tend ranked-room lifecycles, run the matcher, refresh
@@ -514,7 +550,7 @@ export class RoomManager {
     this.rooms.set(code, room);
     for (const entry of [match.a, match.b]) {
       this.trySend(entry.ws, { t: "matchFound", bracket: match.bracket, code });
-      const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, now);
+      const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now);
       if (id === null) continue; // two seats, two players — can't happen
       room.ranked.accounts.set(id, {
         accountId: entry.accountId,
@@ -552,7 +588,7 @@ export class RoomManager {
     this.rooms.set(code, room);
 
     this.trySend(entry.ws, { t: "matchFound", bracket, code });
-    const humanId = room.seat(entry.ws, entry.name, entry.announcer, entry.title, now);
+    const humanId = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now);
     if (humanId === null) {
       // A fresh room can't be full — belt-and-braces: never leak the room.
       this.closeRoom(room, "the match was called off");
@@ -959,6 +995,12 @@ const sanitizeName = (name: unknown): string =>
  * honest: a length-capped string, anything else collapses to the default. */
 const sanitizeAnnouncer = (pack: unknown): string =>
   ((typeof pack === "string" ? pack : "").trim().slice(0, MAX_ANNOUNCER_ID)) || "default";
+
+/** A seat token is a server-minted UUID echoed back verbatim — anything else
+ * on the wire (wrong type, empty, oversized) collapses to null, which never
+ * reclaims a seat. Never truncate: a clipped token must not half-match. */
+const sanitizeSeatToken = (token: unknown): string | null =>
+  typeof token === "string" && token.length > 0 && token.length <= MAX_SEAT_TOKEN ? token : null;
 
 /** The worn title is a DEED ID claim — clients resolve display text from
  * their own defs (an unknown id renders bare), so the wire only needs a

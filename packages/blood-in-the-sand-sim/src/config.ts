@@ -333,7 +333,7 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     bleed: { chance: 1, ticks: 12, interval: 0.5, damage: 1, refresh: true },
     slow: { duration: 1, factor: 0.6 },
   },
-  // The skirmisher's poison dagger (bits-store-arms.md — the first WRIT
+  // The skirmisher's poison dagger (bits-store-arms.md — the first SIGNET
   // weapon, launch shelf item 1): ultra-short reach, the fastest cycle in
   // the game, feeble raw hits — the kill is the poison working while you're
   // already gone. Zero knockback on purpose (it wants the next stab), and
@@ -364,7 +364,7 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     engagementRadius: 60 + 160,
     poison: { maxStacks: 4, interval: 1, damagePerStack: 3, duration: 5 },
   },
-  // The burst repeater (bits-store-arms.md launch shelf item 2, WRIT): the
+  // The burst repeater (bits-store-arms.md launch shelf item 2, SIGNET): the
   // third ranged identity — bow is one big earned hit, staff is slow homing
   // pressure, the scorpion is a three-bolt volley on the slowest ranged
   // cycle. Each bolt re-aims at release (BurstConfig above), so a strafer
@@ -398,7 +398,7 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     projectile: { radius: 5, maxRange: 480 },
     burst: { count: 3, interval: 0.12 },
   },
-  // The artillery piece (bits-store-arms.md launch shelf item 3, WRIT):
+  // The artillery piece (bits-store-arms.md launch shelf item 3, SIGNET):
   // ties the bow for the longest reach behind the slowest cycle (400 → 360
   // across Tom's device pass 2026-08-10, settled at 360 with the client's
   // UNIVERSAL follow zoom — every camera fits the longest range ring, so
@@ -425,7 +425,7 @@ export const WEAPONS: Record<WeaponId, WeaponConfig> = {
     engagementRadius: 360 + 20,
     shell: { flightMin: 0.55, flightMax: 0.9, blastRadius: 120, damage: 22, knockback: 400 },
   },
-  // The healer's gun (bits-store-arms.md launch shelf item 7, WRIT — the
+  // The healer's gun (bits-store-arms.md launch shelf item 7, SIGNET — the
   // last of the seven): the game's first support WEAPON, and the first
   // beam. See BeamWeaponConfig above for the whole rule set. Numbers
   // (Tom's tune, 2026-08-14): heal 3/s ramping +1/s to a 12/s cap — NINE
@@ -592,7 +592,7 @@ export const BLOOD_FONT = { radius: 100, duration: 4, healPerTick: 4, tickInterv
 /** Sandstorm: nothing inside can be auto-targeted, friend or foe. */
 export const SANDSTORM = { radius: 120, duration: 3 };
 
-/** Sinkhole (bits-store-arms.md launch shelf item 4 — the first WRIT
+/** Sinkhole (bits-store-arms.md launch shelf item 4 — the first SIGNET
  * spell): a thrown zone that PULLS everything — both teams — toward its
  * centre, strength ramping over rampSeconds then holding to the end. The
  * roster's only group-displacer; every other zone is stand-here. The pull
@@ -604,7 +604,7 @@ export const SANDSTORM = { radius: 120, duration: 3 };
  * No damage — a setup piece (a sinkhole feeding a teammate's bombard is
  * the sales pitch). Ironhide plants its feet (pulls don't take), dash
  * i-frames ignore it, and it spares NO ONE — the bombard's rule. */
-/** Titan's Draught (bits-store-arms.md launch shelf item 6, WRIT): drink,
+/** Titan's Draught (bits-store-arms.md launch shelf item 6, SIGNET): drink,
  * GROW, hit harder — the cheapest spectacle of the seven, self-balancing
  * because a bigger body is a bigger target for every telegraph, blast and
  * zone in the game (hurt radii scale WITH you, deliberately). Nothing
@@ -623,7 +623,7 @@ export const TITANS_DRAUGHT = {
   damageFactor: 1.35,
 };
 
-/** Tar Pit (bits-store-arms.md launch shelf item 5, WRIT — REDESIGNED at
+/** Tar Pit (bits-store-arms.md launch shelf item 5, SIGNET — REDESIGNED at
  * build, Tom 2026-08-10: a trail you PAINT, not another placed circle):
  * while the cast's active window runs, the caster releases tar blobs
  * behind them as they MOVE — one blob per `spacing` px travelled, plus one

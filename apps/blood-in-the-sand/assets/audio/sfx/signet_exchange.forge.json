@@ -6,13 +6,13 @@
   "model": "eleven_text_to_sound_v2",
   "params": {
     "durationSeconds": 3,
-    "promptInfluence": 0.3,
+    "promptInfluence": 0.85,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "writ_exchange_1.mp3"
+    "signet_exchange_1.mp3"
   ],
-  "created": "2026-08-15T10:59:41.475Z",
-  "updated": "2026-08-15T10:59:41.475Z"
+  "created": "2026-08-15T20:31:39.043Z",
+  "updated": "2026-08-15T20:31:39.043Z"
 }

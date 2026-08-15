@@ -17,6 +17,10 @@ export const TITLE_SPRITES: Record<string, number> = {
   "title-staff": require("../../assets/sprites/title-staff.png"),
   "title-hammer": require("../../assets/sprites/title-hammer.png"),
   "title-trident": require("../../assets/sprites/title-trident.png"),
+  "title-fang": require("../../assets/sprites/title-fang.png"),
+  "title-scorpion": require("../../assets/sprites/title-scorpion.png"),
+  "title-bombard": require("../../assets/sprites/title-bombard.png"),
+  "title-lifeline": require("../../assets/sprites/title-lifeline.png"),
 };
 
 /**

@@ -1,5 +1,5 @@
 /**
- * The Writ Forge's ember field — an SkSL runtime shader (the dustStorm.ts
+ * The Signet Forge's ember field — an SkSL runtime shader (the dustStorm.ts
  * discipline: GPU-evaluated, clock fed from a Reanimated clock on the UI
  * thread, zero React renders per frame, rasterized at half resolution).
  * A drift of warm embers rises through the whole screen; the held charge

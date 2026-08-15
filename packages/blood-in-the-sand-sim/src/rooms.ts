@@ -57,21 +57,24 @@ export type JoinVerdict = "ok" | "wrong passcode" | "room full";
 export interface JoinCheck {
   /** A free (null) seat exists AND the room is in the lobby phase. */
   freeSeatInLobby: boolean;
-  /** A seated-but-disconnected player exists (mid-match rejoin target). */
-  disconnectedSeat: boolean;
+  /** A seated-but-disconnected player whose seat token MATCHES the joiner's
+   * offer exists (mid-match rejoin target). Token-gated since protocol v28
+   * (bits-reconnect.md § seat tokens): no token → never reclaim — a wrong or
+   * missing token reads exactly like an ordinary full room, no oracle. */
+  reclaimableSeat: boolean;
   passcode: string | null;
   offeredPass: string | null;
 }
 
 /**
  * Join rules: the passcode gates everything; a free lobby seat OR a
- * disconnected seat (rejoin-and-resume, any phase) admits you.
+ * token-proven reclaimable seat (rejoin-and-resume, any phase) admits you.
  */
 export const canJoin = (check: JoinCheck): JoinVerdict => {
   if (check.passcode !== null && check.passcode !== (check.offeredPass ?? "")) {
     return "wrong passcode";
   }
-  if (check.freeSeatInLobby || check.disconnectedSeat) return "ok";
+  if (check.freeSeatInLobby || check.reclaimableSeat) return "ok";
   return "room full";
 };
 

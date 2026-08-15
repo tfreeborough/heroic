@@ -1,6 +1,6 @@
 /**
- * Store spend paths (bits-store.md § Persistence & API): Glory→Writ exchange
- * and Writ→entitlement unlock.
+ * Store spend paths (bits-store.md § Persistence & API): Glory→Signet exchange
+ * and Signet→entitlement unlock.
  *
  * Unlike the pre-check-then-batch idiom elsewhere (which leans on the game
  * server being the sole writer), these debits race a second writer process by
@@ -12,25 +12,57 @@
  * fails writes nothing at all, and a retried batch is a no-op end to end.
  */
 import type { Db } from "./db";
+import { recordSignet } from "./signets";
+
+export type IapCreditResult = "ok" | "duplicate";
+
+export interface IapCreditInput {
+  playerId: string;
+  /** Pack size resolved server-side from SIGNET_PACKS — never client-supplied. */
+  signets: number;
+  platform: "apple" | "google" | "mock";
+  /** The STORE's transaction id (Apple transactionId / Google orderId). */
+  transactionId: string;
+  /** For the ledger trail only — which pack this credit came from. */
+  productId: string;
+}
+
+/**
+ * Credit a validated IAP purchase. The idempotency key is
+ * `iap:<platform>:<transactionId>` — deliberately NOT namespaced by player:
+ * the ledger's global UNIQUE constraint then makes one store transaction
+ * creditable exactly once EVER, so a receipt replayed from a second account
+ * (shared receipt files, resold devices, forum-traded JWS blobs) lands as a
+ * harmless `duplicate`, not a second credit.
+ */
+export const creditIapSignets = async (db: Db, input: IapCreditInput): Promise<IapCreditResult> => {
+  const landed = await recordSignet(db, {
+    playerId: input.playerId,
+    amount: input.signets,
+    source: `iap:${input.platform}:${input.productId}`,
+    idempotencyKey: `iap:${input.platform}:${input.transactionId}`,
+  });
+  return landed ? "ok" : "duplicate";
+};
 
 export type ExchangeResult = "ok" | "duplicate" | "insufficient";
 
 export interface ExchangeInput {
   playerId: string;
-  /** Server-decided Glory price of one Writ — never client-supplied. */
+  /** Server-decided Glory price of one Signet — never client-supplied. */
   price: number;
   /** Client-minted uuid for the attempt: a retry of the same tap reuses the
    * key and lands as `duplicate` (success, nothing double-spent). */
   key: string;
 }
 
-/** Debit `price` Glory + credit 1 Writ, atomically. */
-export const exchangeGloryForWrit = async (
+/** Debit `price` Glory + credit 1 Signet, atomically. */
+export const exchangeGloryForSignet = async (
   db: Db,
   input: ExchangeInput,
 ): Promise<ExchangeResult> => {
   const debitKey = `exchange:${input.playerId}:${input.key}:glory`;
-  const creditKey = `exchange:${input.playerId}:${input.key}:writ`;
+  const creditKey = `exchange:${input.playerId}:${input.key}:signet`;
   const [debit] = await db.batch(
     [
       {
@@ -40,7 +72,7 @@ export const exchangeGloryForWrit = async (
         args: [input.playerId, -input.price, debitKey, input.playerId, input.price],
       },
       {
-        sql: `INSERT OR IGNORE INTO writ_ledger (player_id, amount, source, idempotency_key)
+        sql: `INSERT OR IGNORE INTO signet_ledger (player_id, amount, source, idempotency_key)
               SELECT ?, 1, 'store:exchange', ?
               WHERE EXISTS (SELECT 1 FROM glory_ledger WHERE idempotency_key = ?)`,
         args: [input.playerId, creditKey, debitKey],
@@ -63,32 +95,32 @@ export type UnlockResult = "ok" | "already-owned" | "insufficient";
 export interface UnlockInput {
   playerId: string;
   /** Entitlement id — `weapon:<id>` / `ability:<id>`. The API validates it
-   * against the sim's writ-gated roster before calling; this layer only
+   * against the sim's signet-gated roster before calling; this layer only
    * guarantees the money math. */
   itemId: string;
 }
 
 /**
- * Spend 1 Writ for a permanent entitlement, atomically. The debit key is
+ * Spend 1 Signet for a permanent entitlement, atomically. The debit key is
  * deterministic (`unlock:<playerId>:<itemId>`) so a player can never pay for
  * the same item twice, no matter how the call is retried or raced; a
- * deed-granted item is refused before any Writ moves.
+ * deed-granted item is refused before any Signet moves.
  */
-export const unlockWithWrit = async (db: Db, input: UnlockInput): Promise<UnlockResult> => {
+export const unlockWithSignet = async (db: Db, input: UnlockInput): Promise<UnlockResult> => {
   const debitKey = `unlock:${input.playerId}:${input.itemId}`;
   const [debit] = await db.batch(
     [
       {
-        sql: `INSERT OR IGNORE INTO writ_ledger (player_id, amount, source, idempotency_key)
+        sql: `INSERT OR IGNORE INTO signet_ledger (player_id, amount, source, idempotency_key)
               SELECT ?, -1, 'store:unlock', ?
-              WHERE (SELECT COALESCE(SUM(amount), 0) FROM writ_ledger WHERE player_id = ?) >= 1
+              WHERE (SELECT COALESCE(SUM(amount), 0) FROM signet_ledger WHERE player_id = ?) >= 1
                 AND NOT EXISTS (SELECT 1 FROM entitlements WHERE player_id = ? AND item_id = ?)`,
         args: [input.playerId, debitKey, input.playerId, input.playerId, input.itemId],
       },
       {
         sql: `INSERT OR IGNORE INTO entitlements (player_id, item_id, source)
-              SELECT ?, ?, 'purchase:writ'
-              WHERE EXISTS (SELECT 1 FROM writ_ledger WHERE idempotency_key = ?)`,
+              SELECT ?, ?, 'purchase:signet'
+              WHERE EXISTS (SELECT 1 FROM signet_ledger WHERE idempotency_key = ?)`,
         args: [input.playerId, input.itemId, debitKey],
       },
     ],

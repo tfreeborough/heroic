@@ -181,7 +181,7 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * entitled; ranked validates picks server-side against entitlements
  * loaded at queue time; bots draft from the FREE roster only,
  * permanently (Tom: an earned item in hand is proof of humanity).
- * v21 (2026-08-09): the FANG — the first WRIT (store) weapon
+ * v21 (2026-08-09): the FANG — the first SIGNET (store) weapon
  * (bits-store-arms.md launch shelf, item 1) — and the poison status
  * (core stacking dot: stacks share one refreshed clock, tick damage
  * scales with stacks, all fall off together). PlayerSnapshot gains
@@ -189,17 +189,17 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * with stacks), hit events gain `poison?: true` (green tick tint). The
  * new-weapon-id rule from v20 applies — old bundles index
  * WEAPONS[weapon] off snapshots, hence the bump.
- * v22 (2026-08-09): the SCORPION — writ weapon 2 (bits-store-arms.md) —
+ * v22 (2026-08-09): the SCORPION — signet weapon 2 (bits-store-arms.md) —
  * and the burst mechanic (BurstConfig: follow-up bolts on their own
  * clock, re-aimed per release). No message shapes changed; the bump is
  * the new-weapon-id rule again (bolts also ride snapshots as projectile
  * kind "scorpion", which old bundles couldn't render).
- * v23 (2026-08-10): the BOMBARD — writ weapon 3 (bits-store-arms.md) —
+ * v23 (2026-08-10): the BOMBARD — signet weapon 3 (bits-store-arms.md) —
  * and the shell entity: snapshots gain `shells` (launch/landing points +
  * landing clock — the telegraph ring both teams read, and the dodge data
  * a future bot pass reads the same way). Blast is the sandtrap idiom and
  * reuses the detonate event. New-weapon-id rule bumps as ever.
- * v24 (2026-08-10): the SINKHOLE — the first WRIT ability
+ * v24 (2026-08-10): the SINKHOLE — the first SIGNET ability
  * (bits-store-arms.md): a thrown both-teams pull zone, deployable kind
  * "sinkhole" (old bundles can't index the new ability id off slot
  * snapshots, hence the bump). FREE_ABILITY_IDS now genuinely excludes a
@@ -208,22 +208,38 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * thrown cast's landing point, the lob-FX endpoint — carried ON the
  * event because the sampled view lags the interp delay; the harpoon
  * precedent). Absent for every at-the-feet cast.
- * v25 (2026-08-10): the TAR PIT — writ ability 2 (bits-store-arms.md,
+ * v25 (2026-08-10): the TAR PIT — signet ability 2 (bits-store-arms.md,
  * REDESIGNED at build from a placed circle to a movement-painted TRAIL):
  * deployable kind "tar", many small growing blobs laid behind the caster
  * during the cast's active window. New ability id ⇒ bump, as ever.
- * v26 (2026-08-11): TITAN'S DRAUGHT — writ ability 3 (bits-store-arms.md):
+ * v26 (2026-08-11): TITAN'S DRAUGHT — signet ability 3 (bits-store-arms.md):
  * a status buff (the Ironhide family). No new wire shapes — the client
  * derives the grow scale from the slot's broadcast active window, and the
  * sim's radiusOf/damageFactorOf read the same status. New id ⇒ bump.
- * v27 (2026-08-14): the LIFELINE — writ weapon 4, the LAST launch-shelf
+ * v27 (2026-08-14): the LIFELINE — signet weapon 4, the LAST launch-shelf
  * item (bits-store-arms.md): the first beam weapon (core combat/beam.ts
  * link primitive; no attack cycle). PlayerSnapshot gains `beamTargetId`
  * + `beamLink` (the drawn beam + its ramp glow). Heals ride the existing
  * heal event (casterId = the healer — the healing deed chain now has a
  * real team engine); snap ticks are plain hit events. New id ⇒ bump.
+ * v28 (2026-08-15): seat tokens + ranked-door hardening (bits-reconnect.md
+ * § seat tokens; the 2026-08-15 security audit confirmed all four holes).
+ * Every seat is minted a random per-seat secret when first taken, carried in
+ * `welcome.seatToken`; `joinRoom` gains `seatToken?` and a disconnected seat
+ * is reclaimed ONLY on a matching token — no token, no reclaim, ever
+ * (previously anyone with the code could take over an idling body, rename
+ * it, and play out the owner's ranked match). The ranked doors close with
+ * it: a ranked join that can't prove a seat, and ANY `watchRoom` on a ranked
+ * room, reject with the same generic "no such room" a guessed code gets —
+ * a ranked room doesn't exist to outsiders, and a watcher feed is
+ * full-position wallhack intel for an accomplice. Server-side on the same
+ * bump: one live ranked seat per account (a second socket on the same bearer
+ * token could farm parallel bot-backfill matches), and a ranked rejoin keeps
+ * the seat's OWN name/title/announcer — a rejoiner resumes an identity,
+ * never creates one (the queue-time entitlement check otherwise had a
+ * verbatim bypass through Room.seat()).
  */
-export const PROTOCOL_VERSION = 27;
+export const PROTOCOL_VERSION = 28;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -241,7 +257,11 @@ export type ClientMsg =
   /** `teamSize` 1–4 (the host's 1v1/2v2/3v3/4v4 pick) → 2×N seats; absent or
    * off-menu falls back to 1v1 (sanitizeTeamSize). */
   | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; announcer?: string; title?: string }
-  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string }
+  /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
+   * secret the last `welcome` for this room carried. Present and matching a
+   * disconnected seat, that exact seat is reclaimed — name, team, body.
+   * Absent (a fresh join), only a free lobby seat will do. */
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; seatToken?: string }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }
@@ -473,6 +493,11 @@ export type ServerMsg =
       hostId: number;
       zoneId: string;
       config: ArenaClientConfig;
+      /** This seat's rejoin secret (bits-reconnect.md § seat tokens) — send
+       * it back in `joinRoom.seatToken` to reclaim the seat after a socket
+       * death. Minted when the seat is first taken and stable for its life
+       * (a reclaim re-receives the same token). Client memory only, v1. */
+      seatToken: string;
     }
   | { t: "rooms"; rooms: RoomListing[] }
   /** Membership/host changes — sent to the room on join/leave/migration. */

@@ -147,7 +147,7 @@ const weaponRounds = [
     { threshold: 50, title: "Spearside", description: "Win 50 rounds wielding the Trident." },
     { threshold: 200, title: "The Retiarius", description: "Win 200 rounds wielding the Trident.", rewards: [{ kind: "title" }] },
   ]),
-  // The WRIT weapons' ladders (bits-store-arms.md) — same rule as the
+  // The SIGNET weapons' ladders (bits-store-arms.md) — same rule as the
   // trident's: the chain is visible to all, climbable once the Armory sells
   // you the arm. PLACEHOLDER titles (Tom's naming pass).
   ...weaponChain("fang", 5, [
@@ -175,7 +175,7 @@ const weaponRounds = [
 /** Per-ability cast chains — WEST ribs, clustered BY CATEGORY (offensive /
  * defensive / support — thematic grouping, Tom 2026-08-04) with a wide gap
  * between clusters. Rows 0-4 offensive, 5-9 defensive, 10-13 support
- * (the WRIT spells joined 2026-08-10/11: sinkhole + titans-draught
+ * (the SIGNET spells joined 2026-08-10/11: sinkhole + titans-draught
  * offensive, tar-pit support) match the authored order below. */
 const abilityRowY = (row: number): number =>
   185 + row * 115 + (row >= 5 ? 100 : 0) + (row >= 10 ? 100 : 0);
@@ -208,7 +208,7 @@ const abilityCasts = [
     { threshold: 50, title: "Reel Them In", description: "Cast Harpoon 50 times." },
     { threshold: 250, title: "The Butcher's Gaff", description: "Cast Harpoon 250 times." },
   ]),
-  // The first WRIT spell's ladder (bits-store-arms.md) — climbable once the
+  // The first SIGNET spell's ladder (bits-store-arms.md) — climbable once the
   // Armory sells you the throw. PLACEHOLDER titles (Tom's naming pass).
   ...abilityChain("sinkhole", 3, [
     { threshold: 10, title: "Undertow", description: "Cast Sinkhole 10 times." },
@@ -245,7 +245,7 @@ const abilityCasts = [
     { threshold: 100, title: "Hold the Line", description: "Cast Warding Shout 100 times." },
     { threshold: 250, title: "The Herald's Roar", description: "Cast Warding Shout 250 times." },
   ]),
-  // The second WRIT spell's ladder (bits-store-arms.md) — PLACEHOLDER titles.
+  // The second SIGNET spell's ladder (bits-store-arms.md) — PLACEHOLDER titles.
   ...abilityChain("tar-pit", 10, [
     { threshold: 10, title: "Slow Going", description: "Cast Tar Pit 10 times." },
     { threshold: 50, title: "Black Wake", description: "Cast Tar Pit 50 times." },

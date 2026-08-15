@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a small stack of stiff parchment documents dropped onto a wooden counter — two or three quick heavy paper thumps landing in a pile, a leather strap cinching, then one warm low bell tone settling it, about one second, prosperous but understated, no coins, no voices",
+  "prompt": "Three stiff parchment pages slap together onto a worn wooden counter: two quick heavy paper thumps, a third softer settling, leather strap cinch over stack, then a warm low bell tone ringing and decaying — ~1s total, close-mic'd, dry, intimate.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 3,
+    "promptInfluence": 0.85,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "signet_purchase_1.mp3"
+  ],
+  "created": "2026-08-15T20:30:39.656Z",
+  "updated": "2026-08-15T20:30:39.656Z"
+}

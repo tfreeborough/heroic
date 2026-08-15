@@ -379,7 +379,7 @@ export const HomeScreen = ({ onPlay, onArmory, onSettings, onTargetDummies, upda
     };
   }, [devOpen]);
 
-  const onDevGrant = (grant: { glory?: number; writs?: number }) => (): void => {
+  const onDevGrant = (grant: { glory?: number; signets?: number }) => (): void => {
     void (async () => {
       const identity = await ensureIdentity();
       if (!identity) return;
@@ -710,26 +710,30 @@ export const HomeScreen = ({ onPlay, onArmory, onSettings, onTargetDummies, upda
             </Text>
           </Pressable>
           {/* Session grant of every gated item — the wizard shows the trident
-              etc. in practice/skirmish; RANKED still checks the real ledger. */}
-          <Pressable onPress={withTap("uiTap", onToggleGrantItems)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>
-              ITEMS {grantAllItems ? "◉ ALL GRANTED" : "○ EARNED ONLY"}
-            </Text>
-          </Pressable>
+              etc. in practice/skirmish; RANKED still checks the real ledger.
+              Debug builds only: in a shipped build this row would hand out
+              the Armory's paid shelf in skirmish (store-security pass). */}
+          {__DEV__ ? (
+            <Pressable onPress={withTap("uiTap", onToggleGrantItems)} style={styles.devButton}>
+              <Text style={styles.devButtonText}>
+                ITEMS {grantAllItems ? "◉ ALL GRANTED" : "○ EARNED ONLY"}
+              </Text>
+            </Pressable>
+          ) : null}
           {/* Store testing (bits-store.md): real server balances; the grant
               rows need the API running with STORE_DEV_TOOLS=1. */}
           <Pressable onPress={withTap("uiTap", onDevGrant({}))} style={styles.devButton}>
             <Text style={styles.devButtonText}>
-              WALLET {devWallet ? `${devWallet.glory.toLocaleString()} GLORY · ${devWallet.writs} WRIT${devWallet.writs === 1 ? "" : "S"}` : "—"}
+              WALLET {devWallet ? `${devWallet.glory.toLocaleString()} GLORY · ${devWallet.signets} SIGNET${devWallet.signets === 1 ? "" : "S"}` : "—"}
             </Text>
           </Pressable>
           <Pressable onPress={withTap("uiConfirm", onDevGrant({ glory: 500 }))} style={styles.devButton}>
             <Text style={styles.devButtonText}>GRANT 500 GLORY</Text>
           </Pressable>
-          <Pressable onPress={withTap("uiConfirm", onDevGrant({ writs: 1 }))} style={styles.devButton}>
-            <Text style={styles.devButtonText}>GRANT 1 WRIT</Text>
+          <Pressable onPress={withTap("uiConfirm", onDevGrant({ signets: 1 }))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>GRANT 1 SIGNET</Text>
           </Pressable>
-          {/* Forget every Writ purchase (server + local cache) so the unlock
+          {/* Forget every Signet purchase (server + local cache) so the unlock
               flow can be re-tested end to end. Deed grants survive. */}
           <Pressable
             onPress={withTap("uiTap", () => {

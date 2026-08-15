@@ -757,7 +757,7 @@ const SocketStrip = ({ picks, current, landed, refs, onTap, size = 72, separated
 interface WizardStepProps {
   wizard: WizardState;
   picks: Picks;
-  /** Practice unlocks writ-gated items in the grid (try-before-buy). */
+  /** Practice unlocks signet-gated items in the grid (try-before-buy). */
   practice: boolean;
   screenW: number;
   focusedIconRef: React.MutableRefObject<View | null>;
@@ -788,7 +788,7 @@ const WizardStep = (props: WizardStepProps) => {
   }, [slide]);
 
   /** Abilities still free for this step within a category — entitlement-
-   * gated like the weapon list (practice unlocks writ items). */
+   * gated like the weapon list (practice unlocks signet items). */
   const freeIn = (cat: AbilityCategory): AbilityId[] =>
     abilitiesByCategory(cat, getEntitlements(), practice).filter(
       (a) => !picks.hand.includes(a) || a === picks.hand[wizard.step - 1],

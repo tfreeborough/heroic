@@ -114,8 +114,9 @@ export const AUDIO_MANIFEST: AudioManifest = {
     deed_unlock_1: require("../../assets/audio/sfx/deed_unlock_1.mp3"),
 
     // Store
-    writ_exchange_1: require("../../assets/audio/sfx/writ_exchange_1.mp3"),
-    writ_unlock_1: require("../../assets/audio/sfx/writ_unlock_1.mp3"),
+    signet_exchange_1: require("../../assets/audio/sfx/signet_exchange_1.mp3"),
+    signet_unlock_1: require("../../assets/audio/sfx/signet_unlock_1.mp3"),
+    signet_purchase_1: require("../../assets/audio/sfx/signet_purchase_1.mp3"),
 
     // ALL announcer packs (announcer.ts) — `<pack>:announce_first_blood_1`, …
     ...ANNOUNCER_MANIFEST,

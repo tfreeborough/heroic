@@ -30,8 +30,8 @@ import {
   WEAPON_IDS,
   GATED_ABILITIES,
   GATED_WEAPONS,
-  WRIT_ABILITIES,
-  WRIT_WEAPONS,
+  SIGNET_ABILITIES,
+  SIGNET_WEAPONS,
   abilityEntitlement,
   weaponEntitlement,
   type AbilityCategory,
@@ -376,7 +376,7 @@ export const categoryOf = (id: AbilityId): AbilityCategory => ABILITIES[id].cate
 
 /** Ability ids grouped by category, alphabetical (Tom 2026-07-15) — the
  * pick lists' order. Gating mirrors sortedWeaponIds exactly: gated items
- * appear only when entitled — except writ items in PRACTICE, the
+ * appear only when entitled — except signet items in PRACTICE, the
  * try-before-buy door (deed secrets stay hidden even there). */
 export const abilitiesByCategory = (
   category: AbilityCategory,
@@ -388,19 +388,19 @@ export const abilitiesByCategory = (
       categoryOf(id) === category &&
       (!GATED_ABILITIES.has(id) ||
         entitled.has(abilityEntitlement(id)) ||
-        (practice && WRIT_ABILITIES.has(id))),
+        (practice && SIGNET_ABILITIES.has(id))),
   ).sort((a, b) => ABILITIES[a].name.localeCompare(ABILITIES[b].name));
 
 /** Weapon ids alphabetical — same ordering rule as abilities. Gated items
  * appear ONLY when entitled: hidden, never greyed — a secret doesn't exist
  * until it's yours (bits-secret-items.md), and the wizard shows what you
  * own, nothing else (bits-store.md). The one exception: PRACTICE unlocks
- * writ-gated items for everyone — free practice use is the store's
+ * signet-gated items for everyone — free practice use is the store's
  * try-before-buy funnel. Deed items stay hidden even there (secrets rule). */
 export const sortedWeaponIds = (entitled: ReadonlySet<string>, practice = false): WeaponId[] =>
   WEAPON_IDS.filter(
     (w) =>
       !GATED_WEAPONS.has(w) ||
       entitled.has(weaponEntitlement(w)) ||
-      (practice && WRIT_WEAPONS.has(w)),
+      (practice && SIGNET_WEAPONS.has(w)),
   ).sort((a, b) => WEAPONS[a].name.localeCompare(WEAPONS[b].name));

@@ -2,8 +2,10 @@
 
 Status: **designed 2026-08-09 · S1 (Writ wallet + store endpoints + dev tools) BUILT
 same day · S4 launch shelf (7 items, bits-store-arms.md) BUILT 08-09→08-14 ·
-S2 (the Armory screen) BUILT 2026-08-15** — IAP (S3) owed for the end-of-August
-launch, plus TRY IT deep-link, forge art/SFX, on-device pass ·
+S2 (the Armory screen) BUILT 2026-08-15 · S3 (IAP: receipt validation +
+Writ packs + store-security pass) BUILT 2026-08-15** — owed: the store-console
+setup (Tom-only manual steps, § S3 as built), TRY IT deep-link, forge art/SFX
+(writ_purchase clip), on-device pass ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-09 ·
 Companion to [monetisation.md](./monetisation.md) (principles — never a flat paid
@@ -34,6 +36,36 @@ Decisions locked 2026-08-09:
 - **Name: "Writ"** — an official licence to bear arms in the arena. Short enough for
   UI ("UNLOCK — 1 WRIT"). (Two-type names *Writ of Steel* / *Writ of Sand* were
   considered and retired with the next decision.)
+  **AMENDED 2026-08-15 — display name is now "SIGNET"** (Tom, after a wife-test:
+  "writ" is archaic legal jargon that landed as "what is this, why is it
+  special"). A Signet is the sponsor's ring-mark pressed in wax — the patronage
+  fiction the IAP already tells, and it keeps every built asset literally
+  correct (the wax icon IS a signet impression, the forge stamp-strike IS
+  pressing one, the unlock ceremony breaks the seal it made). Shortlist run:
+  Seals/Marks (bureaucratic register, rejected for flavour), Crown (instant but
+  victory-register — a BOUGHT crown fights "glory is never sold" — and
+  genericised across games), Favor (right fiction, no drawable object), Rudis
+  (as unknown as Writ, and sells an earned-freedom symbol). **FULL rename,
+  internals included (Tom, same day):** with exactly one install in the wild
+  and no store products created yet, the display-only compromise had no
+  compatibility case to protect — so `signet_ledger`, `SIGNET_PACKS`,
+  `signet_pack_*` SKUs, `{ glory, signets }` wallet shape,
+  `signetGloryPrice`/`signetItems` on GET /store, `purchase:signet`
+  entitlement source, `SIGNET_GLORY_PRICE` env, sound events
+  (`signetExchange`/`signetUnlock`/`signetPurchase`, clips
+  `signet_exchange_1`/`signet_unlock_1` renamed on disk with their forge
+  sidecars), and files `signets.ts`/`SignetForge.tsx`/`SignetPacks.tsx`.
+  The old `writ_ledger` table is simply abandoned — ensureSchema creates
+  `signet_ledger` fresh; Tom drops the old table (or the dev db) himself.
+  Deploy note: API + client ship together (the wallet field renamed), and
+  any `WRIT_GLORY_PRICE` env on Render must be re-keyed to
+  `SIGNET_GLORY_PRICE` or the price silently falls back to 800.
+  Store-console product display names read "1 Signet" / "3 Signets" /
+  "6 Signets" with SKUs `signet_pack_1/3/6`.
+  Same session: the forge's gold ring around the wax was removed (a
+  gold-ringed disc reads as a button — the tester pressed the artwork instead
+  of the hold control; the wax is now ringless material, only the transient
+  strike stamp draws a ring).
 - **One universal type, not weapon/spell variants** — a player can never hold the
   *wrong* voucher (the no-stranded-remainders hygiene rule from monetisation.md).
   A pricing lever survives anyway: a future item may cost 2 Writs if it ever must.
@@ -338,8 +370,68 @@ Glory→Writ rate so it never becomes the rational permanent path.
    a preset-loadout param through PracticeClient/RoomScreen), forge hero art +
    writ_exchange/writ_unlock clips, cosmetics/announcer shelf (with S3),
    on-device pass.
-3. **S3 — IAP**: receipt validation, Writ packs (honest sizing — no stranded
-   remainders), account-linking nudge after first purchase (per glory-economy.md).
+3. **S3 — IAP — BUILT 2026-08-15.** Decisions (Tom, 2026-08-15): **stack =
+   expo-iap + first-party validation** (react-native-iap is in maintenance
+   mode; its successor expo-iap is the live library. RevenueCat was
+   considered and rejected — a third party in the money path buying us a
+   thin slice of features our ledger already has). **Pack ladder RATIFIED
+   as proposed**: `writ_pack_1` $1.89 · `writ_pack_3` $4.49 · `writ_pack_6`
+   $7.99 — product ids identical on both stores, sizes in the sim's
+   `WRIT_PACKS` table (the API credits from that table ONLY; a writ count
+   never travels from the client). As built:
+   - **Server** (`/store/iap`): Apple = the StoreKit 2 signed transaction
+     (JWS) verified with Apple's official `app-store-server-library` against
+     vendored Apple root certs (`api/certs/`, public documents, committed;
+     verified working under Bun 1.2.23). Production verification needs the
+     numeric `APPLE_APP_APPLE_ID` env (Apple's rule) — until it's set the
+     verifier is sandbox-only, which is exactly TestFlight. Sandbox
+     transaction ids are prefixed `sandbox-` so the two id spaces can never
+     collide in the ledger. Google = the purchase token looked up on the
+     Play Developer API (minimal self-signed JWT + fetch, no SDK; the
+     service account rides `GOOGLE_SERVICE_ACCOUNT_JSON` env on Render,
+     `_FILE` locally — same credential eas submit uses). Package name and
+     bundle id come from env, never the request. Credit = `writ_ledger` row
+     with idempotency key `iap:<platform>:<transactionId>` — deliberately
+     NOT player-namespaced, so the ledger's global UNIQUE constraint makes
+     one store transaction creditable exactly once EVER (cross-account
+     receipt replay is structurally dead). A refunded (revoked) Apple
+     transaction never credits. Response contract: 200 + `credited` (0 =
+     already banked, still success), 400 = affirmatively invalid (client
+     finishes the transaction so the store can't replay a poison pill),
+     503 = verification infra down (client keeps it unfinished → replay).
+   - **Client**: `net/iap.ts` wraps expo-iap; the credit order is
+     verify-with-server FIRST, `finishTransaction(isConsumable)` second —
+     a crash between the two can only double-submit, which idempotency
+     answers with `credited: 0`. Unfinished purchases replay on Armory
+     entry (`getAvailablePurchases`), so a charge the app died on lands
+     next visit. The **pack shelf** (`WritPacks.tsx`, sheet-gesture DNA) is
+     opened by an outlined **BUY WRITS** on the counter row (the money door
+     is quieter than the solid-gold forge — Glory play stays the headline
+     path); prices are store-localized `displayPrice`, never derived. On a
+     client without the native module (pre-rebuild dev client / Expo Go)
+     the same shelf runs the tier-2 **mock path** (prices read DEV, taps
+     post fake receipts only a STORE_DEV_TOOLS API accepts). New
+     `writPurchase` catalogue event (stand-in: writ_exchange_1;
+     writ_purchase brief added to the forge styleBible).
+   - **Store-security pass, same day** (the full audit + fixes are in the
+     2026-08-15 session log): game server got seat-token rejoin auth
+     (protocol v28, bits-reconnect.md updated), a one-live-ranked-match-
+     per-account guard, unwatchable ranked rooms, and rejoin identity
+     pinning; the API got `/register` + store-route rate limits and a
+     boot-refusal of STORE_DEV_TOOLS against a remote Turso; the client's
+     dev-menu grant-all-items overlay became debug-build-only.
+   - **⚠ The IAP native module is a dev-client rebuild** (both platforms) —
+     `expo-iap` is in app.json plugins; iOS also needs the In-App Purchase
+     capability which the plugin adds at prebuild.
+   - **Still owed from S3's original scope**: the account-linking nudge
+     after first purchase (Clerk linking itself is unbuilt — consumable
+     packs have no store-side restore, the ledger is the record, so linking
+     IS the recovery story; glory-economy.md), announcer-pack cosmetics
+     shelf (no entitlement kind exists for packs yet — decide pricing model
+     first), and the **store-console manual steps** only Tom can do:
+     create the three consumable IAPs (ids above) in App Store Connect +
+     Play Console, set the Render envs (`APPLE_APP_APPLE_ID`,
+     `GOOGLE_SERVICE_ACCOUNT_JSON`), and mint sandbox/licence testers.
 4. **Pre-launch content drops** ship `gate: "writ"` and stock the shelf for day
    one. (All four are launch-blocking if the store is to make money in August.)
 
@@ -361,7 +453,7 @@ Three tiers, cheapest first — most store testing never involves money at all:
    Connect → Users → Sandbox) and Google Play licence testers — the genuine
    purchase UI with no charge; TestFlight builds also bill against sandbox. The
    API's receipt validator checks the sandbox endpoint when the receipt says so.
-   ⚠ The IAP native module (react-native-iap or RevenueCat — decide at S3) is a
+   ⚠ The IAP native module (**expo-iap** — decided at S3, 2026-08-15) is a
    **dev-client rebuild**, same as expo-secure-store was.
 
 New-content tax additions when built: unlock-stamp + Writ-purchase SFX via Asset
@@ -371,7 +463,8 @@ Writ icon art per [bits-art-style.md](./bits-art-style.md).
 ## Open questions (deliberately undecided)
 
 - **Names:** "Armory" is a working name (desert-arena alternatives welcome — the
-  Bazaar? the Quartermaster?); Writ display flourish ("Arena Writ"?) — Tom's pass.
+  Bazaar? the Quartermaster?). ~~Writ display flourish~~ — RESOLVED 2026-08-15:
+  the currency displays as **Signet** (see the amended naming decision above).
 - **Numbers to ratify:** exact bundle ladder (3/$4.49 · 6/$7.99 proposed), announcer
   pack pricing model.
 - **Policy:** do post-launch items *always* ship Writ-locked, or is free-drop an

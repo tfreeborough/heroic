@@ -8,7 +8,7 @@
  *
  *  - `deed` (secret items): granted by an achievement. Hidden everywhere
  *    until owned — a secret doesn't exist until it's yours.
- *  - `writ` (store items): bought with a Writ in the Armory. Visible and
+ *  - `signet` (store items): bought with a Signet in the Armory. Visible and
  *    locked in the Armory, absent from the wizard until owned (Tom,
  *    2026-08-09), fully usable in practice (try-before-buy).
  *
@@ -27,16 +27,16 @@ import type { AbilityId, WeaponId } from "./config";
 export const DEED_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>(["trident"]);
 export const DEED_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([]);
 
-/** Writ-purchasable store items (bits-store.md) — stocked by the pre-launch
+/** Signet-purchasable store items (bits-store.md) — stocked by the pre-launch
  * content drops (bits-store-arms.md); a roster id lives in exactly one gate
  * kind, never both. */
-export const WRIT_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>([
+export const SIGNET_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>([
   "fang",
   "scorpion",
   "bombard",
   "lifeline",
 ]);
-export const WRIT_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
+export const SIGNET_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
   "sinkhole",
   "tar-pit",
   "titans-draught",
@@ -46,11 +46,11 @@ export const WRIT_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
  * free-roster partition care about. */
 export const GATED_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>([
   ...DEED_WEAPONS,
-  ...WRIT_WEAPONS,
+  ...SIGNET_WEAPONS,
 ]);
 export const GATED_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
   ...DEED_ABILITIES,
-  ...WRIT_ABILITIES,
+  ...SIGNET_ABILITIES,
 ]);
 
 export const weaponEntitlement = (weapon: WeaponId): string => `weapon:${weapon}`;
@@ -58,10 +58,24 @@ export const abilityEntitlement = (ability: AbilityId): string => `ability:${abi
 
 /** Every entitlement id the store may sell — the API's unlock endpoint
  * refuses anything not in this list (deed items are never purchasable). */
-export const WRIT_ITEM_IDS: readonly string[] = [
-  ...[...WRIT_WEAPONS].map(weaponEntitlement),
-  ...[...WRIT_ABILITIES].map(abilityEntitlement),
+export const SIGNET_ITEM_IDS: readonly string[] = [
+  ...[...SIGNET_WEAPONS].map(weaponEntitlement),
+  ...[...SIGNET_ABILITIES].map(abilityEntitlement),
 ];
+
+/**
+ * The IAP Signet packs (bits-store.md § S3, ratified 2026-08-15): product ids
+ * as configured in App Store Connect / Play Console (identical on both
+ * stores) → Signets credited. The API credits FROM THIS TABLE ONLY — a signet
+ * count never travels from the client — and the client derives its SKU list
+ * from the keys. Prices live in the store consoles (localized), never here:
+ * 1 @ $1.89 · 3 @ $4.49 · 6 @ $7.99.
+ */
+export const SIGNET_PACKS: Readonly<Record<string, number>> = {
+  signet_pack_1: 1,
+  signet_pack_3: 3,
+  signet_pack_6: 6,
+};
 
 /** Entitlement itemId → display name. Titles are NOT here (a title's
  * display string is its deed's own name — resolved from ACHIEVEMENT_DEFS). */

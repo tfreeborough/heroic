@@ -1,13 +1,13 @@
 /**
- * The Writ Forge (bits-store.md § the Writ Forge) — the ONE surface where
- * Glory becomes Writs, rebuilt as a ritual (Tom, 2026-08-15: the tap-and-
+ * The Signet Forge (bits-store.md § the Signet Forge) — the ONE surface where
+ * Glory becomes Signets, rebuilt as a ritual (Tom, 2026-08-15: the tap-and-
  * it-happens version was "super underwhelming"; conversion must feel mega
  * premium so forging again is its own reward).
  *
  * The ritual: HOLD to forge. The press charges the seal — heat blooms
  * behind it, the wax runs molten, haptic ticks climb — release early and
  * it cools; hold to full and THE STRIKE falls: stamp slam, spark burst,
- * the Glory count visibly drains, and the finished Writ flies down onto a
+ * the Glory count visibly drains, and the finished Signet flies down onto a
  * growing fan of sealed documents. The stack is the point: every forge
  * adds a card you can SEE.
  *
@@ -19,7 +19,7 @@
  * round-trip hides entirely inside the 480ms slam — and a refused forge
  * (race/offline) says so in place, nothing charged.
  *
- * Owed from the Forge: writ_exchange_1 (the strike itself — see the brief
+ * Owed from the Forge: signet_exchange_1 (the strike itself — see the brief
  * in audio/catalogue.ts); a charge-loop hiss is a possible later layer.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -44,7 +44,7 @@ const STACK_MAX_CARDS = 7;
 
 export type ForgeOutcome = "ok" | "insufficient" | "unavailable";
 
-interface WritForgeProps {
+interface SignetForgeProps {
   wallet: Wallet;
   price: number;
   /** Pure commerce — no sounds, no haptics; the forge narrates. */
@@ -147,8 +147,8 @@ const Sparks = ({ seed }: { seed: number }) => {
   );
 };
 
-/** The freshly-struck Writ arcing down onto the stack. */
-const FlyingWrit = ({ seed, onLand }: { seed: number; onLand: () => void }) => {
+/** The freshly-struck Signet arcing down onto the stack. */
+const FlyingSignet = ({ seed, onLand }: { seed: number; onLand: () => void }) => {
   const t = useRef(new Animated.Value(0)).current;
   const landed = useRef(false);
   useEffect(() => {
@@ -182,21 +182,21 @@ const FlyingWrit = ({ seed, onLand }: { seed: number; onLand: () => void }) => {
         },
       ]}
     >
-      <WritCard />
+      <SignetCard />
     </Animated.View>
   );
 };
 
 /** One sealed document — the thing this room exists to make. */
-const WritCard = () => (
-  <View style={styles.writCard}>
-    <View style={styles.writCardSeal} />
-    <View style={styles.writCardLine} />
-    <View style={[styles.writCardLine, { width: 16 }]} />
+const SignetCard = () => (
+  <View style={styles.signetCard}>
+    <View style={styles.signetCardSeal} />
+    <View style={styles.signetCardLine} />
+    <View style={[styles.signetCardLine, { width: 16 }]} />
   </View>
 );
 
-export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) => {
+export const SignetForge = ({ wallet, price, onForge, onClose }: SignetForgeProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   useBackClose(onClose);
@@ -206,8 +206,8 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
   const [notice, setNotice] = useState<string | null>(null);
   const [sparkSeed, setSparkSeed] = useState(0);
   const [flySeed, setFlySeed] = useState(0);
-  // The stack lags the wallet: a new Writ joins when its card LANDS.
-  const [shownWrits, setShownWrits] = useState(wallet.writs);
+  // The stack lags the wallet: a new Signet joins when its card LANDS.
+  const [shownSignets, setShownSignets] = useState(wallet.signets);
 
   // JS-driven on purpose — feeds width/colour (see header).
   const charge = useRef(new Animated.Value(0)).current;
@@ -269,7 +269,7 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
     setPhase("striking");
     setNotice(null);
     // The slam is optimistic — the server answer lands inside it.
-    playSound("writExchange");
+    playSound("signetExchange");
     playStrikeHaptic("heavy", true);
     strikeT.setValue(0);
     Animated.timing(strikeT, { toValue: 1, duration: 480, easing: Easing.out(Easing.back(2.2)), useNativeDriver: true }).start();
@@ -283,7 +283,7 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
       playSound("uiError");
       setNotice(
         outcome === "insufficient"
-          ? "THE GLORY MOVED — NOT ENOUGH FOR A WRIT. NOTHING WAS SPENT."
+          ? "THE GLORY MOVED — NOT ENOUGH FOR A SIGNET. NOTHING WAS SPENT."
           : "THE LEDGER IS OUT OF REACH — NOTHING WAS SPENT.",
       );
       coolDown();
@@ -302,7 +302,7 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
     if (phase === "charging") coolDown();
   };
 
-  const stackCards = Math.min(shownWrits, STACK_MAX_CARDS);
+  const stackCards = Math.min(shownSignets, STACK_MAX_CARDS);
 
   return (
     <View style={styles.scrim}>
@@ -312,7 +312,7 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
         <Text style={styles.closeGlyph}>✕</Text>
       </Pressable>
 
-      <Text style={styles.titleText}>THE WRIT FORGE</Text>
+      <Text style={styles.titleText}>THE SIGNET FORGE</Text>
       <Text style={styles.tagline}>RENOWN, PRESSED INTO WAX.</Text>
 
       {/* The purse feeding the seal — drains as the strike lands. */}
@@ -390,11 +390,11 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
         {/* Glory feeding the seal — red diamonds stream in while held. */}
         {phase === "charging" ? <GloryStream /> : null}
         <Sparks seed={sparkSeed} />
-        <FlyingWrit
+        <FlyingSignet
           seed={flySeed}
           onLand={() => {
             playStrikeHaptic("light");
-            setShownWrits(wallet.writs);
+            setShownSignets(wallet.signets);
             // Still holding and still funded → the next charge begins by
             // itself; the chain breaks on release, an empty purse, or a
             // refused forge (failures always require a fresh press).
@@ -408,7 +408,7 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
       <View style={styles.rate}>
         <Text style={styles.rateText}>{`${price.toLocaleString()} GLORY`}</Text>
         <Text style={styles.rateArrow}>→</Text>
-        <Text style={styles.rateText}>1 WRIT</Text>
+        <Text style={styles.rateText}>1 SIGNET</Text>
       </View>
 
       {/* HOLD to forge — the charge fills the button under the thumb. */}
@@ -426,10 +426,10 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
       </Pressable>
       {notice !== null ? <Text style={styles.notice}>{notice}</Text> : null}
 
-      {/* The fan of struck Writs — every forge visibly adds to the pile. */}
+      {/* The fan of struck Signets — every forge visibly adds to the pile. */}
       <View style={styles.stack}>
         {stackCards === 0 ? (
-          <Text style={styles.stackEmpty}>NO WRITS HELD — THE WAX WAITS</Text>
+          <></>
         ) : (
           <>
             <View style={styles.stackFan}>
@@ -441,18 +441,14 @@ export const WritForge = ({ wallet, price, onForge, onClose }: WritForgeProps) =
                     { transform: [{ rotate: `${(i - (stackCards - 1) / 2) * 7}deg` }, { translateY: Math.abs(i - (stackCards - 1) / 2) * 3 }] },
                   ]}
                 >
-                  <WritCard />
+                  <SignetCard />
                 </View>
               ))}
             </View>
-            <Text style={styles.stackCount}>{`${shownWrits} WRIT${shownWrits === 1 ? "" : "S"} HELD`}</Text>
+            <Text style={styles.stackCount}>{`${shownSignets} SIGNET${shownSignets === 1 ? "" : "S"} HELD`}</Text>
           </>
         )}
       </View>
-
-      <Pressable onPress={onClose} style={styles.done}>
-        <Text style={styles.doneText}>TO THE RACKS ›</Text>
-      </Pressable>
     </View>
   );
 };
@@ -483,19 +479,21 @@ const styles = StyleSheet.create({
   stage: { width: 220, height: 190, alignItems: "center", justifyContent: "center" },
   heat: { position: "absolute", left: -50, top: -65, width: 320, height: 320 },
   heatCanvas: { width: 320, height: 320 },
+  // No gold ring around the wax (Tom's wife-test, 2026-08-15): a
+  // gold-ringed disc reads as a BUTTON and testers pressed the artwork
+  // instead of the hold control below. The wax sits ringless — raw material
+  // on the stage, not a control — and only the transient strike stamp draws
+  // a ring, as an event rather than an affordance.
   seal: {
     width: 86,
     height: 86,
-    borderRadius: 43,
-    borderWidth: 3,
-    borderColor: C_GOLD,
     alignItems: "center",
     justifyContent: "center",
   },
   sealWax: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "#7e2020",
     borderWidth: 3,
     borderColor: "#5d1717",
@@ -507,7 +505,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 27,
+    borderRadius: 32,
     backgroundColor: "#ff7a40",
   },
   stamp: {
@@ -533,7 +531,7 @@ const styles = StyleSheet.create({
   sparkLong: { position: "absolute", width: 11, height: 3, borderRadius: 1.5, backgroundColor: "#ffe9b0" },
   flying: { position: "absolute" },
 
-  writCard: {
+  signetCard: {
     width: 34,
     height: 44,
     borderRadius: 4,
@@ -544,8 +542,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 3,
   },
-  writCardSeal: { width: 11, height: 11, borderRadius: 6, backgroundColor: "#7e2020", borderWidth: 1.5, borderColor: "#5d1717" },
-  writCardLine: { width: 20, height: 2, borderRadius: 1, backgroundColor: "rgba(217,154,65,0.45)" },
+  signetCardSeal: { width: 11, height: 11, borderRadius: 6, backgroundColor: "#7e2020", borderWidth: 1.5, borderColor: "#5d1717" },
+  signetCardLine: { width: 20, height: 2, borderRadius: 1, backgroundColor: "rgba(217,154,65,0.45)" },
 
   rate: { flexDirection: "row", alignItems: "center", gap: 12 },
   rateText: { color: C_BONE, fontSize: 12, fontWeight: "900", letterSpacing: 1.5, fontVariant: ["tabular-nums"] },

@@ -1,9 +1,13 @@
 # Blood in the Sand — Reconnect & Rejoin
 
 Status: **connection layer (silent redial + connect screen) BUILT 2026-07-30 ·
-seat rejoin DESIGNED, not built** ·
+seat TOKENS built 2026-08-15 (protocol v28, security pass: welcome carries
+`seatToken`, reclaim is token-only, ranked joins/watches without proof read as
+"no such room"; the client keeps `lastSeat` in module memory and sends it on a
+manual rejoin by code) · AUTO-rejoin (the manager re-dialing the room itself)
+still not built** ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-30
+Last decided: 2026-08-15
 
 > "This can happen randomly and can be quite frustrating […] it's not really
 > obvious to a user why this screen is showing or what they can do."

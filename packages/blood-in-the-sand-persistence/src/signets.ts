@@ -1,20 +1,20 @@
 /**
- * The Writ ledger (bits-store.md): the universal unlock voucher, structured
+ * The Signet ledger (bits-store.md): the universal unlock voucher, structured
  * exactly like the Glory ledger — append-only rows, balance = SUM(amount).
  * Spend paths (exchange, unlock) live in store.ts, which guards balances
  * inside the write batch itself; this module is just the mirror of glory.ts.
  */
 import type { Db } from "./db";
 
-export const writBalance = async (db: Db, playerId: string): Promise<number> => {
+export const signetBalance = async (db: Db, playerId: string): Promise<number> => {
   const result = await db.execute({
-    sql: "SELECT COALESCE(SUM(amount), 0) AS balance FROM writ_ledger WHERE player_id = ?",
+    sql: "SELECT COALESCE(SUM(amount), 0) AS balance FROM signet_ledger WHERE player_id = ?",
     args: [playerId],
   });
   return Number(result.rows[0]?.["balance"] ?? 0);
 };
 
-export interface WritEntry {
+export interface SignetEntry {
   playerId: string;
   /** Positive = credit, negative = debit. */
   amount: number;
@@ -26,9 +26,9 @@ export interface WritEntry {
 }
 
 /** Returns false when the idempotency key was already spent (entry ignored). */
-export const recordWrit = async (db: Db, entry: WritEntry): Promise<boolean> => {
+export const recordSignet = async (db: Db, entry: SignetEntry): Promise<boolean> => {
   const result = await db.execute({
-    sql: `INSERT OR IGNORE INTO writ_ledger (player_id, amount, source, idempotency_key)
+    sql: `INSERT OR IGNORE INTO signet_ledger (player_id, amount, source, idempotency_key)
           VALUES (?, ?, ?, ?)`,
     args: [entry.playerId, entry.amount, entry.source, entry.idempotencyKey],
   });
