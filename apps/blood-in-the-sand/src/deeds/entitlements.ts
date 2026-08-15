@@ -56,6 +56,15 @@ export const setEntitlements = (itemIds: readonly string[]): void => {
   persist();
 };
 
+/** A store unlock succeeded (bits-store.md): fold the bought item in
+ * instantly so the War Table shows it in the very next lobby — the server
+ * already holds the authoritative row this mirrors. */
+export const grantEntitlement = (itemId: string): void => {
+  if (entitlements.has(itemId)) return;
+  entitlements.add(itemId);
+  persist();
+};
+
 /** A `deedUnlocks` push landed: fold in what those deeds pay, from our own
  * defs — ids this bundle doesn't know are skipped (the next authoritative
  * refresh picks them up). */

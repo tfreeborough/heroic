@@ -35,7 +35,7 @@ import {
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
-import { Canvas, LinearGradient, Path, RoundedRect, Skia, vec } from "@shopify/react-native-skia";
+import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import {
   ABILITIES,
   FORCE_START_GRACE_SECONDS,
@@ -52,7 +52,6 @@ import { playStrikeHaptic } from "../game/haptics";
 import { playSound, unlockAudio, warmCombatAudio } from "../audio";
 import { LoadoutIcon, type IconId } from "../loadout/icons";
 import {
-  ABILITY_CODEX,
   abilitiesByCategory,
   categoryOf,
   CATEGORY_META,
@@ -60,9 +59,10 @@ import {
   C_GOLD,
   C_MUTED,
   sortedWeaponIds,
-  WEAPON_CODEX,
-  weaponBars,
 } from "../loadout/catalogue";
+import { CodexBody } from "../loadout/CodexBody";
+import { ItemTile, tileTextStyles } from "../loadout/ItemTile";
+import { useBackClose, useSheetDrag } from "../components/sheetGestures";
 import { loadLastLoadout, saveLastLoadout, type SavedLoadout } from "../settings";
 import { resolveTitleText } from "../deeds/wornTitle";
 import { getEntitlements } from "../deeds/entitlements";
@@ -98,8 +98,6 @@ const GRID_PAD = 24;
 const GRID_GAP = 9;
 /** The tile's category glow: a hairline at the very top edge, then a soft
  * fade — total height of the Skia canvas that draws both. */
-const TILE_BAND_H = 22;
-const TILE_BAND_LINE = 2;
 /** Below this window height (iPhone SE = 667pt) the lobby renders COMPACT:
  * tighter rows/headers, a smaller socket strip, and multiple open seats
  * collapsed into one row — a full 4v4 roster otherwise overflows. */
@@ -871,52 +869,25 @@ const WizardStep = (props: WizardStepProps) => {
       ) : null}
 
       <ScrollView style={styles.gridScroll} contentContainerStyle={styles.grid}>
-        {options.map((id) => {
-          const cat = isWeapon ? null : categoryOf(id as AbilityId);
-          return (
-            <Pressable
-              key={id}
-              onPress={() => openSheet(id)}
-              style={[styles.tile, { width: tileW }, id === current && styles.tileCur]}
-            >
-              {/* The category glow (the mode-card Skia idiom): one rounded
-                  rect whose top corners MATCH the tile's inner radius, so the
-                  gradient follows the corner curve instead of being cut by
-                  the tile's overflow clip. Vertically: a bright hairline at
-                  the edge falling fast into a soft wash, one shader. */}
-              <View pointerEvents="none" style={styles.tileBand}>
-                <Canvas style={StyleSheet.absoluteFill}>
-                  {/* Taller than the band view on purpose: RoundedRect only
-                      rounds uniformly, so the bottom corners are pushed past
-                      the canvas clip — top corners follow the tile's curve,
-                      the sides stay straight through the fade. The gradient
-                      still dies at TILE_BAND_H (clamped past its end). */}
-                  <RoundedRect x={0} y={0} width={tileW - 3} height={TILE_BAND_H + 12} r={10.5}>
-                    <LinearGradient
-                      start={vec(0, 0)}
-                      end={vec(0, TILE_BAND_H)}
-                      colors={[bandColor(cat, "e6"), bandColor(cat, "45"), bandColor(cat, "00")]}
-                      positions={[0, TILE_BAND_LINE / TILE_BAND_H, 1]}
-                    />
-                  </RoundedRect>
-                </Canvas>
-              </View>
-              <LoadoutIcon id={id} size={44} />
-              <Text style={styles.tileName} numberOfLines={1}>
-                {nameOf(id)}
-              </Text>
-              {cat !== null ? (
+        {options.map((id) => (
+          <ItemTile
+            key={id}
+            id={id}
+            width={tileW}
+            onPress={() => openSheet(id)}
+            current={id === current}
+            sub={
+              !isWeapon ? (
                 // Charge pips lead (the round budget matters more than the
                 // cooldown to most players — Tom 2026-08-14), CD trails.
-                <Text style={styles.tileSub}>
-                  <Text style={styles.tilePips}>{"●".repeat(ABILITIES[id as AbilityId].charges)}</Text>
+                <Text style={tileTextStyles.sub}>
+                  <Text style={tileTextStyles.pips}>{"●".repeat(ABILITIES[id as AbilityId].charges)}</Text>
                   {` · ${ABILITIES[id as AbilityId].cooldown}S`}
                 </Text>
-              ) : null}
-              {id === current ? <Text style={styles.tileCurBadge}>✓</Text> : null}
-            </Pressable>
-          );
-        })}
+              ) : undefined
+            }
+          />
+        ))}
       </ScrollView>
 
       {sheet !== null ? (
@@ -929,6 +900,10 @@ const WizardStep = (props: WizardStepProps) => {
           focusedIconRef={focusedIconRef}
           onChoose={onChoose}
           onDismiss={closeSheet}
+          onGone={() => {
+            setSheet(null);
+            sheetT.setValue(0);
+          }}
         />
       ) : null}
     </Animated.View>
@@ -962,10 +937,17 @@ interface CodexSheetProps {
   focusedIconRef: React.MutableRefObject<View | null>;
   onChoose: (id: IconId) => void;
   onDismiss: () => void;
+  /** Instant removal (state null + anim reset) — the drag exit's landing. */
+  onGone: () => void;
 }
 
 const CodexSheet = (props: CodexSheetProps) => {
-  const { id, isWeapon, keeping, hasPick, sheetT, focusedIconRef, onChoose, onDismiss } = props;
+  const { id, isWeapon, keeping, hasPick, sheetT, focusedIconRef, onChoose, onDismiss, onGone } = props;
+  const insets = useSafeAreaInsets();
+  // Android back closes the sheet, never the wizard; the handle drags for
+  // real (sheetGestures.ts — same behaviours as the Armory's sheet).
+  useBackClose(onDismiss);
+  const { dragY, panHandlers } = useSheetDrag(onGone);
   const meta = isWeapon ? null : CATEGORY_META[categoryOf(id as AbilityId)];
   const charges = isWeapon ? 0 : ABILITIES[id as AbilityId].charges;
   return (
@@ -976,58 +958,43 @@ const CodexSheet = (props: CodexSheetProps) => {
       <Animated.View
         style={[
           styles.sheet,
-          { transform: [{ translateY: sheetT.interpolate({ inputRange: [0, 1], outputRange: [440, 0] }) }] },
+          // The home-indicator inset rides INSIDE the sheet's padding — the
+          // CTA must never sit under gesture-nav chrome (Tom's device pass
+          // on the Armory sheet, 2026-08-15; same bug class here).
+          { paddingBottom: insets.bottom + 18 },
+          {
+            transform: [
+              { translateY: sheetT.interpolate({ inputRange: [0, 1], outputRange: [440, 0] }) },
+              // Sequential translateYs compose additively — the live drag
+              // rides on top of the open/close animation.
+              { translateY: dragY },
+            ],
+          },
         ]}
       >
-        <View style={styles.sheetHandle} />
-        <View style={styles.sheetTop}>
-          <View
-            ref={(el) => {
-              focusedIconRef.current = el;
-            }}
-            collapsable={false}
-          >
-            <LoadoutIcon id={id} size={64} />
-          </View>
-          <View style={styles.sheetHeadText}>
-            <Text style={styles.sheetName}>{nameOf(id)}</Text>
-            {meta !== null ? (
-              <Text style={[styles.sheetMeta, { color: meta.color }]}>
-                {`${meta.label} · CD ${ABILITIES[id as AbilityId].cooldown}S · ${charges} / ROUND`}
-              </Text>
-            ) : null}
+        {/* The grab zone: handle + header — wide enough to find blind. */}
+        <View {...panHandlers}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetTop}>
+            <View
+              ref={(el) => {
+                focusedIconRef.current = el;
+              }}
+              collapsable={false}
+            >
+              <LoadoutIcon id={id} size={64} />
+            </View>
+            <View style={styles.sheetHeadText}>
+              <Text style={styles.sheetName}>{nameOf(id)}</Text>
+              {meta !== null ? (
+                <Text style={[styles.sheetMeta, { color: meta.color }]}>
+                  {`${meta.label} · CD ${ABILITIES[id as AbilityId].cooldown}S · ${charges} / ROUND`}
+                </Text>
+              ) : null}
+            </View>
           </View>
         </View>
-        {isWeapon ? (
-          <>
-            <Text style={styles.cardQuote}>{`“${WEAPON_CODEX[id as WeaponId].quote}”`}</Text>
-            <Text style={styles.cardHint}>{WEAPON_CODEX[id as WeaponId].hint}</Text>
-            <View style={styles.bars}>
-              {weaponBars(id as WeaponId).map((bar) => (
-                <View key={bar.label} style={styles.bar}>
-                  <Text style={styles.barLabel}>{bar.label}</Text>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { width: `${Math.round(bar.frac * 100)}%` }]} />
-                  </View>
-                  <Text style={styles.barValue}>{bar.display}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        ) : (
-          <>
-            <Text style={styles.cardQuote}>{`“${ABILITY_CODEX[id as AbilityId].quote}”`}</Text>
-            <Text style={styles.cardHint}>{ABILITY_CODEX[id as AbilityId].hint}</Text>
-            <View style={styles.chips}>
-              {ABILITY_CODEX[id as AbilityId].chips.slice(0, 4).map((chip) => (
-                <View key={chip.label} style={styles.chip}>
-                  <Text style={styles.chipLabel}>{chip.label}</Text>
-                  <Text style={styles.chipValue}>{chip.value}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
+        <CodexBody id={id} isWeapon={isWeapon} />
         <Pressable onPress={() => onChoose(id)} style={[styles.cta, styles.sheetCta, keeping && styles.ctaGhost]}>
           <Text style={[styles.ctaText, keeping && styles.ctaGhostText]}>
             {keeping ? `KEEP ${nameOf(id)}` : hasPick ? `SWAP TO ${nameOf(id)}` : `CHOOSE ${nameOf(id)}`}
@@ -1040,11 +1007,6 @@ const CodexSheet = (props: CodexSheetProps) => {
 
 const nameOf = (id: IconId): string =>
   (id in WEAPONS ? WEAPONS[id as WeaponId].name : ABILITIES[id as AbilityId].name).toUpperCase();
-
-/** Tile-band colour with an alpha suffix — category colour for abilities,
- * gold for weapons (all CATEGORY_META colours are plain #rrggbb). */
-const bandColor = (cat: AbilityCategory | null, alpha: string): string =>
-  `${cat !== null ? CATEGORY_META[cat].color : C_GOLD}${alpha}`;
 
 // ── Leave (✕ + confirm) ─────────────────────────────────────────────────────
 
@@ -1546,25 +1508,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: GRID_PAD,
     paddingBottom: 16,
   },
-  tile: {
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#1d1915",
-    borderWidth: 1.5,
-    borderColor: "#2e2820",
-    borderRadius: 12,
-    paddingTop: 13,
-    paddingBottom: 9,
-    paddingHorizontal: 4,
-    // Clips the band canvas to the rounded corners — the snug-fit rule.
-    overflow: "hidden",
-  },
-  tileBand: { position: "absolute", top: 0, left: 0, right: 0, height: TILE_BAND_H },
-  tileCur: { borderColor: C_GOLD, backgroundColor: "#26201a" },
-  tileCurBadge: { position: "absolute", top: 3, right: 6, color: C_GOLD, fontSize: 10, fontWeight: "900" },
-  tileName: { color: C_BONE, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
-  tileSub: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1, fontVariant: ["tabular-nums"] },
-  tilePips: { color: C_GOLD, letterSpacing: 1.5 },
+  // The tile itself moved to loadout/ItemTile.tsx (shared with the Armory).
 
   // The codex sheet (the sheet content reuses the codex quote/hint/bars/chips
   // styles below — the old card's typography, re-homed).
@@ -1598,33 +1542,6 @@ const styles = StyleSheet.create({
   sheetName: { color: C_BONE, fontSize: 19, fontWeight: "900", letterSpacing: 2 },
   sheetMeta: { fontSize: 8.5, fontWeight: "900", letterSpacing: 1.6, fontVariant: ["tabular-nums"] },
   sheetCta: { marginHorizontal: 0, marginTop: 12 },
-
-  cardQuote: {
-    color: "#c9bfae",
-    fontSize: 11.5,
-    lineHeight: 16,
-    fontStyle: "italic",
-    marginTop: 8,
-  },
-  cardHint: { color: C_MUTED, fontSize: 10, marginTop: 4 },
-  bars: { alignSelf: "stretch", marginTop: 10, gap: 5 },
-  bar: { flexDirection: "row", alignItems: "center", gap: 8 },
-  barLabel: { width: 46, color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1.2 },
-  barTrack: { flex: 1, height: 5, borderRadius: 3, backgroundColor: "#16130f", overflow: "hidden" },
-  barFill: { height: "100%", borderRadius: 3, backgroundColor: C_GOLD },
-  barValue: { width: 52, textAlign: "right", color: C_BONE, fontSize: 9, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 10 },
-  chip: {
-    flexDirection: "row",
-    gap: 4,
-    borderWidth: 1,
-    borderColor: "#3a332a",
-    borderRadius: 5,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  chipLabel: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1 },
-  chipValue: { color: C_BONE, fontSize: 9, fontWeight: "700" },
 
   cta: {
     marginHorizontal: 22,

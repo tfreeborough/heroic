@@ -28,6 +28,8 @@ export interface ModeSelectScreenProps {
   onPractice: () => void;
   /** Deeds → the Chronicle (achievements.md § the codex). */
   onDeeds: () => void;
+  /** The Glory pill's door: currency → what it buys (bits-store.md). */
+  onArmory: () => void;
 }
 
 type ModeKey = "ranked" | "skirmish" | "practice" | "story" | "deeds";
@@ -248,7 +250,7 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact
  * checks here: Skirmish always routes into the play flow, whose connect
  * screen already owns down/update states.
  */
-export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onDeeds }: ModeSelectScreenProps) => {
+export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onDeeds, onArmory }: ModeSelectScreenProps) => {
   const insets = useSafeAreaInsets();
   const entrance = useRef(new Animated.Value(0)).current;
 
@@ -283,7 +285,13 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
         >
           <Text style={styles.backText}>‹</Text>
         </Pressable>
-        <GloryPill />
+        <GloryPill
+          onPress={() => {
+            unlockAudio();
+            playSound("uiTap");
+            onArmory();
+          }}
+        />
       </View>
 
       <View style={styles.cards}>

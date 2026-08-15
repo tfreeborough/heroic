@@ -169,6 +169,17 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   deed_unlock:
     "an achievement unlock stamp — a heavy wax-seal thunk onto parchment with a short bright metallic shimmer tail, " +
     "triumphant but compact, under a second",
+  writ_exchange:
+    "a seal-press STRIKE at the end of a held charge — one deep heavy stamp-slam with a bright metal ring and a " +
+    "soft molten-wax hiss in the tail, weightier and punchier than a document stamp, final, about 0.8 seconds, " +
+    "no coins",
+  // (Rejigged 2026-08-15 — the first brief asked for "a wax seal cracking",
+  // which has no real-world audio anchor and generated mush. Concrete
+  // sources only: things that actually crack on tape.)
+  writ_unlock:
+    "a thick disc of hard brittle wax snapping clean in half — one sharp dry CRACK like ceramic breaking, a few " +
+    "small crumbs scattering, then a single short bright bell ding, close-mic, punchy, about one second, " +
+    "no voices, no music",
   reflect:
     "a magical parry — a bright glassy metallic TING as a mirror shield turns a projectile around, with a quick " +
     "whip of departure as the shot leaves the other way, sharp attack, under half a second",

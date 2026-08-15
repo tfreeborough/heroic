@@ -1,0 +1,18 @@
+{
+  "type": "sfx-bits",
+  "subject": "a thick disc of hard brittle wax snapping clean in half — one sharp dry CRACK like ceramic breaking, a few small crumbs scattering, then a single short bright bell ding, close-mic, punchy, about one second, no voices, no music",
+  "prompt": "a thick disc of hard brittle wax snapping clean in half — one sharp dry CRACK like ceramic breaking, a few small crumbs scattering, then a single short bright bell ding, close-mic, punchy, about one second, no voices, no music. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 4,
+    "promptInfluence": 0.3,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "writ_unlock_1.mp3"
+  ],
+  "created": "2026-08-15T11:07:11.376Z",
+  "updated": "2026-08-15T11:07:11.376Z"
+}

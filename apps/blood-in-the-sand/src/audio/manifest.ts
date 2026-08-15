@@ -113,6 +113,10 @@ export const AUDIO_MANIFEST: AudioManifest = {
     // Achievements
     deed_unlock_1: require("../../assets/audio/sfx/deed_unlock_1.mp3"),
 
+    // Store
+    writ_exchange_1: require("../../assets/audio/sfx/writ_exchange_1.mp3"),
+    writ_unlock_1: require("../../assets/audio/sfx/writ_unlock_1.mp3"),
+
     // ALL announcer packs (announcer.ts) — `<pack>:announce_first_blood_1`, …
     ...ANNOUNCER_MANIFEST,
 };

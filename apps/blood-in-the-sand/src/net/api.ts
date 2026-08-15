@@ -143,6 +143,87 @@ export const devGrant = async (
   }
 };
 
+/** GET /store — the shelf and the one tunable price (bits-store.md). */
+export interface StoreInfo {
+  writGloryPrice: number;
+  /** Entitlement ids the server will sell (`weapon:*` / `ability:*`). */
+  writItems: string[];
+}
+
+export const fetchStore = async (identity: Identity): Promise<StoreInfo | null> => {
+  if (!API_URL) return null;
+  try {
+    const res = await apiFetch("/store", {
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    if (!res.ok) return null;
+    const store = (await res.json()) as StoreInfo;
+    return typeof store.writGloryPrice === "number" && Array.isArray(store.writItems)
+      ? store
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A store mutation's outcome, discriminated: `insufficient` is the server
+ * affirmatively refusing (a real answer the sheet must voice — the balance
+ * moved under us), `unavailable` is network/offline (retryable, no charge).
+ */
+export type StoreResult =
+  | { ok: true; wallet: Wallet }
+  | { ok: false; reason: "insufficient" | "unavailable" };
+
+/** An idempotency key for one purchase tap — a retry of the SAME tap must
+ * reuse the same key, which is what makes it retry-safe on the ledger. */
+export const mintPurchaseKey = (): string =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+const storePost = async (path: string, identity: Identity, body: object): Promise<StoreResult> => {
+  if (!API_URL) return { ok: false, reason: "unavailable" };
+  try {
+    const res = await apiFetch(path, {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 409) return { ok: false, reason: "insufficient" };
+    if (!res.ok) return { ok: false, reason: "unavailable" };
+    const wallet = (await res.json()) as Wallet;
+    if (typeof wallet.glory !== "number" || typeof wallet.writs !== "number") {
+      return { ok: false, reason: "unavailable" };
+    }
+    return { ok: true, wallet };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+};
+
+/** Debit the Glory price, credit 1 Writ — atomic server-side. */
+export const storeExchange = (identity: Identity, key: string): Promise<StoreResult> =>
+  storePost("/store/exchange", identity, { key });
+
+/** Spend 1 Writ for a permanent entitlement. Already-owned is a no-op
+ * success server-side — it never double-charges, whatever the client thinks. */
+export const storeUnlock = (identity: Identity, itemId: string): Promise<StoreResult> =>
+  storePost("/store/unlock", identity, { itemId });
+
+/** Dev-only (STORE_DEV_TOOLS=1): forget every Writ purchase so an unlock
+ * flow can be re-tested. Deed grants are untouched. */
+export const devResetPurchases = async (identity: Identity): Promise<boolean> => {
+  if (!API_URL) return false;
+  try {
+    const res = await apiFetch("/dev/reset-purchases", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Self-heal a stored identity the backend no longer recognises (a dev
  * database reset, a wiped row). Anonymous identity has no second factor, so

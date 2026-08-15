@@ -22,6 +22,7 @@ import { DISPLAY_FONT_SOURCE } from "./src/typography";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
 import { ConnectScreen } from "./src/screens/ConnectScreen";
+import { ArmoryScreen } from "./src/screens/ArmoryScreen";
 import { DeedsScreen } from "./src/screens/DeedsScreen";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -80,10 +81,13 @@ const confirmLeave = (what: "lobby" | "match", leave: () => void): void => {
   );
 };
 
-type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings" | "deeds";
+type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings" | "deeds" | "armory";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
+  // The Armory has two doors (home button, mode-select Glory pill) — back
+  // retraces whichever one was used.
+  const armoryFrom = useRef<Route>("home");
   // The connection lifecycle (dial / silent redial / visible failure) lives in
   // the manager; App just renders its snapshot and pokes wake() on route entry.
   const conn = useArenaConnection(SERVER || null);
@@ -223,6 +227,8 @@ export default function App() {
       // All were entered from the mode select — back retraces that step.
       if (route === "ranked" && client?.queued) client.queueLeave();
       setRoute("modes");
+    } else if (route === "armory") {
+      setRoute(armoryFrom.current);
     } else {
       setRoute("home");
     }
@@ -245,6 +251,10 @@ export default function App() {
     screen = (
       <HomeScreen
         onPlay={() => setRoute("modes")}
+        onArmory={() => {
+          armoryFrom.current = "home";
+          setRoute("armory");
+        }}
         onSettings={() => setRoute("settings")}
         onTargetDummies={startTargetDummies}
         updateReady={updateReady}
@@ -254,6 +264,8 @@ export default function App() {
   } else if (route === "deeds") {
     // Entered from the mode select's DEEDS card — back returns there.
     screen = <DeedsScreen onBack={() => setRoute("modes")} />;
+  } else if (route === "armory") {
+    screen = <ArmoryScreen onBack={() => setRoute(armoryFrom.current)} />;
   } else if (route === "modes") {
     // Connectivity-blind on purpose: Skirmish routes into the play flow,
     // whose connect screen already owns the down/update states. wake() makes
@@ -272,6 +284,10 @@ export default function App() {
         }}
         onPractice={() => setRoute("practice")}
         onDeeds={() => setRoute("deeds")}
+        onArmory={() => {
+          armoryFrom.current = "modes";
+          setRoute("armory");
+        }}
       />
     );
   } else if (route === "settings") {

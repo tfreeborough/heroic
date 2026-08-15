@@ -59,6 +59,9 @@ export type BitsSoundEvent =
   | "gloryEarned" //    the Glory payout lands on the ceremony plate
   | "ceremonyShift" //  the ceremony's fade from Glory to the rating reveal
   | "deedUnlock" //     a deed card stamps in on the ceremony (achievements.md)
+  // ── Store (bits-store.md § premium bar) ───────────────────────────────────
+  | "writExchange" //   Glory becomes a Writ — the licence is stamped
+  | "writUnlock" //     a Writ is spent — the seal breaks, the item is yours
   // ── UI ────────────────────────────────────────────────────────────────────
   | "uiTap" //          a generic button / nav tap
   | "uiConfirm" //      a positive commit (lock in, ready)
@@ -285,6 +288,17 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // with a short bright tail; triumphant but shorter and smaller than
   // rank_up, since first matches pop 2–3 back-to-back.
   deedUnlock: { clips: ["deed_unlock_1"] },
+
+  // ── Store (bits-store.md § premium bar) ─────────────────────────────────
+  // THE STRIKE at the top of the Writ Forge's hold-to-forge ritual
+  // (WritForge.tsx) — plays the instant the held charge completes and the
+  // stamp slams. The 850ms hold before it is deliberately silent (haptics
+  // carry the climb; a charge-loop hiss is a possible later layer).
+  writExchange: { clips: ["writ_exchange_1"] },
+  // The SEAL BREAKS on the unlock ceremony — forged 2026-08-15 (brief
+  // lesson lives in the forge styleBible: build crack sounds from real
+  // crackable sources; "wax seal" alone generates mush).
+  writUnlock: { clips: ["writ_unlock_1"] },
 
   // ── UI ──────────────────────────────────────────────────────────────────
   uiTap: { clips: ["ui_tap_1"], volume: 0.7 },

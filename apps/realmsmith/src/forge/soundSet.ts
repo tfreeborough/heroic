@@ -85,6 +85,10 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "rank_down", label: "Ranked — rank down (subtle)", category: "flow" },
   { id: "glory_earned", label: "Ranked — Glory earned (choral swell)", category: "flow" },
   { id: "deed_unlock", label: "Deeds — unlock stamp (achievements.md)", category: "flow" },
+  // store (bits-store.md § premium bar — both play off catalogue STAND-INS
+  // until forged; swap the catalogue `clips` to these names when they land)
+  { id: "writ_exchange", label: "Armory — the forge STRIKE (Writ struck)", category: "flow" },
+  { id: "writ_unlock", label: "Armory — seal break (item unlocked)", category: "flow" },
   // UI
   { id: "ui_tap", label: "UI tap", category: "ui" },
   { id: "ui_confirm", label: "UI confirm", category: "ui" },

@@ -1,0 +1,20 @@
+{
+  "type": "sprite-bits",
+  "subject": "a gladiator wielding a poison tipped dagger, full side profile facing right",
+  "prompt": "a gladiator wielding a poison tipped dagger, full side profile facing right. A full-figure character sprite for a brutal gladiator arena game set in a scorched desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga games: hand-placed chunky pixels, a strictly limited palette of about 48 colours, shading built from hard stepped colour ramps and checkerboard dithering — no smooth gradients, no anti-aliasing. The figure still reads dimensional: specular glints on armour, warm light bounced up from golden sand, deep warm umber shadow in the recesses, never pure black — but every transition is a decisive pixel step. True materials each in their own full colour, no sepia wash: battle-grey steel (#9aa0a6), bone-white specular highlights (#f2e9d4), saturated dried-blood crimson (#a32c22), cracked leather wraps, hammered bronze trim, sun-split wood. Lit by a low warm desert sun — a golden rim light burns along the helmet crest and upper shoulders. The ENTIRE figure stands about 80% of the frame tall, centered, with empty transparent margin visible on all four sides — above the helmet crest, below the feet, and past every weapon tip; nothing touches or crosses the frame edge. Grim, weighty, battle-scarred — never cute, never cartoonish, never flat vector art, never ink outlines or crosshatching, never a photograph. The figure is a clean cut-out: the cut line follows the figure's own silhouette exactly, and every pixel outside it is fully transparent — including directly beneath the boots, where bare transparent pixels begin at the soles. The figure touches nothing and stands on nothing: no ground, no cast shadow, no dust at the feet, no backdrop, no glow. No text.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1536",
+    "quality": "medium",
+    "background": "transparent",
+    "savedSize": 512,
+    "pixelGrid": 128,
+    "paletteColours": 48
+  },
+  "files": [
+    "title-fang.png"
+  ],
+  "created": "2026-08-15T10:54:59.164Z",
+  "updated": "2026-08-15T10:54:59.164Z"
+}

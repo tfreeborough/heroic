@@ -1,8 +1,9 @@
 # BITS — Writs & the Armory (the store)
 
 Status: **designed 2026-08-09 · S1 (Writ wallet + store endpoints + dev tools) BUILT
-same day** — Armory screen (S2), IAP (S3), content drops (S4) owed for the
-end-of-August launch ·
+same day · S4 launch shelf (7 items, bits-store-arms.md) BUILT 08-09→08-14 ·
+S2 (the Armory screen) BUILT 2026-08-15** — IAP (S3) owed for the end-of-August
+launch, plus TRY IT deep-link, forge art/SFX, on-device pass ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-09 ·
 Companion to [monetisation.md](./monetisation.md) (principles — never a flat paid
@@ -85,11 +86,15 @@ is a second *writer*, not a second system.
 
 The browse-freely home, entered from the **title screen** and by **tapping the Glory
 pill** (currency links to what it buys). Reuses the Arming wizard's card DNA
-(`loadout/catalogue.ts`: big icon, flavour quote, roster-normalised stat bars) — so it
-doubles as the codex for free. Per card:
+(`loadout/catalogue.ts`: big icon, flavour quote, roster-normalised stat bars).
+**Amended on Tom's device pass (2026-08-15): a storefront, not a codex — owned
+items don't appear at all** (the original design listed them as an owned-state
+codex; in hand it muddied "this is a store", and owned steel already lives in
+the War Table). Sold items simply leave the racks; the stock sits in two
+trades, **STEEL** (weapons) and **SORCERY** (spells) — "The Shelf" as a
+player-facing label was rejected as boring. Per card:
 
-- Owned → owned state. Writ-locked → **UNLOCK — 1 WRIT** CTA. Deed-gated → absent
-  until earned (secrets rule).
+- Writ-locked → **UNLOCK — 1 WRIT** CTA. Deed-gated and owned → absent.
 - **TRY IT** on every card — deep-links into practice with that item pre-picked.
   Practice-allows-everything makes the shop a test-range door; the funnel is
   browse → try → want → unlock.
@@ -237,8 +242,102 @@ Glory→Writ rate so it never becomes the rational permanent path.
    GLORY / GRANT 1 WRIT rows (inert against a prod API). Verified: 9 store
    money-math tests + full persistence/sim/server suites + a live curl smoke of
    every endpoint path incl. idempotent retry.
-2. **S2 — the Armory screen at the premium bar**: featured hero + browse/codex +
-   TRY IT + seal-break unlock ceremony + cosmetics shelf + announcer entitlements.
+2. **S2 — the Armory screen — BUILT 2026-08-15** (`ArmoryScreen.tsx`). As built:
+   two doors (home-screen ARMORY button; the mode-select Glory pill is now
+   tappable — back retraces whichever door was used); header purse shows Glory
+   AND Writs (the Writ mark = a wax dot in a gold ring); **featured hero**
+   rotates daily through the unowned shelf (icon-anchored card until forge hero
+   art lands); the stock in two trades — **STEEL** and **SORCERY** — as
+   unowned writ items only, plus a **STRIKE A WRIT** chip on the counter row
+   (banks one for Glory, `writExchange` SFX). Device pass 2026-08-15: the
+   original THE SHELF + YOUR ARSENAL layout was cut (owned items gone —
+   storefront, not codex), the tile became the **extracted shared
+   `loadout/ItemTile.tsx`** (the War Table's exact Skia-band tile, both
+   screens import it — my hand-copied approximation had a visibly thicker
+   band), and safe-area padding moved to the ROOT view so scrolling content
+   never slides under the Android system tray. The sheet reuses the War
+   Table's card body via shared `loadout/CodexBody.tsx` (one codex, two
+   doors — ItemTile is the tile half of the same rule).
+   **Second device pass (Tom, 2026-08-15) — the WRIT FORGE:** the sheet's
+   one-tap Glory→Writ→unlock path was CUT — mixing "1 WRIT" on cards with
+   "EARN N MORE GLORY" on the CTA muddied what a Writ even was. New rule:
+   **the Armory speaks Writs only; Glory and Writs meet on exactly one
+   surface — the Writ Forge**, a dedicated modal (rate row `800 GLORY → 1
+   WRIT`, both balances, a stamp-strike animation per forge, `writExchange`
+   SFX + medium haptic) opened by a solid-gold **FORGE WRITS** button on the
+   counter row and by the sheet's CTA (`FORGE A WRIT` when writless — the
+   forge opens OVER the sheet, so closing lands back on the item with the
+   Writ in hand and the CTA flipped to BREAK THE SEAL). `unlock` now spends
+   held Writs only. Also fixed: both bottom sheets (Armory + War Table
+   codex) now carry `insets.bottom` inside their padding — CTAs never sit
+   under gesture-nav chrome. **Third pass (Tom, 2026-08-15) — sheet
+   behaviours, shared in `components/sheetGestures.ts`:** the handle now
+   drags for real (`useSheetDrag`: vertical pull follows the finger, past
+   110px or a flick dismisses, short pulls spring back; grab zone = handle +
+   header; the drag exit removes the sheet INSTANTLY so the close animation
+   never replays), and **Android back closes the topmost overlay instead of
+   navigating** (`useBackClose`: BackHandler runs listeners newest-first, so
+   overlays subscribed on mount outrank App.tsx's navigation handler, and a
+   forge stacked over a sheet outranks the sheet; the handler rides a ref —
+   re-subscribing on re-render would shuffle the stacking order). Wired on:
+   both codex sheets, the Writ Forge, and the ceremony (back = tap there).
+   **Fourth pass (Tom, 2026-08-15) — the forge-effects pass, BUILT
+   (`WritForge.tsx`, its own file):** the tap-to-exchange was "super
+   underwhelming"; the conversion is now a **hold-to-forge ritual**. HOLD
+   the button: the charge fills it under the thumb (850ms), heat blooms
+   behind the seal (real Skia blur, the EmberGlow recipe), the wax runs
+   molten, haptic ticks climb at 30/55/80% — release early and it cools,
+   nothing spent. At full charge **THE STRIKE falls**: stamp ring slams
+   with a 12-dart spark burst and a shockwave, `writExchange` +
+   crit-weight haptic, the Glory count visibly DRAINS (rAF ease-out), and
+   the finished Writ card **flies down onto a fanned stack of sealed
+   documents** — every forge visibly grows the pile, the do-it-again hook.
+   The strike is optimistic: the ~300ms server round-trip hides inside the
+   480ms slam; a refused forge says so in place, nothing charged. Commerce
+   stayed in ArmoryScreen (pure, silent, ok/insufficient/unavailable); the
+   ritual owns all presentation. Both store clips FORGED + wired same day
+   (`writ_exchange_1` / `writ_unlock_1`; the seal-break brief was rejigged
+   to concrete crackable sources — "wax seal cracking" alone has no audio
+   anchor and generated mush).
+   **Fifth pass (Tom, 2026-08-15) — forge polish:** the hold now ticks the
+   **Glory readout down live** (drains against a press-frozen baseline —
+   phase-clamped so the server debit landing mid-ritual can never
+   double-dip; the number is continuous through strike and cool-down, and
+   refills on an early release) while **red Glory diamonds stream from the
+   purse into the seal** (six loopers, per-diamond period/delay so the
+   stream drifts organically); the heat bloom's canvas grew to 320px with
+   the glow tails well inside it (a gaussian clipped at the canvas edge
+   reads SQUARE once scaled — the reported bug); the hold button's fill
+   carries its own radius inset past the border (Android's overflow clip is
+   unreliable on rounded bordered parents — square corners + edge gaps);
+   and the whole screen gained an **SkSL ember field**
+   (`forgeEmbers.tsx`, the dustStorm discipline: UI-thread clock, half-res
+   raster, zero JS per frame) — a rising drift of embers that the held
+   charge visibly stokes (faster, brighter, extra embers wake).
+   **expo-gl was considered and rejected**: not installed, needs a
+   dev-client rebuild, and Skia already IS the GPU path — SkSL delivers
+   the particles with zero new native modules. Plus **chain-forging**: a
+   button still held when the Writ lands auto-begins the next charge — the
+   full rhythm is hold 850ms → strike → the card flies (~0.9s) → recharge,
+   about 2s per Writ held; the chain breaks on release, an empty purse, or
+   any refused forge (failures always require a fresh press, so an offline
+   ledger can never machine-gun error strikes). The sheet's ONE CTA
+   is honestly worded per purse state: BREAK THE SEAL — 1 WRIT / UNLOCK — 800
+   GLORY (exchange+unlock in one tap) / EARN N MORE GLORY (ghosted) / CONNECT
+   TO UNLOCK; plus the free-in-practice note, and failure notices that always
+   say what was and wasn't charged (a banked-but-unspent Writ says so). The
+   **seal-break ceremony**: deed-ceremony DNA (700ms staged reveal, min-dwell,
+   tap-snaps), the wax seal parts in halves as the item pops through, heavy
+   haptic + `writUnlock`. Client plumbing: `fetchStore`/`storeExchange`/
+   `storeUnlock` (discriminated insufficient-vs-unavailable) + `mintPurchaseKey`
+   per tap in api.ts, `grantEntitlement` fold-in so the War Table shows the buy
+   in the next lobby, `writExchange`/`writUnlock` catalogue events (stand-ins:
+   glory_earned_1 / deed_unlock_1 with forge briefs in place), dev-menu RESET
+   PURCHASES row. Verified: client typecheck + live curl of every commerce path
+   against the stocked 7-item shelf. **Owed**: TRY IT practice deep-link (needs
+   a preset-loadout param through PracticeClient/RoomScreen), forge hero art +
+   writ_exchange/writ_unlock clips, cosmetics/announcer shelf (with S3),
+   on-device pass.
 3. **S3 — IAP**: receipt validation, Writ packs (honest sizing — no stranded
    remainders), account-linking nudge after first purchase (per glory-economy.md).
 4. **Pre-launch content drops** ship `gate: "writ"` and stock the shelf for day

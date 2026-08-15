@@ -7,7 +7,8 @@ import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
-import { devGrant, ensureIdentity, fetchWallet, type Wallet } from "../net/api";
+import { devGrant, devResetPurchases, ensureIdentity, fetchAchievements, fetchWallet, type Wallet } from "../net/api";
+import { setEntitlements } from "../deeds/entitlements";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import type { RankedResultRow } from "../net/connection";
 import { DUST_EFFECT } from "./dustStorm";
@@ -20,6 +21,8 @@ import { DISPLAY_FONT } from "../typography";
 export interface HomeScreenProps {
   /** → the mode select (bits-mode-select.md); Practice lives in there now. */
   onPlay: () => void;
+  /** → the Armory (bits-store.md) — the store's front door. */
+  onArmory: () => void;
   onSettings: () => void;
   /** Dev menu: start the target-dummy firing range (offline, respawning dummies). */
   onTargetDummies: () => void;
@@ -335,7 +338,7 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
  * row drives a real persisted setting (settings.ts) that just has no
  * player-facing UI yet.
  */
-export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
+export const HomeScreen = ({ onPlay, onArmory, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [devOpen, setDevOpen] = useState(false);
@@ -641,6 +644,9 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
               <Text style={styles.playText}>PLAY</Text>
             </Pressable>
           </View>
+          <Pressable onPress={withTap("uiConfirm", onArmory)} style={styles.ghost}>
+            <Text style={styles.ghostText}>ARMORY</Text>
+          </Pressable>
           <Pressable onPress={withTap("uiTap", onSettings)} style={styles.ghost}>
             <Text style={styles.ghostText}>SETTINGS</Text>
           </Pressable>
@@ -722,6 +728,21 @@ export const HomeScreen = ({ onPlay, onSettings, onTargetDummies, updateReady, o
           </Pressable>
           <Pressable onPress={withTap("uiConfirm", onDevGrant({ writs: 1 }))} style={styles.devButton}>
             <Text style={styles.devButtonText}>GRANT 1 WRIT</Text>
+          </Pressable>
+          {/* Forget every Writ purchase (server + local cache) so the unlock
+              flow can be re-tested end to end. Deed grants survive. */}
+          <Pressable
+            onPress={withTap("uiTap", () => {
+              void (async () => {
+                const identity = await ensureIdentity();
+                if (!identity || !(await devResetPurchases(identity))) return;
+                const me = await fetchAchievements(identity);
+                if (me) setEntitlements(me.entitlements.map((e) => e.itemId));
+              })();
+            })}
+            style={styles.devButton}
+          >
+            <Text style={styles.devButtonText}>RESET PURCHASES</Text>
           </Pressable>
         </View>
       )}

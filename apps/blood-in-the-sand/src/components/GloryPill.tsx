@@ -3,17 +3,28 @@
  * Owns its own fetch — drop it on any screen and pass positioning via
  * `style`. Renders NOTHING until a real number arrives: the wallet never
  * shows a loading or error state the player didn't ask for (the api.ts rule).
+ * With `onPress` it becomes a door to the Armory (bits-store.md: currency
+ * links to what it buys); without one it stays the old inert readout.
  */
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useGlory } from "../net/api";
 
-export const GloryPill = ({ style }: { style?: StyleProp<ViewStyle> }) => {
+export const GloryPill = ({ style, onPress }: { style?: StyleProp<ViewStyle>; onPress?: () => void }) => {
   const glory = useGlory();
   if (glory === null) return null;
-  return (
-    <View style={[styles.pill, style]} pointerEvents="none">
+  const body = (
+    <>
       <View style={styles.gem} />
       <Text style={styles.text}>{glory.toLocaleString()}</Text>
+    </>
+  );
+  return onPress ? (
+    <Pressable onPress={onPress} hitSlop={8} style={[styles.pill, style]}>
+      {body}
+    </Pressable>
+  ) : (
+    <View style={[styles.pill, style]} pointerEvents="none">
+      {body}
     </View>
   );
 };
