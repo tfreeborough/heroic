@@ -77,6 +77,14 @@ import { SignetPacks } from "./SignetPacks";
 import { LoadoutIcon, type IconId } from "../loadout/icons";
 import { DISPLAY_FONT } from "../typography";
 
+/** Dev-shelf reference prices (ratified 2026-08-15) — presentation only,
+ * mock path only; the server credits from SIGNET_PACKS regardless. */
+const MOCK_PACK_PRICES: Readonly<Record<string, string>> = {
+  signet_pack_1: "$1.89",
+  signet_pack_3: "$4.49",
+  signet_pack_6: "$7.99",
+};
+
 interface ArmoryItem {
   id: IconId;
   isWeapon: boolean;
@@ -127,9 +135,10 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
         if (event.credited > 0) {
           playSound("signetPurchase");
           playStrikeHaptic("heavy");
-          setPackNotice(
-            event.credited === 1 ? "1 SIGNET BANKED." : `${event.credited} SIGNETS BANKED.`,
-          );
+          // The sale is done — the shelf closes (Tom, 2026-08-21: staying
+          // open reads as greedy). The purse ticking up + the purchase
+          // sting are the confirmation; no notice needed.
+          setPacksOpen(false);
         }
         return;
       case "cancelled":
@@ -177,10 +186,14 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
           setPackListings(mockPackListings());
           setPacksMock(true);
         }
-      } else if (!iapAvailable()) {
-        // No native store on this client (pre-rebuild dev client / Expo Go):
-        // offer the dev-mock shelf — the prod API refuses its receipts, so
-        // this is inert everywhere real (bits-store.md § testing).
+      } else if (!iapAvailable() || __DEV__) {
+        // Module absent (pre-rebuild client / Expo Go) — or a DEV build
+        // whose store CONNECTION failed (the Android .dev package isn't on
+        // Play, so Play Billing refuses to even connect; the iOS twin fails
+        // at the products step and is handled above). Either way the dev
+        // shelf runs on mock receipts, which the prod API refuses — inert
+        // everywhere real (bits-store.md § testing). A release build with a
+        // dead store keeps the honest closed state.
         setPackListings(mockPackListings());
         setPacksMock(true);
       }
@@ -287,9 +300,17 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
-  /** The dev shelf's stock — real pack table, fake DEV prices. */
+  /** The dev shelf's stock — real pack table, reference USD prices. The
+   * real localized prices live only in the store consoles (items.ts rule);
+   * these just let the dev shelf read like the shipped one (Tom,
+   * 2026-08-21 — the sheet carries a "won't be charged" note instead of
+   * DEV price tags). */
   const mockPackListings = (): SignetPackListing[] =>
-    Object.entries(SIGNET_PACKS).map(([sku, signets]) => ({ sku, signets, displayPrice: "DEV" }));
+    Object.entries(SIGNET_PACKS).map(([sku, signets]) => ({
+      sku,
+      signets,
+      displayPrice: MOCK_PACK_PRICES[sku] ?? "—",
+    }));
 
   /**
    * Buy a Signet pack. Native path: open the store sheet — money moves there,
@@ -402,7 +423,9 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
           >
             <Text style={styles.back}>‹</Text>
           </Pressable>
-          <Text style={styles.title}>THE ARMORY</Text>
+          <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            THE ARMORY
+          </Text>
           <View style={styles.purse}>
             {wallet !== null ? (
               <>
@@ -418,11 +441,11 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
           </View>
         </Animated.View>
 
-        {/* The counter: what this place IS, and the clear door to making the
-            money it takes (Tom, 2026-08-15: one obvious "create Signets"
-            button; Glory↔Signet talk lives on the forge screen it opens). */}
+        {/* The counter: the two doors to getting Signets, full-width pair
+            (Tom, 2026-08-15: one obvious "create Signets" button;
+            Glory↔Signet talk lives on the forge screen it opens; the
+            tagline that used to sit here was cut 2026-08-21). */}
         <Animated.View style={[styles.counter, rise(0.05, 0.4)]}>
-          <Text style={styles.tagline}>NEW ARMS FOR THE PIT</Text>
           {wallet !== null ? (
             <View style={styles.counterBtns}>
               {/* Money door — quieter than the forge; Glory play stays the
@@ -436,7 +459,9 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
                 }}
                 style={styles.packsBtn}
               >
-                <Text style={styles.packsBtnText}>BUY SIGNETS</Text>
+                <Text style={styles.packsBtnText} numberOfLines={1}>
+                  BUY SIGNETS
+                </Text>
               </Pressable>
               {price !== null ? (
                 <Pressable
@@ -448,7 +473,9 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
                   style={styles.forgeBtn}
                 >
                   <View style={styles.signetSeal} />
-                  <Text style={styles.forgeBtnText}>FORGE SIGNETS</Text>
+                  <Text style={styles.forgeBtnText} numberOfLines={1}>
+                    FORGE SIGNETS
+                  </Text>
                 </Pressable>
               ) : null}
             </View>
@@ -462,7 +489,9 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
               <View style={[styles.heroGlow, { backgroundColor: bandColor(featured, "14") }]} />
               <View style={styles.heroText}>
                 <Text style={[styles.heroEyebrow, { color: bandColor(featured, "ff") }]}>FEATURED</Text>
-                <Text style={styles.heroName}>{nameOf(featured)}</Text>
+                <Text style={styles.heroName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>
+                  {nameOf(featured)}
+                </Text>
                 <Text style={styles.heroHint} numberOfLines={3}>
                   {hintOf(featured)}
                 </Text>
@@ -533,6 +562,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
       {packsOpen ? (
         <SignetPacks
           listings={packListings}
+          held={wallet?.signets ?? null}
           mock={packsMock}
           notice={packNotice}
           busy={packBusy}
@@ -607,9 +637,16 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
           <View style={styles.sheetTop}>
             <LoadoutIcon id={item.id} size={64} />
             <View style={styles.sheetHeadText}>
-              <Text style={styles.sheetName}>{nameOf(item)}</Text>
+              <Text style={styles.sheetName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                {nameOf(item)}
+              </Text>
               {meta !== null ? (
-                <Text style={[styles.sheetMeta, { color: meta.color }]}>
+                <Text
+                  style={[styles.sheetMeta, { color: meta.color }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
                   {`${meta.label} · CD ${ABILITIES[item.id as AbilityId].cooldown}S · ${charges} / ROUND`}
                 </Text>
               ) : null}
@@ -631,7 +668,14 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
           }}
           style={[styles.cta, !cta.live && styles.ctaGhost]}
         >
-          <Text style={[styles.ctaText, !cta.live && styles.ctaGhostText]}>{cta.label}</Text>
+          <Text
+            style={[styles.ctaText, !cta.live && styles.ctaGhostText]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
+            {cta.label}
+          </Text>
         </Pressable>
       </Animated.View>
     </>
@@ -762,29 +806,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#7e2020",
   },
 
-  counter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
-  tagline: { flexShrink: 1, color: C_MUTED, fontSize: 9, fontWeight: "900", letterSpacing: 2 },
-  counterBtns: { flexDirection: "row", alignItems: "center", gap: 8 },
+  counter: { gap: 10 },
+  counterBtns: { flexDirection: "row", alignItems: "stretch", gap: 9 },
   // The money door: outlined, not solid — present, never shouting.
   packsBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     borderColor: C_GOLD,
     borderWidth: 1,
     borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
-  packsBtnText: { color: C_GOLD, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  packsBtnText: { color: C_GOLD, fontSize: 10.5, fontWeight: "900", letterSpacing: 1.5 },
   // The clear "make Signets" door — solid gold, unmissable (Tom, 2026-08-15).
   forgeBtn: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 7,
     backgroundColor: C_GOLD,
     borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
-  forgeBtnText: { color: "#241a0c", fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  forgeBtnText: { color: "#241a0c", fontSize: 10.5, fontWeight: "900", letterSpacing: 1.5 },
 
   hero: {
     borderRadius: 14,
@@ -810,7 +858,7 @@ const styles = StyleSheet.create({
   clearedBox: { alignItems: "center", gap: 6, paddingVertical: 16 },
   cleared: { color: C_BONE, fontSize: 11, fontWeight: "900", letterSpacing: 1.5, textAlign: "center" },
   clearedSub: { color: C_MUTED, fontSize: 9, fontWeight: "800", letterSpacing: 1.2, textAlign: "center" },
-  footNote: { color: "#6a6155", fontSize: 8.5, fontWeight: "800", letterSpacing: 1, textAlign: "center", lineHeight: 14 },
+  footNote: { color: "#8a8071", fontSize: 9, fontWeight: "800", letterSpacing: 1, textAlign: "center", lineHeight: 14 },
 
   sheetScrim: {
     position: "absolute",
@@ -844,8 +892,8 @@ const styles = StyleSheet.create({
   sheetPurse: { alignItems: "center", gap: 3 },
   sheetPurseText: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1, fontVariant: ["tabular-nums"] },
 
-  practiceNote: { color: "#6a6155", fontSize: 8.5, fontWeight: "800", letterSpacing: 0.8, marginTop: 10 },
-  notice: { color: "#c96a4a", fontSize: 9, fontWeight: "800", letterSpacing: 0.8, marginTop: 6, lineHeight: 13 },
+  practiceNote: { color: "#8a8071", fontSize: 9, fontWeight: "800", letterSpacing: 0.8, lineHeight: 13, marginTop: 10 },
+  notice: { color: "#c96a4a", fontSize: 9.5, fontWeight: "800", letterSpacing: 0.8, marginTop: 6, lineHeight: 14 },
 
   cta: {
     marginTop: 12,

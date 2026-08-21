@@ -420,7 +420,12 @@ export const SignetForge = ({ wallet, price, onForge, onClose }: SignetForgeProp
         <Animated.View
           style={[styles.holdFill, { width: charge.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }) }]}
         />
-        <Text style={[styles.holdText, !canForge && styles.holdGhostText]}>
+        <Text
+          style={[styles.holdText, !canForge && styles.holdGhostText]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
           {canForge ? "HOLD TO FORGE" : `EARN ${(price - wallet.glory).toLocaleString()} MORE GLORY IN THE PIT`}
         </Text>
       </Pressable>
