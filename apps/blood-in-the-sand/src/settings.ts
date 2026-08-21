@@ -70,6 +70,36 @@ export const saveBotDifficulty = (difficulty: DifficultyId): void => {
   void AsyncStorage.setItem(KEY_BOT_DIFFICULTY, difficulty);
 };
 
+/** The Armory's featured pick, pinned for the day (Tom, 2026-08-21: the
+ * old positional day-hash jumped to a different item whenever the stock
+ * shifted — continuity beats variety on a storefront). Stores the item's
+ * entitlementId + the day it was picked; the Armory shows the pinned item
+ * all day, rests the slot for the day if it sells, and re-picks tomorrow. */
+const KEY_FEATURED_PIN = "bits.armory.featured";
+
+export interface FeaturedPin {
+  /** Days since epoch (floor(ms / 86 400 000)) — the pin's calendar day. */
+  day: number;
+  /** The featured item's entitlementId (`weapon:<id>` / `ability:<id>`). */
+  id: string;
+}
+
+export const loadFeaturedPin = async (): Promise<FeaturedPin | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_FEATURED_PIN);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as FeaturedPin;
+    if (typeof parsed.day !== "number" || typeof parsed.id !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+export const saveFeaturedPin = (pin: FeaturedPin): void => {
+  void AsyncStorage.setItem(KEY_FEATURED_PIN, JSON.stringify(pin));
+};
+
 /** The picked announcer voice (audio/announcer.ts) — a real device setting
  * with a dev-menu-only UI for now (the store gates packs by entitlement
  * later). Applied on launch by App.tsx via setAnnouncerPack; validated

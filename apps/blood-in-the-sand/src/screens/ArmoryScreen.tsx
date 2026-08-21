@@ -72,6 +72,7 @@ import {
 import { CodexBody } from "../loadout/CodexBody";
 import { ItemTile, tileTextStyles } from "../loadout/ItemTile";
 import { useBackClose, useSheetDrag } from "../components/sheetGestures";
+import { loadFeaturedPin, saveFeaturedPin } from "../settings";
 import { SignetForge, type ForgeOutcome } from "./SignetForge";
 import { SignetPacks } from "./SignetPacks";
 import { LoadoutIcon, type IconId } from "../loadout/icons";
@@ -220,10 +221,35 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   }, [entitledStamp]);
   const stock = useMemo(() => [...steel, ...sorcery], [steel, sorcery]);
 
-  // Featured hero — one item, rotated daily, never a scroll of banners.
-  const featured = useMemo(() => {
-    if (stock.length === 0) return null;
-    return stock[Math.floor(Date.now() / 86_400_000) % stock.length] ?? null;
+  // Featured hero — ONE item, pinned for the whole day (settings.ts pin).
+  // The old positional day-hash re-pointed whenever the stock shifted (a
+  // purchase shrinks the array under the index — Tom, 2026-08-21). Now the
+  // pinned ITEM shows all day; if it sells, the slot rests until tomorrow
+  // (re-seeding the spotlight right after a sale reads greedy, the pack-
+  // sheet rule); a new day picks and pins afresh.
+  const [featured, setFeatured] = useState<ArmoryItem | null>(null);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      if (stock.length === 0) {
+        if (live) setFeatured(null);
+        return;
+      }
+      const today = Math.floor(Date.now() / 86_400_000);
+      const pin = await loadFeaturedPin();
+      if (!live) return;
+      if (pin !== null && pin.day === today) {
+        setFeatured(stock.find((item) => item.entitlementId === pin.id) ?? null);
+        return;
+      }
+      const pick = stock[today % stock.length];
+      if (pick === undefined) return;
+      saveFeaturedPin({ day: today, id: pick.entitlementId });
+      setFeatured(pick);
+    })();
+    return () => {
+      live = false;
+    };
   }, [stock]);
 
   // Entrance — the mode-select rise, shared value + staggered slices.
