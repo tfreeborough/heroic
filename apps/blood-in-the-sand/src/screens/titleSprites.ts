@@ -20,7 +20,6 @@ export const TITLE_SPRITES: Record<string, number> = {
   "title-fang": require("../../assets/sprites/title-fang.png"),
   "title-scorpion": require("../../assets/sprites/title-scorpion.png"),
   "title-bombard": require("../../assets/sprites/title-bombard.png"),
-  "title-lifeline": require("../../assets/sprites/title-lifeline.png"),
 };
 
 /**
