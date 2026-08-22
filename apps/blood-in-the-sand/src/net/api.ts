@@ -10,8 +10,9 @@
  * Clerk linking exists). The token is the only credential; losing it is
  * losing the wallet, which is exactly what account linking will insure.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /**
  * Same conventions as the game server's EXPO_PUBLIC_DEFAULT_SERVER — unset
@@ -33,6 +34,8 @@ export const API_URL = resolveApiUrl(process.env.EXPO_PUBLIC_API_URL ?? "");
 
 const KEY_PLAYER_ID = "bits.playerId";
 const KEY_TOKEN = "bits.playerToken";
+/** "1" once a wallet fetch reported linked — survives the token dying. */
+const KEY_LINKED_HINT = "bits.linkedAccount";
 
 export interface Identity {
   playerId: string;
@@ -96,11 +99,42 @@ export const fetchGlory = async (identity: Identity): Promise<number | null> => 
 };
 
 /** Both server-authoritative balances (bits-store.md). `signets` tolerates an
- * older API that doesn't serve it yet — the field just reads 0. */
+ * older API that doesn't serve it yet — the field just reads 0; likewise the
+ * account fields (bits-accounts.md) default to "no accounts, not linked". */
 export interface Wallet {
   glory: number;
   signets: number;
+  /** This player carries a Clerk link — hides every sign-in door. */
+  linked: boolean;
+  /** Accounts are ON server-side (key configured, kill switch open). */
+  accounts: boolean;
 }
+
+/**
+ * The last wallet any answer carried — the purse's stale-while-revalidate
+ * seed (Tom, 2026-08-22: every screen change mounted a fresh purse that
+ * painted nothing until its own fetch landed — a visible flicker). Every
+ * wallet-shaped answer publishes here (fetch, forge, unlock, IAP credit,
+ * dev grant), so a newly mounted purse paints the last-known numbers on its
+ * first frame and its own fetch merely corrects them; mounted purses hear
+ * later answers live, so a purchase on the Armory is already in the purse
+ * the next screen shows. Module-level: dies with the JS world, same as the
+ * app's other in-memory caches. Cleared whenever the identity changes
+ * under us — another player's balance must never be the seed.
+ */
+let lastWallet: Wallet | null = null;
+const walletListeners = new Set<(wallet: Wallet) => void>();
+const publishWallet = (wallet: Wallet): Wallet => {
+  lastWallet = wallet;
+  walletListeners.forEach((listen) => listen(wallet));
+  return wallet;
+};
+const forgetWallet = (): void => {
+  lastWallet = null;
+};
+/** The seed for a screen that owns its own wallet state (the Armory) — so
+ * its controlled purse paints on the first frame too. */
+export const lastKnownWallet = (): Wallet | null => lastWallet;
 
 /** The full wallet; null = unavailable right now. */
 export const fetchWallet = async (identity: Identity): Promise<Wallet | null> => {
@@ -110,9 +144,24 @@ export const fetchWallet = async (identity: Identity): Promise<Wallet | null> =>
       headers: { authorization: `Bearer ${identity.token}` },
     });
     if (!res.ok) return null;
-    const wallet = (await res.json()) as { glory?: unknown; signets?: unknown };
+    const wallet = (await res.json()) as {
+      glory?: unknown;
+      signets?: unknown;
+      linked?: unknown;
+      accounts?: unknown;
+    };
     if (typeof wallet.glory !== "number") return null;
-    return { glory: wallet.glory, signets: typeof wallet.signets === "number" ? wallet.signets : 0 };
+    const linked = wallet.linked === true;
+    // The 401-recovery hint (bits-accounts.md): remember linkedness OUTSIDE
+    // the identity, so a token the server stops recognising can still be
+    // routed to restore instead of the anonymous wipe-and-remint.
+    void AsyncStorage.setItem(KEY_LINKED_HINT, linked ? "1" : "0");
+    return publishWallet({
+      glory: wallet.glory,
+      signets: typeof wallet.signets === "number" ? wallet.signets : 0,
+      linked,
+      accounts: wallet.accounts === true,
+    });
   } catch {
     return null;
   }
@@ -137,7 +186,9 @@ export const devGrant = async (
     });
     if (!res.ok) return null;
     const wallet = (await res.json()) as Wallet;
-    return typeof wallet.glory === "number" && typeof wallet.signets === "number" ? wallet : null;
+    return typeof wallet.glory === "number" && typeof wallet.signets === "number"
+      ? publishWallet(withAccountFields(wallet))
+      : null;
   } catch {
     return null;
   }
@@ -175,6 +226,15 @@ export type StoreResult =
   | { ok: true; wallet: Wallet }
   | { ok: false; reason: "insufficient" | "unavailable" };
 
+/** Normalise a wallet-shaped answer's account fields — an older API that
+ * doesn't serve them reads as "no accounts", which correctly hides doors. */
+const withAccountFields = (w: { glory: number; signets: number; linked?: unknown; accounts?: unknown }): Wallet => ({
+  glory: w.glory,
+  signets: w.signets,
+  linked: w.linked === true,
+  accounts: w.accounts === true,
+});
+
 /** An idempotency key for one purchase tap — a retry of the SAME tap must
  * reuse the same key, which is what makes it retry-safe on the ledger. */
 export const mintPurchaseKey = (): string =>
@@ -194,7 +254,7 @@ const storePost = async (path: string, identity: Identity, body: object): Promis
     if (typeof wallet.glory !== "number" || typeof wallet.signets !== "number") {
       return { ok: false, reason: "unavailable" };
     }
-    return { ok: true, wallet };
+    return { ok: true, wallet: publishWallet(withAccountFields(wallet)) };
   } catch {
     return { ok: false, reason: "unavailable" };
   }
@@ -241,9 +301,17 @@ export const storeIapCredit = async (
     if (typeof body.glory !== "number" || typeof body.signets !== "number") {
       return { ok: false, reason: "unavailable" };
     }
+    const extra = body as { linked?: unknown; accounts?: unknown };
     return {
       ok: true,
-      wallet: { glory: body.glory, signets: body.signets },
+      wallet: publishWallet(
+        withAccountFields({
+          glory: body.glory,
+          signets: body.signets,
+          linked: extra.linked,
+          accounts: extra.accounts,
+        }),
+      ),
       credited: typeof body.credited === "number" ? body.credited : 0,
     };
   } catch {
@@ -272,12 +340,31 @@ export const devResetPurchases = async (identity: Identity): Promise<boolean> =>
 };
 
 /**
+ * Overwrite the stored identity — the account-adoption write
+ * (bits-accounts.md): link/restore handed us the account's player + a fresh
+ * token, and this device becomes that player from here on.
+ */
+export const storeIdentity = async (identity: Identity): Promise<void> => {
+  // A handed identity (account link/restore) may be a different player —
+  // the last wallet is no longer ours to seed the purse with.
+  forgetWallet();
+  await Promise.all([
+    SecureStore.setItemAsync(KEY_PLAYER_ID, identity.playerId),
+    SecureStore.setItemAsync(KEY_TOKEN, identity.token),
+  ]);
+};
+
+/**
  * Self-heal a stored identity the backend no longer recognises (a dev
- * database reset, a wiped row). Anonymous identity has no second factor, so
- * an unknown token is unrecoverable BY DESIGN — the only path forward is a
- * fresh registration. Wipes and re-mints ONLY when the API affirmatively
- * answers 401; any network failure keeps the stored identity untouched
- * (offline must never cost a player their wallet).
+ * database reset, a wiped row — or, since accounts, a token another device's
+ * restore rotated away). An ANONYMOUS unknown token is unrecoverable by
+ * design — no second factor — so the only path forward is a fresh
+ * registration. But a player last seen LINKED has a recovery path (sign in →
+ * restore), so their identity is kept for the doors to fix; wiping it would
+ * discard the one crumb that says "this device had an account"
+ * (bits-accounts.md § 401 recovery). Wipes and re-mints ONLY when the API
+ * affirmatively answers 401; any network failure keeps the stored identity
+ * untouched (offline must never cost a player their wallet).
  */
 export const revalidateIdentity = async (identity: Identity): Promise<Identity | null> => {
   if (!API_URL) return identity;
@@ -289,6 +376,8 @@ export const revalidateIdentity = async (identity: Identity): Promise<Identity |
   } catch {
     return identity; // unreachable — keep what we have
   }
+  if ((await AsyncStorage.getItem(KEY_LINKED_HINT)) === "1") return identity;
+  forgetWallet();
   await Promise.all([
     SecureStore.deleteItemAsync(KEY_PLAYER_ID),
     SecureStore.deleteItemAsync(KEY_TOKEN),
@@ -398,4 +487,38 @@ export const useGlory = (): number | null => {
     };
   }, []);
   return glory;
+};
+
+/**
+ * The full wallet as a hook — same silence rules as useGlory (null until a
+ * real answer; never an error state the player didn't ask for), plus the
+ * account fields the sign-in doors key off and a `refresh` for the moment a
+ * sign-in lands (adoption changes the identity under every balance).
+ */
+export const useWalletInfo = (): { wallet: Wallet | null; refresh: () => void } => {
+  // Seeded from the last-known wallet (no first-frame blank) and kept live
+  // by every later answer; the mount fetch below is the revalidation.
+  const [wallet, setWallet] = useState<Wallet | null>(lastWallet);
+  const [stamp, setStamp] = useState(0);
+  useEffect(() => {
+    walletListeners.add(setWallet);
+    return () => {
+      walletListeners.delete(setWallet);
+    };
+  }, []);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const identity = await ensureIdentity();
+      if (!identity || !live) return;
+      // fetchWallet publishes — the listener above delivers it to us and to
+      // every other mounted purse in one go.
+      await fetchWallet(identity);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [stamp]);
+  const refresh = useCallback(() => setStamp((s) => s + 1), []);
+  return { wallet, refresh };
 };

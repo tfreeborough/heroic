@@ -612,7 +612,7 @@ export const HomeScreen = ({ onPlay, onArmory, onSettings, onTargetDummies, upda
 
       {/* The title block is compressed into the backdrop's sky band (top ~27%
           of the art) — below it the colosseum begins and text drowns. */}
-      <View style={[styles.ui, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + 70 }]} pointerEvents="box-none">
+      <View style={[styles.ui, { paddingTop: insets.top + 50, paddingBottom: insets.bottom + 70 }]} pointerEvents="box-none">
         <Animated.View style={rise(0, 0.45)}>
           <Pressable onPress={onTitleTap}>
             <Text style={styles.eyebrow}>HEROIC</Text>

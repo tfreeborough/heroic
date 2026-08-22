@@ -15,6 +15,7 @@ import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RoomListing } from "@heroic/blood-in-the-sand-sim";
 import { playSound, unlockAudio } from "../audio";
+import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import type { ArenaClient } from "../net/connection";
 
 const REFRESH_MS = 4000;
@@ -23,8 +24,10 @@ export interface RoomListScreenProps {
   client: ArenaClient;
   /** Already claimed on the NameScreen gate — guaranteed non-empty. */
   playerName: string;
-  /** Back to the title screen. */
+  /** Back to the mode select. */
   onBack: () => void;
+  /** The header purse → the Armory. */
+  onArmory: () => void;
 }
 
 /** Which dialog is up: create a room, join by code, or a locked room's passcode. */
@@ -36,7 +39,7 @@ type Sheet = { kind: "create" } | { kind: "code" } | { kind: "pass"; room: RoomL
  * room passcodes) — the list itself is just rooms. Rooms mid-match are hidden;
  * the list re-polls every few seconds while this screen is mounted.
  */
-export const RoomListScreen = ({ client, playerName, onBack }: RoomListScreenProps) => {
+export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomListScreenProps) => {
   const insets = useSafeAreaInsets();
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [roomName, setRoomName] = useState("");
@@ -124,18 +127,16 @@ export const RoomListScreen = ({ client, playerName, onBack }: RoomListScreenPro
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 24 }]}>
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Pressable onPress={onBack} hitSlop={12}>
-            <Text style={styles.backText}>‹</Text>
+    <View style={[styles.root, { paddingTop: insets.top + 16 }]}>
+      <ScreenHeader onBack={onBack} onPurse={onArmory} />
+      <ScreenSign
+        title="ROOMS"
+        right={
+          <Pressable onPress={() => openSheet({ kind: "code" })} style={styles.codeButton}>
+            <Text style={styles.codeButtonText}>JOIN BY CODE</Text>
           </Pressable>
-          <Text style={styles.title}>ROOMS</Text>
-        </View>
-        <Pressable onPress={() => openSheet({ kind: "code" })} style={styles.codeButton}>
-          <Text style={styles.codeButtonText}>JOIN BY CODE</Text>
-        </Pressable>
-      </View>
+        }
+      />
 
       {client.lastError && sheet === null ? <Text style={styles.error}>{client.lastError}</Text> : null}
 
@@ -287,10 +288,6 @@ const SheetModal = ({ title, onClose, children }: { title: string; onClose: () =
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  title: { color: "#d94141", fontSize: 28, fontWeight: "900", letterSpacing: 3 },
-  backText: { color: "#8a7f70", fontSize: 30, fontWeight: "800", marginTop: -3 },
   codeButton: {
     borderColor: "#3a332a",
     borderWidth: 1,

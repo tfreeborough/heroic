@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
+    "@clerk/backend": "^3.16.10",
     "@heroic/blood-in-the-sand-persistence": "workspace:*",
     "@heroic/blood-in-the-sand-sim": "workspace:*",
     "hono": "^4.8.0"

@@ -49,6 +49,15 @@ interface SignetForgeProps {
   price: number;
   /** Pure commerce — no sounds, no haptics; the forge narrates. */
   onForge: () => Promise<ForgeOutcome>;
+  /** The money door, shown ONLY when the purse can't fund a forge — the
+   * player arrived wanting a Signet and the Pit is the slow answer; the
+   * pack shelf opens OVER the forge (Tom, 2026-08-22: a high-intent moment,
+   * encourage the purchase). Omit and the ghosted hold stands alone. */
+  onBuy?: () => void;
+  /** Store-localized price of the smallest pack ("US$1.89") for the buy
+   * door's caption; null/undefined = listings haven't answered, caption
+   * drops the price. */
+  buyFrom?: string | null;
   onClose: () => void;
 }
 
@@ -115,7 +124,6 @@ const Sparks = ({ seed }: { seed: number }) => {
           long: Math.random() > 0.5,
         };
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [seed],
   );
   useEffect(() => {
@@ -163,7 +171,6 @@ const FlyingSignet = ({ seed, onLand }: { seed: number; onLand: () => void }) =>
         }
       },
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed, t]);
   if (seed === 0) return null;
   return (
@@ -196,7 +203,7 @@ const SignetCard = () => (
   </View>
 );
 
-export const SignetForge = ({ wallet, price, onForge, onClose }: SignetForgeProps) => {
+export const SignetForge = ({ wallet, price, onForge, onBuy, buyFrom, onClose }: SignetForgeProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   useBackClose(onClose);
@@ -208,6 +215,13 @@ export const SignetForge = ({ wallet, price, onForge, onClose }: SignetForgeProp
   const [flySeed, setFlySeed] = useState(0);
   // The stack lags the wallet: a new Signet joins when its card LANDS.
   const [shownSignets, setShownSignets] = useState(wallet.signets);
+  // ...except Signets that arrive from OUTSIDE the ritual — a pack bought
+  // through the buy door lands while the forge is idle underneath, and the
+  // fan should grow to show it (the purchase's confirmation is the pile).
+  // Mid-strike the wallet is ahead of the flying card; onLand syncs then.
+  useEffect(() => {
+    if (phase === "idle") setShownSignets(wallet.signets);
+  }, [wallet.signets]);
 
   // JS-driven on purpose — feeds width/colour (see header).
   const charge = useRef(new Animated.Value(0)).current;
@@ -431,6 +445,34 @@ export const SignetForge = ({ wallet, price, onForge, onClose }: SignetForgeProp
       </Pressable>
       {notice !== null ? <Text style={styles.notice}>{notice}</Text> : null}
 
+      {/* The money door — ONLY when the purse falls short. The player came
+          here wanting a Signet; the ghosted hold says how far the Pit is,
+          the gold door says it needn't be. Solid gold like the counter's
+          forge button: on this screen, at this moment, buying IS the live
+          path (Tom, 2026-08-22). Hidden the instant Glory suffices — the
+          forge never sells to a player who can forge. */}
+      {!canForge && onBuy !== undefined ? (
+        <View style={styles.buyDoor}>
+          <Text style={styles.buyOr}>OR</Text>
+          <Pressable
+            onPress={() => {
+              unlockAudio();
+              playSound("uiTap");
+              onBuy();
+            }}
+            style={styles.buyBtn}
+          >
+            <View style={styles.buySeal} />
+            <Text style={styles.buyBtnText} numberOfLines={1}>
+              BUY SIGNETS
+            </Text>
+          </Pressable>
+          <Text style={styles.buyCaption} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {buyFrom ? `THE PIT CAN WAIT — FROM ${buyFrom}` : "THE PIT CAN WAIT."}
+          </Text>
+        </View>
+      ) : null}
+
       {/* The fan of struck Signets — every forge visibly adds to the pile. */}
       <View style={styles.stack}>
         {stackCards === 0 ? (
@@ -581,6 +623,24 @@ const styles = StyleSheet.create({
   holdGhost: { borderColor: "#3a332a", backgroundColor: "transparent" },
   holdGhostText: { color: C_MUTED, fontSize: 11 },
   notice: { color: "#c96a4a", fontSize: 9, fontWeight: "800", letterSpacing: 0.8, textAlign: "center", lineHeight: 13 },
+
+  buyDoor: { alignSelf: "stretch", alignItems: "center", gap: 7, marginTop: 2 },
+  buyOr: { color: "#6a6155", fontSize: 8.5, fontWeight: "900", letterSpacing: 2.5, marginRight: -2.5 },
+  // Mirrors the counter's solid-gold forge door (ArmoryScreen.forgeBtn) —
+  // same shape the player already learned means "get Signets".
+  buyBtn: {
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: C_GOLD,
+    borderRadius: 13,
+    paddingVertical: 15,
+  },
+  buySeal: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: "#5d1717", backgroundColor: "#7e2020" },
+  buyBtnText: { color: "#241a0c", fontSize: 13, fontWeight: "900", letterSpacing: 2.5 },
+  buyCaption: { color: C_MUTED, fontSize: 8.5, fontWeight: "900", letterSpacing: 1.5, marginRight: -1.5 },
 
   stack: { alignItems: "center", gap: 8, marginTop: 10, minHeight: 74 },
   stackFan: { flexDirection: "row", alignItems: "center" },

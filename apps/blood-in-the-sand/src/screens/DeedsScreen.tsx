@@ -42,11 +42,14 @@ import { getWornTitle, setWornTitle } from "../deeds/wornTitle";
 import { setEntitlements } from "../deeds/entitlements";
 import { devFlags } from "../dev";
 import { ensureIdentity, fetchAchievements, type AchievementsMe } from "../net/api";
+import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { DeedReplayOverlay } from "./DeedCards";
 import { DISPLAY_FONT } from "../typography";
 
 export interface DeedsScreenProps {
   onBack: () => void;
+  /** The header purse → the Armory. */
+  onArmory: () => void;
 }
 
 
@@ -351,7 +354,7 @@ const Block = ({ block, counters, worn, onWear }: { block: CodexBlock; counters:
   );
 };
 
-export const DeedsScreen = ({ onBack }: DeedsScreenProps) => {
+export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   // Session dev flag, read once per mount — re-enter the screen to apply.
@@ -451,28 +454,37 @@ export const DeedsScreen = ({ onBack }: DeedsScreenProps) => {
   const ready = preview !== null || (me !== "loading" && me !== null);
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 16 }]}>
       {Array.from({ length: EMBER_COUNT }, (_, i) => (
         <Ember key={i} w={width} h={height} seed={i + 7} />
       ))}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => {
-            playSound("uiBack");
-            onBack();
-          }}
-          hitSlop={12}
-        >
-          <Text style={styles.back}>‹ BACK</Text>
-        </Pressable>
-        <Text style={styles.screenTitle}>DEEDS</Text>
-        <Text style={styles.progress}>{ready ? `${earnedCount} / ${ACHIEVEMENT_DEFS.length}` : ""}</Text>
-      </View>
-
+      <ScreenHeader
+        style={styles.header}
+        onBack={() => {
+          playSound("uiBack");
+          onBack();
+        }}
+        onPurse={() => {
+          playSound("uiTap");
+          onArmory();
+        }}
+      />
       {ready ? (
         <SectionList
           sections={sections}
           keyExtractor={(block) => block.key}
+          // The sign is CONTENT, not chrome (Tom, 2026-08-22): the screen's
+          // name and the tally head the chronicle and scroll away with it —
+          // the bar above is nav + purse, same as every screen. Absolute
+          // count over a percentage: the chapter rows beneath count the same
+          // way, and "12 / 48" says how big the chronicle is and how far is
+          // left, where a % hides the scale and ticks in lumpy ~2% steps.
+          ListHeaderComponent={
+            <ScreenSign
+              title="DEEDS"
+              right={<Text style={styles.progress}>{`${earnedCount} / ${ACHIEVEMENT_DEFS.length}`}</Text>}
+            />
+          }
           renderItem={({ item, index }) => (
             <BlockReveal index={index}>
               <Block block={item} counters={counters} worn={worn} onWear={onWear} />
@@ -511,20 +523,7 @@ export const DeedsScreen = ({ onBack }: DeedsScreenProps) => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  back: { color: "#8a7f70", fontSize: 13, fontWeight: "800", letterSpacing: 2 },
-  screenTitle: {
-    fontFamily: DISPLAY_FONT,
-    color: "#e8d9b8",
-    fontSize: 22,
-    letterSpacing: 5,
-  },
+  header: { paddingHorizontal: 20 },
   progress: {
     color: "#8a7f70",
     fontSize: 13, fontWeight: "800",

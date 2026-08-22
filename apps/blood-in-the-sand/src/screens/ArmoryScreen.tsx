@@ -43,6 +43,7 @@ import {
   ensureIdentity,
   fetchStore,
   fetchWallet,
+  lastKnownWallet,
   mintPurchaseKey,
   storeExchange,
   storeIapCredit,
@@ -59,7 +60,14 @@ import {
   type SignetPackListing,
 } from "../net/iap";
 import { SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
-import { getEntitlements, grantEntitlement } from "../deeds/entitlements";
+import { getEntitlements, grantEntitlement, loadEntitlements } from "../deeds/entitlements";
+import { AccountSheet } from "../components/AccountSheet";
+import { ScreenHeader } from "../components/ScreenHeader";
+import {
+  CLERK_PUBLISHABLE_KEY,
+  markOfferShown,
+  shouldOfferAfterPurchase,
+} from "../net/account";
 import {
   ABILITY_CODEX,
   CATEGORY_META,
@@ -107,7 +115,9 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
-  const [wallet, setWallet] = useState<Wallet | null>(null);
+  // Seeded from the last-known wallet so the purse never blanks on entry;
+  // the mount fetch below corrects it.
+  const [wallet, setWallet] = useState<Wallet | null>(lastKnownWallet);
   const [price, setPrice] = useState<number | null>(null);
   // Bumped after every local grant so the stock re-derives.
   const [entitledStamp, setEntitledStamp] = useState(0);
@@ -123,7 +133,23 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
    * build whose .dev bundle id can never see the real products). Routes
    * buys to the API's mock arm and labels the shelf DEV. */
   const [packsMock, setPacksMock] = useState(false);
+  /** The post-purchase account offer (bits-accounts.md § the sheet). */
+  const [accountOffer, setAccountOffer] = useState(false);
   const busy = useRef(false);
+
+  /**
+   * Offer the account sheet after a purchase — the moment of maximum
+   * investment, EITHER purchase kind (Tom, 2026-08-21: an Armory unlock and
+   * a Signet pack are equally worth protecting). Only while unlinked, only
+   * with accounts live at both ends, at most once per app session; the
+   * ceremony/shelf has always finished before this is called.
+   */
+  const maybeOfferAccount = (w: Wallet | null): void => {
+    if (!w?.accounts || w.linked || CLERK_PUBLISHABLE_KEY.length === 0) return;
+    if (!shouldOfferAfterPurchase()) return;
+    markOfferShown();
+    setAccountOffer(true);
+  };
 
   /** A store answer landing — from a live purchase OR the crash-recovery
    * replay on entry. `credited: 0` = an already-banked replay: refresh
@@ -140,6 +166,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
           // open reads as greedy). The purse ticking up + the purchase
           // sting are the confirmation; no notice needed.
           setPacksOpen(false);
+          maybeOfferAccount(event.wallet);
         }
         return;
       case "cancelled":
@@ -294,6 +321,19 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   };
 
   // ── Commerce. The ledger is the referee; this just narrates its answers. ──
+  /** A sign-in landed — from the post-purchase offer OR the header's
+   * restore door. An adoption changed WHO we are: owned items may differ
+   * too, so the shelf refilters before the wallet refreshes. */
+  const onAccountLinked = (adopted: boolean): void => {
+    void (async () => {
+      if (adopted) {
+        await loadEntitlements();
+        setEntitledStamp((s) => s + 1);
+      }
+      await refreshWallet();
+    })();
+  };
+
   const refreshWallet = async (): Promise<void> => {
     const identity = await ensureIdentity();
     if (!identity) return;
@@ -432,39 +472,26 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
     // Safe-area padding lives on the ROOT, not the scroll content — content
     // must never slide under the system tray as it scrolls (Tom's Android
     // pass, 2026-08-15).
-    <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 16 }]}>
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header: door back, the sign, the purse. */}
+        {/* The shared bar, CONTROLLED: this screen owns the live wallet
+            (purchases move it), so the purse reads ours, not a second
+            fetch. No door on the purse — we're already here. The sign
+            that used to sit between ("THE ARMORY") went with the 2026-08-22
+            header unification: the featured hero IS the sign. */}
         <Animated.View style={[styles.header, rise(0, 0.35)]}>
-          <Pressable
-            onPress={() => {
+          <ScreenHeader
+            wallet={wallet}
+            onLinked={onAccountLinked}
+            onBack={() => {
               unlockAudio();
               playSound("uiBack");
               onBack();
             }}
-            hitSlop={12}
-          >
-            <Text style={styles.back}>‹</Text>
-          </Pressable>
-          <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            THE ARMORY
-          </Text>
-          <View style={styles.purse}>
-            {wallet !== null ? (
-              <>
-                <View style={styles.gloryGem} />
-                <Text style={styles.purseText}>{wallet.glory.toLocaleString()}</Text>
-                <View style={styles.purseDivider} />
-                <View style={styles.signetSeal} />
-                <Text style={styles.purseText}>{wallet.signets}</Text>
-              </>
-            ) : (
-              <Text style={styles.purseOffline}>—</Text>
-            )}
-          </View>
+          />
         </Animated.View>
 
         {/* The counter: the two doors to getting Signets, full-width pair
@@ -581,7 +608,21 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
       {/* ── The Signet Forge — over the sheet, so closing it lands the player
           back on the item they wanted, now holding the Signet to break. ── */}
       {forgeOpen && wallet !== null && price !== null ? (
-        <SignetForge wallet={wallet} price={price} onForge={forgeSignet} onClose={() => setForgeOpen(false)} />
+        <SignetForge
+          wallet={wallet}
+          price={price}
+          onForge={forgeSignet}
+          // The forge's buy door opens the shelf OVER the forge — a credited
+          // pack closes the shelf and lands the player back on the forge,
+          // fan grown, Signet in hand (the forge stays; the Armory's sheet
+          // beneath it is still the item they came for).
+          onBuy={() => {
+            setPackNotice(null);
+            setPacksOpen(true);
+          }}
+          buyFrom={packListings?.[0]?.displayPrice ?? null}
+          onClose={() => setForgeOpen(false)}
+        />
       ) : null}
 
       {/* ── The pack shelf — the one surface where money enters. ── */}
@@ -601,7 +642,28 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
       ) : null}
 
       {/* ── The seal breaks. ── */}
-      {ceremony !== null ? <SignetCeremony item={ceremony} onDone={() => setCeremony(null)} /> : null}
+      {ceremony !== null ? (
+        <SignetCeremony
+          item={ceremony}
+          onDone={() => {
+            // The ceremony always lands whole; the account offer waits its turn.
+            setCeremony(null);
+            maybeOfferAccount(wallet);
+          }}
+        />
+      ) : null}
+
+      {/* ── Keep your armory (bits-accounts.md) — after either purchase. ── */}
+      {accountOffer ? (
+        <AccountSheet
+          mode="keep"
+          onClose={() => setAccountOffer(false)}
+          onLinked={(adopted) => {
+            setAccountOffer(false);
+            onAccountLinked(adopted);
+          }}
+        />
+      ) : null}
     </View>
   );
 };
@@ -804,24 +866,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210" },
   scroll: { paddingHorizontal: 16, gap: 16 },
 
-  header: { flexDirection: "row", alignItems: "center", gap: 12 },
-  back: { color: C_MUTED, fontSize: 30, lineHeight: 32, fontWeight: "700", paddingHorizontal: 4 },
-  title: { flex: 1, color: C_BONE, fontSize: 20, letterSpacing: 3, fontFamily: DISPLAY_FONT },
-  purse: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderColor: "rgba(138,109,68,0.75)",
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(30,24,16,0.72)",
-  },
-  purseText: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 1, fontVariant: ["tabular-nums"] },
-  purseDivider: { width: 1, height: 10, backgroundColor: "rgba(138,109,68,0.5)" },
-  purseOffline: { color: C_MUTED, fontSize: 11, fontWeight: "800" },
-  gloryGem: { width: 6, height: 6, backgroundColor: "#8c2f2f", transform: [{ rotate: "45deg" }] },
+  // The bar: scroll pads 16, the bar's own 4 lands it 20 from the edge like
+  // every screen. The scroll's gap:16 below it stacks on the bar's 14 — the
+  // bar pads its own bottom, so give the gap back here.
+  header: { paddingHorizontal: 4, marginBottom: -14 },
   // The Signet's mark: a wax dot in a gold ring — the seal before it breaks.
   signetSeal: {
     width: 9,

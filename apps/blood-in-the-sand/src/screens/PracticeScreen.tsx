@@ -4,6 +4,7 @@ import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DIFFICULTIES, DIFFICULTY_IDS, type DifficultyId } from "@heroic/blood-in-the-sand-sim";
+import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { loadBotDifficulty, saveBotDifficulty } from "../settings";
 import type { PracticeMode } from "../net/practice";
 
@@ -30,6 +31,8 @@ const TIER_HINTS: Record<DifficultyId, string> = {
 
 export interface PracticeScreenProps {
   onBack: () => void;
+  /** The header purse → the Armory. */
+  onArmory: () => void;
   onStart: (playerName: string, teamSize: number, difficulty: DifficultyId, opponent: PracticeMode) => void;
 }
 
@@ -43,7 +46,7 @@ export interface PracticeScreenProps {
  * between visits (climbing the ladder shouldn't mean re-picking); the range
  * ignores size and tier entirely (a fixed line of dummies).
  */
-export const PracticeScreen = ({ onBack, onStart }: PracticeScreenProps) => {
+export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProps) => {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("gladiator");
   const [opponent, setOpponent] = useState<PracticeMode>("bot");
@@ -63,13 +66,9 @@ export const PracticeScreen = ({ onBack, onStart }: PracticeScreenProps) => {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.back} hitSlop={12}>
-          <Text style={styles.backText}>‹ BACK</Text>
-        </Pressable>
-        <Text style={styles.title}>PRACTICE</Text>
-      </View>
+    <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom }]}>
+      <ScreenHeader onBack={onBack} onPurse={onArmory} />
+      <ScreenSign title="PRACTICE" />
       <Text style={styles.hint}>{OPPONENT_HINTS[opponent]}</Text>
 
       <Text style={styles.sectionLabel}>OPPONENTS</Text>
@@ -127,10 +126,6 @@ export const PracticeScreen = ({ onBack, onStart }: PracticeScreenProps) => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
-  header: { flexDirection: "row", alignItems: "center", gap: 16 },
-  back: { paddingVertical: 4 },
-  backText: { color: "#8a7f70", fontSize: 15, fontWeight: "800", letterSpacing: 1 },
-  title: { color: "#d94141", fontSize: 28, fontWeight: "900", letterSpacing: 3 },
   hint: { color: "#8a7f70", fontSize: 13, marginTop: 10, lineHeight: 19 },
   // Every chip row sits under a sectionLabel now — the label owns the gap.
   sizeRow: { flexDirection: "row", gap: 8 },

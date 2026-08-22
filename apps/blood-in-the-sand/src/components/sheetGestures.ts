@@ -11,9 +11,11 @@
  *
  *  - useSheetDrag: makes the bottom-sheet handle honest — grab the handle
  *    zone, drag down, release past the threshold (or flick) and the sheet
- *    leaves; short drags spring back. `onGone` must remove the sheet
- *    INSTANTLY (state null + anim value reset) — the drag has already
- *    animated the exit, a second close animation would replay it.
+ *    leaves; short drags spring back. `onGone` must UNMOUNT the sheet
+ *    instantly (state null + any enter-anim reset) — the drag has already
+ *    animated the exit, a second close animation would replay it, and the
+ *    hook leaves dragY parked offscreen so the sheet can't reappear in
+ *    the gap before React commits the removal.
  */
 import { useEffect, useRef } from "react";
 import { Animated, BackHandler, Easing, PanResponder } from "react-native";
@@ -57,8 +59,14 @@ export const useSheetDrag = (
             useNativeDriver: true,
           }).start(({ finished }) => {
             if (!finished) return;
+            // Hand off and STOP — never reset dragY here. onGone is a React
+            // state update that commits a frame or two later, while a
+            // native-driver setValue(0) lands on the UI thread at once: the
+            // sheet snapped back to rest under its still-opaque scrim for
+            // those frames before unmounting (the pack shelf's "flashes back
+            // on dismiss", Tom 2026-08-22). The sheet unmounts on gone and a
+            // fresh mount gets a fresh value, so nothing needs resetting.
             goneRef.current();
-            dragY.setValue(0);
           });
         } else {
           Animated.spring(dragY, { toValue: 0, bounciness: 4, useNativeDriver: true }).start();

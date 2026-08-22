@@ -134,6 +134,19 @@ const applySchema = async (db: Db): Promise<void> => {
         player_id TEXT NOT NULL,
         PRIMARY KEY (match_id, player_id)
       )`,
+      // Per-device bearer tokens (bits-accounts.md § A4): one player, many
+      // credentials — an account restore ADDS a row here instead of rotating
+      // players.token_hash, so a second device never logs out the first.
+      // This table is the ONLY one token resolution reads; players.token_hash
+      // is legacy (still written on register, backfilled below for old rows).
+      `CREATE TABLE IF NOT EXISTS player_tokens (
+        token_hash TEXT PRIMARY KEY,
+        player_id TEXT NOT NULL REFERENCES players(id),
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`,
+      // The prune query: newest N per player.
+      `CREATE INDEX IF NOT EXISTS idx_player_tokens_player
+        ON player_tokens (player_id, created_at)`,
       // Owned items — shared by achievements (source achievement:<id>) and
       // the future store (source purchase:<sku>); achievements.md § secret
       // items. One row per owned item regardless of how it arrived.
@@ -152,6 +165,22 @@ const applySchema = async (db: Db): Promise<void> => {
   // signal). Readers treat peak_rating 0 as "no recorded peak" and fall back
   // to the live rating, so old rows need no backfill.
   await addColumnIfMissing(db, "ranked_ratings", "peak_rating INTEGER NOT NULL DEFAULT 0");
+  // One player per Clerk account (bits-accounts.md) — partial so the unlinked
+  // majority (NULL) never collide. Outside the batch: players predates it.
+  await db.execute(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_players_clerk_user
+      ON players (clerk_user_id) WHERE clerk_user_id IS NOT NULL`,
+  );
+  // Backfill pre-A4 tokens into player_tokens so every stored device token
+  // keeps working. Guarded on "player has no token rows yet" rather than a
+  // bare OR IGNORE: registration writes both tables, so only genuinely
+  // pre-A4 players ever match — and a legacy row later pruned by the device
+  // cap can never be resurrected by a reboot.
+  await db.execute(
+    `INSERT INTO player_tokens (token_hash, player_id, created_at)
+      SELECT token_hash, id, created_at FROM players p
+      WHERE NOT EXISTS (SELECT 1 FROM player_tokens t WHERE t.player_id = p.id)`,
+  );
 };
 
 const addColumnIfMissing = async (db: Db, table: string, columnDdl: string): Promise<void> => {

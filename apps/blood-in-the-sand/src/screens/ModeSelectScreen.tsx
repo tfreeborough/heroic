@@ -14,7 +14,7 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import { playSound, unlockAudio } from "../audio";
-import { GloryPill } from "../components/GloryPill";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { devFlags } from "../dev";
 import { DISPLAY_FONT } from "../typography";
 
@@ -273,26 +273,19 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => {
-            unlockAudio();
-            playSound("uiBack");
-            onBack();
-          }}
-          hitSlop={12}
-          style={styles.back}
-        >
-          <Text style={styles.backText}>‹</Text>
-        </Pressable>
-        <GloryPill
-          onPress={() => {
-            unlockAudio();
-            playSound("uiTap");
-            onArmory();
-          }}
-        />
-      </View>
+      <ScreenHeader
+        style={styles.header}
+        onBack={() => {
+          unlockAudio();
+          playSound("uiBack");
+          onBack();
+        }}
+        onPurse={() => {
+          unlockAudio();
+          playSound("uiTap");
+          onArmory();
+        }}
+      />
 
       <View style={styles.cards}>
         <ModeCard
@@ -351,15 +344,8 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingHorizontal: 16 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 4,
-    paddingBottom: 14,
-  },
-  back: { width: 44, paddingVertical: 2 },
-  backText: { color: "#8a7f70", fontSize: 26, fontWeight: "800", lineHeight: 28 },
+  // Root pads 16; the bar's own 4 lands it 20 from the edge like every screen.
+  header: { paddingHorizontal: 4 },
   cards: { flex: 1, gap: 12 },
   /** Skirmish + Practice side by side — each ModeCard's flex:1 splits the
    * width; the row itself takes one card-height unit of the column. */

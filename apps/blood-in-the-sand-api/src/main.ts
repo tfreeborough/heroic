@@ -28,7 +28,11 @@ import {
   findPlayerByToken,
   gloryBalance,
   gloryEarned,
+  linkAccount,
+  linkedClerkUserId,
   rankedSummary,
+  restoreAccount,
+  unlinkAccount,
   recentForm,
   recordGlory,
   recordSignet,
@@ -37,6 +41,7 @@ import {
   unlockWithSignet,
   signetBalance,
 } from "@heroic/blood-in-the-sand-persistence";
+import { accountsEnabled, deleteClerkUser, verifyClerkToken } from "./clerk";
 import { verifyAppleTransaction } from "./iapApple";
 import { verifyGooglePurchase } from "./iapGoogle";
 
@@ -131,11 +136,15 @@ const authedPlayer = async (c: Context): Promise<string | null> => {
 app.get("/wallet", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
-  const [glory, signets] = await Promise.all([
+  const [glory, signets, clerkUserId] = await Promise.all([
     gloryBalance(db, playerId),
     signetBalance(db, playerId),
+    linkedClerkUserId(db, playerId),
   ]);
-  return c.json({ glory, signets });
+  // `linked` + `accounts` drive the restore door's visibility
+  // (bits-accounts.md): the wallet fetch already rides every screen that
+  // shows the pill, so the client needs no second read to know its doors.
+  return c.json({ glory, signets, linked: clerkUserId !== null, accounts: accountsEnabled });
 });
 
 /**
@@ -150,16 +159,25 @@ const SIGNET_GLORY_PRICE = Math.max(1, Number(process.env.SIGNET_GLORY_PRICE ?? 
 app.get("/store", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
-  return c.json({ signetGloryPrice: SIGNET_GLORY_PRICE, signetItems: SIGNET_ITEM_IDS });
+  // `accounts` is the kill switch's client face (bits-accounts.md): false
+  // hides the post-purchase sheet, the restore door, and the Settings rows.
+  return c.json({
+    signetGloryPrice: SIGNET_GLORY_PRICE,
+    signetItems: SIGNET_ITEM_IDS,
+    accounts: accountsEnabled,
+  });
 });
 
-/** Fresh balances after any store mutation — one shape, every response. */
+/** Fresh balances after any store mutation — one shape, every response,
+ * account fields included (the post-purchase offer keys off the wallet that
+ * rides the purchase answer, bits-accounts.md). */
 const walletOf = async (playerId: string) => {
-  const [glory, signets] = await Promise.all([
+  const [glory, signets, clerkUserId] = await Promise.all([
     gloryBalance(db, playerId),
     signetBalance(db, playerId),
+    linkedClerkUserId(db, playerId),
   ]);
-  return { glory, signets };
+  return { glory, signets, linked: clerkUserId !== null, accounts: accountsEnabled };
 };
 
 /**
@@ -282,6 +300,78 @@ app.post("/store/iap", async (c) => {
   const result = await creditIapSignets(db, { playerId, signets, platform, transactionId, productId });
   return c.json({ ...(await walletOf(playerId)), credited: result === "ok" ? signets : 0 });
 });
+
+/**
+ * Account linking (bits-accounts.md): the optional Clerk account that makes
+ * purchases survive a device change. Routes exist only while accounts are on
+ * — CLERK_SECRET_KEY set and ACCOUNTS_ENABLED not 0; the client learns via
+ * /store's `accounts` flag and hides every door when off.
+ */
+if (accountsEnabled) {
+  console.log("🔗 Clerk accounts on — /account/link + /restore + /unlink live");
+
+  /** The body's Clerk JWT, verified → clerkUserId, or null → 401. */
+  const clerkUserFrom = async (c: Context): Promise<string | null> => {
+    const body = (await c.req.json().catch(() => ({}))) as { clerkToken?: unknown };
+    if (typeof body.clerkToken !== "string") return null;
+    return verifyClerkToken(body.clerkToken);
+  };
+
+  /**
+   * Stamp the caller's player with the signed-in Clerk user. Three answers:
+   *  - `{ linked: true }` — stamped (or already was); identity unchanged.
+   *  - `{ linked: true, identity, merged }` — this account already owns a
+   *    player: the caller's purchases were merged into it and the client MUST
+   *    adopt `identity` (overwrite SecureStore, refetch wallet/armory).
+   *  - 409 `already_linked` — this player belongs to a different account.
+   */
+  app.post("/account/link", async (c) => {
+    const playerId = await authedPlayer(c);
+    if (!playerId) return c.json({ error: "unauthorized" }, 401);
+    if (overLimit(`account:${playerId}`, 10)) return c.json({ error: "rate_limited" }, 429);
+    const clerkUserId = await clerkUserFrom(c);
+    if (!clerkUserId) return c.json({ error: "invalid_account_token" }, 401);
+    const outcome = await linkAccount(db, { playerId, clerkUserId });
+    if (outcome.result === "conflict") return c.json({ error: "already_linked" }, 409);
+    if (outcome.result === "restored") {
+      return c.json({ linked: true, identity: outcome.identity, merged: outcome.merged });
+    }
+    return c.json({ linked: true });
+  });
+
+  /**
+   * New-device restore — the only route a device with no identity can call
+   * besides /register (hence the IP bucket). The calling device gets its OWN
+   * bearer token; every other device's keeps working (per-device tokens,
+   * bits-accounts.md § A4 — one sign-in per device, ever).
+   */
+  app.post("/account/restore", async (c) => {
+    if (overLimit(`restore:${callerIp(c)}`, 10)) return c.json({ error: "rate_limited" }, 429);
+    const clerkUserId = await clerkUserFrom(c);
+    if (!clerkUserId) return c.json({ error: "invalid_account_token" }, 401);
+    const identity = await restoreAccount(db, clerkUserId);
+    if (!identity) return c.json({ error: "not_linked" }, 404);
+    return c.json(identity);
+  });
+
+  /**
+   * Account deletion (App Store 5.1.1(v)): delete the Clerk user FIRST —
+   * only Clerk's confirmation clears the local link, so a half-deleted
+   * account can't exist. The player + purchases survive as pure-anonymous.
+   */
+  app.post("/account/unlink", async (c) => {
+    const playerId = await authedPlayer(c);
+    if (!playerId) return c.json({ error: "unauthorized" }, 401);
+    if (overLimit(`account:${playerId}`, 10)) return c.json({ error: "rate_limited" }, 429);
+    const clerkUserId = await linkedClerkUserId(db, playerId);
+    if (!clerkUserId) return c.json({ linked: false }); // idempotent no-op
+    if (!(await deleteClerkUser(clerkUserId))) {
+      return c.json({ error: "accounts_unavailable" }, 503);
+    }
+    await unlinkAccount(db, playerId);
+    return c.json({ linked: false });
+  });
+}
 
 /**
  * Dev-only store tools (bits-store.md § testing): ledger grants + purchase

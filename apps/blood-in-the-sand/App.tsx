@@ -2,6 +2,9 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Alert, BackHandler, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
+import { ClerkProvider } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
+import { CLERK_PUBLISHABLE_KEY } from "./src/net/account";
 import { StatusBar } from "expo-status-bar";
 import { useKeepAwake } from "expo-keep-awake";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -85,9 +88,14 @@ type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings" | "d
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
-  // The Armory has two doors (home button, mode-select Glory pill) — back
-  // retraces whichever one was used.
+  // The Armory has a door on every menu screen (the home button, and the
+  // shared header's purse everywhere else) — back retraces whichever one
+  // was used.
   const armoryFrom = useRef<Route>("home");
+  const openArmory = (from: Route): void => {
+    armoryFrom.current = from;
+    setRoute("armory");
+  };
   // The connection lifecycle (dial / silent redial / visible failure) lives in
   // the manager; App just renders its snapshot and pokes wake() on route entry.
   const conn = useArenaConnection(SERVER || null);
@@ -110,10 +118,15 @@ export default function App() {
   // keeps its own call too; redundant awake locks are harmless).
   useKeepAwake();
 
-  // The bundled display face (typography.ts). The hook re-renders the tree
-  // when the load lands; until then text draws in the system fallback for a
-  // frame or two rather than gating startup.
-  useFonts(DISPLAY_FONT_SOURCE);
+  // The bundled display face (typography.ts). Builds with the font embedded
+  // natively (app.json expo-font plugin) report it loaded synchronously;
+  // older builds load it at runtime, and the routed tree waits for that —
+  // a Text that mounts before the face lands is MEASURED in the system
+  // fallback and then DRAWN in Cinzel (wider), which clipped the title's
+  // "SAND" and left stray fallback-font text behind. A load failure never
+  // gates startup: the tree renders in the fallback face instead.
+  const [fontsReady, fontError] = useFonts(DISPLAY_FONT_SOURCE);
+  const typographyReady = fontsReady || fontError !== null;
 
   useEffect(() => {
     void AsyncStorage.getItem(KEY_NAME).then((v) => setPlayerName(v?.trim() ?? ""));
@@ -251,10 +264,7 @@ export default function App() {
     screen = (
       <HomeScreen
         onPlay={() => setRoute("modes")}
-        onArmory={() => {
-          armoryFrom.current = "home";
-          setRoute("armory");
-        }}
+        onArmory={() => openArmory("home")}
         onSettings={() => setRoute("settings")}
         onTargetDummies={startTargetDummies}
         updateReady={updateReady}
@@ -263,7 +273,7 @@ export default function App() {
     );
   } else if (route === "deeds") {
     // Entered from the mode select's DEEDS card — back returns there.
-    screen = <DeedsScreen onBack={() => setRoute("modes")} />;
+    screen = <DeedsScreen onBack={() => setRoute("modes")} onArmory={() => openArmory("deeds")} />;
   } else if (route === "armory") {
     screen = <ArmoryScreen onBack={() => setRoute(armoryFrom.current)} />;
   } else if (route === "modes") {
@@ -284,19 +294,24 @@ export default function App() {
         }}
         onPractice={() => setRoute("practice")}
         onDeeds={() => setRoute("deeds")}
-        onArmory={() => {
-          armoryFrom.current = "modes";
-          setRoute("armory");
-        }}
+        onArmory={() => openArmory("modes")}
       />
     );
   } else if (route === "settings") {
-    screen = <SettingsScreen onBack={() => setRoute("home")} playerName={playerName ?? ""} onRename={saveName} />;
+    screen = (
+      <SettingsScreen
+        onBack={() => setRoute("home")}
+        onArmory={() => openArmory("settings")}
+        playerName={playerName ?? ""}
+        onRename={saveName}
+      />
+    );
   } else if (route === "practice") {
     // Practice runs the SAME arming wizard as real rooms before the match.
     screen = !practice ? (
       <PracticeScreen
         onBack={() => setRoute("modes")}
+        onArmory={() => openArmory("practice")}
         onStart={(name, teamSize, difficulty, opponent) =>
           setPractice(
             opponent === "dummies"
@@ -335,9 +350,19 @@ export default function App() {
     // skirmish browses rooms. matchFound → welcome flips both into RoomScreen.
     screen =
       route === "ranked" ? (
-        <RankedScreen client={client} playerName={playerName} onBack={() => setRoute("modes")} />
+        <RankedScreen
+          client={client}
+          playerName={playerName}
+          onBack={() => setRoute("modes")}
+          onArmory={() => openArmory("ranked")}
+        />
       ) : (
-        <RoomListScreen client={client} playerName={playerName} onBack={() => setRoute("modes")} />
+        <RoomListScreen
+          client={client}
+          playerName={playerName}
+          onBack={() => setRoute("modes")}
+          onArmory={() => openArmory("play")}
+        />
       );
   } else if (client.phase === "lobby") {
     // The arming wizard + lobby (and its 10s countdown) all live on RoomScreen.
@@ -346,14 +371,27 @@ export default function App() {
     screen = <GameScreen client={client} onLeave={() => client.leaveRoom()} />;
   }
 
-  return (
+  const tree = (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         {/* Home is the sunlit High Sun scene — dark icons; everywhere else stays dark-ground. */}
         <StatusBar style={route === "home" ? "dark" : "light"} hidden={inMatch} />
-        {screen}
+        {/* Dark root until the display face is ready (see useFonts above) —
+            the same ground as the launch screen, so nothing visibly flashes. */}
+        {typographyReady ? screen : null}
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+
+  // Accounts (bits-accounts.md): the Clerk provider mounts only when the
+  // publishable key shipped — without it every sign-in door stays hidden
+  // (the header purse/Settings gate on the key) and the tree runs Clerk-free.
+  return CLERK_PUBLISHABLE_KEY.length > 0 ? (
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+      {tree}
+    </ClerkProvider>
+  ) : (
+    tree
   );
 }
 

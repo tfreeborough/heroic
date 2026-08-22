@@ -2,6 +2,7 @@
   "expo": {
     "name": "Blood in the Sand",
     "slug": "blood-in-the-sand",
+    "scheme": "bloodinthesand",
     "icon": "./assets/blood-in-the-sand-icon.png",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,6 +10,7 @@
     "backgroundColor": "#141210",
     "ios": {
       "bundleIdentifier": "com.tfreeb.blood-in-the-sand",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Blood in the Sand does not record audio. This declaration is required by the game's audio playback engine."
@@ -18,7 +20,26 @@
       "package": "com.heroic.blood_in_the_sand",
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["expo-secure-store", "expo-iap"],
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "17.0"
+          }
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": ["./assets/fonts/Cinzel-Bold.ttf"]
+        }
+      ],
+      "expo-secure-store",
+      "expo-iap",
+      "expo-web-browser",
+      "expo-apple-authentication"
+    ],
     "owner": "free-the-borough-games",
     "extra": {
       "eas": {

@@ -1,5 +1,18 @@
 export { createDb, ensureSchema, type Db } from "./db";
-export { registerPlayer, findPlayerByToken, type Registration } from "./players";
+export {
+  registerPlayer,
+  findPlayerByToken,
+  mintPlayerToken,
+  type Registration,
+} from "./players";
+export {
+  linkAccount,
+  restoreAccount,
+  unlinkAccount,
+  linkedClerkUserId,
+  type LinkInput,
+  type LinkOutcome,
+} from "./accounts";
 export { gloryBalance, recordGlory, type GloryEntry } from "./glory";
 export { signetBalance, recordSignet, type SignetEntry } from "./signets";
 export {

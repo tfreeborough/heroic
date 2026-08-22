@@ -25,7 +25,7 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import { playSound, unlockAudio } from "../audio";
-import { GloryPill } from "../components/GloryPill";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { badgeFor } from "../components/rankBadges";
 import {
   ensureIdentity,
@@ -43,6 +43,8 @@ export interface RankedScreenProps {
   client: ArenaClient;
   playerName: string;
   onBack: () => void;
+  /** The header purse → the Armory (disabled while queued). */
+  onArmory: () => void;
 }
 
 /** Which match's ceremony has already played — module-level so the once-only
@@ -148,7 +150,7 @@ const BracketArt = ({ art, w, h, locked }: { art: number | null; w: number; h: n
   );
 };
 
-export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) => {
+export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScreenProps) => {
   const insets = useSafeAreaInsets();
   const [identity, setIdentity] = useState<Identity | null | "loading">("loading");
   const [standing, setStanding] = useState<RankedBracketStanding | null>(null);
@@ -266,13 +268,9 @@ export const RankedScreen = ({ client, playerName, onBack }: RankedScreenProps) 
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
-      <View style={styles.header}>
-        <Pressable onPress={back} hitSlop={12} style={styles.back}>
-          <Text style={styles.backText}>‹</Text>
-        </Pressable>
-        <Text style={styles.season}>RANKED</Text>
-        <GloryPill />
-      </View>
+      {/* The purse is a door to the Armory — except while QUEUED: a match
+          can land any second and the ranked route is where it shows. */}
+      <ScreenHeader style={styles.header} onBack={back} onPurse={client.queued ? undefined : onArmory} />
 
       {/* Your standing. During PLACEMENTS (first 10 matches — and the safe
           default while /ranked/me loads) rank and rating stay hidden: the
@@ -518,21 +516,7 @@ const CardBody = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingHorizontal: 16 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 4,
-    paddingBottom: 14,
-  },
-  back: { width: 44, paddingVertical: 2 },
-  backText: { color: "#8a7f70", fontSize: 26, fontWeight: "800", lineHeight: 28 },
-  season: {
-    fontFamily: DISPLAY_FONT,
-    color: "#e8c87a",
-    fontSize: 15,
-    letterSpacing: 4,
-  },
+  header: { paddingHorizontal: 4 },
   standing: {
     borderWidth: 1,
     borderColor: "#8a6d44",

@@ -7,11 +7,22 @@
  * arena voice cut in stone. Lowercase glyphs set as capitals, so the
  * mixed-case strings that relied on IM Fell's small caps still render as
  * caps unchanged. Static 700 instance (the variable TTF renders at its
- * default weight in RN). Bundled TTF (OFL, licence file beside it);
- * App.tsx loads it with `useFonts(DISPLAY_FONT_SOURCE)` so the load's
- * completion re-renders the tree — until then RN silently falls back to
- * the system font for a frame or two, which beats gating the whole app
- * on a font.
+ * default weight in RN). Bundled TTF (OFL, licence file beside it).
+ *
+ * Two ways it reaches the screen, both under the SAME name — the TTF's
+ * PostScript name is literally "Cinzel-Bold", which is what iOS resolves
+ * an embedded font by and what Android names an assets/fonts/ file:
+ *   1. app.json's expo-font config plugin embeds it in the native build
+ *      (iOS UIAppFonts / Android assets/fonts), so it's registered at
+ *      launch and `useFonts` reports it loaded synchronously.
+ *   2. Builds from before the plugin load it at runtime via the same
+ *      `useFonts(DISPLAY_FONT_SOURCE)` — and App.tsx holds the routed
+ *      tree back until that lands. It used to render straight away and
+ *      let the load re-render the tree, but a Text that mounts before the
+ *      face is registered is measured in the system fallback and then
+ *      drawn in Cinzel (wider) — the title's "IN THE SAND" lost its "SAND"
+ *      off the end of the measured box, and text that never re-measured
+ *      stayed in the fallback face (Tom, 2026-08-22).
  */
 export const DISPLAY_FONT = "Cinzel-Bold";
 

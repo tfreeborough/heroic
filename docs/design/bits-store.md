@@ -370,6 +370,21 @@ Glory→Writ rate so it never becomes the rational permanent path.
    a preset-loadout param through PracticeClient/RoomScreen), forge hero art +
    writ_exchange/writ_unlock clips, cosmetics/announcer shelf (with S3),
    on-device pass.
+   **Sixth pass (Tom, 2026-08-22) — the forge's buy door, BUILT:** when the
+   purse can't fund a forge, the ghosted hold ("EARN N MORE GLORY IN THE
+   PIT") no longer stands alone — under it sits a solid-gold **BUY SIGNETS**
+   door (OR divider, captioned "THE PIT CAN WAIT — FROM <smallest pack's
+   store price>") that opens the pack shelf OVER the forge. Rationale: a
+   player on the forge without the Glory is at peak intent — they came to
+   make a Signet and the only answer on offer was "go grind"; the door
+   turns that dead end into the sale. Rules: it renders ONLY while
+   `glory < price` (the forge never sells to a player who can forge — Glory
+   play stays the headline path), the shelf's existing credited-closes-
+   shelf behaviour lands the player back on the forge, and the forge's fan
+   now syncs to out-of-ritual Signet arrivals while idle, so the bought
+   Signets visibly join the pile (the purchase's confirmation IS the pile).
+   `SignetForge` props `onBuy?` / `buyFrom?`; ArmoryScreen wires both.
+   On-device pass owed with the rest of S2.
 3. **S3 — IAP — BUILT 2026-08-15.** Decisions (Tom, 2026-08-15): **stack =
    expo-iap + first-party validation** (react-native-iap is in maintenance
    mode; its successor expo-iap is the live library. RevenueCat was
