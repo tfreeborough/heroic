@@ -1,0 +1,159 @@
+/* Free the Borough — brochure + legal pages.
+   One stylesheet, no JS, no build step. The palette is the games' arena
+   language: near-black ground, bone text, rationed gold + blood-red. */
+
+:root {
+  --ground: #141210;
+  --panel: #1d1915;
+  --line: #3a332a;
+  --bone: #f0e8d8;
+  --body: #c9bfae;
+  --muted: #8a7f70;
+  --gold: #e8c87a;
+  --red: #8c2f2f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--ground);
+  color: var(--body);
+  font: 16px/1.65 Georgia, 'Times New Roman', serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── Header ── */
+header {
+  border-bottom: 1px solid var(--line);
+  padding: 28px 0;
+}
+header .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.mark {
+  color: var(--bone);
+  font-family: Georgia, serif;
+  font-size: 18px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mark::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: var(--red);
+  transform: rotate(45deg);
+  flex: none;
+}
+nav { display: flex; gap: 22px; }
+nav a {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+nav a:hover, nav a[aria-current] { color: var(--gold); }
+
+/* ── Main ── */
+main { flex: 1; padding: 56px 0 72px; }
+
+h1 {
+  color: var(--bone);
+  font-size: 32px;
+  letter-spacing: 2px;
+  line-height: 1.25;
+  margin-bottom: 8px;
+}
+.updated {
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 1px;
+  margin-bottom: 36px;
+}
+
+h2 {
+  color: var(--gold);
+  font-size: 15px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  margin: 40px 0 12px;
+}
+h3 {
+  color: var(--bone);
+  font-size: 16px;
+  margin: 24px 0 8px;
+}
+p { margin-bottom: 14px; }
+ul { margin: 0 0 14px 22px; }
+li { margin-bottom: 6px; }
+a { color: var(--gold); }
+strong { color: var(--bone); font-weight: 600; }
+
+.lede {
+  color: var(--bone);
+  font-size: 19px;
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+/* ── Brochure cards ── */
+.game {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 26px 28px;
+  margin-top: 28px;
+}
+.game h2 { margin-top: 0; }
+.game .status {
+  display: inline-block;
+  color: var(--gold);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+/* ── Footer ── */
+footer {
+  border-top: 1px solid var(--line);
+  padding: 26px 0;
+}
+footer .wrap {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+footer a { color: var(--muted); text-decoration: none; margin-right: 18px; }
+footer a:hover { color: var(--gold); }
+
+@media (max-width: 480px) {
+  h1 { font-size: 26px; }
+  main { padding-top: 40px; }
+}
