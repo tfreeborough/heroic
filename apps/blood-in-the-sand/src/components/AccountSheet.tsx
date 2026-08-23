@@ -2,11 +2,13 @@
  * The sign-in sheet (bits-accounts.md) — the ONE surface where an account
  * enters the game, in two dressings:
  *
- *  - `keep` (post-purchase): one platform-matched button, nothing else —
- *    Apple native on iOS, Google on Android. Dismissing asks for a confirm
+ *  - `keep` (post-purchase): dismissing asks for a confirm
  *    (Tom, 2026-08-21: nobody gets to say they closed it by accident).
- *  - `restore` (the wallet door / Settings): BOTH providers — a device
- *    migrating across platforms needs the other one — and a free close.
+ *  - `restore` (the wallet door / Settings): a free close.
+ *
+ * Both dressings show ONE platform-matched button — Apple native on iOS,
+ * Google on Android (Tom, 2026-08-23: a player straddling platforms is too
+ * rare to earn a second button).
  *
  * Clerk lives entirely inside this file's hooks; success hands the session
  * JWT to accountLink, which owns the merge/adopt dance. The sheet never
@@ -109,14 +111,11 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
     setBusy(true);
     setNotice(null);
     try {
-      // Apple is native where the OS provides it; everything else rides the
-      // system browser SSO flow (Google everywhere, Apple-on-Android).
+      // Apple rides the native sheet; Google rides the system browser SSO flow.
       const flow =
-        provider === "apple" && Platform.OS === "ios"
+        provider === "apple"
           ? await startAppleAuthenticationFlow()
-          : await startSSOFlow({
-              strategy: provider === "apple" ? "oauth_apple" : "oauth_google",
-            });
+          : await startSSOFlow({ strategy: "oauth_google" });
       if (!flow.createdSessionId || !flow.setActive) {
         // A dismissed browser tab is a non-event. But a flow that RAN to its
         // end without minting a session is instance config trouble
@@ -165,8 +164,6 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
     }
   };
 
-  const showApple = Platform.OS === "ios" || mode === "restore";
-  const showGoogle = Platform.OS === "android" || mode === "restore";
 
   return (
     <Modal transparent statusBarTranslucent animationType="none" onRequestClose={requestClose}>
@@ -209,26 +206,19 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
         </Text>
 
         <View style={[styles.buttons, busy && styles.buttonsBusy]}>
-          {showApple ? (
-            Platform.OS === "ios" ? (
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                cornerRadius={999}
-                style={styles.appleButton}
-                onPress={() => void signIn("apple")}
-              />
-            ) : (
-              <Pressable style={styles.providerButton} onPress={() => void signIn("apple")}>
-                <Text style={styles.providerText}>SIGN IN WITH APPLE</Text>
-              </Pressable>
-            )
-          ) : null}
-          {showGoogle ? (
+          {Platform.OS === "ios" ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={999}
+              style={styles.appleButton}
+              onPress={() => void signIn("apple")}
+            />
+          ) : (
             <Pressable style={styles.providerButton} onPress={() => void signIn("google")}>
               <Text style={styles.providerText}>SIGN IN WITH GOOGLE</Text>
             </Pressable>
-          ) : null}
+          )}
         </View>
 
         {notice !== null ? <Text style={styles.notice}>{notice}</Text> : null}

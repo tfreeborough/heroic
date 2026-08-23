@@ -5,9 +5,11 @@ schema + /account routes + kill switch) BUILT 2026-08-22 · A2 (client: Clerk
 provider, AccountSheet, wallet restore door, Settings rows + deletion, 401
 recovery) BUILT 2026-08-22 · A3 (post-purchase sheet on both purchase
 surfaces) BUILT 2026-08-22 · A4 (per-device tokens — multi-device play, one
-sign-in per device ever) BUILT 2026-08-22** — owed: Clerk dashboard connections (Apple +
-Google) + production instance + Render env, dev-client rebuild (new native
-modules), account_linked SFX, on-device pass ·
+sign-in per device ever) BUILT 2026-08-22 · **WORKING IN PRODUCTION on both
+platforms 2026-08-23** (production Clerk instance + Apple/Google connections +
+Render env + native-app registrations all configured)** — owed: ship the
+sheet's improved error surfacing (in working tree, not yet in a build/OTA),
+account_linked SFX ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-21 ·
 Companion to [glory-economy.md](./glory-economy.md) (the anonymous identity this
@@ -98,12 +100,13 @@ glyph, tappable → the same sign-in sheet (headlined **RESTORE YOUR ARMORY** in
 context). While **linked**, the glyph disappears entirely — signed-in is the quiet
 state, per the api.ts rule (never show state the player didn't ask about).
 
-**The restore door shows BOTH providers** (Apple *and* Google, both platforms).
-Rationale: the post-purchase sheet optimises for friction (one native button), but
-restore must handle **cross-platform migration** — an account linked with Apple on
-iPhone has to be reachable from an Android phone (Apple sign-in runs as a web flow
-there; rare case, acceptable friction). Note 4.8: Google appearing on the iOS
-restore door is fine because Apple is right next to it.
+**The restore door shows ONE platform-matched button** — same as the post-purchase
+sheet. **AMENDED 2026-08-23 (Tom, production device pass):** the original design gave
+restore both providers so an Apple-linked iPhone armory could migrate to Android,
+but a player straddling platforms is too rare to earn a second button — that
+migration path is deliberately unserved until it proves needed (the fix would be
+re-adding the cross-platform provider via the browser SSO flow, a one-line
+revert).
 
 A **Settings row** ("Save purchases across devices" / when linked: "Signed in ·
 Apple") is the always-available fallback, and hosts **account deletion** (required:
@@ -229,6 +232,35 @@ Where the build refined the design:
   ledgers with deterministic `merge:<playerId>` idempotency keys) — the
   "empty player" adopt case is just a merge that moves nothing, so there's
   one code path and a retried merge is provably a no-op.
+
+### Production config gotchas (device pass 2026-08-23 — each one cost a debug round)
+
+- **Native packages a library lazy-imports must be declared in the app's own
+  package.json.** `@clerk/expo` lazy-imports `expo-crypto` and (via
+  `expo-auth-session`) `expo-linking`; hoisted transitive copies satisfied
+  Metro but NOT autolinking → release builds crashed on tap with "Cannot
+  find native module 'ExpoCrypto'" (Metro's module-load guard reports it
+  fatally before any try/catch). All three now declared.
+- **`@clerk/expo` needs iOS deployment target 17.0** — set via
+  expo-build-properties; drops iPhone 8/X-era devices, accepted.
+- **Native Apple sign-in needs the app's Bundle ID in Clerk's "Native
+  applications"** (production dashboard) — the native token's audience is the
+  bundle id, not the Services ID (which only covers the web flow). Symptom
+  when missing: Apple sheet completes, then "sign-in didn't complete".
+- **Production instances enforce a redirect-URL allowlist** (dev doesn't —
+  works-in-dev-only trap). The browser SSO redirect
+  `bloodinthesand://sso-callback` (app scheme + Clerk's `sso-callback` path)
+  had to be added via BAPI `/redirect_urls`; the Native-applications setup
+  auto-adds two DIFFERENT patterns that don't match it. Symptom when
+  missing: no browser ever opens ("Redirect url mismatch" from FAPI).
+- **Android native-app registration**: namespace + package
+  `com.heroic.blood_in_the_sand`, SHA-256 of the **Play App Signing** cert
+  (read off the installed APK with `apksigner verify --print-certs`; keytool
+  can't read scheme-v2 signatures). EAS internal-distribution sideloads are
+  signed by the upload key = different fingerprint.
+- Debug technique that found all of this: FAPI can be driven with curl
+  (mint client → POST sign_ins with strategy+redirect_url) to test instance
+  config without a device; Android crashes read directly via adb logcat.
 
 Owed after build: Tom's Clerk dashboard setup (Apple Services ID + native Google
 OAuth creds — manual), Render env vars, dev-client rebuild, an `account_linked`
