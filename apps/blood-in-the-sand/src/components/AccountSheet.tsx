@@ -118,7 +118,15 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
               strategy: provider === "apple" ? "oauth_apple" : "oauth_google",
             });
       if (!flow.createdSessionId || !flow.setActive) {
-        // Browser dismissed / flow abandoned — a non-event, not an error.
+        // A dismissed browser tab is a non-event. But a flow that RAN to its
+        // end without minting a session is instance config trouble
+        // (restricted sign-ups, unmet requirements) — name it, don't eat it.
+        const sessionResult =
+          "authSessionResult" in flow
+            ? (flow.authSessionResult as { type?: string } | null)
+            : null;
+        const browserCancelled = sessionResult !== null && sessionResult.type !== "success";
+        if (!browserCancelled) setNotice("THE SIGN-IN FINISHED WITHOUT A SESSION — TRY AGAIN LATER.");
         return;
       }
       await flow.setActive({ session: flow.createdSessionId });
@@ -143,7 +151,14 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
     } catch (err) {
       // The native Apple sheet throws on cancel — also a non-event.
       if ((err as { code?: string }).code !== "ERR_REQUEST_CANCELED") {
-        setNotice("THE SIGN-IN DIDN'T COMPLETE — NOTHING CHANGED.");
+        // Clerk's messages are player-safe and specific ("invalid audience",
+        // "sign-ups restricted") — surfacing them beats a generic line that
+        // hides a config problem behind "didn't complete" (device pass,
+        // 2026-08-23: exactly that hid a missing dashboard field).
+        const clerkMessage = (err as { errors?: { message?: string }[] }).errors?.[0]?.message;
+        setNotice(
+          `THE SIGN-IN DIDN'T COMPLETE${clerkMessage ? ` — ${clerkMessage.toUpperCase()}` : " — NOTHING CHANGED."}`,
+        );
       }
     } finally {
       setBusy(false);
