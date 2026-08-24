@@ -10,10 +10,40 @@
  * subsequent fetch speaks as the account's player. The abandoned local
  * player was merged server-side; nothing is lost.
  */
-import { API_URL, ensureIdentity, storeIdentity, type Identity } from "./api";
+import { markDeedsCelebrated } from "../deeds/celebrated";
+import { setEntitlements } from "../deeds/entitlements";
+import { API_URL, ensureIdentity, fetchAchievements, storeIdentity, type Identity } from "./api";
 
 /** Accounts exist client-side at all only when the Clerk key shipped. */
 export const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+
+/**
+ * Adopting an identity changes WHO WE ARE under every device-local cache —
+ * the wallet refetches everywhere it's shown, but the rest refresh only
+ * when /achievements/me is fetched, which normally only Deeds visits do.
+ * One authoritative fetch with the adopted identity fixes both:
+ *
+ *  - the ENTITLEMENT cache (what the War Table and Armory believe you own)
+ *    is REPLACED — without this, a restored account synced its currency but
+ *    "forgot" its purchases until a Deeds visit (Tom, 2026-08-24). NOTE:
+ *    deeds/loadEntitlements only re-reads the LOCAL cache — this is the
+ *    server fetch it isn't.
+ *  - the CELEBRATED set gains every deed the account has already unlocked —
+ *    they were celebrated where they were earned; without this a fresh
+ *    device replays the account's entire deed history as "missed"
+ *    ceremonies on its first Deeds visit. Deeds unlocked AFTER the restore
+ *    still ceremony normally.
+ *
+ * Worn title stays device-local on purpose: the server never stores worn
+ * state, and a stale claim costs nothing (ranked validates it) — the player
+ * re-picks in Deeds on a new device.
+ */
+const adoptAchievementState = async (identity: Identity): Promise<void> => {
+  const me = await fetchAchievements(identity);
+  if (!me) return;
+  setEntitlements(me.entitlements.map((e) => e.itemId));
+  markDeedsCelebrated(me.unlocks.map((u) => u.id));
+};
 
 /** Never let a dead API hang the sheet — same deadline discipline as api.ts. */
 const FETCH_TIMEOUT_MS = 8000;
@@ -82,7 +112,9 @@ export const accountLink = async (clerkToken: string): Promise<LinkResult> => {
   if (body?.linked !== true) return { ok: false, reason: "unavailable" };
   const handed = body.identity;
   if (typeof handed?.playerId === "string" && typeof handed.token === "string") {
-    await storeIdentity({ playerId: handed.playerId, token: handed.token });
+    const adopted = { playerId: handed.playerId, token: handed.token };
+    await storeIdentity(adopted);
+    await adoptAchievementState(adopted);
     return { ok: true, adopted: true };
   }
   return { ok: true, adopted: false };
@@ -102,6 +134,7 @@ export const accountRestore = async (clerkToken: string): Promise<Identity | nul
   if (typeof body?.playerId !== "string" || typeof body.token !== "string") return null;
   const identity = { playerId: body.playerId, token: body.token };
   await storeIdentity(identity);
+  await adoptAchievementState(identity);
   return identity;
 };
 

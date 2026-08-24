@@ -60,7 +60,7 @@ import {
   type SignetPackListing,
 } from "../net/iap";
 import { SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
-import { getEntitlements, grantEntitlement, loadEntitlements } from "../deeds/entitlements";
+import { getEntitlements, grantEntitlement } from "../deeds/entitlements";
 import { AccountSheet } from "../components/AccountSheet";
 import { ScreenHeader } from "../components/ScreenHeader";
 import {
@@ -322,14 +322,13 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
 
   // ── Commerce. The ledger is the referee; this just narrates its answers. ──
   /** A sign-in landed — from the post-purchase offer OR the header's
-   * restore door. An adoption changed WHO we are: owned items may differ
-   * too, so the shelf refilters before the wallet refreshes. */
+   * restore door. accountLink already refreshed the entitlement cache from
+   * the server on adoption (net/account.ts — deeds/loadEntitlements only
+   * re-reads the LOCAL cache, the 2026-08-24 "purchases didn't restore"
+   * bug); the shelf just refilters off the fresh cache, then the wallet. */
   const onAccountLinked = (adopted: boolean): void => {
     void (async () => {
-      if (adopted) {
-        await loadEntitlements();
-        setEntitledStamp((s) => s + 1);
-      }
+      if (adopted) setEntitledStamp((s) => s + 1);
       await refreshWallet();
     })();
   };
