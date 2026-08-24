@@ -10,9 +10,17 @@
  * subsequent fetch speaks as the account's player. The abandoned local
  * player was merged server-side; nothing is lost.
  */
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { markDeedsCelebrated } from "../deeds/celebrated";
 import { setEntitlements } from "../deeds/entitlements";
-import { API_URL, ensureIdentity, fetchAchievements, storeIdentity, type Identity } from "./api";
+import {
+  API_URL,
+  ensureIdentity,
+  fetchAchievements,
+  lastKnownWallet,
+  storeIdentity,
+  type Identity,
+} from "./api";
 
 /** Accounts exist client-side at all only when the Clerk key shipped. */
 export const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
@@ -158,4 +166,60 @@ let offeredThisSession = false;
 export const shouldOfferAfterPurchase = (): boolean => !offeredThisSession;
 export const markOfferShown = (): void => {
   offeredThisSession = true;
+};
+
+/**
+ * The first-win nudge (bits-accounts.md § re-offer cadence, Tom 2026-08-24):
+ * ONE lifetime sheet, raised right after a player's first ONLINE win — the
+ * moment they first hold something worth saving, which converts better than
+ * pitching an account to someone who hasn't played yet. GameScreen notes the
+ * win; App shows the sheet once the match flow has released the screen.
+ *
+ * The note is a cheap module flag, persisted only at SHOW time — so a win
+ * whose nudge can't show yet (offline wallet, ranked ceremony in the way)
+ * keeps its claim and the sheet rises after a later win instead of never.
+ */
+const KEY_FIRST_WIN_NUDGE = "bits.firstWinNudge";
+let firstWinPending = false;
+
+/** GameScreen, on a matchEnd the local player's team won — online only. */
+export const noteFirstOnlineWin = (): void => {
+  firstWinPending = true;
+};
+
+/** App's cheap per-render gate — true while a noted win awaits its sheet. */
+export const hasPendingFirstWinNudge = (): boolean => firstWinPending;
+
+/**
+ * Claim the nudge: true exactly once per install, and only when the sheet
+ * can actually work — accounts live at both ends, player still unlinked.
+ * "Accounts off / wallet unknown" keeps the claim for a later surface;
+ * "linked" or "already shown" retires it for good.
+ */
+export const takeFirstWinNudge = async (): Promise<boolean> => {
+  if (!firstWinPending) return false;
+  if (CLERK_PUBLISHABLE_KEY.length === 0) {
+    firstWinPending = false;
+    return false;
+  }
+  const wallet = lastKnownWallet();
+  if (!wallet?.accounts) return false; // no live wallet answer yet — keep the claim
+  if (wallet.linked || (await AsyncStorage.getItem(KEY_FIRST_WIN_NUDGE)) === "1") {
+    firstWinPending = false;
+    return false;
+  }
+  firstWinPending = false;
+  void AsyncStorage.setItem(KEY_FIRST_WIN_NUDGE, "1");
+  return true;
+};
+
+/**
+ * Dev menu (bits-dev-menu.md): forget the once-per-install flag so the REAL
+ * first-win path can fire again after the next online win. App raises the
+ * sheet directly for the rehearsal itself — the linked/accounts gates are
+ * bypassed on purpose, a linked tester still needs to see the copy.
+ */
+export const resetFirstWinNudge = (): void => {
+  firstWinPending = false;
+  void AsyncStorage.removeItem(KEY_FIRST_WIN_NUDGE);
 };

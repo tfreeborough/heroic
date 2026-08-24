@@ -4,7 +4,14 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { ClerkProvider } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
-import { CLERK_PUBLISHABLE_KEY } from "./src/net/account";
+import {
+  CLERK_PUBLISHABLE_KEY,
+  hasPendingFirstWinNudge,
+  resetFirstWinNudge,
+  takeFirstWinNudge,
+} from "./src/net/account";
+import { AccountSheet } from "./src/components/AccountSheet";
+import { ensureIdentity, fetchWallet } from "./src/net/api";
 import { StatusBar } from "expo-status-bar";
 import { useKeepAwake } from "expo-keep-awake";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -259,6 +266,23 @@ export default function App() {
     (practice !== null && practice.phase !== "lobby") ||
     ((route === "play" || route === "ranked") && client?.welcome != null && client.phase !== "lobby");
 
+  // The first-win account nudge (bits-accounts.md): GameScreen noted an
+  // online win; the sheet rises the moment the match flow releases the
+  // screen — over the returned-to lobby, never over the victory plate. The
+  // ranked route is excluded whole (the RankedCeremony owns that return) —
+  // the claim survives and the sheet rises on the next calm surface instead.
+  const [firstWinNudge, setFirstWinNudge] = useState(false);
+  useEffect(() => {
+    if (inMatch || route === "ranked" || firstWinNudge || !hasPendingFirstWinNudge()) return;
+    let live = true;
+    void takeFirstWinNudge().then((show) => {
+      if (show && live) setFirstWinNudge(true);
+    });
+    return () => {
+      live = false;
+    };
+  });
+
   let screen;
   if (route === "home") {
     screen = (
@@ -267,6 +291,14 @@ export default function App() {
         onArmory={() => openArmory("home")}
         onSettings={() => setRoute("settings")}
         onTargetDummies={startTargetDummies}
+        onRehearseFirstWin={
+          CLERK_PUBLISHABLE_KEY.length > 0
+            ? () => {
+                resetFirstWinNudge();
+                setFirstWinNudge(true);
+              }
+            : undefined
+        }
         updateReady={updateReady}
         onApplyUpdate={restartToApply}
       />
@@ -379,6 +411,22 @@ export default function App() {
         {/* Dark root until the display face is ready (see useFonts above) —
             the same ground as the launch screen, so nothing visibly flashes. */}
         {typographyReady ? screen : null}
+        {/* takeFirstWinNudge only fires under a shipped Clerk key, so this
+            sheet always has the provider below it. */}
+        {firstWinNudge ? (
+          <AccountSheet
+            mode="firstWin"
+            onClose={() => setFirstWinNudge(false)}
+            onLinked={() => {
+              setFirstWinNudge(false);
+              // A link (or adoption) changed the wallet under every purse —
+              // one authoritative fetch republishes to all of them.
+              void ensureIdentity().then((id) => {
+                if (id) void fetchWallet(id);
+              });
+            }}
+          />
+        ) : null}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

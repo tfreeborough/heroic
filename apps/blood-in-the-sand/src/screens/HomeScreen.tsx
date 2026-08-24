@@ -26,6 +26,10 @@ export interface HomeScreenProps {
   onSettings: () => void;
   /** Dev menu: start the target-dummy firing range (offline, respawning dummies). */
   onTargetDummies: () => void;
+  /** Dev menu: raise the first-win account sheet on demand and re-arm its
+   * once-per-install flag (bits-accounts.md). Absent = no Clerk key shipped,
+   * so the row hides (the sheet can't mount without the provider). */
+  onRehearseFirstWin?: () => void;
   /** A downloaded OTA update is staged — show the restart pill. */
   updateReady: boolean;
   /** Restart into the staged update (instant JS reload). */
@@ -338,7 +342,15 @@ const DustStorm = ({ w, h }: { w: number; h: number }) => {
  * row drives a real persisted setting (settings.ts) that just has no
  * player-facing UI yet.
  */
-export const HomeScreen = ({ onPlay, onArmory, onSettings, onTargetDummies, updateReady, onApplyUpdate }: HomeScreenProps) => {
+export const HomeScreen = ({
+  onPlay,
+  onArmory,
+  onSettings,
+  onTargetDummies,
+  onRehearseFirstWin,
+  updateReady,
+  onApplyUpdate,
+}: HomeScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [devOpen, setDevOpen] = useState(false);
@@ -702,6 +714,14 @@ export const HomeScreen = ({ onPlay, onArmory, onSettings, onTargetDummies, upda
           <Pressable onPress={withTap("uiTap", () => setDeedRehearsal(true))} style={styles.devButton}>
             <Text style={styles.devButtonText}>DEED CEREMONY ▶</Text>
           </Pressable>
+          {/* The first-win account sheet on demand (bits-accounts.md) — also
+              re-arms the once-per-install flag, so the real post-win trigger
+              can be re-tested after the next online win. */}
+          {onRehearseFirstWin ? (
+            <Pressable onPress={withTap("uiTap", onRehearseFirstWin)} style={styles.devButton}>
+              <Text style={styles.devButtonText}>FIRST-WIN NUDGE ▶</Text>
+            </Pressable>
+          ) : null}
           {/* Deed Map preview — REAL server data / SOME (frontier on show) /
               ALL unlocked. Applies next time the deeds screen opens. */}
           <Pressable onPress={withTap("uiTap", onCycleDeedsPreview)} style={styles.devButton}>

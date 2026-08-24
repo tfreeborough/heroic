@@ -111,7 +111,7 @@ const AccountRows = () => {
   const confirmDelete = (): void => {
     Alert.alert(
       "Delete account?",
-      "Your sign-in is removed everywhere. Purchases stay on this device only.",
+      "Your account and sign-in are removed everywhere. This device keeps playing locally — its progress and purchases stay here, and here only.",
       [
         { text: "Keep account", style: "cancel" },
         {
@@ -137,11 +137,14 @@ const AccountRows = () => {
     );
   };
 
+  // The row leads with WHERE progress lives (Tom, 2026-08-24: the real
+  // distinction is local — this device only — vs linked — saved everywhere),
+  // not with what button to press.
   return wallet.linked ? (
     <View style={styles.row}>
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>Purchases saved</Text>
-        <Text style={styles.rowHint}>your armory follows your account</Text>
+        <Text style={styles.rowTitle}>Account linked</Text>
+        <Text style={styles.rowHint}>progress and purchases saved across your devices</Text>
       </View>
       <Pressable onPress={confirmDelete} hitSlop={8} style={busy && styles.rowBusy}>
         <Text style={styles.deleteText}>DELETE ACCOUNT</Text>
@@ -151,8 +154,8 @@ const AccountRows = () => {
     <>
       <View style={styles.row}>
         <View style={styles.rowText}>
-          <Text style={styles.rowTitle}>Save purchases</Text>
-          <Text style={styles.rowHint}>sign in — your armory follows you to any device</Text>
+          <Text style={styles.rowTitle}>Playing locally</Text>
+          <Text style={styles.rowHint}>progress lives on this device only — sign in to save it everywhere</Text>
         </View>
         <Pressable onPress={() => setSheetOpen(true)} hitSlop={8}>
           <Text style={styles.signInText}>SIGN IN</Text>

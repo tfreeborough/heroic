@@ -40,6 +40,7 @@ import {
 import { useAbilityIconImages } from "../game/abilityIcons";
 import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
 import { resolveTitleText } from "../deeds/wornTitle";
+import { noteFirstOnlineWin } from "../net/account";
 import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
 import { RoundBanner } from "../game/RoundBanner";
@@ -652,6 +653,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           );
         } else if (e.type === "matchEnd") {
           playSound("matchEnd", e.winnerTeam === myTeam ? "win" : "loss");
+          // The first-win account nudge (bits-accounts.md): note ONLINE wins
+          // only — App raises the sheet once the match flow releases the
+          // screen, never over the victory plate.
+          if (e.winnerTeam === myTeam && !client.practice) noteFirstOnlineWin();
         }
       }
     };

@@ -30,12 +30,23 @@ export interface LinkInput {
 }
 
 /**
- * Merge one player's purchases into another: union the entitlements, credit
- * the source player's ledger balances as single aggregate rows. Deterministic
- * idempotency keys (`merge:<fromId>:…`) make a retried or re-raced merge a
- * no-op — which also means a merged-away player that somehow earns MORE
- * later (its token can survive on a second device) merges only once, ever;
- * union+sum at link time, orphaned afterwards (bits-accounts.md merge policy).
+ * Merge one player's progress into another: union the entitlements AND the
+ * deed unlocks (keeping the earliest unlock date), take the higher of each
+ * lifetime counter, credit the source player's ledger balances as single
+ * aggregate rows. Deterministic idempotency keys (`merge:<fromId>:…`) and
+ * only-if-better upserts make a retried or re-raced merge a no-op — which
+ * also means a merged-away player that somehow earns MORE later (its token
+ * can survive on a second device) merges only once, ever; union+sum at link
+ * time, orphaned afterwards (bits-accounts.md merge policy).
+ *
+ * Counters take MAX, not SUM, because the stored values mix additive
+ * lifetimes with streak high-waters (achievements.md) — summing would mint
+ * a best-streak nobody ran. MAX can undercount an additive counter, but it
+ * can never unlock a deed neither identity legitimately reached.
+ *
+ * Unlock rows are copied WITHOUT their Glory rewards — the source player
+ * was already paid when the deed fired, and that payment rides the ledger
+ * sum below; re-paying here would double-credit shared deeds.
  */
 const mergePlayers = async (db: Db, fromId: string, intoId: string): Promise<boolean> => {
   const [glory, signets] = await Promise.all([
@@ -66,15 +77,31 @@ const mergePlayers = async (db: Db, fromId: string, intoId: string): Promise<boo
           SELECT ?, item_id, source FROM entitlements WHERE player_id = ?`,
     args: [intoId, fromId],
   });
-  return moved || entitlements.rowsAffected > 0;
+  // Both upserts guard their DO UPDATE on strict improvement so a retried
+  // merge touches zero rows — `merged` must stay false on the second pass.
+  const unlocks = await db.execute({
+    sql: `INSERT INTO achievement_unlocks (player_id, achievement_id, unlocked_at)
+          SELECT ?, achievement_id, unlocked_at FROM achievement_unlocks WHERE player_id = ?
+          ON CONFLICT (player_id, achievement_id) DO UPDATE SET unlocked_at = excluded.unlocked_at
+          WHERE excluded.unlocked_at < achievement_unlocks.unlocked_at`,
+    args: [intoId, fromId],
+  });
+  const counters = await db.execute({
+    sql: `INSERT INTO achievement_counters (player_id, counter, value)
+          SELECT ?, counter, value FROM achievement_counters WHERE player_id = ?
+          ON CONFLICT (player_id, counter) DO UPDATE SET value = excluded.value
+          WHERE excluded.value > achievement_counters.value`,
+    args: [intoId, fromId],
+  });
+  return moved || entitlements.rowsAffected > 0 || unlocks.rowsAffected > 0 || counters.rowsAffected > 0;
 };
 
 /**
  * Link the caller's player to a Clerk user. Three shapes come back:
  * `linked` (stamped, idempotent), `restored` (the account already owned a
  * player — caller merges in and adopts it), `conflict` (caller belongs to a
- * different account). Ranked ratings, deeds, and names never merge — the
- * account player's records stand (bits-accounts.md).
+ * different account). Ranked ratings and names never merge — the account
+ * player's records stand; Elo merging is unprincipled (bits-accounts.md).
  */
 export const linkAccount = async (db: Db, input: LinkInput): Promise<LinkOutcome> => {
   const caller = await db.execute({

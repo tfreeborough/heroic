@@ -141,6 +141,11 @@ export interface GameClient {
   /** The post-match settlement in a RANKED room (rating deltas + Glory) —
    * absent/null everywhere else; practice never sets it. */
   readonly rankedResult?: RankedResultInfo | null;
+  /** True on PracticeClient only. The RENDERER still can't tell them apart —
+   * this exists for the wizard's try-before-buy unlocks (bits-store.md) and
+   * so GameScreen counts only ONLINE wins toward the first-win account nudge
+   * (bits-accounts.md — offline wins bank nothing worth saving). */
+  readonly practice?: boolean;
   /** `casts` indexed by ability slot (= pick = button order). */
   sendInput(sx: number, sy: number, casts: boolean[]): void;
 }
@@ -162,9 +167,6 @@ export interface LobbyClient extends GameClient {
   phase: RoundPhase;
   readonly hostId: number | null;
   readonly isHost: boolean;
-  /** True on PracticeClient only — practice unlocks signet-gated items in the
-   * wizard (the try-before-buy funnel, bits-store.md); real rooms never do. */
-  readonly practice?: boolean;
   /** Latest transient lobby toast (host handoff), or null — the RoomScreen
    * banner reads this and fades it on its own timer. */
   readonly notice: Notice | null;

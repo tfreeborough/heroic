@@ -140,6 +140,17 @@ Reach: practice and skirmish only in effect; RANKED validates picks
 against the real ledger server-side, so this switch deliberately cannot
 defeat it.
 
+## Tool 9 — first-win nudge rehearsal *(2026-08-24)*
+
+`FIRST-WIN NUDGE ▶` — raises the `firstWin` AccountSheet (bits-accounts.md §
+the first-win nudge) right over the title screen, on demand, as many times as
+you like. It bypasses the sheet's real gates (linked / accounts-live) so a
+linked tester still sees the copy, and it also CLEARS the persisted
+`bits.firstWinNudge` flag — so after tapping it, the next real online win
+re-triggers the honest path too. Only rendered when the Clerk key shipped
+(the sheet can't mount without the provider). Signing in from the rehearsed
+sheet is real — it links for real.
+
 ## Adding future tools
 
 `HomeScreen`'s dev panel is just a column — add a `Pressable` per tool and a

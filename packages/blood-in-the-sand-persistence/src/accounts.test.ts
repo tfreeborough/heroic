@@ -1,7 +1,8 @@
 /**
  * Account linking (bits-accounts.md): the link/restore/unlink lifecycle and
- * the merge policy — union entitlements, sum wallets, never lose a purchase,
- * never double-credit on a retried merge.
+ * the merge policy — union entitlements + deed unlocks, sum wallets, MAX
+ * counters, never lose a purchase or a deed, never double-credit on a
+ * retried merge.
  */
 import { beforeEach, describe, expect, test } from "bun:test";
 import { linkAccount, linkedClerkUserId, restoreAccount, unlinkAccount } from "./accounts";
@@ -41,6 +42,40 @@ const giveGlory = async (playerId: string, amount: number): Promise<void> => {
     source: "test",
     idempotencyKey: `test:${playerId}:glory:${Math.random()}`,
   });
+};
+
+// Raw rows with explicit dates — the merge cares about unlocked_at ordering,
+// which applyMatchAchievements (unixepoch() default) can't pin in a test.
+const unlock = async (playerId: string, deedId: string, at: number): Promise<void> => {
+  await db.execute({
+    sql: "INSERT INTO achievement_unlocks (player_id, achievement_id, unlocked_at) VALUES (?, ?, ?)",
+    args: [playerId, deedId, at],
+  });
+};
+
+const setCounter = async (playerId: string, counter: string, value: number): Promise<void> => {
+  await db.execute({
+    sql: "INSERT INTO achievement_counters (player_id, counter, value) VALUES (?, ?, ?)",
+    args: [playerId, counter, value],
+  });
+};
+
+const unlocksOf = async (playerId: string): Promise<{ id: string; at: number }[]> => {
+  const result = await db.execute({
+    sql: "SELECT achievement_id, unlocked_at FROM achievement_unlocks WHERE player_id = ? ORDER BY unlocked_at",
+    args: [playerId],
+  });
+  return result.rows.map((r) => ({ id: String(r["achievement_id"]), at: Number(r["unlocked_at"]) }));
+};
+
+const countersOf = async (playerId: string): Promise<Record<string, number>> => {
+  const result = await db.execute({
+    sql: "SELECT counter, value FROM achievement_counters WHERE player_id = ?",
+    args: [playerId],
+  });
+  const counters: Record<string, number> = {};
+  for (const r of result.rows) counters[String(r["counter"])] = Number(r["value"]);
+  return counters;
 };
 
 describe("linkAccount", () => {
@@ -95,6 +130,52 @@ describe("linkAccount", () => {
       args: [player],
     });
     expect(owned.rows.map((r) => r["item_id"])).toEqual(["weapon:fang", "weapon:scorpion"]);
+  });
+
+  test("merge unions deed unlocks, keeping the earliest unlock date", async () => {
+    await linkAccount(db, { playerId: player, clerkUserId: CLERK_USER });
+    const second = await registerPlayer(db);
+    // Account: an old shared deed + one only it has. Anonymous: an EARLIER
+    // date on the shared deed + one of its own.
+    await unlock(player, "first-blood", 100);
+    await unlock(player, "veteran", 300);
+    await unlock(second.playerId, "first-blood", 50);
+    await unlock(second.playerId, "sandstorm", 200);
+
+    const outcome = await linkAccount(db, { playerId: second.playerId, clerkUserId: CLERK_USER });
+    if (outcome.result !== "restored") throw new Error(`expected restored, got ${outcome.result}`);
+    expect(outcome.merged).toBe(true);
+    expect(await unlocksOf(player)).toEqual([
+      { id: "first-blood", at: 50 },
+      { id: "sandstorm", at: 200 },
+      { id: "veteran", at: 300 },
+    ]);
+  });
+
+  test("merge takes the higher of each lifetime counter, never the sum", async () => {
+    await linkAccount(db, { playerId: player, clerkUserId: CLERK_USER });
+    const second = await registerPlayer(db);
+    // Streak high-waters are why SUM would lie: 5 + 4 is a 9-streak nobody ran.
+    await setCounter(player, "best_streak", 5);
+    await setCounter(player, "kills", 200);
+    await setCounter(second.playerId, "best_streak", 4);
+    await setCounter(second.playerId, "wins", 12);
+
+    await linkAccount(db, { playerId: second.playerId, clerkUserId: CLERK_USER });
+    expect(await countersOf(player)).toEqual({ best_streak: 5, kills: 200, wins: 12 });
+  });
+
+  test("a retried merge of deeds and counters still reports merged=false", async () => {
+    await linkAccount(db, { playerId: player, clerkUserId: CLERK_USER });
+    const second = await registerPlayer(db);
+    await unlock(second.playerId, "first-blood", 50);
+    await setCounter(second.playerId, "kills", 30);
+    await linkAccount(db, { playerId: second.playerId, clerkUserId: CLERK_USER });
+    const retry = await linkAccount(db, { playerId: second.playerId, clerkUserId: CLERK_USER });
+    if (retry.result !== "restored") throw new Error(`expected restored, got ${retry.result}`);
+    expect(retry.merged).toBe(false);
+    expect(await unlocksOf(player)).toEqual([{ id: "first-blood", at: 50 }]);
+    expect(await countersOf(player)).toEqual({ kills: 30 });
   });
 
   test("a retried merge never double-credits", async () => {

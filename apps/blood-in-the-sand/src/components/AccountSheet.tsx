@@ -1,10 +1,13 @@
 /**
  * The sign-in sheet (bits-accounts.md) — the ONE surface where an account
- * enters the game, in two dressings:
+ * enters the game, in three dressings:
  *
  *  - `keep` (post-purchase): dismissing asks for a confirm
  *    (Tom, 2026-08-21: nobody gets to say they closed it by accident).
  *  - `restore` (the wallet door / Settings): a free close.
+ *  - `firstWin` (App's once-per-install nudge after the first online win,
+ *    Tom 2026-08-24): a free close — it's an invitation, not a guard; a
+ *    player who just won owes us nothing.
  *
  * Both dressings show ONE platform-matched button — Apple native on iOS,
  * Google on Android (Tom, 2026-08-23: a player straddling platforms is too
@@ -41,8 +44,9 @@ import { DISPLAY_FONT } from "../typography";
 WebBrowser.maybeCompleteAuthSession();
 
 export interface AccountSheetProps {
-  /** `keep` = post-purchase (confirm-to-skip); `restore` = the wallet door. */
-  mode: "keep" | "restore";
+  /** `keep` = post-purchase (confirm-to-skip); `restore` = the wallet door;
+   * `firstWin` = the once-per-install first-victory nudge (free close). */
+  mode: "keep" | "restore" | "firstWin";
   onClose: () => void;
   /** Sign-in landed and the link/merge finished. `adopted` = this device now
    * IS the account's player (identity rewritten) — refetch everything. */
@@ -189,7 +193,13 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
         <GestureDetector gesture={pan}>
           <View>
             <View style={styles.handle} />
-            <Text style={styles.title}>{mode === "keep" ? "KEEP YOUR ARMORY" : "RESTORE YOUR ARMORY"}</Text>
+            <Text style={styles.title}>
+              {mode === "keep"
+                ? "KEEP YOUR ARMORY"
+                : mode === "firstWin"
+                  ? "SAVE YOUR LEGEND"
+                  : "RESTORE YOUR ARMORY"}
+            </Text>
           </View>
         </GestureDetector>
         {/* The honest state first (Tom, 2026-08-22): everything currently
@@ -202,7 +212,9 @@ export const AccountSheet = ({ mode, onClose, onLinked }: AccountSheetProps) => 
         <Text style={styles.line}>
           {mode === "keep"
             ? "YOUR PURCHASES AND PROGRESS LIVE ONLY ON THIS DEVICE — LOST OR REPLACED, THEY GO WITH IT. SIGN IN ONCE AND THEY FOLLOW YOU THROUGH REINSTALLS AND NEW DEVICES."
-            : "SIGN IN TO BRING YOUR PURCHASES AND PROGRESS TO THIS DEVICE — OR START SAVING THIS ONE'S ACROSS DEVICES."}
+            : mode === "firstWin"
+              ? "FIRST BLOOD IS YOURS — AND RIGHT NOW YOUR GLORY, DEEDS AND UNLOCKS LIVE ONLY ON THIS DEVICE. SIGN IN ONCE AND EVERYTHING YOU EARN IS SAVED TO YOUR ACCOUNT, ON ANY DEVICE."
+              : "SIGN IN TO BRING YOUR PURCHASES AND PROGRESS TO THIS DEVICE — OR START SAVING THIS ONE'S ACROSS DEVICES."}
         </Text>
 
         <View style={[styles.buttons, busy && styles.buttonsBusy]}>

@@ -88,6 +88,21 @@ any purchase but **at most once per app session**. A confirmed skip is respected
 the session, not forever — the next session's purchase re-offers. The header door
 and Settings row exist precisely so the sheet doesn't have to nag.
 
+**The first-win nudge (added 2026-08-24, Tom):** discoverability was the gap — the
+header glyph and Settings row are quiet by design, so a player could grind for weeks
+never realising an account exists. One extra surface fixes it: **right after the
+player's first ONLINE win** (skirmish or ranked; practice/offline wins bank nothing
+worth saving), a third sheet dressing (`firstWin`, headlined **SAVE YOUR LEGEND**)
+rises — once per install, ever (`bits.firstWinNudge`). Post-victory beats
+first-launch because the pitch lands when the player first HOLDS something to lose,
+not on minute one. Mechanics: GameScreen notes the win (module flag), App raises the
+sheet only once the match flow releases the screen — over the returned-to lobby,
+never over the victory plate, and never over the ranked ceremony (the claim
+survives and rises on the next calm surface). The persisted flag is written at SHOW
+time, so a win whose nudge couldn't show (no wallet answer yet) keeps its claim.
+Free close, no skip-confirm — it's an invitation, not a post-payment guard. An
+already-linked player retires the claim silently.
+
 **On success:** a short "Armory secured" beat (reuse the stamp/seal motif — this is
 literally a signet moment), sheet closes. No profile UI appears anywhere.
 
@@ -158,7 +173,19 @@ the Clerk user already owns another player):
   side — union the unlock entitlements, sum the wallets, ledger rows annotated
   `merge:<abandonedPlayerId>`. Never prompt the player to choose; nobody loses
   anything under union+sum.
-- Ranked/Elo, deeds, names: the account player's records win; the abandoned
+- **Deeds merge too (AMENDED 2026-08-24, Tom):** the original policy left the
+  anonymous player's deeds orphaned, but that's the one place the
+  play-first-link-later player visibly LOSES progress at sign-in — it reads as
+  a bug. Now: achievement unlocks **union** (keeping the *earliest* unlock date
+  per deed), lifetime counters take **MAX** per counter — never SUM, because the
+  stored values mix additive lifetimes with streak high-waters, and summing
+  would mint a best-streak nobody ran (MAX can undercount an additive counter;
+  it can never fabricate an unlock). Unlock rows copy WITHOUT their Glory
+  rewards — the source player was paid when the deed fired and that payment
+  already rides the ledger sum. Both upserts guard on strict improvement so a
+  retried merge touches zero rows. Deed-granted entitlements were always safe
+  (the entitlement union carries them).
+- Ranked/Elo and names: the account player's records win; the abandoned
   player's are left orphaned (not merged — Elo merging is unprincipled).
 
 **Security notes:** restore is rate-limited like the other store endpoints; a
@@ -229,9 +256,23 @@ Where the build refined the design:
   only after Clerk confirms — a half-deleted account can't exist; the client
   then drops its local Clerk session.
 - **Merge is unconditional on link-conflict** (union entitlements + sum both
-  ledgers with deterministic `merge:<playerId>` idempotency keys) — the
-  "empty player" adopt case is just a merge that moves nothing, so there's
-  one code path and a retried merge is provably a no-op.
+  ledgers with deterministic `merge:<playerId>` idempotency keys; since
+  2026-08-24 also deed unlocks union + counter MAX, per the amended merge
+  policy above) — the "empty player" adopt case is just a merge that moves
+  nothing, so there's one code path and a retried merge is provably a no-op.
+
+## Wording pass (2026-08-24, Tom)
+
+The player-facing model is **playing locally** (progress lives on this device
+only) vs **account linked** (saved across devices) — surfaces lead with WHERE
+progress lives, not with what button to press. Settings rows became "Playing
+locally / progress lives on this device only — sign in to save it everywhere"
+(unlinked) and "Account linked / progress and purchases saved across your
+devices" (linked); the delete confirm now spells out that the device keeps
+playing locally afterwards. A "switch to local play" / log-out action was
+considered and REJECTED (Tom): it would encourage minting throwaway local
+players, and delete-account already covers the real need. DELETE ACCOUNT stays
+the only exit, deliberately far from the sign-in framing.
 
 ### Production config gotchas (device pass 2026-08-23 — each one cost a debug round)
 
