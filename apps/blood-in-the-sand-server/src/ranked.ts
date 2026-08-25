@@ -8,6 +8,7 @@
  * now beats a fair match never). The widening rating window is built and
  * tested so flipping to fair matching later is a config change, not a build.
  */
+import { RANKED_BRACKETS } from "@heroic/blood-in-the-sand-sim";
 import type { Socket } from "./room";
 
 /** Server-side season config — bump on rollover (bits-ranked.md § Seasons). */
@@ -52,45 +53,88 @@ export interface QueueEntry {
 export const ratingWindow = (waitedMs: number): number =>
   WINDOW_BASE + WINDOW_GROWTH * Math.floor(Math.max(0, waitedMs) / 10_000);
 
+/** Whether a candidate group may form: with windows on, the group's rating
+ * SPREAD (max − min) must fit the longest-waiting member's window — the 1v1
+ * pair rule generalised to `2 × teamSize` entries. */
+export const canGroup = (
+  entries: readonly Pick<QueueEntry, "rating" | "joinedMs">[],
+  nowMs: number,
+  matchAnyone: boolean,
+): boolean => {
+  if (matchAnyone) return true;
+  let lo = Infinity;
+  let hi = -Infinity;
+  let window = 0;
+  for (const e of entries) {
+    lo = Math.min(lo, e.rating);
+    hi = Math.max(hi, e.rating);
+    window = Math.max(window, ratingWindow(nowMs - e.joinedMs));
+  }
+  return hi - lo <= window;
+};
+
+/** The pair rule, kept as the size-two reading of canGroup. */
 export const canPair = (
   a: Pick<QueueEntry, "rating" | "joinedMs">,
   b: Pick<QueueEntry, "rating" | "joinedMs">,
   nowMs: number,
   matchAnyone: boolean,
-): boolean => {
-  if (matchAnyone) return true;
-  const window = Math.max(ratingWindow(nowMs - a.joinedMs), ratingWindow(nowMs - b.joinedMs));
-  return Math.abs(a.rating - b.rating) <= window;
-};
+): boolean => canGroup([a, b], nowMs, matchAnyone);
 
 /**
- * One bracket's pairing pass, pure: sort by rating, walk once, pair adjacent
- * entries whose gap fits the window. Returns index pairs INTO THE SORTED
- * ORDER along with that order, so the caller can map back to live entries.
+ * One bracket's matching pass, pure: sort by rating, walk once, take each
+ * run of `size` contiguous entries whose spread fits the window. Returns
+ * index groups INTO THE SORTED ORDER along with that order, so the caller
+ * can map back to live entries. `size` = 2 × teamSize (2 for 1v1, 4 for 2v2).
  */
+export const groupBracket = <T extends Pick<QueueEntry, "rating" | "joinedMs">>(
+  entries: readonly T[],
+  size: number,
+  nowMs: number,
+  matchAnyone: boolean,
+): { sorted: T[]; groups: number[][] } => {
+  const sorted = [...entries].sort((a, b) => a.rating - b.rating || a.joinedMs - b.joinedMs);
+  const groups: number[][] = [];
+  let i = 0;
+  while (i + size <= sorted.length) {
+    const run = sorted.slice(i, i + size);
+    if (canGroup(run, nowMs, matchAnyone)) {
+      groups.push(Array.from({ length: size }, (_, k) => i + k));
+      i += size;
+    } else {
+      i += 1;
+    }
+  }
+  return { sorted, groups };
+};
+
+/** The 1v1 pass, kept as groupBracket at size two (index pairs). */
 export const pairBracket = <T extends Pick<QueueEntry, "rating" | "joinedMs">>(
   entries: readonly T[],
   nowMs: number,
   matchAnyone: boolean,
 ): { sorted: T[]; pairs: [number, number][] } => {
-  const sorted = [...entries].sort((a, b) => a.rating - b.rating || a.joinedMs - b.joinedMs);
-  const pairs: [number, number][] = [];
-  let i = 0;
-  while (i + 1 < sorted.length) {
-    if (canPair(sorted[i]!, sorted[i + 1]!, nowMs, matchAnyone)) {
-      pairs.push([i, i + 1]);
-      i += 2;
-    } else {
-      i += 1;
-    }
-  }
-  return { sorted, pairs };
+  const { sorted, groups } = groupBracket(entries, 2, nowMs, matchAnyone);
+  return { sorted, pairs: groups.map(([a, b]) => [a!, b!]) };
+};
+
+/**
+ * Split a rating-sorted group into two sides with the closest team means:
+ * the SNAKE draft — positions 0 and 3 (best + worst) against 1 and 2 (the
+ * middle two) for four; for two, one each. Deterministic, no dice
+ * (bits-ranked.md § 2v2 solo queue). Pure over the sorted order.
+ */
+export const splitTeams = <T>(sorted: readonly T[]): [T[], T[]] => {
+  const a: T[] = [];
+  const b: T[] = [];
+  sorted.forEach((e, i) => (i % 4 === 0 || i % 4 === 3 ? a : b).push(e));
+  return [a, b];
 };
 
 export interface QueueMatch {
   bracket: string;
-  a: QueueEntry;
-  b: QueueEntry;
+  /** The two sides the matcher dictated — seated as teams 1 and 2. */
+  teams: [QueueEntry[], QueueEntry[]];
 }
 
 export interface BracketStatus {
@@ -109,6 +153,13 @@ export class RankedQueue {
     for (const b of brackets) this.queues.set(b, []);
   }
 
+  /** Entries per match for a bracket — 2 × its team size (unknown keys,
+   * which only tests construct, read as 1v1). */
+  private matchSize(bracket: string): number {
+    const spec = (RANKED_BRACKETS as Record<string, { teamSize: number } | undefined>)[bracket];
+    return 2 * (spec?.teamSize ?? 1);
+  }
+
   /** Seconds left on an account's dodge lockout; 0 = free to queue. */
   lockoutLeft(accountId: string, nowMs: number): number {
     const until = this.lockouts.get(accountId) ?? 0;
@@ -124,8 +175,10 @@ export class RankedQueue {
   }
 
   /** Enter a bracket's queue. The same account re-queueing (a reconnect, a
-   * second device) REPLACES its old entry — one seat in line per account,
-   * and the superseded socket is told it left. */
+   * second device, adding a bracket to a multi-queue) REPLACES its old entry
+   * — one seat in line per account — but KEEPS the wait it had already
+   * earned in this bracket: re-sending the bracket set to add 2v2 must not
+   * send the 1v1 wait back to zero. A superseded socket is told it left. */
   enqueue(bracket: string, entry: QueueEntry): void {
     const queue = this.queues.get(bracket);
     if (!queue) return;
@@ -134,8 +187,21 @@ export class RankedQueue {
       const old = queue[stale]!;
       queue.splice(stale, 1);
       if (old.ws !== entry.ws) safeSend(old.ws, JSON.stringify({ t: "queueLeft" }));
+      entry = { ...entry, joinedMs: Math.min(entry.joinedMs, old.joinedMs) };
     }
     queue.push(entry);
+  }
+
+  /** The socket's queue-entry times per bracket — snapshotted BEFORE a
+   * re-send's cleanup drops its entries, so the re-enqueue can hand the
+   * earned wait back (adding 2v2 to a 1v1 wait must not reset the 1v1). */
+  waitsOf(ws: Socket): Map<string, number> {
+    const waits = new Map<string, number>();
+    for (const [bracket, queue] of this.queues) {
+      const mine = queue.find((e) => e.ws === ws);
+      if (mine) waits.set(bracket, mine.joinedMs);
+    }
+    return waits;
   }
 
   /** Drop a socket from every bracket (close, queueLeave, entering a room).
@@ -153,21 +219,21 @@ export class RankedQueue {
   }
 
   /**
-   * The matcher beat: pair every bracket, REMOVING matched entries — and,
-   * multi-queue's first-match-wins rule, removing the matched accounts from
-   * every other bracket they were waiting in.
+   * The matcher beat: group every bracket (2 × teamSize entries a match),
+   * REMOVING matched entries — and, multi-queue's first-match-wins rule,
+   * removing the matched accounts from every other bracket they were
+   * waiting in. Sides come out of splitTeams over the rating order.
    */
   match(nowMs: number, matchAnyone = MATCH_ANYONE): QueueMatch[] {
     const matches: QueueMatch[] = [];
     for (const [bracket, queue] of this.queues) {
-      const { sorted, pairs } = pairBracket(queue, nowMs, matchAnyone);
-      for (const [i, j] of pairs) {
-        const m: QueueMatch = { bracket, a: sorted[i]!, b: sorted[j]! };
+      const { sorted, groups } = groupBracket(queue, this.matchSize(bracket), nowMs, matchAnyone);
+      for (const group of groups) {
+        const m: QueueMatch = { bracket, teams: splitTeams(group.map((i) => sorted[i]!)) };
         matches.push(m);
-        // Claim both accounts IMMEDIATELY — before the next bracket pairs —
+        // Claim every account IMMEDIATELY — before the next bracket groups —
         // or a multi-queued account could land two matches in one beat.
-        this.removeAccount(m.a.accountId);
-        this.removeAccount(m.b.accountId);
+        for (const side of m.teams) for (const e of side) this.removeAccount(e.accountId);
       }
     }
     return matches;

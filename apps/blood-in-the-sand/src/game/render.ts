@@ -392,6 +392,10 @@ export interface ArenaRenderInput {
    *  joins roomState against the deed defs — snapshots stay cosmetic-free).
    *  Absent id = bare. */
   titles?: ReadonlyMap<number, string>;
+  /** A directed camera (the Primer's scripted scenes, bits-onboarding.md):
+   *  world centre + zoom, bypassing follow/fit entirely. Matches never set
+   *  this — the arena camera stays the one every player shares. */
+  camera?: { cx: number; cy: number; zoom: number };
 }
 
 // ── Premium blood material ──────────────────────────────────────────────────
@@ -1940,7 +1944,11 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         : me && spectateId != null
           ? view.players.find((p) => p.id === spectateId)
           : undefined;
-    if (follow) {
+    if (r.camera) {
+      zoom = r.camera.zoom;
+      cx = r.camera.cx;
+      cy = r.camera.cy;
+    } else if (follow) {
       // UNIVERSAL follow zoom (Tom, 2026-08-10): every camera — every
       // loadout — fits the roster's LONGEST range ring across the screen
       // width. Born as a bombard-only artillery zoom, made universal the

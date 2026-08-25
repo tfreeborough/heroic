@@ -238,16 +238,29 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the seat's OWN name/title/announcer — a rejoiner resumes an identity,
  * never creates one (the queue-time entitlement check otherwise had a
  * verbatim bypass through Room.seat()).
+ * v29 (2026-08-24): the 2v2 SOLO QUEUE (bits-ranked.md § 2v2 solo queue).
+ * `RANKED_BRACKETS` gains "2v2" (teamSize 2, NO bot backfill) — the matcher
+ * takes four solo entries and dictates the sides (best + worst vs the middle
+ * two), `rankedResult.results[]` carries four rows (one per seat; the shape
+ * was an array from day one), and `queueJoin.brackets[]` may now name both
+ * brackets at once (multi-queue, first match wins — the client UI finally
+ * exposes it). No new message shapes; the bump exists because a v28 client
+ * has no 2v2 card to seat into and would be reading a 4-row settlement it
+ * never expected.
  */
-export const PROTOCOL_VERSION = 28;
+export const PROTOCOL_VERSION = 29;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
  * ladder — per-subject ratings are keyed by it — and maps to the room shape
- * its matches run. Season I ships 1v1 only; future entries (2v2, premade
- * variants) are additive. */
+ * its matches run. `botBackfill`: whether a lone queuer may draw a disguised
+ * server bot after the wait (bits-ranked-bots.md) — 1v1 only, never a team
+ * bracket (a bot teammate feels awful; bits-ranked.md § 2v2 solo queue,
+ * 2026-08-24). Team brackets' displayed queue sizes are honest for the same
+ * reason (the fuzz exists to hide bot matches, and there are none). */
 export const RANKED_BRACKETS = {
-  "1v1": { teamSize: 1 },
+  "1v1": { teamSize: 1, botBackfill: true },
+  "2v2": { teamSize: 2, botBackfill: false },
 } as const;
 
 export type RankedBracket = keyof typeof RANKED_BRACKETS;
@@ -289,7 +302,8 @@ export type ClientMsg =
   /** Enter the ranked queue (bits-ranked.md). `token` is the persistence
    * bearer secret — verified server-side against the shared DB; a bad token
    * (or an unreachable DB) rejects, ranked being the one honestly
-   * connectivity-gated mode. `brackets` always ["1v1"] in Season I. */
+   * connectivity-gated mode. `brackets` is the set to wait in at once —
+   * first match found wins, the rest are auto-left (multi-queue). */
   | { t: "queueJoin"; v: number; token: string; playerName: string; brackets: string[]; announcer?: string; title?: string }
   | { t: "queueLeave" }
   /** Unauthenticated queue-size read — the ranked screen's population display

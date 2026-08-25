@@ -15,7 +15,6 @@ import {
 } from "@shopify/react-native-skia";
 import { playSound, unlockAudio } from "../audio";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { devFlags } from "../dev";
 import { DISPLAY_FONT } from "../typography";
 
 export interface ModeSelectScreenProps {
@@ -183,7 +182,7 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact
     unlockAudio();
     playSound("uiConfirm");
     // Choosing a mode is a commitment beat — the one menu tap that pulses.
-    if (!devFlags.disableHaptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onEnter?.();
   };
 

@@ -55,6 +55,17 @@ const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => 
   }
 };
 
+/** The identity this device already holds — never registers. For places
+ * that only want to SHOW the id (the feedback stamps, the support email)
+ * and must not spend a network round-trip to learn there is none. */
+export const storedIdentity = async (): Promise<Identity | null> => {
+  const [playerId, token] = await Promise.all([
+    SecureStore.getItemAsync(KEY_PLAYER_ID),
+    SecureStore.getItemAsync(KEY_TOKEN),
+  ]);
+  return playerId && token ? { playerId, token } : null;
+};
+
 /**
  * The stored identity, registering silently if this device has none yet.
  * Null when the API is unconfigured or unreachable AND nothing is stored —
@@ -162,33 +173,6 @@ export const fetchWallet = async (identity: Identity): Promise<Wallet | null> =>
       linked,
       accounts: wallet.accounts === true,
     });
-  } catch {
-    return null;
-  }
-};
-
-/**
- * Dev-menu ledger grant (bits-store.md § testing) — hits POST /dev/grant,
- * which only exists when the API runs with STORE_DEV_TOOLS=1. Against a
- * production API this 404s and quietly returns null, so the dev-menu row is
- * inert exactly where it should be.
- */
-export const devGrant = async (
-  identity: Identity,
-  grant: { glory?: number; signets?: number },
-): Promise<Wallet | null> => {
-  if (!API_URL) return null;
-  try {
-    const res = await apiFetch("/dev/grant", {
-      method: "POST",
-      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
-      body: JSON.stringify(grant),
-    });
-    if (!res.ok) return null;
-    const wallet = (await res.json()) as Wallet;
-    return typeof wallet.glory === "number" && typeof wallet.signets === "number"
-      ? publishWallet(withAccountFields(wallet))
-      : null;
   } catch {
     return null;
   }
@@ -464,6 +448,40 @@ export const fetchAchievements = async (identity: Identity): Promise<Achievement
     return Array.isArray(me.unlocks) ? me : null;
   } catch {
     return null;
+  }
+};
+
+/** One feedback report as POST /feedback wants it (bits-feedback.md). The
+ * context stamps come from support.ts's deviceContext(). */
+export interface FeedbackReport {
+  kind: "bug" | "idea" | "other";
+  message: string;
+  contactEmail: string;
+  playerName: string;
+  platform: string;
+  osVersion: string;
+  appBinary: string;
+  appBundle: string;
+}
+
+/** `sent` = the row exists server-side; `rejected` = the server refused the
+ * shape (empty message — the form guards this, so it's a belt-and-braces
+ * answer); `unavailable` = never reached it (offline, API down, timeout,
+ * rate-limited) — the form keeps the draft and offers the email door. */
+export type FeedbackResult = "sent" | "rejected" | "unavailable";
+
+export const sendFeedback = async (identity: Identity, report: FeedbackReport): Promise<FeedbackResult> => {
+  if (!API_URL) return "unavailable";
+  try {
+    const res = await apiFetch("/feedback", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify(report),
+    });
+    if (res.status === 400) return "rejected";
+    return res.ok ? "sent" : "unavailable";
+  } catch {
+    return "unavailable";
   }
 };
 

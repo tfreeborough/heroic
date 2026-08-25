@@ -110,6 +110,26 @@ const applySchema = async (db: Db): Promise<void> => {
         loser_loadout TEXT,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       )`,
+      // One row per PARTICIPANT per ranked match (bits-ranked.md § 2v2 solo
+      // queue, 2026-08-24): the per-player truth once a side can hold more
+      // than one subject — ranked_matches keeps its header shape (ids
+      // comma-joined, team-mean ratings for team brackets) and this table
+      // carries who was on which side with their own before/after. Written
+      // for EVERY bracket from now on (1v1 included) so recent form and the
+      // pick-rate analytics have one table to read; pre-existing 1v1 rows
+      // are backfilled below.
+      `CREATE TABLE IF NOT EXISTS ranked_match_players (
+        match_id TEXT NOT NULL REFERENCES ranked_matches(id),
+        subject_id TEXT NOT NULL,
+        team INTEGER NOT NULL,
+        won INTEGER NOT NULL,
+        rating_before INTEGER NOT NULL,
+        rating_after INTEGER NOT NULL,
+        loadout TEXT,
+        PRIMARY KEY (match_id, subject_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_ranked_match_players_subject
+        ON ranked_match_players (subject_id)`,
       // Achievements (achievements.md): permanent, cross-season, board-blind
       // — only counters and unlocks are ever stored; the per-match summary
       // is server memory. The PK is what makes a double-award impossible.
@@ -157,6 +177,22 @@ const applySchema = async (db: Db): Promise<void> => {
         granted_at INTEGER NOT NULL DEFAULT (unixepoch()),
         PRIMARY KEY (player_id, item_id)
       )`,
+      // Player feedback + bug reports (bits-feedback.md): append-only, one
+      // row per report, stamped with the identity and the running version
+      // so a "it broke" from a stale OTA is recognisable at a glance.
+      `CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id TEXT NOT NULL REFERENCES players(id),
+        kind TEXT NOT NULL,
+        message TEXT NOT NULL,
+        contact_email TEXT,
+        player_name TEXT,
+        platform TEXT,
+        os_version TEXT,
+        app_binary TEXT,
+        app_bundle TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`,
     ],
     "write",
   );
@@ -180,6 +216,28 @@ const applySchema = async (db: Db): Promise<void> => {
     `INSERT INTO player_tokens (token_hash, player_id, created_at)
       SELECT token_hash, id, created_at FROM players p
       WHERE NOT EXISTS (SELECT 1 FROM player_tokens t WHERE t.player_id = p.id)`,
+  );
+  // Backfill ranked_match_players from 1v1 history rows that predate the
+  // table (2026-08-24). Only header rows with no participant rows yet — and
+  // only single-subject rows (team brackets were born WITH the table, and
+  // their comma-joined header ids are not subject ids). Team numbers are a
+  // convention here (winner 1, loser 2): pre-table rows never recorded them.
+  await db.execute(
+    `INSERT OR IGNORE INTO ranked_match_players
+       (match_id, subject_id, team, won, rating_before, rating_after, loadout)
+     SELECT id, winner_id, 1, 1, winner_rating_before, winner_rating_after, winner_loadout
+       FROM ranked_matches m
+      WHERE instr(m.winner_id, ',') = 0
+        AND NOT EXISTS (SELECT 1 FROM ranked_match_players p WHERE p.match_id = m.id)`,
+  );
+  await db.execute(
+    `INSERT OR IGNORE INTO ranked_match_players
+       (match_id, subject_id, team, won, rating_before, rating_after, loadout)
+     SELECT id, loser_id, 2, 0, loser_rating_before, loser_rating_after, loser_loadout
+       FROM ranked_matches m
+      WHERE instr(m.loser_id, ',') = 0
+        AND NOT EXISTS (SELECT 1 FROM ranked_match_players p
+                         WHERE p.match_id = m.id AND p.subject_id = m.loser_id)`,
   );
 };
 

@@ -36,6 +36,12 @@ export interface ForgeStatus {
   /** PNGs already in the deed-icon destination folder — done-ticks for the
    * deed set (derived from ACHIEVEMENT_DEFS, deedSet.ts). */
   deedFiles: string[];
+  /** Deed id → the subject its PNG was forged FROM (read off the
+   * `<id>.forge.json` sidecar). The panel diffs this against the live
+   * DEED_SUBJECTS so a deed whose subject was rewritten after forging shows
+   * as STALE — re-forge candidates stay visible without regenerating the
+   * rest of the set. Absent when the sidecar is missing or unreadable. */
+  deedForged: Record<string, string>;
   /** PNGs already in the home-backdrop destination folder — done-ticks for
    * the home set (the checked-in HOME_KEYS/HOME_SUBJECTS list). */
   homeFiles: string[];

@@ -142,6 +142,15 @@ export const ForgePanel = ({ onClose }: Props) => {
   const deeds = useMemo(buildDeedSet, []);
   const deedDone = (id: string): boolean => (status?.deedFiles ?? []).includes(`${id}.png`);
   const deedDoneCount = deeds.filter((e) => deedDone(e.id)).length;
+  // STALE = forged, but DEED_SUBJECTS has been rewritten since (the sidecar
+  // remembers what the PNG was actually made from). These are the only
+  // re-forge candidates — everything else done is done; don't regenerate it.
+  const deedForgedFrom = (id: string): string | undefined => status?.deedForged?.[id];
+  const deedStale = (e: DeedSetEntry): boolean => {
+    const forged = deedForgedFrom(e.id);
+    return deedDone(e.id) && !e.missingSubject && forged !== undefined && forged.trim() !== e.subject.trim();
+  };
+  const deedStaleCount = deeds.filter(deedStale).length;
 
   // The home-backdrop set — the checked-in HOME_KEYS list (homeSet.ts).
   const homes = useMemo(buildHomeSet, []);
@@ -481,7 +490,9 @@ export const ForgePanel = ({ onClose }: Props) => {
       {isDeed && (
         <div className="icon-manifest">
           <div className="icon-manifest-head">
-            The deed icons — {deedDoneCount} of {deeds.length} done (cast/weapon chains reuse the loadout icons)
+            The deed icons — {deedDoneCount} of {deeds.length} done
+            {deedStaleCount > 0 ? `, ${deedStaleCount} stale (subject rewritten since forged — ↻)` : ""} (cast/weapon
+            chains reuse the loadout icons)
           </div>
           <div className="icon-cat-row">
             <span className="icon-cat icon-cat-mode">deed</span>
@@ -489,11 +500,17 @@ export const ForgePanel = ({ onClose }: Props) => {
               {deeds.map((e) => (
                 <button
                   key={e.id}
-                  className={`icon-chip${e.id === deedId ? " active" : ""}${deedDone(e.id) ? " done" : ""}`}
+                  className={`icon-chip${e.id === deedId ? " active" : ""}${deedDone(e.id) ? " done" : ""}${deedStale(e) ? " stale" : ""}`}
                   onClick={() => pickDeed(e)}
-                  title={e.missingSubject ? "no art subject yet — add one to DEED_SUBJECTS in forge/styleBible.ts" : e.subject}
+                  title={
+                    e.missingSubject
+                      ? "no art subject yet — add one to DEED_SUBJECTS in forge/styleBible.ts"
+                      : deedStale(e)
+                        ? `STALE — forged from: "${deedForgedFrom(e.id)}"\n\nnow: ${e.subject}`
+                        : e.subject
+                  }
                 >
-                  {deedDone(e.id) ? "✓ " : ""}
+                  {deedStale(e) ? "↻ " : deedDone(e.id) ? "✓ " : ""}
                   {e.name}
                   {e.missingSubject ? " ⚠" : ""}
                 </button>

@@ -24,7 +24,7 @@ import {
 import { DEFAULT_SERVER } from "./src/net/connection";
 import { useArenaConnection } from "./src/net/useArenaConnection";
 import { setAnnouncerPack } from "./src/audio";
-import { loadAnnouncerPack } from "./src/settings";
+import { loadAnnouncerPack, loadPrimerSeen, savePrimerSeen } from "./src/settings";
 import { loadWornTitle } from "./src/deeds/wornTitle";
 import { loadEntitlements } from "./src/deeds/entitlements";
 import { useFonts } from "expo-font";
@@ -39,10 +39,12 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { ModeSelectScreen } from "./src/screens/ModeSelectScreen";
 import { NameScreen } from "./src/screens/NameScreen";
 import { PracticeScreen } from "./src/screens/PracticeScreen";
+import { PrimerScreen } from "./src/screens/PrimerScreen";
 import { RankedScreen } from "./src/screens/RankedScreen";
 import { RoomListScreen } from "./src/screens/RoomListScreen";
 import { RoomScreen } from "./src/screens/RoomScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { FeedbackScreen } from "./src/screens/FeedbackScreen";
 
 /**
  * The app always talks to ONE server (EXPO_PUBLIC_DEFAULT_SERVER, or the
@@ -52,6 +54,8 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  *
  * Top-level routes (home is the title screen):
  *   home              → title + PLAY / SETTINGS
+ *   primer            → the first PLAY's rules walkthrough (bits-onboarding.md);
+ *                       replayable from Settings + the dev menu
  *   modes             → the fork behind PLAY: ranked / skirmish / practice / story
  *                       (bits-mode-select.md — connectivity gates live there)
  *   play              → SKIRMISH: connecting / RoomList / Room (lobby) / Game, by client state
@@ -60,6 +64,7 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
  *                       same client-state routing carries the whole flow)
  *   practice          → bots-or-dummies front door; an offline sim match
  *   settings          → device settings (lefty mode)
+ *   feedback          → bug reports / feedback form, from Settings (bits-feedback.md)
  */
 const SERVER = process.env.EXPO_PUBLIC_AUTO_HOST ?? DEFAULT_SERVER;
 
@@ -91,7 +96,17 @@ const confirmLeave = (what: "lobby" | "match", leave: () => void): void => {
   );
 };
 
-type Route = "home" | "modes" | "play" | "ranked" | "practice" | "settings" | "deeds" | "armory";
+type Route =
+  | "home"
+  | "primer"
+  | "modes"
+  | "play"
+  | "ranked"
+  | "practice"
+  | "settings"
+  | "feedback"
+  | "deeds"
+  | "armory";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
@@ -135,8 +150,19 @@ export default function App() {
   const [fontsReady, fontError] = useFonts(DISPLAY_FONT_SOURCE);
   const typographyReady = fontsReady || fontError !== null;
 
+  // The Primer (bits-onboarding.md): the first PLAY routes through the rules.
+  // null = the boot read hasn't landed; a PLAY that early falls through to
+  // the mode select — a veteran must never see it twice.
+  const [primerSeen, setPrimerSeen] = useState<boolean | null>(null);
+  const finishPrimer = useCallback((next: () => void) => {
+    savePrimerSeen(true);
+    setPrimerSeen(true);
+    next();
+  }, []);
+
   useEffect(() => {
     void AsyncStorage.getItem(KEY_NAME).then((v) => setPlayerName(v?.trim() ?? ""));
+    void loadPrimerSeen().then(setPrimerSeen);
     // The persisted announcer voice (dev-menu picked) — applied before any
     // match can play a kill line; matches only exist behind PLAY/PRACTICE.
     void loadAnnouncerPack().then(setAnnouncerPack);
@@ -159,8 +185,8 @@ export default function App() {
     setPractice(null);
   }, [practice]);
 
-  // The dev menu's shortcut to the firing range: offline sim, you vs a line
-  // of respawning target dummies (the player-facing way in is PRACTICE →
+  // The Primer's "try the range" exit: offline sim, you vs a line of
+  // respawning target dummies (the player-facing way in is PRACTICE →
   // TARGET DUMMIES; this jump just skips the two screens between).
   const startTargetDummies = useCallback(() => {
     setPractice(new PracticeClient(playerName || "gladiator", RANGE_TEAM_SIZE, "dummies"));
@@ -287,10 +313,14 @@ export default function App() {
   if (route === "home") {
     screen = (
       <HomeScreen
-        onPlay={() => setRoute("modes")}
+        onPlay={() => setRoute(primerSeen === false ? "primer" : "modes")}
         onArmory={() => openArmory("home")}
+        onReplayPrimer={() => {
+          savePrimerSeen(false);
+          setPrimerSeen(false);
+          setRoute("primer");
+        }}
         onSettings={() => setRoute("settings")}
-        onTargetDummies={startTargetDummies}
         onRehearseFirstWin={
           CLERK_PUBLISHABLE_KEY.length > 0
             ? () => {
@@ -301,6 +331,14 @@ export default function App() {
         }
         updateReady={updateReady}
         onApplyUpdate={restartToApply}
+      />
+    );
+  } else if (route === "primer") {
+    screen = (
+      <PrimerScreen
+        onDone={() => finishPrimer(() => setRoute("modes"))}
+        onRange={() => finishPrimer(startTargetDummies)}
+        onExit={() => setRoute("home")}
       />
     );
   } else if (route === "deeds") {
@@ -336,6 +374,16 @@ export default function App() {
         onArmory={() => openArmory("settings")}
         playerName={playerName ?? ""}
         onRename={saveName}
+        onPrimer={() => setRoute("primer")}
+        onFeedback={() => setRoute("feedback")}
+      />
+    );
+  } else if (route === "feedback") {
+    screen = (
+      <FeedbackScreen
+        onBack={() => setRoute("settings")}
+        onArmory={() => openArmory("feedback")}
+        playerName={playerName ?? ""}
       />
     );
   } else if (route === "practice") {

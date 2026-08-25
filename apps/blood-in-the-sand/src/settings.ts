@@ -25,6 +25,18 @@ export const saveLefty = (on: boolean): void => {
   void AsyncStorage.setItem(KEY_LEFTY, on ? "1" : "0");
 };
 
+/** The Primer (bits-onboarding.md) — the first PLAY routes through the
+ * five-chapter rules walkthrough until a door or SKIP retires it. Only a
+ * decision writes the flag: a crash mid-Primer replays it. Settings' HOW TO
+ * PLAY row and the dev menu replay it without touching this. */
+const KEY_PRIMER_SEEN = "bits.primerSeen";
+
+export const loadPrimerSeen = async (): Promise<boolean> => (await AsyncStorage.getItem(KEY_PRIMER_SEEN)) === "1";
+
+export const savePrimerSeen = (seen: boolean): void => {
+  void AsyncStorage.setItem(KEY_PRIMER_SEEN, seen ? "1" : "0");
+};
+
 /** The last loadout a player armed with — the wizard's RUN IT BACK offer.
  * Device-local like everything here; validated against the live roster on
  * load so a removed weapon/ability can never resurrect. */
@@ -115,4 +127,15 @@ export const loadAnnouncerPack = async (): Promise<AnnouncerPackId> => {
 
 export const saveAnnouncerPack = (pack: AnnouncerPackId): void => {
   void AsyncStorage.setItem(KEY_ANNOUNCER_PACK, pack);
+};
+
+/** The reply address the feedback form last sent with (bits-feedback.md) —
+ * remembered so a second report never asks for it again. */
+const KEY_CONTACT_EMAIL = "bits.contactEmail";
+
+export const loadContactEmail = async (): Promise<string> =>
+  (await AsyncStorage.getItem(KEY_CONTACT_EMAIL)) ?? "";
+
+export const saveContactEmail = (email: string): void => {
+  void AsyncStorage.setItem(KEY_CONTACT_EMAIL, email.trim());
 };

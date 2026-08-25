@@ -15,7 +15,6 @@
 import { Asset } from "expo-asset";
 import { createAudioDirector, type AudioDirector } from "@heroic/engine";
 import { createSoundScheduler, type SoundConfig, type SoundScheduler } from "@heroic/core";
-import { devFlags } from "../dev";
 import { AUDIO_MANIFEST } from "./manifest";
 import { SOUND_CATALOGUE, type BitsSoundEvent } from "./catalogue";
 import {
@@ -89,9 +88,6 @@ export const playSound = (
   overrides?: SoundConfig,
   gain = 1,
 ): void => {
-  // Dev A/B (not a mute): skip ALL per-play work incl. the native calls, so a
-  // choppy device can answer "is it the audio?" with one dev-menu toggle.
-  if (devFlags.disableSfx) return;
   const { director, scheduler } = ensure();
   const cmd = scheduler.play(event, qualifier, overrides);
   // Announcer lines remap to the active PACK's manifest entry (announcer.ts);
@@ -111,7 +107,6 @@ export const playAnnouncement = (
   pack: AnnouncerPackId,
   qualifier?: string,
 ): void => {
-  if (devFlags.disableSfx) return;
   const { director, scheduler } = ensure();
   const cmd = scheduler.play(event, qualifier);
   if (cmd) director.playSfx(resolveAnnouncerClip(cmd.clip, pack), { volume: cmd.volume });
@@ -128,7 +123,6 @@ export const playAnnouncement = (
  */
 export const setAnnouncerPack = (pack: AnnouncerPackId): void => {
   setActiveAnnouncer(pack);
-  if (devFlags.disableSfx) return;
   director?.warm(announcerPackClips(pack));
 };
 
@@ -168,9 +162,6 @@ const COMBAT_EVENTS: BitsSoundEvent[] = [
  * anything already warm.
  */
 export const warmCombatAudio = (): void => {
-  // Under the dev SFX kill, skip the warm too — otherwise the A/B still
-  // builds the whole native player pool and only silences the plays.
-  if (devFlags.disableSfx) return;
   const names = new Set<string>();
   for (const event of COMBAT_EVENTS) {
     const def = SOUND_CATALOGUE[event];
@@ -191,7 +182,6 @@ export const warmCombatAudio = (): void => {
  * it isn't up yet, so the gesture that unlocks is also what allocates.
  */
 export const unlockAudio = (): void => {
-  if (devFlags.disableSfx) return; // dev A/B: no director, no native session
   ensure().director.resume();
 };
 
@@ -236,7 +226,6 @@ const fadeMusic = (d: AudioDirector, to: number, stopAtEnd: boolean): void => {
 
 /** Start the looping crowd bed — call on entering the arena (GameScreen mount). */
 export const startCrowdAmbience = (): void => {
-  if (devFlags.disableSfx) return; // dev A/B: no audio work at all
   const { director } = ensure();
   director.setMusicVolume(0);
   musicLevel = 0;

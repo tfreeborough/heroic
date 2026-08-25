@@ -1,0 +1,20 @@
+{
+  "type": "deed-bits",
+  "subject": "one small bronze figure of a lone fighter standing braced at the centre of a ring of sand, two enemy spears crossed and planted at its feet — the pair that couldn't take it",
+  "prompt": "one small bronze figure of a lone fighter standing braced at the centre of a ring of sand, two enemy spears crossed and planted at its feet — the pair that couldn't take it. An achievement illustration for a brutal gladiator arena game set in a scorched desert. Early-1990s retro pixel art in the lineage of VGA DOS and 16-bit Amiga games: hand-placed chunky pixels, a strictly limited palette of about 32 colours, shading built from hard stepped colour ramps and checkerboard dithering — no smooth gradients, no anti-aliasing. The form still reads dimensional: specular glints, warm light bounced up from golden sand, deep warm umber shadow in the recesses, never pure black. One bold central subject filling about 80% of the frame, lit by a low warm desert sun. Draw NO frame of any kind: no circle, no ring, no coin face, no medallion, no shield backing, no border or rim around the subject — the subject floats free and the game composites any framing itself. True materials each in their own full colour, no sepia wash: battle-grey steel (#9aa0a6), honey sand-gold (#dcb96f), bone-white specular highlights (#f2e9d4), saturated dried-blood crimson (#a32c22), with one muted gold accent where the subject earns it. Grim, sun-scoured, blood-and-sand mood — never cute, never cartoonish, never flat vector art, never ink outlines or crosshatching, never a photograph. Chunky forms: at 24 pixels the subject must still read. The subject floats alone on a fully transparent background — no backdrop, no glow, no vignette; every pixel outside the subject is transparent. No text, no letters, no numerals — the artwork carries no writing or tier marks of any kind.",
+  "provider": "openai-image",
+  "model": "gpt-image-1",
+  "params": {
+    "size": "1024x1024",
+    "quality": "medium",
+    "background": "transparent",
+    "savedSize": 256,
+    "pixelGrid": 64,
+    "paletteColours": 32
+  },
+  "files": [
+    "deed-clutch.png"
+  ],
+  "created": "2026-08-24T22:15:33.610Z",
+  "updated": "2026-08-24T22:15:33.610Z"
+}

@@ -22,12 +22,13 @@
  * Owed from the Forge: signet_exchange_1 (the strike itself — see the brief
  * in audio/catalogue.ts); a charge-loop hiss is a possible later layer.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Blur, Canvas, Circle } from "@shopify/react-native-skia";
 import { ForgeEmbers } from "./forgeEmbers";
+import { Sparks } from "../components/Sparks";
 import { playSound, unlockAudio } from "../audio";
 import { playStrikeHaptic } from "../game/haptics";
 import type { Wallet } from "../net/api";
@@ -106,54 +107,6 @@ const GloryStream = () => (
     ))}
   </View>
 );
-
-/** One strike's spark burst — keyed by seed so every strike gets a fresh
- * random spread. Pure spectacle, native-driver, gone in half a second. */
-const Sparks = ({ seed }: { seed: number }) => {
-  const t = useRef(new Animated.Value(0)).current;
-  const darts = useMemo(
-    () =>
-      Array.from({ length: 12 }, () => {
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 55 + Math.random() * 75;
-        return {
-          x: Math.cos(angle) * dist,
-          // Sparks fly UP-and-out more than down — forge physics.
-          y: Math.sin(angle) * dist * 0.8 - 24,
-          spin: `${Math.round(Math.random() * 300 - 150)}deg`,
-          long: Math.random() > 0.5,
-        };
-      }),
-    [seed],
-  );
-  useEffect(() => {
-    if (seed === 0) return;
-    t.setValue(0);
-    Animated.timing(t, { toValue: 1, duration: 460, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
-  }, [seed, t]);
-  if (seed === 0) return null;
-  return (
-    <View pointerEvents="none" style={styles.sparkStage}>
-      {darts.map((d, i) => (
-        <Animated.View
-          key={`${seed}-${i}`}
-          style={[
-            d.long ? styles.sparkLong : styles.spark,
-            {
-              opacity: t.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.9, 0] }),
-              transform: [
-                { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [0, d.x] }) },
-                { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, d.y] }) },
-                { rotate: d.spin },
-                { scale: t.interpolate({ inputRange: [0, 1], outputRange: [1, 0.3] }) },
-              ],
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-};
 
 /** The freshly-struck Signet arcing down onto the stack. */
 const FlyingSignet = ({ seed, onLand }: { seed: number; onLand: () => void }) => {
@@ -574,8 +527,6 @@ const styles = StyleSheet.create({
   sparkStage: { position: "absolute", width: 0, height: 0, alignItems: "center", justifyContent: "center" },
   // The Glory gem, in flight (rotation lives in the transform).
   streamDiamond: { position: "absolute", width: 8, height: 8, backgroundColor: "#8c2f2f" },
-  spark: { position: "absolute", width: 5, height: 5, borderRadius: 2.5, backgroundColor: "#ffcf7a" },
-  sparkLong: { position: "absolute", width: 11, height: 3, borderRadius: 1.5, backgroundColor: "#ffe9b0" },
   flying: { position: "absolute" },
 
   signetCard: {

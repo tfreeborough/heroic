@@ -51,6 +51,7 @@ export {
   displayFloorOf,
   rankChangeBetween,
   winnerGlory,
+  teamMean,
   loserGlory,
   type Rung,
   type RatingUpdateInput,
@@ -76,8 +77,20 @@ export {
   recentForm,
   type RankedRating,
   type RankedMatchInput,
+  type RankedSubjectInput,
   type RankedBotMatchInput,
   type RankedMatchResult,
   type RankedSideResult,
   type LeaderboardEntry,
 } from "./ranked";
+export {
+  FEEDBACK_KINDS,
+  FEEDBACK_MESSAGE_MAX,
+  FEEDBACK_EMAIL_MAX,
+  FEEDBACK_STAMP_MAX,
+  recordFeedback,
+  listFeedback,
+  type FeedbackInput,
+  type FeedbackKind,
+  type FeedbackRecord,
+} from "./feedback";

@@ -40,8 +40,8 @@ import { loadCelebratedDeeds } from "../deeds/celebrated";
 import { DEED_ICONS } from "../deeds/deedIcons";
 import { getWornTitle, setWornTitle } from "../deeds/wornTitle";
 import { setEntitlements } from "../deeds/entitlements";
-import { devFlags } from "../dev";
 import { ensureIdentity, fetchAchievements, type AchievementsMe } from "../net/api";
+import { Embers } from "../components/Embers";
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { DeedReplayOverlay } from "./DeedCards";
 import { DISPLAY_FONT } from "../typography";
@@ -54,79 +54,6 @@ export interface DeedsScreenProps {
 
 
 const DEFS_BY_ID = new Map<string, BitsAchievementDef>(ACHIEVEMENT_DEFS.map((d) => [d.id, d]));
-
-/** The dev preview's fake state (bits-dev-menu.md): "all" unlocks the whole
- * chronicle; "some" unlocks the root + every chain's first tier with
- * counters faked ~60% toward each next tier so progress bars render.
- * Session-only, client-side, never written anywhere. */
-const previewState = (mode: "some" | "all"): { unlocked: Set<string>; counters: Record<string, number> } => {
-  if (mode === "all") return { unlocked: new Set(ACHIEVEMENT_DEFS.map((d) => d.id)), counters: {} };
-  const roots = new Set(ACHIEVEMENT_DEFS.filter((d) => d.parent === null).map((d) => d.id));
-  const unlocked = new Set(
-    ACHIEVEMENT_DEFS.filter((d) => d.parent === null || roots.has(d.parent)).map((d) => d.id),
-  );
-  const counters: Record<string, number> = {};
-  for (const def of ACHIEVEMENT_DEFS) {
-    if (def.trigger.kind !== "milestone" || !unlocked.has(def.id)) continue;
-    counters[def.trigger.counter] = Math.max(counters[def.trigger.counter] ?? 0, def.trigger.threshold);
-  }
-  const nextLocked: Record<string, number> = {};
-  for (const def of ACHIEVEMENT_DEFS) {
-    if (def.trigger.kind !== "milestone" || unlocked.has(def.id)) continue;
-    const cur = counters[def.trigger.counter] ?? 0;
-    if (def.trigger.threshold > cur) {
-      nextLocked[def.trigger.counter] = Math.min(nextLocked[def.trigger.counter] ?? Infinity, def.trigger.threshold);
-    }
-  }
-  for (const [counter, next] of Object.entries(nextLocked)) {
-    const cur = counters[counter] ?? 0;
-    counters[counter] = cur + Math.floor((next - cur) * 0.6);
-  }
-  return { unlocked, counters };
-};
-
-/** Rising gold embers behind the chronicle — the candlelight (same
- * native-driven pattern as the title screen's motes). */
-const EMBER_COUNT = 16;
-
-const Ember = ({ w, h, seed }: { w: number; h: number; seed: number }) => {
-  const t = useRef(new Animated.Value(0)).current;
-  const x0 = (((seed * 89) % 100) / 100) * w;
-  const y0 = h * 0.3 + (((seed * 53) % 100) / 100) * h * 0.65;
-  const dur = 11000 + ((seed * 131) % 8) * 1500;
-  const size = 2 + (seed % 3);
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(t, { toValue: 1, duration: dur, easing: Easing.linear, useNativeDriver: true }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [t, dur]);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: "absolute",
-        left: x0,
-        top: y0,
-        width: size,
-        height: size,
-        borderRadius: size,
-        backgroundColor: seed % 5 === 0 ? "#fff3d0" : seed % 2 === 0 ? "#f2cd6e" : "#e8c87a",
-        opacity: t.interpolate({ inputRange: [0, 0.15, 0.75, 1], outputRange: [0, 0.42, 0.3, 0] }),
-        transform: [
-          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [0, -(60 + (seed % 4) * 18)] }) },
-          {
-            translateX: t.interpolate({
-              inputRange: [0, 0.5, 1],
-              outputRange: [0, (seed % 2 === 0 ? 1 : -1) * (8 + (seed % 3) * 5), (seed % 2 === 0 ? 1 : -1) * (14 + (seed % 3) * 7)],
-            }),
-          },
-        ],
-      }}
-    />
-  );
-};
 
 /** One tier's resolved display state. */
 interface TierEntry {
@@ -357,8 +284,6 @@ const Block = ({ block, counters, worn, onWear }: { block: CodexBlock; counters:
 export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  // Session dev flag, read once per mount — re-enter the screen to apply.
-  const preview = useMemo(() => (devFlags.deedsPreview ? previewState(devFlags.deedsPreview) : null), []);
   const [me, setMe] = useState<AchievementsMe | null | "loading">("loading");
   const [replay, setReplay] = useState<string[] | null>(null);
   // The worn title (deeds/wornTitle.ts) — mirrored into state so the pills
@@ -394,10 +319,10 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
   }, []);
 
   const unlocked = useMemo(
-    () => preview?.unlocked ?? new Set(me !== "loading" && me !== null ? me.unlocks.map((u) => u.id) : []),
-    [me, preview],
+    () => new Set(me !== "loading" && me !== null ? me.unlocks.map((u) => u.id) : []),
+    [me],
   );
-  const counters = preview?.counters ?? (me !== "loading" && me !== null ? me.counters : {});
+  const counters = me !== "loading" && me !== null ? me.counters : {};
   const unlockedAt = useMemo(() => {
     const map = new Map<string, number>();
     if (me !== "loading" && me !== null) for (const u of me.unlocks) map.set(u.id, u.unlockedAt);
@@ -451,13 +376,12 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
     [chapters, collapsedChapters],
   );
 
-  const ready = preview !== null || (me !== "loading" && me !== null);
+  const ready = me !== "loading" && me !== null;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 16 }]}>
-      {Array.from({ length: EMBER_COUNT }, (_, i) => (
-        <Ember key={i} w={width} h={height} seed={i + 7} />
-      ))}
+      {/* the candlelight — rising gold embers (shared with the Primer) */}
+      <Embers w={width} h={height} count={16} seed={7} />
       <ScreenHeader
         style={styles.header}
         onBack={() => {
@@ -515,8 +439,7 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
         </View>
       )}
 
-      {/* No replay during a preview — fake unlocks must never celebrate. */}
-      {replay && preview === null && <DeedReplayOverlay deeds={replay} onDone={() => setReplay(null)} />}
+      {replay && <DeedReplayOverlay deeds={replay} onDone={() => setReplay(null)} />}
     </View>
   );
 };

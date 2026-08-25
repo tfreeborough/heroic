@@ -21,9 +21,12 @@ import {
   ARM_DEADLINE_MS,
   RankedQueue,
   SEASON,
+  canGroup,
   canPair,
+  groupBracket,
   pairBracket,
   ratingWindow,
+  splitTeams,
   type QueueEntry,
 } from "./ranked";
 
@@ -66,6 +69,43 @@ describe("pairBracket", () => {
     const now = 0;
     expect(pairBracket([entry(1500), entry(2200)], now, false).pairs).toEqual([]);
     expect(pairBracket([entry(1500, -120_000), entry(2200)], now, false).pairs).toEqual([[0, 1]]);
+  });
+});
+
+describe("groupBracket + splitTeams (2v2)", () => {
+  const entry = (rating: number, joinedMs = 0) => ({ rating, joinedMs });
+
+  test("takes four contiguous entries in rating order; the leftovers wait", () => {
+    const { sorted, groups } = groupBracket(
+      [entry(1800), entry(1500), entry(1520), entry(1400), entry(1700)],
+      4,
+      0,
+      true,
+    );
+    expect(groups).toEqual([[0, 1, 2, 3]]);
+    expect(sorted.map((e) => e.rating)).toEqual([1400, 1500, 1520, 1700, 1800]);
+  });
+
+  test("three queued form nothing", () => {
+    expect(groupBracket([entry(1500), entry(1500), entry(1500)], 4, 0, true).groups).toEqual([]);
+  });
+
+  test("window mode gates on the group's SPREAD, relenting with the longest wait", () => {
+    const wide = [entry(1400), entry(1500), entry(1600), entry(1700)]; // spread 300 > 100
+    expect(canGroup(wide, 0, false)).toBe(false);
+    expect(groupBracket(wide, 4, 0, false).groups).toEqual([]);
+    // One member waiting 40s widens the window to 300 — the group forms.
+    expect(groupBracket([entry(1400, -40_000), entry(1500), entry(1600), entry(1700)], 4, 0, false).groups).toEqual([
+      [0, 1, 2, 3],
+    ]);
+  });
+
+  test("splitTeams: best + worst vs the middle two", () => {
+    expect(splitTeams([1400, 1500, 1520, 1700])).toEqual([
+      [1400, 1700],
+      [1500, 1520],
+    ]);
+    expect(splitTeams([1500, 1512])).toEqual([[1500], [1512]]);
   });
 });
 
@@ -117,8 +157,8 @@ const until = async (pred: () => boolean, ms = 2000): Promise<void> => {
 const say = (manager: RoomManager, s: FakeSocket, msg: object): void =>
   manager.message(s.ws, JSON.stringify(msg));
 
-const queueJoin = (manager: RoomManager, s: FakeSocket, token: string, name: string): void =>
-  say(manager, s, { t: "queueJoin", v: PROTOCOL_VERSION, token, playerName: name, brackets: ["1v1"] });
+const queueJoin = (manager: RoomManager, s: FakeSocket, token: string, name: string, brackets = ["1v1"]): void =>
+  say(manager, s, { t: "queueJoin", v: PROTOCOL_VERSION, token, playerName: name, brackets });
 
 // Private-member access for hand-driving beats — tests only.
 type Internals = {
@@ -160,7 +200,7 @@ describe("ranked flow", () => {
     const a = makeSocket();
     const b = makeSocket();
     await queueBoth(a, b);
-    expect(a.of("queueStatus")[0]!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }]);
+    expect(a.of("queueStatus")[0]!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }, { bracket: "2v2", size: 0 }]);
 
     internals(manager).rankedBeat();
     for (const s of [a, b]) {
@@ -261,7 +301,7 @@ describe("ranked flow", () => {
     await until(() => room.ranked!.settled);
     queueJoin(manager, twin, tokenA, "Alice");
     await until(() => twin.of("queueStatus").length > 0);
-    expect(twin.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }]);
+    expect(twin.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }, { bracket: "2v2", size: 0 }]);
   });
 
   test("the arm deadline voids the match and locks the idlers out", async () => {
@@ -295,7 +335,7 @@ describe("ranked flow", () => {
     // Alice is re-queued automatically (a fresh queueStatus followed the void)…
     say(manager, a, { t: "queueInfo" });
     const last = a.of("queueStatus").at(-1)!;
-    expect(last["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }]);
+    expect(last["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }, { bracket: "2v2", size: 0 }]);
     // …and Bob is locked out.
     queueJoin(manager, b, tokenB, "Bob");
     await until(() => b.of("reject").length > 0);
@@ -351,7 +391,7 @@ describe("ranked flow", () => {
     await until(() => a.of("queueStatus").length > 0);
     say(manager, a, { t: "createRoom", v: PROTOCOL_VERSION, playerName: "Alice" });
     say(manager, a, { t: "queueInfo" });
-    expect(a.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 0 }]);
+    expect(a.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 0 }, { bracket: "2v2", size: 0 }]);
   });
 });
 
@@ -436,7 +476,7 @@ describe("ranked bot backfill", () => {
     internals(manager).rankedBeat();
 
     expect(manager.roomCount()).toBe(0);
-    expect(a.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }]);
+    expect(a.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }, { bracket: "2v2", size: 0 }]);
   });
 
   test("before the deadline: no bot, and the displayed size is fuzzed", async () => {
@@ -620,6 +660,188 @@ describe("ranked bot backfill", () => {
       .map((s) => (s["players"] as { id: number; lastSeq: number }[]).find((p) => p.id === botSeatId)?.lastSeq ?? 0);
     expect(Math.max(...seqs)).toBeGreaterThan(1); // climbing, not the eternal 0
     expect(JSON.stringify(published)).not.toContain('"bot":true');
+  });
+});
+
+// ── 2v2 solo queue (bits-ranked.md § 2v2 solo queue) ───────────────────────
+
+describe("2v2 solo queue", () => {
+  let db: Db;
+  let manager: RoomManager;
+  let published: { t: string; [k: string]: unknown }[];
+  let tokens: string[];
+
+  /** Backfill ON with a zero wait — the harshest setting for "2v2 never pops
+   * a bot": every 1v1 entry would be overdue on the first beat. */
+  const instantCfg = { enabled: true, minWaitMs: 0, maxWaitMs: 0, ratingJitter: 0 };
+
+  beforeEach(async () => {
+    db = createDb(":memory:");
+    await ensureSchema(db);
+    tokens = [];
+    for (let i = 0; i < 4; i++) tokens.push((await registerPlayer(db)).token);
+    manager = new RoomManager(db, instantCfg);
+    const fake = makeServer();
+    published = fake.published;
+    (manager as unknown as { server: Server<ClientData> }).server = fake.server;
+  });
+
+  const names = ["Alice", "Bob", "Carol", "Dave"];
+
+  const queueFour = async (brackets = ["2v2"]): Promise<FakeSocket[]> => {
+    const socks = names.map(() => makeSocket());
+    socks.forEach((s, i) => queueJoin(manager, s, tokens[i]!, names[i]!, brackets));
+    await until(() => socks.every((s) => s.of("queueStatus").length > 0));
+    return socks;
+  };
+
+  const seedRating = async (token: string, rating: number): Promise<void> => {
+    const rows = await db.execute({ sql: "SELECT player_id FROM player_tokens", args: [] });
+    void rows;
+    const id = (await import("@heroic/blood-in-the-sand-persistence")).findPlayerByToken;
+    const playerId = await id(db, token);
+    await db.execute({
+      sql: `INSERT INTO ranked_ratings (subject_id, season, bracket, rating, wins, losses, peak_rating, updated_at)
+            VALUES (?, ?, '2v2', ?, 10, 10, ?, 0)`,
+      args: [playerId, SEASON, rating, rating],
+    });
+  };
+
+  test("a lone 2v2 queuer NEVER draws a bot, however overdue; the count is honest", async () => {
+    const a = makeSocket();
+    queueJoin(manager, a, tokens[0]!, "Alice", ["2v2"]);
+    await until(() => a.of("queueStatus").length > 0);
+    for (let i = 0; i < 5; i++) internals(manager).rankedBeat();
+    expect(manager.roomCount()).toBe(0);
+    const brackets = a.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number }[];
+    // 1v1 is fuzzed (backfill bracket); 2v2 shows the real 1.
+    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBe(1);
+    expect(brackets.find((b) => b.bracket === "1v1")!.size).toBeGreaterThanOrEqual(1);
+  });
+
+  test("three queued wait; the fourth completes the match into one 2v2 room", async () => {
+    const socks = names.slice(0, 3).map(() => makeSocket());
+    socks.forEach((s, i) => queueJoin(manager, s, tokens[i]!, names[i]!, ["2v2"]));
+    await until(() => socks.every((s) => s.of("queueStatus").length > 0));
+    internals(manager).rankedBeat();
+    expect(manager.roomCount()).toBe(0);
+
+    const d = makeSocket();
+    queueJoin(manager, d, tokens[3]!, "Dave", ["2v2"]);
+    await until(() => d.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
+    expect(manager.roomCount()).toBe(1);
+    const all = [...socks, d];
+    for (const s of all) {
+      expect(s.of("matchFound")).toHaveLength(1);
+      expect(s.of("matchFound")[0]!["bracket"]).toBe("2v2");
+      expect(s.of("welcome")).toHaveLength(1);
+      expect(s.of("welcome")[0]!["teamSize"]).toBe(2);
+    }
+    const room = [...internals(manager).rooms.values()][0]!;
+    expect(room.sim.state.players).toHaveLength(4);
+    for (const account of room.ranked!.accounts.values()) expect(account.bot).toBeUndefined();
+  });
+
+  test("the matcher dictates the sides: best + worst vs the middle two", async () => {
+    await seedRating(tokens[0]!, 1400); // Alice
+    await seedRating(tokens[1]!, 1500); // Bob
+    await seedRating(tokens[2]!, 1520); // Carol
+    await seedRating(tokens[3]!, 1700); // Dave
+    const socks = await queueFour();
+    internals(manager).rankedBeat();
+    expect(manager.roomCount()).toBe(1);
+    const teamOf = (s: FakeSocket) => s.of("welcome")[0]!["team"];
+    expect(teamOf(socks[0]!)).toBe(teamOf(socks[3]!)); // Alice + Dave
+    expect(teamOf(socks[1]!)).toBe(teamOf(socks[2]!)); // Bob + Carol
+    expect(teamOf(socks[0]!)).not.toBe(teamOf(socks[1]!));
+  });
+
+  test("matchEnd settles all four: Elo vs the enemy mean, full Glory each, four wire rows", async () => {
+    await seedRating(tokens[0]!, 1600); // Alice
+    await seedRating(tokens[1]!, 1400); // Bob
+    await seedRating(tokens[2]!, 1500); // Carol
+    await seedRating(tokens[3]!, 1500); // Dave
+    const socks = await queueFour();
+    internals(manager).rankedBeat();
+    const room = [...internals(manager).rooms.values()][0]!;
+    // Sorted 1400 (Bob) 1500 (Carol) 1500 (Dave) 1600 (Alice): Bob + Alice
+    // vs Carol + Dave — means 1500 vs 1500.
+    const aliceTeam = room.sim.state.players[socks[0]!.ws.data.playerId!]!.team as Team;
+    expect(room.sim.state.players[socks[1]!.ws.data.playerId!]!.team).toBe(aliceTeam);
+
+    room.onRankedMatchEnd!(aliceTeam);
+    await until(() => published.some((m) => m.t === "rankedResult"));
+    const result = published.find((m) => m.t === "rankedResult") as unknown as {
+      bracket: string;
+      results: { playerId: number; delta: number; glory: number; placement: unknown }[];
+    };
+    expect(result.bracket).toBe("2v2");
+    expect(result.results).toHaveLength(4);
+    const rowOf = (s: FakeSocket) => result.results.find((r) => r.playerId === s.ws.data.playerId)!;
+    expect(rowOf(socks[0]!).delta).toBe(5); // Alice 1600 vs mean 1500, K=15
+    expect(rowOf(socks[1]!).delta).toBe(10); // Bob 1400 vs 1500 — the underdog earns more
+    expect(rowOf(socks[2]!).delta).toBe(-7);
+    expect(rowOf(socks[3]!).delta).toBe(-7);
+    for (const s of socks.slice(0, 2)) expect(rowOf(s).glory).toBe(23);
+    for (const s of socks.slice(2)) expect(rowOf(s).glory).toBe(5);
+    for (const s of socks) expect(rowOf(s).placement).toBeNull(); // seeded past placements
+
+    // Ladder + ledger agree, per member.
+    expect((await getRating(db, socks[0]!.ws.data.accountId!, SEASON, "2v2")).rating).toBe(1605);
+    expect((await getRating(db, socks[1]!.ws.data.accountId!, SEASON, "2v2")).rating).toBe(1410);
+    expect(await gloryBalance(db, socks[1]!.ws.data.accountId!)).toBe(23);
+    expect(await gloryBalance(db, socks[3]!.ws.data.accountId!)).toBe(5);
+    const players = await db.execute("SELECT subject_id FROM ranked_match_players");
+    expect(players.rows).toHaveLength(4);
+  });
+
+  test("a four-seat void: the leaver is locked out, the other three go straight back in line", async () => {
+    const socks = await queueFour();
+    internals(manager).rankedBeat();
+    expect(manager.roomCount()).toBe(1);
+
+    say(manager, socks[2]!, { t: "leaveRoom" }); // Carol bails during arming
+    internals(manager).tendRankedRooms(performance.now());
+    expect(manager.roomCount()).toBe(0);
+
+    say(manager, socks[0]!, { t: "queueInfo" });
+    const brackets = socks[0]!.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number }[];
+    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBe(3);
+    queueJoin(manager, socks[2]!, tokens[2]!, "Carol", ["2v2"]);
+    await until(() => socks[2]!.of("reject").length > 0);
+    expect(socks[2]!.of("reject")[0]!["reason"]).toContain("lockout");
+  });
+
+  test("multi-queue: 1v1 + 2v2 at once, the first match wins and the other entry evaporates", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    queueJoin(manager, a, tokens[0]!, "Alice", ["1v1", "2v2"]);
+    queueJoin(manager, b, tokens[1]!, "Bob", ["1v1", "2v2"]);
+    await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
+    expect(manager.roomCount()).toBe(1);
+    expect(a.of("matchFound")[0]!["bracket"]).toBe("1v1");
+    expect(a.ws.data.roomCode).toBe(b.ws.data.roomCode);
+    const outsider = makeSocket();
+    say(manager, outsider, { t: "queueInfo" });
+    const brackets = outsider.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number }[];
+    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBe(0);
+  });
+
+  test("re-sending the bracket set keeps the wait already earned", async () => {
+    const a = makeSocket();
+    queueJoin(manager, a, tokens[0]!, "Alice", ["1v1"]);
+    await until(() => a.of("queueStatus").length > 0);
+    const queues = (manager as unknown as { queue: { queues: Map<string, QueueEntry[]> } }).queue.queues;
+    // Age the 1v1 entry by hand, then add 2v2 the way the client does — one
+    // queueJoin naming both brackets.
+    queues.get("1v1")![0]!.joinedMs -= 30_000;
+    const earned = queues.get("1v1")![0]!.joinedMs;
+    queueJoin(manager, a, tokens[0]!, "Alice", ["1v1", "2v2"]);
+    await until(() => a.of("queueStatus").length > 1);
+    expect(queues.get("1v1")![0]!.joinedMs).toBe(earned); // not reset
+    expect(queues.get("2v2")![0]!.joinedMs).toBeGreaterThan(earned); // fresh line, fresh wait
   });
 });
 

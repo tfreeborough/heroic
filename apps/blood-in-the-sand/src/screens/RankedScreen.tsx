@@ -1,14 +1,14 @@
 /**
  * The ranked home (bits-ranked.md § the ranked screen) — what the RANKED card
- * opens. Not a queueing spinner: your standing, the bracket cards (1v1 live
- * in Season I, future brackets shown locked for aspiration), the live queue
- * population, and the queue/cancel flow. When a match is found the server
- * seats us itself — the welcome flips the app into the room flow and this
- * screen simply stops rendering; after the match, roomClosed lands us back
- * here with the settlement banner still up.
- *
- * Bracket-card art is owed to the Forge — cards paint the mode-select
- * gradient fallback until the PNGs land.
+ * opens. Not a queueing spinner: your standing (per bracket — the pills on
+ * the panel pick which ladder it shows), the bracket cards with their live
+ * queue populations, and the queue/cancel flow. Both brackets are live since
+ * the 2v2 solo queue (2026-08-24): each card queues its own ladder and you
+ * may wait in both at once — MULTI-QUEUE, first match found wins, the other
+ * line is left for you. When a match is found the server seats us itself —
+ * the welcome flips the app into the room flow and this screen simply stops
+ * rendering; after the match, roomClosed lands us back here with the
+ * settlement banner still up.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
@@ -74,6 +74,14 @@ const GREYSCALE = [
   0, 0, 0, 1, 0,
 ];
 const LOCKED_ART_OPACITY = 0.28;
+
+/** The live brackets, in card order, with their card copy. Keys are the
+ * protocol's RANKED_BRACKETS; the copy is the card's sell. */
+const LIVE_BRACKETS: readonly { key: string; pitch: string }[] = [
+  { key: "1v1", pitch: "One life a round. First to three rounds. Your rating on the line." },
+  { key: "2v2", pitch: "Two a side, matched by rating. Whoever the sand sends stands with you." },
+];
+const DEFAULT_FOCUS = "1v1";
 
 /** How often to refresh the population display while NOT queued (the server
  * pushes queueStatus every matcher beat once we are). */
@@ -153,13 +161,20 @@ const BracketArt = ({ art, w, h, locked }: { art: number | null; w: number; h: n
 export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScreenProps) => {
   const insets = useSafeAreaInsets();
   const [identity, setIdentity] = useState<Identity | null | "loading">("loading");
-  const [standing, setStanding] = useState<RankedBracketStanding | null>(null);
+  const [standings, setStandings] = useState<RankedBracketStanding[] | null>(null);
+  // Which ladder the standing panel shows. A settlement pulls focus to its
+  // bracket so the post-match number is the one on screen.
+  const [focus, setFocus] = useState<string>(DEFAULT_FOCUS);
   const pulse = useRef(new Animated.Value(0)).current;
 
   // Identity + standing. The settlement key re-fetches the standing after a
   // match so the header always shows the post-match number even if the
   // ceremony banner is dismissed.
   const settlementKey = client.rankedResult?.matchId ?? "";
+  const settlementBracket = client.rankedResult?.bracket;
+  useEffect(() => {
+    if (settlementBracket) setFocus(settlementBracket);
+  }, [settlementKey, settlementBracket]);
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -172,7 +187,7 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
       setIdentity(id);
       if (!id) return;
       const me = await fetchRankedMe(id);
-      if (live && me) setStanding(me.brackets.find((b) => b.bracket === "1v1") ?? null);
+      if (live && me) setStandings(me.brackets);
     })();
     return () => {
       live = false;
@@ -202,9 +217,12 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
   }, [client.queued, pulse]);
 
 
-  const oneVOne = client.queueStatus.find((b) => b.bracket === "1v1");
-  const queueSize = oneVOne?.size ?? 0;
-  const waitedSec = oneVOne?.waitedSec;
+  const statusOf = (bracket: string) => client.queueStatus.find((b) => b.bracket === bracket);
+  /** The brackets THIS socket is waiting in right now (server truth). */
+  const queuedIn = client.queueStatus.filter((b) => b.waitedSec !== undefined).map((b) => b.bracket);
+  // One timer for the whole search — the longest of the waits.
+  const waitedSec = queuedIn.length > 0 ? Math.max(...queuedIn.map((b) => statusOf(b)!.waitedSec!)) : undefined;
+  const standing = standings?.find((b) => b.bracket === focus) ?? null;
   const settlement = client.lastSettlement;
   // The ceremony (bits-ranked.md § ceremony): one full-screen reveal per
   // settlement, then never again — dismissal re-renders via the reducer.
@@ -243,20 +261,25 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
   const displayWait =
     waitAnchor.current === null ? 0 : Math.max(0, Math.floor((performance.now() - waitAnchor.current) / 1000));
 
-  const canQueue = identity !== null && identity !== "loading" && !client.queued;
+  const canQueue = identity !== null && identity !== "loading";
 
-  const enterQueue = (): void => {
+  /** Join a bracket's line — ADDING it to any line we're already in (the
+   * server keeps the wait earned in each; multi-queue, first match wins). */
+  const enterQueue = (bracket: string): void => {
     if (identity === null || identity === "loading") return;
     unlockAudio();
     playSound("uiConfirm"); // joining the line is a plain confirm — the
     // queueMatchFound summons plays when the matcher SEATS you (RoomScreen).
-    client.queueRanked(playerName, identity.token);
+    client.queueRanked(playerName, identity.token, [...new Set([...queuedIn, bracket])]);
   };
 
-  const leaveQueue = (): void => {
+  /** Leave one bracket's line; leaving the last one leaves the queue. */
+  const leaveQueue = (bracket: string): void => {
     unlockAudio();
     playSound("uiBack");
-    client.queueLeave();
+    const rest = queuedIn.filter((b) => b !== bracket);
+    if (rest.length === 0 || identity === null || identity === "loading") client.queueLeave();
+    else client.queueRanked(playerName, identity.token, rest);
   };
 
   const back = (): void => {
@@ -277,13 +300,14 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
           panel sells the reveal instead of showing a meaningless 1500. */}
       {placing ? (
         <View style={styles.standing}>
+          <BracketPills focus={focus} onFocus={setFocus} />
           <View style={styles.standingTop}>
             <View style={styles.standingLeft}>
               <Text style={styles.tier}>PLACEMENTS</Text>
               <Text style={styles.record}>
                 {standing
-                  ? `${standing.placementsLeft} match${standing.placementsLeft === 1 ? "" : "es"} until your rank is forged · 1v1`
-                  : "1v1"}
+                  ? `${standing.placementsLeft} match${standing.placementsLeft === 1 ? "" : "es"} until your rank is forged · ${focus}`
+                  : focus}
               </Text>
             </View>
             <Text style={styles.rating}>{standing ? `${played}/${played + standing.placementsLeft}` : "—"}</Text>
@@ -291,6 +315,7 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
         </View>
       ) : (
         <View style={styles.standing}>
+          <BracketPills focus={focus} onFocus={setFocus} />
           {/* Row 1 is deliberately sparse — badge, title block, rating and
               NOTHING else, so "PIT FIGHTER III" never fights a second column
               for width on a small screen (it auto-shrinks before wrapping). */}
@@ -303,7 +328,7 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
               <Text style={styles.tier} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                 {rankName(standing!.tier, standing!.division).toUpperCase()}
               </Text>
-              <Text style={styles.record}>{`${standing!.wins}W · ${standing!.losses}L · 1v1`}</Text>
+              <Text style={styles.record}>{`${standing!.wins}W · ${standing!.losses}L · ${focus}`}</Text>
             </View>
             <View style={styles.ratingCol}>
               <Text style={styles.rating}>{standing!.rating}</Text>
@@ -339,7 +364,7 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
       {settlement && (
         <View style={[styles.settle, settlement.won ? styles.settleWin : styles.settleLoss]}>
           <Text style={[styles.settleTitle, settlement.won ? styles.settleTitleWin : styles.settleTitleLoss]}>
-            {settlement.won ? "VICTORY" : "DEFEAT"}
+            {`${settlement.won ? "VICTORY" : "DEFEAT"} · ${settlement.bracket}`}
           </Text>
           <Text style={styles.settleLine}>
             {settlement.mine.placement
@@ -353,52 +378,54 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
       )}
 
       <View style={styles.cards}>
-        {/* 1v1 — Season I's one live bracket. A populated queue is the card's
-            best advert: the count sits big beside the copy (its own layout
-            column — never overlapping). An empty queue advertises nothing. */}
-        <View style={[styles.card, styles.cardLive]}>
-          <CardBody
-            locked={false}
-            art={BRACKET_ART["1v1"]}
-            aside={
-              queueSize > 0 ? (
-                <View style={styles.queueBadge}>
-                  <Text style={styles.queueBadgeNum}>{queueSize}</Text>
-                  <Text style={styles.queueBadgeLabel}>IN QUEUE</Text>
-                </View>
-              ) : null
-            }
-          >
-            <Text style={styles.cardTitle}>1v1</Text>
-            <Text style={styles.cardPitch}>One life a round. First to three rounds. Your rating on the line.</Text>
-            {client.queued ? (
-              <View style={styles.queueRow}>
-                <Animated.Text style={[styles.searching, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }]}>
-                  SEARCHING · {formatWait(displayWait)}
-                </Animated.Text>
-                <Pressable onPress={leaveQueue} style={[styles.cta, styles.ctaGhost]}>
-                  <Text style={styles.ctaText}>CANCEL</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={enterQueue}
-                style={[styles.cta, !canQueue && styles.ctaDisabled]}
-                disabled={!canQueue}
+        {/* One live card per bracket. A populated queue is the card's best
+            advert: the count sits big beside the copy (its own layout column
+            — never overlapping). An empty queue advertises nothing. 2v2's
+            count is honest by construction (no bot backfill there). */}
+        {LIVE_BRACKETS.map(({ key, pitch }) => {
+          const size = statusOf(key)?.size ?? 0;
+          const inLine = queuedIn.includes(key);
+          return (
+            <View key={key} style={[styles.card, styles.cardLive]}>
+              <CardBody
+                locked={false}
+                art={BRACKET_ART[key] ?? null}
+                aside={
+                  size > 0 ? (
+                    <View style={styles.queueBadge}>
+                      <Text style={styles.queueBadgeNum}>{size}</Text>
+                      <Text style={styles.queueBadgeLabel}>IN QUEUE</Text>
+                    </View>
+                  ) : null
+                }
               >
-                <Text style={styles.ctaText}>QUEUE FOR 1v1</Text>
-              </Pressable>
-            )}
-          </CardBody>
-        </View>
-
-        {/* Future brackets — closed doors are part of the sell. */}
-        <View style={[styles.card, styles.cardLocked]}>
-          <CardBody locked art={BRACKET_ART["2v2"]}>
-            <Text style={[styles.cardTitle, styles.cardTitleDim]}>2v2</Text>
-            <Text style={[styles.cardPitch, styles.cardPitchDim]}>A future season. Bring a friend.</Text>
-          </CardBody>
-        </View>
+                <Text style={styles.cardTitle}>{key}</Text>
+                <Text style={styles.cardPitch}>{pitch}</Text>
+                {inLine ? (
+                  <View style={styles.queueRow}>
+                    <Animated.Text
+                      style={[styles.searching, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) }]}
+                    >
+                      SEARCHING · {formatWait(displayWait)}
+                    </Animated.Text>
+                    <Pressable onPress={() => leaveQueue(key)} style={[styles.cta, styles.ctaGhost]}>
+                      <Text style={styles.ctaText}>CANCEL</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => enterQueue(key)}
+                    style={[styles.cta, client.queued && styles.ctaGhost, !canQueue && styles.ctaDisabled]}
+                    disabled={!canQueue}
+                  >
+                    {/* Already searching elsewhere: this card ADDS its line. */}
+                    <Text style={styles.ctaText}>{client.queued ? `ALSO QUEUE ${key}` : `QUEUE FOR ${key}`}</Text>
+                  </Pressable>
+                )}
+              </CardBody>
+            </View>
+          );
+        })}
       </View>
 
       {identity === null && (
@@ -420,6 +447,28 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
     </View>
   );
 };
+
+/** The standing panel's ladder picker — one pill per live bracket. The
+ * ratings are independent ladders (bits-ranked.md § brackets), so the panel
+ * shows one at a time rather than averaging anything. */
+const BracketPills = ({ focus, onFocus }: { focus: string; onFocus: (bracket: string) => void }) => (
+  <View style={styles.pills}>
+    {LIVE_BRACKETS.map(({ key }) => (
+      <Pressable
+        key={key}
+        onPress={() => {
+          if (key === focus) return;
+          unlockAudio();
+          playSound("uiConfirm");
+          onFocus(key);
+        }}
+        style={[styles.pill, key === focus && styles.pillOn]}
+      >
+        <Text style={[styles.pillText, key === focus && styles.pillTextOn]}>{key}</Text>
+      </Pressable>
+    ))}
+  </View>
+);
 
 /** How many rating points a win is worth, roughly — K=15 post-placements
  * against an even opponent pays ~8. Presentation heuristic only (the real
@@ -528,6 +577,18 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   standingTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  // The ladder picker: quiet pills, the focused one lit in the panel's gold.
+  pills: { flexDirection: "row", gap: 6 },
+  pill: {
+    borderWidth: 1,
+    borderColor: "#4a3b26",
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 12,
+  },
+  pillOn: { borderColor: "#e8c87a", backgroundColor: "#2a2118" },
+  pillText: { color: "#8a7f70", fontSize: 10, fontWeight: "800", letterSpacing: 2 },
+  pillTextOn: { color: "#e8c87a" },
   badge: { width: 52, height: 52, marginRight: 12, flexShrink: 0 },
   // flex: 1 so the long placement copy wraps INSIDE the panel instead of
   // shoving the number out of the row; the number never shrinks.
@@ -595,8 +656,9 @@ const styles = StyleSheet.create({
   },
   // Capped so the card's aspect stays near the 2.5:1 art band — uncapped it
   // grew near-square and even a right-anchored crop lost most of the scene.
-  cardLive: { maxHeight: 230 },
-  cardLocked: { borderColor: "#4a3b26", maxHeight: 110 },
+  // Two live cards now share the column (2v2, 2026-08-24) — capped a touch
+  // lower than the single-card 230 so both keep a scene on small screens.
+  cardLive: { maxHeight: 200 },
   cardFill: { flex: 1 },
   cardCopy: {
     flex: 1,
@@ -615,9 +677,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
-  cardTitleDim: { color: "#cfc4b0" },
   cardPitch: { color: "#d9cbb4", fontSize: 13, lineHeight: 18, maxWidth: 260 },
-  cardPitchDim: { color: "#8d8272" },
   // The live-population count: a static layout column beside the copy.
   queueBadge: { alignItems: "center", flexShrink: 0 },
   queueBadgeNum: {

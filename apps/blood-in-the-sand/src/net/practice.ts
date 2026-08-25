@@ -57,7 +57,6 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
 import { getWornTitle } from "../deeds/wornTitle";
-import { devFlags } from "../dev";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
 
 const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus", "Spartacus", "Agron", "Duro"];
@@ -292,20 +291,16 @@ export class PracticeClient implements LobbyClient {
     inputs.set(0, { seq: this.seq++, sx, sy, casts });
     for (const [id, seat] of this.bots) {
       // Stale WORLD, current self: the tier's reaction time is how old a view
-      // of everyone else this bot acts on; its own body it always knows. The
-      // dev menu's session overrides trump the lobby pick (bits-dev-menu.md).
-      const difficulty = devFlags.botDifficulty ?? seat.difficulty;
+      // of everyone else this bot acts on; its own body it always knows.
+      const difficulty = seat.difficulty;
       const tier = DIFFICULTIES[difficulty];
       // The tier's speed multiplier is a HOST-side sim write (never on the
-      // wire) — re-asserted each tick so a dev-menu tier flip applies live.
+      // wire) — re-asserted each tick.
       const body = this.sim.state.players[id];
       if (body) body.moveFactor = tier.speedFactor;
       const world = this.history.stale(tier.reactionTicks) ?? this.lastSnap;
       const snap = this.lastSnap.players.find((p) => p.id === id);
-      const decision = botThink(seat.memory, snap, world, this.nav, {
-        difficulty,
-        archetype: devFlags.botArchetype ?? undefined,
-      });
+      const decision = botThink(seat.memory, snap, world, this.nav, { difficulty });
       inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
     }
     this.step(inputs);

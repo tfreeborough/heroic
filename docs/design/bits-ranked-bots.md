@@ -3,7 +3,15 @@
 Status: **BUILT 2026-08-01** (steps 1–7 including the ceremony hold + client
 touches; on-device pass owed — see § verification) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-08-01
+Last decided: 2026-08-24
+
+> **Scope: 1v1 only.** Decided 2026-08-24 with the 2v2 design (bits-ranked.md
+> § 2v2 solo queue): backfill never fires in team brackets — a bot teammate feels
+> awful and a disguised ally is far easier to catch out than a disguised enemy.
+> `RANKED_BRACKETS` carries the per-bracket `botBackfill` flag; the queue-size fuzz
+> below is likewise per-bracket and 2v2 shows honest counts. Since the same build the
+> bot's fabricated side also lands in `ranked_match_players` (history, like
+> `ranked_matches`) — `ranked_ratings` and `glory_ledger` stay bot-free as before.
 
 Build-time deviations (all minor):
 

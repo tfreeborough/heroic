@@ -173,7 +173,9 @@ what's next.
     killer-instinct, never-doubted) + lifeblood now reads healingDealt.
     New accumulator tallies: crits, roundWinners (events already carried
     the data — no sim/wire change). PLACEHOLDER TITLES (Tom's naming pass
-    owed), thresholds: 7 reflects/10 crits (Tom-tuned), 300 dmg still a first guess, 8 icon
+    owed), thresholds: 7 reflects/10 crits (Tom-tuned), 750 dmg (was 300 —
+    first-win audit 2026-08-25, which also made still-standing an
+    undying-streak milestone and Lights Out 5 kills; achievements.md), 8 icon
     subjects briefed in the style bible (DEED_ICONS null until forged —
     next Realmsmith session). Feats deliberately cascade (a perfect match
     pops Not a Scratch + Flawless + Still Standing together).

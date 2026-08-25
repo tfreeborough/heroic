@@ -4,10 +4,9 @@ import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Blur, Canvas, Fill, Group, Oval, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
-import { ARCHETYPE_IDS, DIFFICULTY_IDS } from "@heroic/blood-in-the-sand-sim";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { devFlags } from "../dev";
-import { devGrant, devResetPurchases, ensureIdentity, fetchAchievements, fetchWallet, type Wallet } from "../net/api";
+import { devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
 import { setEntitlements } from "../deeds/entitlements";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import type { RankedResultRow } from "../net/connection";
@@ -24,12 +23,13 @@ export interface HomeScreenProps {
   /** → the Armory (bits-store.md) — the store's front door. */
   onArmory: () => void;
   onSettings: () => void;
-  /** Dev menu: start the target-dummy firing range (offline, respawning dummies). */
-  onTargetDummies: () => void;
   /** Dev menu: raise the first-win account sheet on demand and re-arm its
    * once-per-install flag (bits-accounts.md). Absent = no Clerk key shipped,
    * so the row hides (the sheet can't mount without the provider). */
   onRehearseFirstWin?: () => void;
+  /** Dev menu: replay the Primer (bits-onboarding.md) and re-arm its
+   * once-per-install flag, so the real first-PLAY trigger can be re-tested. */
+  onReplayPrimer: () => void;
   /** A downloaded OTA update is staged — show the restart pill. */
   updateReady: boolean;
   /** Restart into the staged update (instant JS reload). */
@@ -67,7 +67,7 @@ const REHEARSAL_ROW: RankedResultRow = {
 
 /** A spread of deed shapes for the rehearsal: the root feat, an early kill
  * milestone, and a titled chain tier — three cards, three reveal flavours. */
-const REHEARSAL_DEEDS = ["sworn-to-the-sand", "killing-blows-1", "ranked-wins-5"];
+const REHEARSAL_DEEDS = ["sworn-to-the-sand", "killing-blows-5", "ranked-wins-5"];
 
 /** Drifting sunlit dust motes over the scene. */
 const MOTE_COUNT = 14;
@@ -346,8 +346,8 @@ export const HomeScreen = ({
   onPlay,
   onArmory,
   onSettings,
-  onTargetDummies,
   onRehearseFirstWin,
+  onReplayPrimer,
   updateReady,
   onApplyUpdate,
 }: HomeScreenProps) => {
@@ -358,47 +358,15 @@ export const HomeScreen = ({
   const [playBox, setPlayBox] = useState<{ w: number; h: number } | null>(null);
   // Mirror devFlags so the toggle labels re-render on tap.
   const [perfOverlay, setPerfOverlay] = useState(devFlags.perfOverlay);
-  const [sfxOff, setSfxOff] = useState(devFlags.disableSfx);
-  const [hapticsOff, setHapticsOff] = useState(devFlags.disableHaptics);
-  const [botArchetype, setBotArchetype] = useState(devFlags.botArchetype);
-  const [botDifficulty, setBotDifficulty] = useState(devFlags.botDifficulty);
-  const [deedsPreview, setDeedsPreview] = useState(devFlags.deedsPreview);
-  const [grantAllItems, setGrantAllItems] = useState(devFlags.grantAllItems);
   // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
   // session-only devFlags rows — App.tsx applies it on launch; this label
   // just needs the same stored value.
   const [announcer, setAnnouncer] = useState<AnnouncerPackId>("default");
   // Full post-match ceremony on fake data — see REHEARSAL_ROW above.
   const [deedRehearsal, setDeedRehearsal] = useState(false);
-  // Store testing (bits-store.md): live balances shown while the menu is
-  // open; the GRANT rows hit dev-only API endpoints (STORE_DEV_TOOLS=1) and
-  // are inert against a production API.
-  const [devWallet, setDevWallet] = useState<Wallet | null>(null);
   useEffect(() => {
     void loadAnnouncerPack().then(setAnnouncer);
   }, []);
-  useEffect(() => {
-    if (!devOpen) return;
-    let live = true;
-    void (async () => {
-      const identity = await ensureIdentity();
-      if (!identity || !live) return;
-      const wallet = await fetchWallet(identity);
-      if (live && wallet) setDevWallet(wallet);
-    })();
-    return () => {
-      live = false;
-    };
-  }, [devOpen]);
-
-  const onDevGrant = (grant: { glory?: number; signets?: number }) => (): void => {
-    void (async () => {
-      const identity = await ensureIdentity();
-      if (!identity) return;
-      const wallet = await devGrant(identity, grant);
-      if (wallet) setDevWallet(wallet);
-    })();
-  };
   const knock = useRef({ count: 0, lastMs: 0 });
 
   // The forged backdrop owns the screen when it exists; the painted scene
@@ -447,49 +415,6 @@ export const HomeScreen = ({
   const onTogglePerf = (): void => {
     devFlags.perfOverlay = !devFlags.perfOverlay;
     setPerfOverlay(devFlags.perfOverlay);
-  };
-
-  const onToggleSfx = (): void => {
-    devFlags.disableSfx = !devFlags.disableSfx;
-    setSfxOff(devFlags.disableSfx);
-  };
-
-  const onToggleHaptics = (): void => {
-    devFlags.disableHaptics = !devFlags.disableHaptics;
-    setHapticsOff(devFlags.disableHaptics);
-  };
-
-  // Matchup testing (bot-brains.md step 5): cycle every practice bot through
-  // a pinned archetype / difficulty; null = the normal behaviour (archetype
-  // from loadout, tier from the practice lobby's pick).
-  const onCycleBotArchetype = (): void => {
-    const ring = [null, ...ARCHETYPE_IDS] as const;
-    const next = ring[(ring.indexOf(devFlags.botArchetype) + 1) % ring.length]!;
-    devFlags.botArchetype = next;
-    setBotArchetype(next);
-  };
-
-  const onCycleBotDifficulty = (): void => {
-    const ring = [null, ...DIFFICULTY_IDS] as const;
-    const next = ring[(ring.indexOf(devFlags.botDifficulty) + 1) % ring.length]!;
-    devFlags.botDifficulty = next;
-    setBotDifficulty(next);
-  };
-
-  // Deed Map preview — fake unlock states for board testing without the
-  // grind (achievements.md; read on DeedsScreen mount, session-only).
-  const onCycleDeedsPreview = (): void => {
-    const ring = [null, "some", "all"] as const;
-    const next = ring[(ring.indexOf(devFlags.deedsPreview) + 1) % ring.length]!;
-    devFlags.deedsPreview = next;
-    setDeedsPreview(next);
-  };
-
-  // Grant every gated item this session (bits-secret-items.md) — the wizard
-  // shows unearned steel in practice/skirmish; ranked still validates.
-  const onToggleGrantItems = (): void => {
-    devFlags.grantAllItems = !devFlags.grantAllItems;
-    setGrantAllItems(devFlags.grantAllItems);
   };
 
   // Cycle the announcer voice — applied live + persisted, then the new pack's
@@ -675,32 +600,8 @@ export const HomeScreen = ({
               <Text style={styles.devClose}>✕</Text>
             </Pressable>
           </View>
-          <Pressable onPress={withTap("uiConfirm", onTargetDummies)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>TARGET DUMMIES</Text>
-          </Pressable>
           <Pressable onPress={withTap("uiTap", onTogglePerf)} style={styles.devButton}>
             <Text style={styles.devButtonText}>PERF OVERLAY {perfOverlay ? "◉ ON" : "○ OFF"}</Text>
-          </Pressable>
-          {/* Perf A/B: kills playSound outright (scheduler + native calls), so a
-              choppy device can answer "is it the audio?" in one toggle. */}
-          <Pressable onPress={withTap("uiTap", onToggleSfx)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>SFX {sfxOff ? "○ KILLED" : "◉ ON"}</Text>
-          </Pressable>
-          {/* Same A/B for the other per-moment native cost (iOS allocates a
-              feedback generator per pulse). */}
-          <Pressable onPress={withTap("uiTap", onToggleHaptics)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>HAPTICS {hapticsOff ? "○ KILLED" : "◉ ON"}</Text>
-          </Pressable>
-          {/* Bot-brain overrides for practice matchup testing — tap to cycle. */}
-          <Pressable onPress={withTap("uiTap", onCycleBotArchetype)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>
-              BOT BRAIN {botArchetype ? `◉ ${botArchetype.toUpperCase()}` : "○ FROM LOADOUT"}
-            </Text>
-          </Pressable>
-          <Pressable onPress={withTap("uiTap", onCycleBotDifficulty)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>
-              BOT TIER {botDifficulty ? `◉ ${botDifficulty.toUpperCase()}` : "○ FROM LOBBY"}
-            </Text>
           </Pressable>
           {/* The announcer voice — the one PERSISTED row (a real device
               setting auditioned from here until the store exists). */}
@@ -722,39 +623,13 @@ export const HomeScreen = ({
               <Text style={styles.devButtonText}>FIRST-WIN NUDGE ▶</Text>
             </Pressable>
           ) : null}
-          {/* Deed Map preview — REAL server data / SOME (frontier on show) /
-              ALL unlocked. Applies next time the deeds screen opens. */}
-          <Pressable onPress={withTap("uiTap", onCycleDeedsPreview)} style={styles.devButton}>
-            <Text style={styles.devButtonText}>
-              DEEDS {deedsPreview ? `◉ ${deedsPreview.toUpperCase()} UNLOCKED` : "○ REAL DATA"}
-            </Text>
-          </Pressable>
-          {/* Session grant of every gated item — the wizard shows the trident
-              etc. in practice/skirmish; RANKED still checks the real ledger.
-              Debug builds only: in a shipped build this row would hand out
-              the Armory's paid shelf in skirmish (store-security pass). */}
-          {__DEV__ ? (
-            <Pressable onPress={withTap("uiTap", onToggleGrantItems)} style={styles.devButton}>
-              <Text style={styles.devButtonText}>
-                ITEMS {grantAllItems ? "◉ ALL GRANTED" : "○ EARNED ONLY"}
-              </Text>
-            </Pressable>
-          ) : null}
-          {/* Store testing (bits-store.md): real server balances; the grant
-              rows need the API running with STORE_DEV_TOOLS=1. */}
-          <Pressable onPress={withTap("uiTap", onDevGrant({}))} style={styles.devButton}>
-            <Text style={styles.devButtonText}>
-              WALLET {devWallet ? `${devWallet.glory.toLocaleString()} GLORY · ${devWallet.signets} SIGNET${devWallet.signets === 1 ? "" : "S"}` : "—"}
-            </Text>
-          </Pressable>
-          <Pressable onPress={withTap("uiConfirm", onDevGrant({ glory: 500 }))} style={styles.devButton}>
-            <Text style={styles.devButtonText}>GRANT 500 GLORY</Text>
-          </Pressable>
-          <Pressable onPress={withTap("uiConfirm", onDevGrant({ signets: 1 }))} style={styles.devButton}>
-            <Text style={styles.devButtonText}>GRANT 1 SIGNET</Text>
+          {/* The Primer on demand + its flag re-armed (bits-onboarding.md). */}
+          <Pressable onPress={withTap("uiTap", onReplayPrimer)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>PRIMER ▶</Text>
           </Pressable>
           {/* Forget every Signet purchase (server + local cache) so the unlock
-              flow can be re-tested end to end. Deed grants survive. */}
+              flow can be re-tested end to end (dev API only, STORE_DEV_TOOLS=1;
+              inert against production). Deed grants survive. */}
           <Pressable
             onPress={withTap("uiTap", () => {
               void (async () => {

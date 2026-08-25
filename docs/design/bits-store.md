@@ -274,6 +274,9 @@ Glory→Writ rate so it never becomes the rational permanent path.
    GLORY / GRANT 1 WRIT rows (inert against a prod API). Verified: 9 store
    money-math tests + full persistence/sim/server suites + a live curl smoke of
    every endpoint path incl. idempotent retry.
+   *(2026-08-25: `/dev/grant`, `devGrant` and the dev-menu WALLET/GRANT rows
+   were retired — bits-dev-menu.md § retired rows. `/dev/reset-purchases` and
+   the mock IAP arm remain the `STORE_DEV_TOOLS` dev paths.)*
 2. **S2 — the Armory screen — BUILT 2026-08-15** (`ArmoryScreen.tsx`). As built:
    two doors (home-screen ARMORY button; the mode-select Glory pill is now
    tappable — back retraces whichever door was used); header purse shows Glory

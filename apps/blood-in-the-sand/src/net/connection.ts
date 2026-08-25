@@ -219,7 +219,7 @@ export class ArenaClient {
   /** My side of that settlement, resolved WHILE the seat still existed (the
    * result rows are keyed by in-room seat id, which means nothing once
    * welcome is gone). RankedScreen reads this after the room closes. */
-  lastSettlement: { won: boolean; mine: RankedResultRow; theirs: RankedResultRow | null } | null = null;
+  lastSettlement: { won: boolean; bracket: string; mine: RankedResultRow; others: RankedResultRow[] } | null = null;
   /** MY newly-unlocked deeds from the last settle (achievements.md § unlock
    * ceremony) — the server sends them per-socket, so this is never the
    * opponent's list. Survives the room closing like rankedResult (the
@@ -375,8 +375,11 @@ export class ArenaClient {
         if (mine && this.welcome) {
           this.lastSettlement = {
             won: this.welcome.team === msg.winnerTeam,
+            bracket: msg.bracket,
             mine,
-            theirs: msg.results.find((r) => r.playerId !== myId) ?? null,
+            // Every other seat's row — one opponent in 1v1, a teammate and
+            // two opponents in 2v2 (rows carry no team; the roster does).
+            others: msg.results.filter((r) => r.playerId !== myId),
           };
         }
         // The settlement outran the phase flip (a pre-ceremony-hold server
@@ -421,7 +424,9 @@ export class ArenaClient {
 
   /** Enter the ranked queue (bits-ranked.md). `token` is the persistence
    * bearer secret from ensureIdentity(); the server derives who we are from
-   * it — no claimed id rides the wire. */
+   * it — no claimed id rides the wire. `brackets` is the FULL set to wait in
+   * (multi-queue, first match wins): re-sending with a different set adds or
+   * drops brackets, and the server keeps the wait already earned in each. */
   queueRanked(playerName: string, token: string, brackets: string[] = ["1v1"]): void {
     this.lastError = null;
     this.rankedResult = null; // a fresh campaign — the old ceremony is done

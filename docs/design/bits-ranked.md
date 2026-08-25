@@ -1,11 +1,11 @@
 # Blood in the Sand — Ranked, Ratings & the Queue
 
 Status: **designed 2026-07-28 · revised 2026-07-29 · M1+M2+M3 BUILT 2026-07-29 ·
-display v2 + 14-rung divisions BUILT 2026-07-30** (rating core + schema + server
-queue/ranked rooms/recorder + client — protocol v19; on-device pass + M4 ladder
-polish pending) ·
+display v2 + 14-rung divisions BUILT 2026-07-30 · 2v2 solo queue DESIGNED +
+BUILT 2026-08-24 (protocol v29)** (rating core + schema + server queue/ranked
+rooms/recorder + client; on-device pass + M4 ladder polish pending) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-30
+Last decided: 2026-08-24
 
 > Season I: solo-queue 1v1 ranked with Elo ratings, tier badges, and Glory payouts
 > scaled by opponent difficulty — reached through a dedicated ranked screen built to
@@ -18,9 +18,11 @@ Last decided: 2026-07-30
 ## Decisions locked
 
 1. **Brackets, each with its own rating** *(revised 2026-07-29)*. A bracket is a ranked
-   format — `1v1` now; `2v2`, `3v3`, premade-team ladders later. **A player's rating is
+   format — `1v1` now; `2v2`, `3v3` later. **A player's rating is
    per-bracket**: 1700 in 1v1 and 1400 in 2v2 coexist, so a bad 2v2 teammate can never
-   dent your 1v1 number. Season I ships the `1v1` bracket only.
+   dent your 1v1 number. Season I ships the `1v1` bracket only. *(Revised 2026-08-24:
+   premade teams are NOT their own bracket — a premade pair queues into the same `2v2`
+   pool as solo players, one ladder; see § 2v2 solo queue.)*
 2. **Glory: participation + difficulty-scaled win payout** *(revised 2026-07-29)*.
    Losers always earn a little; winners earn `floor + range × (1 − E)` — an even fight
    pays ~50% over floor, an upset pays double-floor, a stomp pays the bare floor.
@@ -74,11 +76,13 @@ in one match.)*
 - All math is **pure functions** — a new
   `packages/blood-in-the-sand-persistence/src/elo.ts` (no DB imports), unit-tested with
   known fixtures. The server calls it; nothing else re-implements it.
-- **Team brackets (future, stated now so shapes don't box us in):** solo-queue team
-  brackets rate each player *within that bracket* — a team's strength is the mean of
-  its members' bracket ratings, and every member updates against the enemy mean with
-  their own K. **Premade teams** are a different thing again: the named team itself is
-  the rated subject with its own row (see Persistence) — a WoW-arena-team-style ladder.
+- **Team brackets:** team brackets rate each player *within that bracket* — a team's
+  strength is the mean of its members' bracket ratings, and every member updates
+  against the enemy mean with their own K. ~~**Premade teams** are a different thing
+  again: the named team itself is the rated subject with its own row — a
+  WoW-arena-team-style ladder.~~ *(Reversed 2026-08-24: premades share the solo pool
+  and players stay the rated subject — a separate premade ladder would split an
+  already-small population. § 2v2 solo queue.)*
 
 ### Tiers
 
@@ -310,7 +314,7 @@ same `Room` machinery, different rules:
 | Discovery | listed / code / passcode | never listed, unjoinable, no code shown |
 | Host | host powers + migration | no host — server owns the room |
 | forceStart / cancelStart | host / any-seated | disabled |
-| Bots | backfill on forceStart | queue backfill after a 15–25 s empty-queue wait, disguised as a player (bits-ranked-bots.md; was "never" — reversed 2026-08-01, env kill switch) |
+| Bots | backfill on forceStart | **1v1 only:** queue backfill after a 15–25 s empty-queue wait, disguised as a player (bits-ranked-bots.md; was "never" — reversed 2026-08-01, env kill switch). **Never in 2v2** (2026-08-24) |
 | switchTeam | open seat hop | disabled |
 | Team size | host-picked 1–4 | fixed by bracket (Season I: 1v1) |
 | Start | arming wizard, auto-start when full+armed | same wizard, **60 s arm deadline** |
@@ -359,12 +363,10 @@ ranked_matches   id (text pk, server-minted uuid) · season · bracket
 - **`bracket` is a key string** (`"1v1"`, later `"2v2"`, `"2v2-premade"`, …). One
   player, many rows — a 1700 `1v1` rating and a 1400 `2v2` rating are simply two rows,
   fully independent.
-- **`subject_id` is what's being rated**: a player id in solo-queue brackets, a
-  **team id** in future premade-team brackets (teams get their own table when built —
-  `teams: id · name · member player_ids`). The bracket key tells you which kind of
-  subject its rows hold, so no `subject_type` column is needed and today's queries stay
-  plain. Solo and premade versions of the same size are distinct bracket keys by
-  construction.
+- **`subject_id` is what's being rated**: a player id. *(2026-08-24: the "team id
+  for premade brackets" idea is retired with the separate premade ladder — premades
+  rate as individuals in the shared `2v2` pool, so `subject_id` is always a player
+  id and the column name is simply roomier than it needs to be.)*
 - `ranked_matches` is the audit trail *and* the analytics tap monetisation.md asked
   for ("log per-weapon pick rate + win rate at match end from day one") — loadouts as
   JSON (an array once team brackets exist), queried offline, no new pipeline.
@@ -404,6 +406,151 @@ persisted display name column is a fast follow decided at build time.)
   v19, unshipped). Matched accounts auto-leave their other queues (first match wins).
 - Ranked rooms reject `forceStart` / `cancelStart` / `switchTeam` / outside
   `joinRoom` (the mid-match rejoin of a disconnected seat is the one exception).
+
+## 2v2 solo queue *(designed + BUILT 2026-08-24 · protocol v29)*
+
+The second bracket: four solo players matched into a 2v2. Same ladder mechanics as
+1v1 — its own rating, its own placements, same tiers and Glory — extended to teams.
+Nearly all of the plumbing was laid for it on 2026-07-29 (string brackets,
+`RANKED_BRACKETS → teamSize`, array-shaped `queueJoin`/`queueStatus`/`rankedResult`,
+the team Elo rule above, the forged `bracket-2v2` card); what remains is the handful
+of places that assume exactly two people.
+
+### Decisions (Tom, 2026-08-24)
+
+1. **No bot backfill in 2v2 — ever.** A bot teammate feels awful (and a disguised
+   ally is far easier to catch out than a disguised enemy). 2v2 waits for four humans;
+   an empty 2v2 queue is honest about it. Consequences: `RANKED_BRACKETS` entries
+   carry a `botBackfill: boolean` (1v1 true, 2v2 false); `takeOverdue` skips 2v2;
+   `fuzzedQueueSize` applies only to backfill brackets — 2v2 shows real counts
+   (the point of the fuzz is hiding bot matches, and there are none). Multi-queue
+   (already built server-side, `queueJoin.brackets[]`, first match wins) is the
+   counter to a thin 2v2 population: a player queued for both gets whichever fills
+   first — see § Client below.
+2. **Premade pairs (future) queue into the SAME 2v2 pool.** One `2v2` ladder, players
+   are the rated subject — no `2v2-premade` bracket, no `teams` table. Splitting the
+   queue would halve an already-small population. The solo-vs-premade fairness gap is
+   the premade design's problem to solve when it comes (matcher preference for
+   premade-vs-premade first, widening with wait, and/or a small rating handicap —
+   **deferred, not designed**). Nothing below boxes that in: a premade is a queue
+   entry with two accounts that the matcher must keep on one side.
+
+### Matcher
+
+- A bracket's match takes **`2 × teamSize` entries** (4 for 2v2). `pairBracket`
+  generalises to `groupBracket`: sort by rating (then wait), walk in contiguous
+  groups of `n`; `QueueMatch` becomes `{ bracket, teams: [QueueEntry[], QueueEntry[]] }`
+  (1v1 = two singletons — one code path).
+- **Team split** of a 4-group sorted by rating: **best + worst vs the middle two** —
+  the split that minimises the gap between team means, deterministic, no dice.
+- **Window:** with `matchAnyone` (Season I) a group forms as soon as four are queued.
+  When windows go live, the group's spread (`max − min` rating) must fit the
+  longest-waiter's window — same widening schedule as 1v1.
+- **Seating:** the matcher dictates sides. `room.seat` gains an optional `team` (ranked
+  only — skirmish keeps its random-balanced assignment); `createRankedRoom` seats each
+  team's entries onto it. Formation spawns already derive from team size.
+
+### Ratings, Glory, settle
+
+- **Elo per member** (the rule in § Ratings): each player's `E` is computed against
+  the **enemy team's mean** rating; update with their *own* K and their *own*
+  placement count in the `2v2` bracket. Placements are 10 per bracket, independent —
+  a 1v1 veteran places fresh in 2v2.
+- **Glory is per member and never split:** each winner gets the full
+  `floor + range × (1 − E_team)` (E of the winning team's mean vs the losing team's
+  mean), each loser gets `GLORY_LOSS`. Glory is renown, not a pot to share.
+- **Recorder:** `recordRankedMatch` generalises to team sides
+  (`winners: Subject[]`, `losers: Subject[]`; 1v1 is the size-1 case, old signature
+  retired). One idempotent batch, keyed on the match id as today:
+  - `ranked_ratings` upsert per member (4 rows);
+  - one `ranked_matches` header row — **existing columns kept**: `winner_id`/`loser_id`
+    hold the member ids comma-joined, the four `rating_before/after` columns hold the
+    **team means** (rounded; enough to reconstruct expected score offline), the two
+    `loadout` columns hold JSON **arrays** (the doc anticipated this). 1v1 rows are
+    unchanged;
+  - **NEW `ranked_match_players`** `(match_id · subject_id · team · won ·
+    rating_before · rating_after · loadout json)` PK `(match_id, subject_id)` — the
+    per-player truth, written for **every** bracket from now on (1v1 included, so
+    pick-rate analytics have one table to read). Idempotent DDL in `ensureSchema`;
+  - `glory_ledger` row per member (4 rows).
+- `rankedResult.results[]` carries four rows (one per seat — the wire shape is already
+  an array; no protocol bump for the message, but **protocol v29** for the client-side
+  bracket unlock + `team` seating expectations).
+- **Bot recorder untouched:** `recordRankedBotMatch` stays 1v1-only by construction
+  (decision 1).
+
+### Lifecycle (unchanged, checked against four seats)
+
+- **Arm deadline / void:** `voidRanked` already walks every account — any dodger(s)
+  eat the 30 s lockout, the other three re-queue with their earned wait. No change.
+- **Disconnect mid-match:** the arena's law, unchanged — the body idles, the rejoin
+  window stands, the result **stands for all four**. The innocent partner eats the
+  loss exactly as 1v1's "abandoning is losing"; accepted for v1, revisit (loss
+  forgiveness for the abandoned partner) only if it shows up in `ranked_matches`.
+- **One live ranked seat per account** and first-match-wins multi-queue already
+  cover the 1v1+2v2 double-queue case.
+- **Deeds:** per-seat with team — ranked-win counters count 2v2 wins (ranked is
+  ranked). The 2v2-ONLY board (partnership moments: assists, avenged partners,
+  clutches, concert kills…) was designed + built the same day — achievements.md
+  § Wave-3.
+
+### Client
+
+- **RankedScreen gets a selected bracket** (tap a card): the standing header, W/L
+  line and CTA bind to it instead of the hard-coded `"1v1"`. The 2v2 card unlocks
+  (art already forged).
+- **Multi-queue UI ships with 2v2** — this is where the array-shaped protocol pays
+  off: queue for 1v1, 2v2, or both (two toggles, one QUEUE button); the population
+  count on each card tells you which is worth waiting on. Leaving the screen still
+  leaves every queue (v1 simplification stands).
+- **Ceremony:** `mine` is unchanged; the epilogue line grows from "the opponent" to
+  the other three rows (teammate first, then both enemies).
+- Room screen / wizard: already handles 2×2 seats from skirmish; the SEASON I badge,
+  no-force-start and no-side-switch rules apply as they do in 1v1.
+
+### Build order (M5)
+
+1. ✅ Persistence: team-shaped `recordRankedMatch` + `ranked_match_players` + fixtures
+   (team-mean Elo, per-member Glory, 1v1 as the size-1 case still passing).
+2. ✅ Server: `groupBracket` + team split + `QueueMatch.teams`, `room.seat(team)`,
+   team settle broadcast, backfill/fuzz gated per bracket; fake-socket tests for a
+   4-entry match, a 4-seat void, and "2v2 never pops a bot".
+3. ✅ Client: bracket selection + multi-queue + protocol v29 (ceremony epilogue —
+   see as-built).
+4. ☐ On-device 2v2 pass (four devices — or two humans + two skirmish-style bots in a
+   dev-menu-only rehearsal, never in the live queue).
+
+### As built (2026-08-24)
+
+- **Persistence** (`ranked.ts`): `recordRankedMatch({ winners[], losers[] })` is
+  the one path — the old `winnerId/loserId` signature is gone; the result is
+  `{ winners[], losers[] }` in input order. `teamMean` lives in `elo.ts`. The header
+  row's team-mean rating columns are rounded; a single-subject side writes its
+  loadout verbatim (1v1 rows byte-identical to before), a team side writes a JSON
+  array. `ranked_match_players` is written by BOTH writers — the bot writer includes
+  the bot's fabricated row (history only; `ranked_ratings`/`glory_ledger` stay
+  bot-free). `recentForm` now reads the players table; `ensureSchema` backfills it
+  from pre-table 1v1 header rows on every boot (guarded, idempotent — tested).
+- **Server**: `groupBracket(entries, size)` + `splitTeams` (snake: positions 0 and 3
+  vs 1 and 2) in `ranked.ts`; `canGroup` is the spread-fits-longest-waiter window
+  rule, `canPair`/`pairBracket` kept as its size-two readings. `RANKED_BRACKETS`
+  entries carry `botBackfill`; the manager derives `BACKFILL_BRACKETS` from it for
+  both `takeOverdue` and the queue-size fuzz. `Room.seat` takes an optional `team`
+  (ignored on a reclaim). **Deviation:** a `queueJoin` re-send now KEEPS the wait
+  earned per bracket (`RankedQueue.waitsOf` snapshotted before `leaveFirst` drops
+  the entries, `enqueue` also min()s against a superseded entry) — without it,
+  adding 2v2 to a 1v1 wait would have reset the 1v1 clock.
+- **Client**: the standing panel grew a row of bracket pills (one ladder at a time
+  — a settlement pulls focus to its bracket); both cards are live, each with its own
+  count and CTA. Multi-queue is per-card rather than "two toggles + one button":
+  QUEUE FOR 2v2 on a card while already searching reads ALSO QUEUE 2v2 and re-sends
+  the union; CANCEL on a card leaves that line only (the last one leaves the queue).
+  Live cards cap at 200 (was 230) so both keep a scene on small screens.
+  `ArenaClient.lastSettlement` carries `bracket` + `others[]` (was `theirs`).
+  **Not built:** the ceremony epilogue for the other three rows — the 1v1 ceremony
+  never rendered the opponent's row either, so there was no line to grow; owed with
+  the on-device pass if it's missed.
+- Tests: persistence 23 (7 new), server 67 (12 new), all packages green.
 
 ## Abuse & integrity (v1 posture)
 
@@ -447,8 +594,10 @@ persisted display name column is a fast follow decided at build time.)
    post-match lobby back to RankedScreen, where the ceremony plays. On-device
    pass owed.
 4. **M4 — ladder polish:** leaderboard endpoint + UI, tier badge art, ranked
-   sounds, dodge lockout UX. Season-roll tooling, multi-queue UI, premade teams
-   stay deferred.
+   sounds, dodge lockout UX. Season-roll tooling and premade teams stay deferred.
+5. **M5 — 2v2 solo queue** *(designed 2026-08-24, § 2v2 solo queue)*: team-shaped
+   recorder + `ranked_match_players`, group matcher + dictated seating, no bots,
+   bracket selection + multi-queue UI on RankedScreen.
 
 ## Audio & art owed (Forge done-tick, per bits-audio.md)
 

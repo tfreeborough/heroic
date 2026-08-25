@@ -30,6 +30,7 @@ import {
   WEAPONS,
   canJoin,
   counterDeltas,
+  undyingStreakUpdates,
   generateRoomCode,
   sanitizePasscode,
   sanitizeRoomName,
@@ -94,6 +95,12 @@ const MAX_SEAT_TOKEN = 64;
 const BOT_TITLE_CHANCE = 0.3;
 const BOT_TITLES = ["sworn-to-the-sand", "ranked-wins-5"] as const;
 /** DB settlement retries — the batch is idempotent, so retrying is free. */
+/** The brackets a lone queuer may draw a bot in (bits-ranked-bots.md) —
+ * derived from the protocol table so a new team bracket can never backfill
+ * by omission (bits-ranked.md § 2v2 solo queue: never in 2v2). */
+const BACKFILL_BRACKETS: readonly string[] = Object.entries(RANKED_BRACKETS)
+  .filter(([, spec]) => spec.botBackfill)
+  .map(([key]) => key);
 const SETTLE_ATTEMPTS = 3;
 const SETTLE_BACKOFF_MS = 1_000;
 
@@ -408,13 +415,16 @@ export class RoomManager {
     if (typeof msg.token !== "string" || msg.token.length === 0 || msg.token.length > 128) {
       return this.send(ws, { t: "reject", reason: "ranked sign-in failed — restart the app" });
     }
+    // A re-send (the client adding or dropping a bracket mid-wait) keeps the
+    // wait already earned per bracket — snapshot before leaveFirst drops it.
+    const earned = this.queue.waitsOf(ws);
     this.leaveFirst(ws);
     const name = sanitizeName(msg.playerName);
     const announcer = sanitizeAnnouncer(msg.announcer);
     const title = sanitizeTitle(msg.title);
     // Token verification + rating loads are async; the socket handler is not.
     // Everything after the awaits re-checks the socket's world before acting.
-    void this.verifyAndEnqueue(ws, msg.token, name, announcer, title, brackets).catch((err) => {
+    void this.verifyAndEnqueue(ws, msg.token, name, announcer, title, brackets, earned).catch((err) => {
       console.error("queueJoin failed:", err);
       this.trySend(ws, { t: "reject", reason: "ranked is unreachable right now — try again" });
     });
@@ -427,6 +437,7 @@ export class RoomManager {
     announcer: string,
     title: string,
     brackets: string[],
+    earned: Map<string, number>,
   ): Promise<void> {
     const db = this.db!;
     // The verified identity sticks to the socket — re-queues skip the lookup.
@@ -477,7 +488,7 @@ export class RoomManager {
         title,
         items,
         rating: ratings.get(bracket)!,
-        joinedMs: now,
+        joinedMs: Math.min(now, earned.get(bracket) ?? now),
         ...(this.botBackfillOn() ? { botAtMs: botDeadline(now, this.botCfg, Math.random) } : {}),
       });
     }
@@ -509,7 +520,7 @@ export class RoomManager {
     if (this.botBackfillOn()) {
       // TODO(v2): population-aware trigger — skip backfill while the bracket's
       // queue size is ≥ N and let the wait ride instead.
-      for (const { bracket, entry } of this.queue.takeOverdue(now, ["1v1"])) {
+      for (const { bracket, entry } of this.queue.takeOverdue(now, BACKFILL_BRACKETS)) {
         this.createRankedBotRoom(bracket, entry, now);
       }
     }
@@ -519,19 +530,24 @@ export class RoomManager {
   }
 
   /** The displayed queue numbers: honest, unless backfill is on — then the
-   * fuzz rides EVERY read (queueStatus and queueInfo agree by construction)
-   * so "1 in queue → match found" never appears (bits-ranked-bots.md). */
+   * fuzz rides EVERY read of a BACKFILL bracket (queueStatus and queueInfo
+   * agree by construction) so "1 in queue → match found" never appears
+   * (bits-ranked-bots.md). Team brackets never backfill, so their counts
+   * stay honest either way (bits-ranked.md § 2v2 solo queue). */
   private queueStatusFor(ws: Socket | null, now: number): BracketStatus[] {
     const brackets = this.queue.statusFor(ws, now);
     if (!this.botBackfillOn()) return brackets;
-    return brackets.map((b) => ({ ...b, size: fuzzedQueueSize(b.size, b.bracket, now) }));
+    return brackets.map((b) =>
+      BACKFILL_BRACKETS.includes(b.bracket) ? { ...b, size: fuzzedQueueSize(b.size, b.bracket, now) } : b,
+    );
   }
 
   private createRankedRoom(match: QueueMatch, now: number): void {
+    const everyone = match.teams.flat();
     // A socket can die between beats — never build a room around a corpse;
-    // the survivor goes straight back in line.
-    if (match.a.ws.readyState !== 1 || match.b.ws.readyState !== 1) {
-      for (const e of [match.a, match.b]) {
+    // the survivors go straight back in line.
+    if (everyone.some((e) => e.ws.readyState !== 1)) {
+      for (const e of everyone) {
         if (e.ws.readyState === 1) this.queue.enqueue(match.bracket, this.requeued(e));
       }
       return;
@@ -548,24 +564,28 @@ export class RoomManager {
     room.ranked = { bracket: match.bracket, matchId: randomUUID(), accounts: new Map(), ended: false, settled: false };
     room.onRankedMatchEnd = (winnerTeam) => void this.settleRanked(room, winnerTeam);
     this.rooms.set(code, room);
-    for (const entry of [match.a, match.b]) {
-      this.trySend(entry.ws, { t: "matchFound", bracket: match.bracket, code });
-      const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now);
-      if (id === null) continue; // two seats, two players — can't happen
-      room.ranked.accounts.set(id, {
-        accountId: entry.accountId,
-        name: entry.name,
-        announcer: entry.announcer,
-        title: entry.title,
-        items: entry.items,
-        rating: entry.rating,
-        joinedMs: entry.joinedMs,
-      });
-    }
+    // The matcher dictated the sides (best + worst vs the middle two in a
+    // 2v2) — seat each side onto its team; the sim never rolls for it.
+    match.teams.forEach((side, i) => {
+      const team = (i + 1) as Team;
+      for (const entry of side) {
+        this.trySend(entry.ws, { t: "matchFound", bracket: match.bracket, code });
+        const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now, team);
+        if (id === null) continue; // 2×N seats, 2×N players — can't happen
+        room.ranked!.accounts.set(id, {
+          accountId: entry.accountId,
+          name: entry.name,
+          announcer: entry.announcer,
+          title: entry.title,
+          items: entry.items,
+          rating: entry.rating,
+          joinedMs: entry.joinedMs,
+        });
+      }
+    });
     this.attachMatchStats(room);
-    console.log(
-      `⚔ ranked ${match.bracket} room ${code}: ${match.a.name} (${match.a.rating}) vs ${match.b.name} (${match.b.rating})`,
-    );
+    const sideLog = (side: QueueEntry[]) => side.map((e) => `${e.name} (${e.rating})`).join(" + ");
+    console.log(`⚔ ranked ${match.bracket} room ${code}: ${sideLog(match.teams[0])} vs ${sideLog(match.teams[1])}`);
   }
 
   /** A queue entry whose bot deadline passed with no human to pair: a room
@@ -741,17 +761,27 @@ export class RoomManager {
     const ctx = room.ranked!;
     try {
       const seated = seatedPlayers(room.sim.state);
-      const winner = seated.find((p) => p.team === winnerTeam);
-      const loser = seated.find((p) => p.team !== winnerTeam);
-      const winnerAccount = winner && ctx.accounts.get(winner.id);
-      const loserAccount = loser && ctx.accounts.get(loser.id);
-      if (!winner || !loser || !winnerAccount || !loserAccount) {
+      const winners = seated.filter((p) => p.team === winnerTeam);
+      const losers = seated.filter((p) => p.team !== winnerTeam);
+      const accountOf = (p: (typeof seated)[number]) => ctx.accounts.get(p.id);
+      if (
+        winners.length === 0 ||
+        winners.length !== losers.length ||
+        [...winners, ...losers].some((p) => accountOf(p) === undefined)
+      ) {
         console.error(`[${room.meta.code}] ranked settle: seats/accounts missing — match ${ctx.matchId} unrecorded`);
         return;
       }
+      const loadoutOf = (p: (typeof seated)[number]) => ({ weapon: p.weapon, abilities: p.abilities });
       // A bot on either side routes to the one-sided writer: the human's Elo,
       // history, and Glory land; the bot's side of the result is fabricated
-      // upstream (bits-ranked-bots.md) and never touches the ladder.
+      // upstream (bits-ranked-bots.md) and never touches the ladder. Bots
+      // only ever exist in 1v1 rooms (RANKED_BRACKETS.botBackfill), so a
+      // bot match is exactly one human against one bot.
+      const winner = winners[0]!;
+      const loser = losers[0]!;
+      const winnerAccount = accountOf(winner)!;
+      const loserAccount = accountOf(loser)!;
       const botSide = winnerAccount.bot ? "winner" : loserAccount.bot ? "loser" : null;
       const record = botSide
         ? () =>
@@ -763,41 +793,37 @@ export class RoomManager {
               humanWon: botSide === "loser",
               botId: (botSide === "winner" ? winnerAccount : loserAccount).accountId,
               botRating: (botSide === "winner" ? winnerAccount : loserAccount).rating,
-              humanLoadout:
-                botSide === "winner"
-                  ? { weapon: loser.weapon, abilities: loser.abilities }
-                  : { weapon: winner.weapon, abilities: winner.abilities },
-              botLoadout:
-                botSide === "winner"
-                  ? { weapon: winner.weapon, abilities: winner.abilities }
-                  : { weapon: loser.weapon, abilities: loser.abilities },
+              humanLoadout: loadoutOf(botSide === "winner" ? loser : winner),
+              botLoadout: loadoutOf(botSide === "winner" ? winner : loser),
             })
         : () =>
             recordRankedMatch(this.db!, {
               matchId: ctx.matchId,
               season: SEASON,
               bracket: ctx.bracket,
-              winnerId: winnerAccount.accountId,
-              loserId: loserAccount.accountId,
-              winnerLoadout: { weapon: winner.weapon, abilities: winner.abilities },
-              loserLoadout: { weapon: loser.weapon, abilities: loser.abilities },
+              winners: winners.map((p) => ({ subjectId: accountOf(p)!.accountId, loadout: loadoutOf(p) })),
+              losers: losers.map((p) => ({ subjectId: accountOf(p)!.accountId, loadout: loadoutOf(p) })),
             });
       for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt++) {
         try {
           const result = await record();
           if (result) {
+            // Result rows come back in the order the sides were listed —
+            // zip them back onto seat ids for the wire.
             room.publish({
               t: "rankedResult",
               matchId: ctx.matchId,
               bracket: ctx.bracket,
               winnerTeam,
               results: [
-                { playerId: winner.id, ...sideResult(result.winner) },
-                { playerId: loser.id, ...sideResult(result.loser) },
+                ...winners.map((p, i) => ({ playerId: p.id, ...sideResult(result.winners[i]!) })),
+                ...losers.map((p, i) => ({ playerId: p.id, ...sideResult(result.losers[i]!) })),
               ],
             });
+            const line = (p: (typeof seated)[number], r: (typeof result.winners)[number]) =>
+              `${accountOf(p)!.name} ${r.before}→${r.after} (+${r.glory}g)`;
             console.log(
-              `[${room.meta.code}] ranked settled: ${winnerAccount.name} ${result.winner.before}→${result.winner.after} (+${result.winner.glory}g), ${loserAccount.name} ${result.loser.before}→${result.loser.after} (+${result.loser.glory}g)`,
+              `[${room.meta.code}] ranked settled: ${winners.map((p, i) => line(p, result.winners[i]!)).join(", ")} over ${losers.map((p, i) => line(p, result.losers[i]!)).join(", ")}`,
             );
             // Achievements ride the settle but never block it: the ratings
             // and rankedResult above are already committed and broadcast —
@@ -845,8 +871,11 @@ export class RoomManager {
           achievementUnlocks(db, account.accountId),
           gloryEarned(db, account.accountId),
         ]);
-        const won = result.winner.subjectId === account.accountId;
-        const matchGlory = won ? result.winner.glory : result.loser.glory;
+        const side =
+          result.winners.find((r) => r.subjectId === account.accountId) ??
+          result.losers.find((r) => r.subjectId === account.accountId);
+        const won = result.winners.some((r) => r.subjectId === account.accountId);
+        const matchGlory = side?.glory ?? 0;
         // The ledger already holds this match's ranked Glory (the settle
         // batch landed first) — "before" backs it out so the crossing rule
         // sees this match's earnings. Achievement Glory rewards land after
@@ -858,6 +887,7 @@ export class RoomManager {
           after[counter] = (after[counter] ?? 0) + delta;
         }
         Object.assign(after, streakUpdates(before, won));
+        Object.assign(after, undyingStreakUpdates(before, summary, seatId));
         after[COUNTERS.gloryEarned] = earnedNow;
         const fired = evaluate({
           defs: ACHIEVEMENT_DEFS,

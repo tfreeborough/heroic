@@ -8,12 +8,17 @@
  * Env: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (Turso in production; defaults
  * to a local `file:dev.db` so local dev needs no credentials), PORT.
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { RANKED_BRACKETS, SIGNET_ITEM_IDS, SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
 import {
+  FEEDBACK_EMAIL_MAX,
+  FEEDBACK_KINDS,
+  FEEDBACK_MESSAGE_MAX,
+  FEEDBACK_STAMP_MAX,
   PLACEMENT_MATCHES,
   RATING_START,
   achievementCounters,
@@ -30,16 +35,17 @@ import {
   gloryEarned,
   linkAccount,
   linkedClerkUserId,
+  listFeedback,
   rankedSummary,
+  recordFeedback,
   restoreAccount,
   unlinkAccount,
   recentForm,
-  recordGlory,
-  recordSignet,
   registerPlayer,
   rungAbove,
   unlockWithSignet,
   signetBalance,
+  type FeedbackKind,
 } from "@heroic/blood-in-the-sand-persistence";
 import { accountsEnabled, deleteClerkUser, verifyClerkToken } from "./clerk";
 import { verifyAppleTransaction } from "./iapApple";
@@ -62,8 +68,8 @@ const port = Number(process.env.PORT ?? 7780);
 /**
  * Belt-and-braces against the one deploy foot-gun the dev tools have: Bun
  * auto-loads .env.local, so a deploy that copies a working tree (instead of
- * building from git, as Render does) would silently ship /dev/grant — an
- * infinite-currency faucet. A Turso URL means production data; refuse the
+ * building from git, as Render does) would silently ship the mock IAP arm —
+ * a free-Signet faucet. A Turso URL means production data; refuse the
  * combination outright.
  */
 if (
@@ -374,37 +380,13 @@ if (accountsEnabled) {
 }
 
 /**
- * Dev-only store tools (bits-store.md § testing): ledger grants + purchase
- * resets so the whole Glory→Signet→unlock flow is testable without money.
- * The routes DO NOT EXIST unless STORE_DEV_TOOLS=1 — never set in prod.
+ * Dev-only store tools (bits-store.md § testing): purchase resets so the
+ * Signet→unlock flow is testable end to end (plus the mock IAP arm on
+ * /store/iap above). The routes DO NOT EXIST unless STORE_DEV_TOOLS=1 —
+ * never set in prod.
  */
 if (process.env.STORE_DEV_TOOLS === "1") {
-  console.log("🛠  STORE_DEV_TOOLS on — /dev/grant + /dev/reset-purchases live");
-
-  app.post("/dev/grant", async (c) => {
-    const playerId = await authedPlayer(c);
-    if (!playerId) return c.json({ error: "unauthorized" }, 401);
-    const body = (await c.req.json().catch(() => ({}))) as { glory?: unknown; signets?: unknown };
-    const glory = Math.trunc(Number(body.glory ?? 0)) || 0;
-    const signets = Math.trunc(Number(body.signets ?? 0)) || 0;
-    if (glory !== 0) {
-      await recordGlory(db, {
-        playerId,
-        amount: glory,
-        source: "dev-grant",
-        idempotencyKey: `dev:${crypto.randomUUID()}`,
-      });
-    }
-    if (signets !== 0) {
-      await recordSignet(db, {
-        playerId,
-        amount: signets,
-        source: "dev-grant",
-        idempotencyKey: `dev:${crypto.randomUUID()}`,
-      });
-    }
-    return c.json(await walletOf(playerId));
-  });
+  console.log("🛠  STORE_DEV_TOOLS on — /dev/reset-purchases + mock IAP live");
 
   /** Forget every store purchase (entitlements bought with Signets) — deed
    * grants are untouched; Signet balances stay as they are. */
@@ -491,6 +473,70 @@ app.get("/achievements/me", async (c) => {
     entitlements,
   });
 });
+
+/**
+ * Feedback + bug reports (bits-feedback.md): one row per report, stamped
+ * with the caller's identity and whatever version context the client sends.
+ * Everything free-text is length-capped here AND clipped again in the
+ * persistence layer; the kind is a closed set. 10/hour/player — no person
+ * files more, a script does.
+ */
+app.post("/feedback", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  if (overLimit(`feedback:${playerId}`, 10, 3_600_000)) return c.json({ error: "rate_limited" }, 429);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const text = (key: string, max: number): string | null => {
+    const v = body[key];
+    if (typeof v !== "string") return null;
+    const trimmed = v.trim();
+    return trimmed ? trimmed.slice(0, max) : null;
+  };
+  const kind = body.kind;
+  if (typeof kind !== "string" || !(FEEDBACK_KINDS as readonly string[]).includes(kind)) {
+    return c.json({ error: "invalid_kind" }, 400);
+  }
+  const message = text("message", FEEDBACK_MESSAGE_MAX);
+  if (!message) return c.json({ error: "empty_message" }, 400);
+  const id = await recordFeedback(db, {
+    playerId,
+    kind: kind as FeedbackKind,
+    message,
+    contactEmail: text("contactEmail", FEEDBACK_EMAIL_MAX),
+    playerName: text("playerName", FEEDBACK_STAMP_MAX),
+    platform: text("platform", FEEDBACK_STAMP_MAX),
+    osVersion: text("osVersion", FEEDBACK_STAMP_MAX),
+    appBinary: text("appBinary", FEEDBACK_STAMP_MAX),
+    appBundle: text("appBundle", FEEDBACK_STAMP_MAX),
+  });
+  return c.json({ ok: true, id });
+});
+
+/**
+ * The one reader of the feedback table (Tom). Exists only when
+ * FEEDBACK_ADMIN_TOKEN is set; the bearer is compared in constant time
+ * against the env value and the route is IP-limited so the secret can't be
+ * guessed at wire speed. `?before=<id>&limit=<n>` pages newest-first.
+ */
+const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN ?? "";
+if (feedbackAdminToken) {
+  console.log("📬 FEEDBACK_ADMIN_TOKEN set — GET /admin/feedback live");
+  const digest = (s: string): Buffer => createHash("sha256").update(s).digest();
+  const expected = digest(feedbackAdminToken);
+  app.get("/admin/feedback", async (c) => {
+    if (overLimit(`admin:${callerIp(c)}`, 30)) return c.json({ error: "rate_limited" }, 429);
+    const header = c.req.header("authorization") ?? "";
+    const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    if (!timingSafeEqual(digest(presented), expected)) return c.json({ error: "unauthorized" }, 401);
+    const before = Number(c.req.query("before"));
+    const limit = Number(c.req.query("limit"));
+    const reports = await listFeedback(db, {
+      before: Number.isFinite(before) ? before : undefined,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+    return c.json({ reports });
+  });
+}
 
 Bun.serve({ port, fetch: app.fetch });
 console.log(`⚔️  blood-in-the-sand API listening on port ${port} (db: ${dbUrl})`);

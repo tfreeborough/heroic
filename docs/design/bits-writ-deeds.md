@@ -78,7 +78,7 @@ Everything else is T0/T1.
 
 *Signature: get in, stab, get out — the poison works while you're gone.*
 
-**Feats** (branch off `rounds-fang-5`):
+**Feats** (branch off `rounds-fang-15`):
 
 | id | title (placeholder) | deed | cost |
 |---|---|---|---|
@@ -98,7 +98,7 @@ Everything else is T0/T1.
 
 *Signature: three re-aiming bolts; the premium is landing all three.*
 
-**Feats** (branch off `rounds-scorpion-5`):
+**Feats** (branch off `rounds-scorpion-15`):
 
 | id | title | deed | cost |
 |---|---|---|---|
@@ -118,7 +118,7 @@ per full-spread above]**:
 *Signature: indirect fire, blast hits EVERYONE — the game's only
 friendly fire.*
 
-**Feats** (branch off `rounds-bombard-5`):
+**Feats** (branch off `rounds-bombard-15`):
 
 | id | title | deed | cost |
 |---|---|---|---|
@@ -140,7 +140,7 @@ damage IS shell damage):
 *Signature: the ramping link — protecting it is the team's job. Allies
 or nothing; it deals no damage, ever.*
 
-**Feats** (branch off `rounds-lifeline-5`):
+**Feats** (branch off `rounds-lifeline-15`):
 
 | id | title | deed | cost |
 |---|---|---|---|
@@ -165,7 +165,7 @@ counterDeltas already knows the weapon):
 
 *Signature: the setup piece — it kills nothing, it FEEDS kills.*
 
-**Feats** (branch off `casts-sinkhole-10`):
+**Feats** (branch off `casts-sinkhole-30`):
 
 | id | title | deed | cost |
 |---|---|---|---|
@@ -185,7 +185,7 @@ counterDeltas already knows the weapon):
 *Signature: the roster's only movement-expressed ability; it spares
 no one, your own boots included.*
 
-**Feats** (branch off `casts-tar-pit-10`):
+**Feats** (branch off `casts-tar-pit-30`):
 
 | id | title | deed | cost |
 |---|---|---|---|
@@ -205,7 +205,7 @@ no one, your own boots included.*
 
 *Signature: the moment — everything you do while grown is the show.*
 
-**Feats** (branch off `casts-titans-draught-10`):
+**Feats** (branch off `casts-titans-draught-30`):
 
 | id | title | deed | cost |
 |---|---|---|---|

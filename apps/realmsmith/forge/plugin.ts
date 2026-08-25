@@ -130,15 +130,30 @@ export const forgePlugin = (): Plugin => {
       const abs = join(repoRoot, dir);
       return existsSync(abs) ? (await readdir(abs)).filter((f) => f.endsWith(ext)) : [];
     };
-    const [iconFiles, sfxFiles, spriteFiles, modeFiles, badgeFiles, deedFiles, homeFiles] = await Promise.all([
-      listDir(ICON.destination, ".png"),
-      listDir(SFX_BITS.destination, ".mp3"),
-      listDir(SPRITE.destination, ".png"),
-      listDir(MODE.destination, ".png"),
-      listDir(BADGE.destination, ".png"),
-      listDir(DEED.destination, ".png"),
-      listDir(HOME.destination, ".png"),
-    ]);
+    /** id → forged subject, from every `<id>.forge.json` sidecar in a folder. */
+    const forgedSubjects = async (dir: string): Promise<Record<string, string>> => {
+      const out: Record<string, string> = {};
+      for (const f of await listDir(dir, ".forge.json")) {
+        try {
+          const meta = JSON.parse(await readFile(join(repoRoot, dir, f), "utf8")) as { subject?: unknown };
+          if (typeof meta.subject === "string") out[f.slice(0, -".forge.json".length)] = meta.subject;
+        } catch {
+          // Unreadable sidecar — the deed simply isn't diffable; done-ness still comes from the PNG.
+        }
+      }
+      return out;
+    };
+    const [iconFiles, sfxFiles, spriteFiles, modeFiles, badgeFiles, deedFiles, deedForged, homeFiles] =
+      await Promise.all([
+        listDir(ICON.destination, ".png"),
+        listDir(SFX_BITS.destination, ".mp3"),
+        listDir(SPRITE.destination, ".png"),
+        listDir(MODE.destination, ".png"),
+        listDir(BADGE.destination, ".png"),
+        listDir(DEED.destination, ".png"),
+        forgedSubjects(DEED.destination),
+        listDir(HOME.destination, ".png"),
+      ]);
     return {
       types: [
         { id: SFX_BITS.id, label: SFX_BITS.label, provider: SFX_BITS.provider, candidates: SFX_BITS.candidates },
@@ -157,6 +172,7 @@ export const forgePlugin = (): Plugin => {
       modeFiles,
       badgeFiles,
       deedFiles,
+      deedForged,
       homeFiles,
     };
   };

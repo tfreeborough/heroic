@@ -1,8 +1,8 @@
 # Blood in the Sand — Dev Menu & the Target-Dummy Range
 
-Status: **BUILT 2026-07-16** (perf overlay added 2026-07-17) ·
+Status: **BUILT 2026-07-16** (perf overlay added 2026-07-17; pruned 2026-08-25) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-07-17
+Last decided: 2026-08-25
 
 A hidden toolbox for on-device testing — things a developer needs mid-playtest
 that must never be visible (or reachable) in a normal session.
@@ -19,32 +19,7 @@ hides it.
 - Silent until the fifth tap (a secret shouldn't click), then the ordinary
   `uiConfirm` sound. No new audio events (bits-audio checklist: nothing owed).
 
-## Tool 1 — Target dummies (the firing range)
-
-An offline mode for testing weapons, abilities, damage numbers, statuses and
-feel against things that hold still: **you vs a line of 3 target dummies**.
-
-- Rides the whole practice stack: `PracticeClient` in `"dummies"` mode steps
-  the sim in-process — the same arming wizard (RoomScreen), the same
-  GameScreen. The only dev shortcut: the 10s arming countdown is clamped to
-  2s (client-side, offline only).
-- **Dummies are first-class in the sim** (`ArenaPlayer.dummy`, seated by
-  `addDummy`) because attacking is automatic — an input-less bot would still
-  auto-swing. A dummy never takes aim and never swings (skipped in step.ts's
-  targeting + attack passes) but is hit, bled, slowed, shoved and harpooned
-  like anyone else. It arms itself on placement (loadout is cosmetic) so the
-  arming gate treats it as ready; the room is sized exactly (4 seats) so the
-  full-room gate passes without a force-start.
-- **Training flag** (`ArenaState.training`, set via `createSim(…, training)`):
-  rounds never end (`checkRoundOver` stands down) and a dead dummy stands back
-  up on its spawn slot after `DUMMY_RESPAWN_SECONDS` (2s) at full hp, statuses
-  dropped — "another one spawns in its place", the range never empties.
-  Real rooms never set the flag; nothing changes on the wire (dummies are
-  ordinary players in snapshots).
-- Leaving the range (LEAVE / quit) lands back on the **title screen** — the
-  range has no front-door screen of its own.
-
-## Tool 2 — Perf overlay (frame profiler)
+## Tool 1 — Perf overlay (frame profiler)
 
 A toggle (`PERF OVERLAY ◉/○`) that turns on a small green readout in matches
 — top-left of GameScreen, next match you enter (any match: online or
@@ -71,27 +46,7 @@ Carried by `devFlags` (`src/dev.ts`), a plain session-only module object —
 readable from the game loop without React, reset on every launch like the
 menu itself. When off, every timing branch is skipped: zero cost.
 
-## Tool 3 — SFX kill-switch (perf A/B)
-
-`SFX ◉ ON / ○ KILLED` — flips `devFlags.disableSfx`, which makes `playSound`
-return before doing ANY work: no scheduler, no native `seekTo`/`play` calls.
-Not a mute (mute still drives the players at volume 0) — this is a perf
-experiment: if a device stutters in busy fights with SFX on and is smooth
-with SFX killed, the per-play native audio path is the cost and audio is
-where to optimise; if it's choppy either way, look at render/raster instead.
-Added 2026-07-17 chasing an iPhone-only chop that survived voice warming.
-
-## Tool 4 — Haptics kill-switch (perf A/B)
-
-`HAPTICS ◉ ON / ○ KILLED` — flips `devFlags.disableHaptics`, which makes
-`playStrikeHaptic` return before any native work. The same experiment as the
-SFX switch for the other per-moment native cost: iOS allocates a fresh
-`UIImpactFeedbackGenerator` per pulse (Android's vibrator call is cheap), and
-strikes/casts fire one on the exact frame the moment lands. Killed-and-smooth
-means haptics need batching/pre-armed generators; choppy either way clears
-them. Added 2026-07-18 on the same iPhone stutter hunt.
-
-## Tool 5 — Announcer pack switcher
+## Tool 2 — Announcer pack switcher
 
 `ANNOUNCER ○ DEFAULT / ◉ ELIZA NIGHTSHADE` — cycles the kill-announcement
 voice through every pack in `audio/announcer.ts` and immediately plays the
@@ -103,7 +58,7 @@ packs get auditioned. The product shape is LIVE (protocol v18): the KILLER's
 pack voices kill calls on every client in the room — so cycling this row is
 also how you demo the flex (see monetisation.md § announcer packs).
 
-## Tool 6 — Deed ceremony rehearsal *(2026-08-03)*
+## Tool 3 — Deed ceremony rehearsal *(2026-08-03)*
 
 `DEED CEREMONY ▶` — plays the ENTIRE post-match ceremony (achievements.md
 § unlock ceremony) on fabricated data, right over the title screen: the
@@ -115,32 +70,7 @@ celebrated set untouched — a rehearsed deed still gets its real moment when
 genuinely earned. Fully offline: no server, no DB, session-only like the
 rest of the menu.
 
-## Tool 7 — Deed Map preview *(2026-08-04)*
-
-`DEEDS ○ REAL DATA / ◉ SOME UNLOCKED / ◉ ALL UNLOCKED` — fakes the board's
-unlock state client-side so the Deed Map is testable without grinding
-matches (achievements.md). SOME = the root + every chain's first tier
-unlocked, which puts every node state on show at once (full art, frontier
-ghosts, hidden tails) with counters faked ~60% toward each next tier so
-milestone progress lines render; ALL = the finished board. Read on
-DeedsScreen MOUNT — flip the flag, then re-enter the screen. Session-only,
-purely client-side: no server writes, the celebrated set is never touched
-(the missed-ceremony replay is suppressed while previewing), and real data
-returns the moment the flag is off.
-
-## Tool 8 — gated-item grant *(2026-08-09)*
-
-`ITEMS ○ EARNED ONLY / ◉ ALL GRANTED` — grants every achievement-gated item
-for the session (bits-secret-items.md), so the arming wizard shows the
-trident (and any future secrets) without winning the deeds. Implemented as
-a UNION overlay on `getEntitlements()` (`devFlags.grantAllItems`): the
-persisted entitlement cache is never touched, so flipping it off — or a
-relaunch, devFlags being session-only — restores honest state instantly.
-Reach: practice and skirmish only in effect; RANKED validates picks
-against the real ledger server-side, so this switch deliberately cannot
-defeat it.
-
-## Tool 9 — first-win nudge rehearsal *(2026-08-24)*
+## Tool 4 — first-win nudge rehearsal *(2026-08-24)*
 
 `FIRST-WIN NUDGE ▶` — raises the `firstWin` AccountSheet (bits-accounts.md §
 the first-win nudge) right over the title screen, on demand, as many times as
@@ -150,6 +80,45 @@ linked tester still sees the copy, and it also CLEARS the persisted
 re-triggers the honest path too. Only rendered when the Clerk key shipped
 (the sheet can't mount without the provider). Signing in from the rehearsed
 sheet is real — it links for real.
+
+## Tool 5 — Primer replay *(2026-08-24)*
+
+`PRIMER ▶` — replays the five-chapter Primer (bits-onboarding.md) and
+re-arms its once-per-install `bits.primerSeen` flag, so the real first-PLAY
+trigger can be re-tested.
+
+## Tool 6 — reset purchases *(2026-08-15)*
+
+`RESET PURCHASES` — forgets every Signet purchase (server entitlements with a
+`purchase:*` source + the local entitlement cache) so a store unlock can be
+re-tested end to end. Deed grants survive. Hits `POST /dev/reset-purchases`,
+which only exists when the API runs with `STORE_DEV_TOOLS=1` — inert against
+production.
+
+## Retired rows *(2026-08-25)*
+
+Pruned once they'd served their purpose, with their plumbing removed:
+
+- **TARGET DUMMIES** — the range has a player-facing door now (PRACTICE →
+  TARGET DUMMIES, plus the Primer's "try the range" exit); the dev shortcut
+  was redundant. The range itself (`PracticeClient` in `"dummies"` mode,
+  `ArenaState.training`, `addDummy`) is unchanged.
+- **SFX / HAPTICS kill-switches** — the 2026-07 iPhone stutter hunt is over;
+  `devFlags.disableSfx` / `disableHaptics` and their guards in `audio/index.ts`,
+  `game/haptics.ts`, `ModeSelectScreen` are gone.
+- **BOT BRAIN / BOT TIER** — practice bots take archetype from loadout and
+  tier from the practice lobby again, no session override
+  (`devFlags.botArchetype` / `botDifficulty` removed from `PracticeClient`).
+- **DEEDS preview** — the fake-unlock board state (`devFlags.deedsPreview`,
+  `previewState` in DeedsScreen) is gone; the board always shows real
+  `/achievements/me` data.
+- **ITEMS grant-all** — the `getEntitlements()` overlay
+  (`devFlags.grantAllItems`) is gone; the wizard only ever shows what's earned
+  or bought.
+- **WALLET / GRANT 500 GLORY / GRANT 1 SIGNET** — the dev ledger faucet.
+  `POST /dev/grant` was removed from the API along with `devGrant` in
+  `net/api.ts`. `STORE_DEV_TOOLS=1` still gates `/dev/reset-purchases` and
+  the mock IAP arm on `/store/iap` (the remaining way to add Signets in dev).
 
 ## Adding future tools
 

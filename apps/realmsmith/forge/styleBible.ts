@@ -920,6 +920,77 @@ export const DEED_SUBJECTS: Record<string, string> = {
     "an anatomical heart bound tight in leather cords, one bright drop falling into it " +
     "from above, a young green vine curling out of its crown — life pulled back from the " +
     "brink",
+
+  // ── Wave-3: the 2v2 board (2026-08-24) — the PAIR is the motif. Two of a
+  // thing where the Season I board had one; single bold objects, no scenes.
+  // "Two Blades, One Sand" — the board's root.
+  "deed-two-blades":
+    "two gladiator swords crossed point-up and bound together at the hilts with one red " +
+    "cord, driven into a single mound of sand",
+  // The pair ladder: Sworn Brothers → The Twin Lions → Blood Brothers → The Dioscuri.
+  "deed-duo-wins":
+    "two bronze lion heads facing outward from one shared mane, a single star set between " +
+    "their brows — Castor and Pollux as beasts of the pit",
+  // The assist ladder: Wingman → The Setup Man → The Second Blade.
+  "deed-assists":
+    "a wooden practice post already studded with one arrow, a second arrow in flight about " +
+    "to strike beside it — the first blow that makes the second one count",
+  // The vengeance ladder: An Eye for an Eye → Vendetta → Nemesis.
+  "deed-revenge":
+    "a broken bronze helm on the sand with a single dagger driven down through its crest, " +
+    "the blade's pommel wrapped in a fallen comrade's red sash",
+  // The clutch ladder: Against the Odds → One Against Two → The Last Man Standing.
+  "deed-clutch":
+    "one small bronze figure of a lone fighter standing braced at the centre of a ring of " +
+    "sand, two enemy spears crossed and planted at its feet — the pair that couldn't take it",
+  // The double-kill ladder: Two for One → Reaper's Pair → Both Barrels.
+  "deed-double-kill":
+    "a single heavy scythe blade with TWO skulls hanging from its haft by one cord, " +
+    "swinging together",
+  // "In Concert" — two blows landing as one.
+  "deed-concert":
+    "two bronze war horns crossed bell-to-bell, a single burst of sound lines radiating from " +
+    "where they meet",
+  // "The Ambush" — the kill before the fight has drawn breath.
+  "deed-ambush":
+    "an hourglass with only a few grains fallen, a blade already through its upper bulb " +
+    "spilling the sand — the fight over before the glass has started",
+  // "Swift Vengeance" — the avenging blow in seconds.
+  "deed-swift-vengeance":
+    "a bronze arrowhead trailing a red ribbon, shot straight down into the sand beside a " +
+    "fallen comrade's dropped helm, the ribbon still in the air",
+  // "The Last Word" — the decider, won alone against two.
+  "deed-last-word":
+    "a single raised bronze fist gripping one broken spear shaft, two more broken spears " +
+    "lying beneath it in the sand — the last thing said in the argument",
+  // "Shieldwall" — neither of the pair fell.
+  "deed-shieldwall":
+    "two tall bronze tower shields locked edge to edge into one wall, a shower of arrows " +
+    "snapped and scattered at their base, not one through",
+  // "Matching Set" — the pair with the same steel.
+  "deed-matching-set":
+    "two identical bronze gladiator swords lying side by side on a leather roll, perfectly " +
+    "mirrored, a single tie binding both scabbards",
+  // "Selfless" — a partner's health restored.
+  "deed-selfless":
+    "one clay chalice tipped to pour its glowing liquid into a second empty chalice beside " +
+    "it, the giver's cup nearly drained",
+  // "Even Split" — the spoils shared exactly.
+  "deed-even-split":
+    "a bronze balance scale with one skull on each pan, perfectly level, the beam " +
+    "dead-horizontal",
+  // "The Meat Shield" — three quarters of the blows, and still standing.
+  "deed-meat-shield":
+    "a battered bronze breastplate absolutely bristling with snapped arrow shafts and dents, " +
+    "still buckled, still whole — worn with pride",
+  // "Along for the Ride" — the joke: won, contributed nothing.
+  "deed-along-for-the-ride":
+    "a small wooden cart with a gladiator's helm sitting inside it like a passenger, a single " +
+    "rope leading off out of frame — someone else is pulling",
+  // "Nobody's Hero" — the joke: out-fought everyone and lost anyway.
+  "deed-nobodys-hero":
+    "a laurel wreath dropped in the sand beside a broken sword, the leaves still green, " +
+    "nobody there to pick it up",
 };
 
 export interface DeedSpec {

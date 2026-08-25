@@ -117,17 +117,17 @@ describe("achievement awards at settle", () => {
     await until(() => room.ranked!.settled);
     await until(() => a.of("deedUnlocks").length > 0);
 
-    // Alice: first match + first blood (+ nothing else on one win).
+    // Alice: first match (+ nothing else on one win — one kill ≠ five).
     const aUnlocks = a.of("deedUnlocks")[0]!["unlocks"] as string[];
     expect(aUnlocks).toContain("sworn-to-the-sand");
-    expect(aUnlocks).toContain("killing-blows-1");
+    expect(aUnlocks).not.toContain("killing-blows-5");
     expect(aUnlocks).not.toContain("ranked-wins-5");
 
     // Bob still gets his first-match deed — losers earn too.
     await until(() => b.of("deedUnlocks").length > 0);
     const bUnlocks = b.of("deedUnlocks")[0]!["unlocks"] as string[];
     expect(bUnlocks).toContain("sworn-to-the-sand");
-    expect(bUnlocks).not.toContain("killing-blows-1");
+    expect(bUnlocks).toHaveLength(1);
 
     // Privacy: neither socket ever saw the other's unlock list.
     expect(a.of("deedUnlocks")).toHaveLength(1);
@@ -148,6 +148,9 @@ describe("achievement awards at settle", () => {
     expect(counters["damage_dealt"]).toBe(60);
     expect(counters["cast:dash"]).toBe(1);
     expect(counters["win_streak_current"]).toBe(1);
+    // A deathless win starts the undying streak (Still Standing's counter).
+    expect(counters["undying_streak_current"]).toBe(1);
+    expect(counters["undying_streak_best"]).toBe(1);
     // Lifetime Glory rode the ledger into the counter set.
     expect(counters["glory_earned"]).toBeGreaterThan(0);
   });
@@ -173,7 +176,9 @@ describe("achievement awards at settle", () => {
     expect(aCounters["ranked_wins"]).toBe(2);
     expect(aCounters["win_streak_current"]).toBe(2);
     expect(aCounters["win_streak_best"]).toBe(2);
+    expect(aCounters["undying_streak_current"]).toBe(2);
     const bCounters = await achievementCounters(db, accountB);
+    expect(bCounters["undying_streak_current"]).toBe(0);
     expect(bCounters["ranked_matches"]).toBe(2);
     expect(bCounters["loss_streak_current"]).toBe(2);
     expect(bCounters["win_streak_current"]).toBe(0);
@@ -204,8 +209,8 @@ describe("achievement awards at settle", () => {
 
     const unlocks = a.of("deedUnlocks")[0]!["unlocks"] as string[];
     expect(unlocks).toContain("sworn-to-the-sand");
-    expect(unlocks).toContain("killing-blows-1");
     const counters = await achievementCounters(db, accountA);
+    expect(counters["killing_blows"]).toBe(1);
     expect(counters["ranked_wins"]).toBe(1);
     // The throwaway bot subject never grew achievement rows.
     const botAccount = [...room.ranked!.accounts.values()].find((acc) => acc.bot)!;

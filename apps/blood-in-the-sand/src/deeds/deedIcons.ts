@@ -3,7 +3,8 @@
  * field. Two families:
  * - Deed-specific emblems forged in Realmsmith (deed-bits type) — null until
  *   the PNG lands in assets/deeds; the forge's save step hands back the
- *   exact replacement line.
+ *   exact replacement line (paste it — a forged PNG that stays null here
+ *   is invisible in-game while Realmsmith still ticks it done).
  * - Cast/weapon chains REUSE the loadout icons (recognition beats novelty,
  *   and it saves ~45 generations) — derived from the roster, so new sim
  *   content wires its own map icon automatically.
@@ -29,16 +30,36 @@ export const DEED_ICONS: Record<string, number | null> = {
   "deed-healing": require("../../assets/deeds/deed-healing.png"),
   "deed-untouched": require("../../assets/deeds/deed-untouched.png"),
   "deed-lifeblood": require("../../assets/deeds/deed-lifeblood.png"),
-  // Wave-2 feats (2026-08-08) — null until forged; the codex renders the
-  // bare well and the ceremony simply skips the icon block.
-  "deed-thread": null,
-  "deed-reflect": null,
-  "deed-standing": null,
-  "deed-flawless": null,
-  "deed-old-ways": null,
-  "deed-carnage": null,
-  "deed-crits": null,
-  "deed-comeback": null,
+  // Wave-2 feats (forged 2026-08-08, wired 2026-08-24 — the require lines
+  // were never pasted after the forge, so these rendered iconless).
+  "deed-thread": require("../../assets/deeds/deed-thread.png"),
+  "deed-reflect": require("../../assets/deeds/deed-reflect.png"),
+  "deed-standing": require("../../assets/deeds/deed-standing.png"),
+  "deed-flawless": require("../../assets/deeds/deed-flawless.png"),
+  "deed-old-ways": require("../../assets/deeds/deed-old-ways.png"),
+  "deed-carnage": require("../../assets/deeds/deed-carnage.png"),
+  "deed-crits": require("../../assets/deeds/deed-crits.png"),
+  "deed-comeback": require("../../assets/deeds/deed-comeback.png"),
+  // Wave-3: the 2v2 board (achievements.md § Wave-3) — forged 2026-08-24,
+  // the same day as the defs (deedSet derives the rows; briefs in the style
+  // bible).
+  "deed-two-blades": require("../../assets/deeds/deed-two-blades.png"),
+  "deed-duo-wins": require("../../assets/deeds/deed-duo-wins.png"),
+  "deed-assists": require("../../assets/deeds/deed-assists.png"),
+  "deed-revenge": require("../../assets/deeds/deed-revenge.png"),
+  "deed-clutch": require("../../assets/deeds/deed-clutch.png"),
+  "deed-double-kill": require("../../assets/deeds/deed-double-kill.png"),
+  "deed-concert": require("../../assets/deeds/deed-concert.png"),
+  "deed-ambush": require("../../assets/deeds/deed-ambush.png"),
+  "deed-swift-vengeance": require("../../assets/deeds/deed-swift-vengeance.png"),
+  "deed-last-word": require("../../assets/deeds/deed-last-word.png"),
+  "deed-shieldwall": require("../../assets/deeds/deed-shieldwall.png"),
+  "deed-matching-set": require("../../assets/deeds/deed-matching-set.png"),
+  "deed-selfless": require("../../assets/deeds/deed-selfless.png"),
+  "deed-even-split": require("../../assets/deeds/deed-even-split.png"),
+  "deed-meat-shield": require("../../assets/deeds/deed-meat-shield.png"),
+  "deed-along-for-the-ride": require("../../assets/deeds/deed-along-for-the-ride.png"),
+  "deed-nobodys-hero": require("../../assets/deeds/deed-nobodys-hero.png"),
   // Loadout-icon reuse — derived, never forged as deeds.
   ...Object.fromEntries(WEAPON_IDS.map((w) => [`deed-rounds-${w}`, ICON_SOURCES[w]])),
   ...Object.fromEntries(ABILITY_IDS.map((a) => [`deed-casts-${a}`, ICON_SOURCES[a]])),

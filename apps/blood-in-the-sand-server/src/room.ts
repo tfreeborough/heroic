@@ -255,9 +255,19 @@ export class Room {
    * Seat a validated joiner: a token-proven disconnected seat is reclaimed
    * first (mid-match rejoin takes over the live body), else a free lobby
    * seat. Returns the player id, or null if the room filled up in the
-   * meantime.
+   * meantime. `team` pins the side (the ranked matcher dictates sides —
+   * bits-ranked.md § 2v2 solo queue); absent, the sim's random-balanced
+   * assignment runs (skirmish). Ignored on a reclaim — a ghost keeps its seat.
    */
-  seat(ws: Socket, name: string, announcer: string, title: string, seatToken: string | null, nowMs: number): number | null {
+  seat(
+    ws: Socket,
+    name: string,
+    announcer: string,
+    title: string,
+    seatToken: string | null,
+    nowMs: number,
+    team?: Team,
+  ): number | null {
     const ghost = this.findGhost(seatToken);
     // A rejoiner RESUMES an identity, never creates one: on a ranked reclaim
     // the seat's name/title/announcer were entitlement-verified at queue time
@@ -279,7 +289,7 @@ export class Room {
         this.notice(`${name} arrives — the bots stand down.`);
         console.log(`[${this.meta.code}] ${name} joined mid-bot-countdown — bots dismissed`);
       }
-      playerId = addPlayer(this.sim, name)?.id ?? null;
+      playerId = addPlayer(this.sim, name, team)?.id ?? null;
     }
     if (playerId === null) return null;
     // A fresh seat mints its rejoin secret here — a reclaim keeps (and
@@ -625,7 +635,7 @@ export class Room {
       }
       const events = stepSim(this.sim, stepInputs, TICK_DT);
       this.eventBuffer.push(...events);
-      this.matchStats?.ingest(events);
+      this.matchStats?.ingest(events, this.sim.state.tick); // the tick clocks the Wave-3 timed stats
     }
     this.castLatch.clear();
     this.logEvents();

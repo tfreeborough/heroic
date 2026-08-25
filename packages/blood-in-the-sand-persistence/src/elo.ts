@@ -26,6 +26,12 @@ export const K_SETTLED = 15;
 export const expectedScore = (rating: number, opponent: number): number =>
   1 / (1 + 10 ** ((opponent - rating) / 400));
 
+/** A team's strength for the expected-score math (bits-ranked.md § team
+ * brackets): the mean of its members' bracket ratings. A 1v1 "team" is the
+ * player — the mean of one. */
+export const teamMean = (ratings: readonly number[]): number =>
+  ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+
 /** Each side uses its OWN K — a placement player moves fast even against a
  * settled one. `matchesPlayed` = that player's wins + losses in the bracket. */
 export const kFactor = (matchesPlayed: number): number =>

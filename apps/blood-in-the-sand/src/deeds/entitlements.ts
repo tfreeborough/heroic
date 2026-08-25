@@ -11,33 +11,13 @@
  * cache costs nothing worse than a hidden wizard card or an ignored pick.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  ACHIEVEMENT_DEFS,
-  GATED_ABILITIES,
-  GATED_WEAPONS,
-  abilityEntitlement,
-  weaponEntitlement,
-} from "@heroic/blood-in-the-sand-sim";
-import { devFlags } from "../dev";
+import { ACHIEVEMENT_DEFS } from "@heroic/blood-in-the-sand-sim";
 
 const KEY_ENTITLEMENTS = "bits.entitlements";
 
 let entitlements = new Set<string>();
 
-/** Every gated item's entitlement id — the dev-menu grant-all overlay. */
-const ALL_GATED: readonly string[] = [
-  ...[...GATED_WEAPONS].map(weaponEntitlement),
-  ...[...GATED_ABILITIES].map(abilityEntitlement),
-];
-
-export const getEntitlements = (): ReadonlySet<string> =>
-  // The dev overlay UNIONS, never mutates — flipping the switch off (or a
-  // relaunch, devFlags are session-only) restores the honest cache as-is.
-  // Debug builds ONLY (2026-08-15 store-security pass): the secret menu
-  // ships in release builds, and with a paid shelf in the Armory a
-  // grant-everything switch reachable by tap-count is a "why buy" hole —
-  // skirmish is real PvP even though ranked never trusted this cache.
-  __DEV__ && devFlags.grantAllItems ? new Set([...entitlements, ...ALL_GATED]) : entitlements;
+export const getEntitlements = (): ReadonlySet<string> => entitlements;
 
 const persist = (): void => {
   void AsyncStorage.setItem(KEY_ENTITLEMENTS, JSON.stringify([...entitlements]));

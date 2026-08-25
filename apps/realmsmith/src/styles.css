@@ -647,6 +647,13 @@ body {
   opacity: 0.65;
 }
 
+/* Forged, but the style-bible subject moved on — a re-forge candidate. */
+.forge .icon-chip.stale {
+  opacity: 1;
+  border-color: #b8742a;
+  color: #e0a45a;
+}
+
 .forge .icon-chip.active {
   border-color: #d99a41;
   color: #d99a41;

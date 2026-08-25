@@ -30,15 +30,20 @@ import {
   type BoardDef,
   type ChainTier,
 } from "@heroic/achievements";
-import { COUNTERS } from "./counters";
+import { COUNTERS, UNDYING_STREAK } from "./counters";
 import { summaryTeamOf, wonMatch, type MatchSummary } from "./summary";
+import { ACHIEVEMENT_DEFS_2V2, CHAPTER_2V2, RANKED_2V2_BOARD, RANKED_2V2_BOARD_DEF } from "./defs2v2";
 
 export type BitsAchievementDef = AchievementDef<MatchSummary>;
 
 export const RANKED_BOARD = "ranked";
 
+/** Two boards (achievements.md § boards): the Season I ranked board accepts
+ * every ranked match (its counters are bracket-blind — a 2v2 win is a
+ * ranked win), the 2v2 board (defs2v2.ts) only 2v2 matches. */
 export const ACHIEVEMENT_BOARDS: Record<string, BoardDef<MatchSummary>> = {
   [RANKED_BOARD]: { id: RANKED_BOARD, accepts: (s) => s.ranked },
+  [RANKED_2V2_BOARD]: RANKED_2V2_BOARD_DEF,
 };
 
 /** The board's root: everyone's first node, parent of every chain. */
@@ -97,7 +102,9 @@ const kills = milestoneChain<MatchSummary>({
   origin: { x: 140, y: 0 },
   step: { x: 115, y: 0 },
   tiers: [
-    { threshold: 1, title: "Lights Out", description: "Strike your first killing blow." },
+    // 1 → 5 (Tom, 2026-08-25 — first-win audit): a first-blood tier popped
+    // in every first match next to Christened; five kills is a second win.
+    { threshold: 5, title: "Lights Out", description: "Strike 5 killing blows." },
     { threshold: 25, title: "Gravedigger", description: "Strike 25 killing blows." },
     { threshold: 100, title: "Judge, Jury and Executioner", description: "Strike 100 killing blows." },
     { threshold: 500, title: "Sudden Death", description: "Strike 500 killing blows." },
@@ -121,54 +128,54 @@ const weaponChain = (weapon: string, row: number, tiers: readonly ChainTier[]) =
 
 const weaponRounds = [
   ...weaponChain("blade", 0, [
-    { threshold: 5, title: "Quick on the Draw", description: "Win 5 rounds wielding the Blade." },
-    { threshold: 50, title: "A Cut Above", description: "Win 50 rounds wielding the Blade." },
-    { threshold: 200, title: "The Crimson Blur", description: "Win 200 rounds wielding the Blade.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Quick on the Draw", description: "Win 15 rounds wielding the Blade." },
+    { threshold: 150, title: "A Cut Above", description: "Win 150 rounds wielding the Blade." },
+    { threshold: 600, title: "The Crimson Blur", description: "Win 600 rounds wielding the Blade.", rewards: [{ kind: "title" }] },
   ]),
   ...weaponChain("bow", 1, [
-    { threshold: 5, title: "Fletcher's Friend", description: "Win 5 rounds wielding the Bow." },
-    { threshold: 50, title: "Deadeye", description: "Win 50 rounds wielding the Bow." },
-    { threshold: 200, title: "Death from Afar", description: "Win 200 rounds wielding the Bow.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Fletcher's Friend", description: "Win 15 rounds wielding the Bow." },
+    { threshold: 150, title: "Deadeye", description: "Win 150 rounds wielding the Bow." },
+    { threshold: 600, title: "Death from Afar", description: "Win 600 rounds wielding the Bow.", rewards: [{ kind: "title" }] },
   ]),
   ...weaponChain("staff", 2, [
-    { threshold: 5, title: "Spark-Thrower", description: "Win 5 rounds wielding the Staff." },
-    { threshold: 50, title: "The Long Reach", description: "Win 50 rounds wielding the Staff." },
-    { threshold: 200, title: "Stormcaller", description: "Win 200 rounds wielding the Staff.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Spark-Thrower", description: "Win 15 rounds wielding the Staff." },
+    { threshold: 150, title: "The Long Reach", description: "Win 150 rounds wielding the Staff." },
+    { threshold: 600, title: "Stormcaller", description: "Win 600 rounds wielding the Staff.", rewards: [{ kind: "title" }] },
   ]),
   ...weaponChain("hammer", 3, [
-    { threshold: 5, title: "Heavy-Handed", description: "Win 5 rounds wielding the Hammer." },
-    { threshold: 50, title: "Bonebreaker", description: "Win 50 rounds wielding the Hammer." },
-    { threshold: 200, title: "The Landslide", description: "Win 200 rounds wielding the Hammer.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Heavy-Handed", description: "Win 15 rounds wielding the Hammer." },
+    { threshold: 150, title: "Bonebreaker", description: "Win 150 rounds wielding the Hammer." },
+    { threshold: 600, title: "The Landslide", description: "Win 600 rounds wielding the Hammer.", rewards: [{ kind: "title" }] },
   ]),
   // The gated weapon's own ladder — visible like any chain, but you can't
   // climb it until the Sand snake hands you the spear. PLACEHOLDER titles.
   ...weaponChain("trident", 4, [
-    { threshold: 5, title: "The Fisherman", description: "Win 5 rounds wielding the Trident." },
-    { threshold: 50, title: "Spearside", description: "Win 50 rounds wielding the Trident." },
-    { threshold: 200, title: "The Retiarius", description: "Win 200 rounds wielding the Trident.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "The Fisherman", description: "Win 15 rounds wielding the Trident." },
+    { threshold: 150, title: "Spearside", description: "Win 150 rounds wielding the Trident." },
+    { threshold: 600, title: "The Retiarius", description: "Win 600 rounds wielding the Trident.", rewards: [{ kind: "title" }] },
   ]),
   // The SIGNET weapons' ladders (bits-store-arms.md) — same rule as the
   // trident's: the chain is visible to all, climbable once the Armory sells
   // you the arm. PLACEHOLDER titles (Tom's naming pass).
   ...weaponChain("fang", 5, [
-    { threshold: 5, title: "Just a Scratch", description: "Win 5 rounds wielding the Fang." },
-    { threshold: 50, title: "Venomous", description: "Win 50 rounds wielding the Fang." },
-    { threshold: 200, title: "The Adder's Kiss", description: "Win 200 rounds wielding the Fang.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Just a Scratch", description: "Win 15 rounds wielding the Fang." },
+    { threshold: 150, title: "Venomous", description: "Win 150 rounds wielding the Fang." },
+    { threshold: 600, title: "The Adder's Kiss", description: "Win 600 rounds wielding the Fang.", rewards: [{ kind: "title" }] },
   ]),
   ...weaponChain("scorpion", 6, [
-    { threshold: 5, title: "Three of a Kind", description: "Win 5 rounds wielding the Scorpion." },
-    { threshold: 50, title: "Bolt-Counter", description: "Win 50 rounds wielding the Scorpion." },
-    { threshold: 200, title: "The Rain of Barbs", description: "Win 200 rounds wielding the Scorpion.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Three of a Kind", description: "Win 15 rounds wielding the Scorpion." },
+    { threshold: 150, title: "Bolt-Counter", description: "Win 150 rounds wielding the Scorpion." },
+    { threshold: 600, title: "The Rain of Barbs", description: "Win 600 rounds wielding the Scorpion.", rewards: [{ kind: "title" }] },
   ]),
   ...weaponChain("bombard", 7, [
-    { threshold: 5, title: "Fire in the Hole", description: "Win 5 rounds wielding the Bombard." },
-    { threshold: 50, title: "The Long Arm", description: "Win 50 rounds wielding the Bombard." },
-    { threshold: 200, title: "Rain of Ruin", description: "Win 200 rounds wielding the Bombard.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Fire in the Hole", description: "Win 15 rounds wielding the Bombard." },
+    { threshold: 150, title: "The Long Arm", description: "Win 150 rounds wielding the Bombard." },
+    { threshold: 600, title: "Rain of Ruin", description: "Win 600 rounds wielding the Bombard.", rewards: [{ kind: "title" }] },
   ]),
   ...weaponChain("lifeline", 8, [
-    { threshold: 5, title: "Field Medicine", description: "Win 5 rounds wielding the Lifeline." },
-    { threshold: 50, title: "The Thin Gold Thread", description: "Win 50 rounds wielding the Lifeline." },
-    { threshold: 200, title: "Death's Paperwork", description: "Win 200 rounds wielding the Lifeline.", rewards: [{ kind: "title" }] },
+    { threshold: 15, title: "Field Medicine", description: "Win 15 rounds wielding the Lifeline." },
+    { threshold: 150, title: "The Thin Gold Thread", description: "Win 150 rounds wielding the Lifeline." },
+    { threshold: 600, title: "Death's Paperwork", description: "Win 600 rounds wielding the Lifeline.", rewards: [{ kind: "title" }] },
   ]),
 ];
 
@@ -177,6 +184,8 @@ const weaponRounds = [
  * between clusters. Rows 0-4 offensive, 5-9 defensive, 10-13 support
  * (the SIGNET spells joined 2026-08-10/11: sinkhole + titans-draught
  * offensive, tar-pit support) match the authored order below. */
+/** Cast tiers TRIPLED with the weapon tiers (Tom, 2026-08-25): charges
+ * refill every round, so the old 10-cast tier 1 was a second match. */
 const abilityRowY = (row: number): number =>
   185 + row * 115 + (row >= 5 ? 100 : 0) + (row >= 10 ? 100 : 0);
 
@@ -194,77 +203,77 @@ const abilityChain = (ability: string, row: number, tiers: readonly ChainTier[])
 
 const abilityCasts = [
   ...abilityChain("sandtrap", 0, [
-    { threshold: 10, title: "Trapper's Apprentice", description: "Cast Sandtrap 10 times." },
-    { threshold: 50, title: "Tread Carefully", description: "Cast Sandtrap 50 times." },
-    { threshold: 250, title: "The Ground Lies", description: "Cast Sandtrap 250 times." },
+    { threshold: 30, title: "Trapper's Apprentice", description: "Cast Sandtrap 30 times." },
+    { threshold: 150, title: "Tread Carefully", description: "Cast Sandtrap 150 times." },
+    { threshold: 750, title: "The Ground Lies", description: "Cast Sandtrap 750 times." },
   ]),
   ...abilityChain("tremor", 1, [
-    { threshold: 10, title: "Rumbler", description: "Cast Tremor 10 times." },
-    { threshold: 50, title: "Faultline", description: "Cast Tremor 50 times." },
-    { threshold: 250, title: "The Earthshaker", description: "Cast Tremor 250 times.", rewards: [{ kind: "title" }] },
+    { threshold: 30, title: "Rumbler", description: "Cast Tremor 30 times." },
+    { threshold: 150, title: "Faultline", description: "Cast Tremor 150 times." },
+    { threshold: 750, title: "The Earthshaker", description: "Cast Tremor 750 times.", rewards: [{ kind: "title" }] },
   ]),
   ...abilityChain("harpoon", 2, [
-    { threshold: 10, title: "Hooked", description: "Cast Harpoon 10 times." },
-    { threshold: 50, title: "Reel Them In", description: "Cast Harpoon 50 times." },
-    { threshold: 250, title: "The Butcher's Gaff", description: "Cast Harpoon 250 times." },
+    { threshold: 30, title: "Hooked", description: "Cast Harpoon 30 times." },
+    { threshold: 150, title: "Reel Them In", description: "Cast Harpoon 150 times." },
+    { threshold: 750, title: "The Butcher's Gaff", description: "Cast Harpoon 750 times." },
   ]),
   // The first SIGNET spell's ladder (bits-store-arms.md) — climbable once the
   // Armory sells you the throw. PLACEHOLDER titles (Tom's naming pass).
   ...abilityChain("sinkhole", 3, [
-    { threshold: 10, title: "Undertow", description: "Cast Sinkhole 10 times." },
-    { threshold: 50, title: "The Ground Hungers", description: "Cast Sinkhole 50 times." },
-    { threshold: 250, title: "The Swallowing Sands", description: "Cast Sinkhole 250 times.", rewards: [{ kind: "title" }] },
+    { threshold: 30, title: "Undertow", description: "Cast Sinkhole 30 times." },
+    { threshold: 150, title: "The Ground Hungers", description: "Cast Sinkhole 150 times." },
+    { threshold: 750, title: "The Swallowing Sands", description: "Cast Sinkhole 750 times.", rewards: [{ kind: "title" }] },
   ]),
   ...abilityChain("titans-draught", 4, [
-    { threshold: 10, title: "A Head Taller", description: "Drink Titan's Draught 10 times." },
-    { threshold: 50, title: "Giant's Thirst", description: "Drink Titan's Draught 50 times." },
-    { threshold: 250, title: "The Colossus of the Pit", description: "Drink Titan's Draught 250 times.", rewards: [{ kind: "title" }] },
+    { threshold: 30, title: "A Head Taller", description: "Drink Titan's Draught 30 times." },
+    { threshold: 150, title: "Giant's Thirst", description: "Drink Titan's Draught 150 times." },
+    { threshold: 750, title: "The Colossus of the Pit", description: "Drink Titan's Draught 750 times.", rewards: [{ kind: "title" }] },
   ]),
   ...abilityChain("dash", 5, [
-    { threshold: 25, title: "Quickstep", description: "Cast Dash 25 times." },
-    { threshold: 100, title: "Dust Devil", description: "Cast Dash 100 times." },
-    { threshold: 500, title: "Gone in a Blink", description: "Cast Dash 500 times." },
+    { threshold: 75, title: "Quickstep", description: "Cast Dash 75 times." },
+    { threshold: 300, title: "Dust Devil", description: "Cast Dash 300 times." },
+    { threshold: 1500, title: "Gone in a Blink", description: "Cast Dash 1500 times." },
   ]),
   ...abilityChain("mirror-guard", 6, [
-    { threshold: 15, title: "Polished Bronze", description: "Cast Mirror Guard 15 times." },
-    { threshold: 100, title: "Turnabout", description: "Cast Mirror Guard 100 times." },
-    { threshold: 300, title: "The Mirror's Edge", description: "Cast Mirror Guard 300 times." },
+    { threshold: 45, title: "Polished Bronze", description: "Cast Mirror Guard 45 times." },
+    { threshold: 300, title: "Turnabout", description: "Cast Mirror Guard 300 times." },
+    { threshold: 900, title: "The Mirror's Edge", description: "Cast Mirror Guard 900 times." },
   ]),
   ...abilityChain("ironhide", 7, [
-    { threshold: 10, title: "Thick-Skinned", description: "Cast Ironhide 10 times." },
-    { threshold: 50, title: "Man of Iron", description: "Cast Ironhide 50 times." },
-    { threshold: 250, title: "The Anvil", description: "Cast Ironhide 250 times.", rewards: [{ kind: "title" }] },
+    { threshold: 30, title: "Thick-Skinned", description: "Cast Ironhide 30 times." },
+    { threshold: 150, title: "Man of Iron", description: "Cast Ironhide 150 times." },
+    { threshold: 750, title: "The Anvil", description: "Cast Ironhide 750 times.", rewards: [{ kind: "title" }] },
   ]),
   ...abilityChain("straw-man", 8, [
-    { threshold: 10, title: "Decoy", description: "Cast Straw Man 10 times." },
-    { threshold: 75, title: "Misdirection", description: "Cast Straw Man 75 times." },
-    { threshold: 200, title: "The Puppeteer", description: "Cast Straw Man 200 times." },
+    { threshold: 30, title: "Decoy", description: "Cast Straw Man 30 times." },
+    { threshold: 225, title: "Misdirection", description: "Cast Straw Man 225 times." },
+    { threshold: 600, title: "The Puppeteer", description: "Cast Straw Man 600 times." },
   ]),
   ...abilityChain("warding-shout", 9, [
-    { threshold: 20, title: "Stand Back", description: "Cast Warding Shout 20 times." },
-    { threshold: 100, title: "Hold the Line", description: "Cast Warding Shout 100 times." },
-    { threshold: 250, title: "The Herald's Roar", description: "Cast Warding Shout 250 times." },
+    { threshold: 60, title: "Stand Back", description: "Cast Warding Shout 60 times." },
+    { threshold: 300, title: "Hold the Line", description: "Cast Warding Shout 300 times." },
+    { threshold: 750, title: "The Herald's Roar", description: "Cast Warding Shout 750 times." },
   ]),
   // The second SIGNET spell's ladder (bits-store-arms.md) — PLACEHOLDER titles.
   ...abilityChain("tar-pit", 10, [
-    { threshold: 10, title: "Slow Going", description: "Cast Tar Pit 10 times." },
-    { threshold: 50, title: "Black Wake", description: "Cast Tar Pit 50 times." },
-    { threshold: 250, title: "The Unfollowable", description: "Cast Tar Pit 250 times.", rewards: [{ kind: "title" }] },
+    { threshold: 30, title: "Slow Going", description: "Cast Tar Pit 30 times." },
+    { threshold: 150, title: "Black Wake", description: "Cast Tar Pit 150 times." },
+    { threshold: 750, title: "The Unfollowable", description: "Cast Tar Pit 750 times.", rewards: [{ kind: "title" }] },
   ]),
   ...abilityChain("war-drums", 11, [
-    { threshold: 10, title: "Drummer Boy", description: "Cast War Drums 10 times." },
-    { threshold: 50, title: "March to War", description: "Cast War Drums 50 times." },
-    { threshold: 150, title: "The Rhythm of Ruin", description: "Cast War Drums 250 times." },
+    { threshold: 30, title: "Drummer Boy", description: "Cast War Drums 30 times." },
+    { threshold: 150, title: "March to War", description: "Cast War Drums 150 times." },
+    { threshold: 750, title: "The Rhythm of Ruin", description: "Cast War Drums 750 times." },
   ]),
   ...abilityChain("blood-font", 12, [
-    { threshold: 10, title: "First Aid", description: "Cast Blood Font 10 times." },
-    { threshold: 50, title: "Haemophiliac", description: "Cast Blood Font 50 times." },
-    { threshold: 250, title: "The Red Spring", description: "Cast Blood Font 250 times.", rewards: [{ kind: "title" }] },
+    { threshold: 30, title: "First Aid", description: "Cast Blood Font 30 times." },
+    { threshold: 150, title: "Haemophiliac", description: "Cast Blood Font 150 times." },
+    { threshold: 750, title: "The Red Spring", description: "Cast Blood Font 750 times.", rewards: [{ kind: "title" }] },
   ]),
   ...abilityChain("sandstorm", 13, [
-    { threshold: 10, title: "Dust Kicker", description: "Cast Sandstorm 10 times." },
-    { threshold: 50, title: "Eye of the Storm", description: "Cast Sandstorm 50 times." },
-    { threshold: 250, title: "The Desert's Wrath", description: "Cast Sandstorm 250 times." },
+    { threshold: 30, title: "Dust Kicker", description: "Cast Sandstorm 30 times." },
+    { threshold: 150, title: "Eye of the Storm", description: "Cast Sandstorm 150 times." },
+    { threshold: 750, title: "The Desert's Wrath", description: "Cast Sandstorm 750 times." },
   ]),
 ];
 
@@ -418,7 +427,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "Return to Sender",
     description: "Turn seven shots back with Mirror Guard in a single ranked match.",
     icon: "deed-reflect",
-    parent: "casts-mirror-guard-15",
+    parent: "casts-mirror-guard-45",
     pos: { x: -25, y: 745 },
     trigger: {
       kind: "feat",
@@ -429,14 +438,16 @@ const FEATS: BitsAchievementDef[] = [
     id: "still-standing",
     board: RANKED_BOARD,
     title: "Still Standing",
-    description: "Win a ranked match without dying once.",
+    // Reworked 2026-08-25 (first-win audit): as a "win without dying" feat
+    // it was IDENTICAL to Flawless in a 1v1 (a dropped round is a death)
+    // and popped as its twin on every sweep. Now an undying STREAK — three
+    // ranked wins in a row without dying — read off the adapter-folded
+    // `undying_streak_best` (counters.ts). Same id, icon and board slot.
+    description: "Win three ranked matches in a row without dying once.",
     icon: "deed-standing",
     parent: wins[0]!.id,
     pos: { x: -150, y: -245 },
-    trigger: {
-      kind: "feat",
-      test: (s, p) => wonMatch(s, p) && (s.stats[p]?.deaths ?? 1) === 0,
-    },
+    trigger: { kind: "milestone", counter: `${UNDYING_STREAK}_best`, threshold: 3 },
   },
   {
     id: "flawless",
@@ -472,13 +483,20 @@ const FEATS: BitsAchievementDef[] = [
     id: "carnage",
     board: RANKED_BOARD,
     title: "Carnage",
-    description: "Deal 300 damage in a single ranked match.",
+    // 300 → 750 (Tom, 2026-08-25 — first-ranked-win ceremony audit): a
+    // match is first-to-3 on 100hp bodies and hit damage isn't clamped to
+    // remaining HP, so EVERY 1v1 win deals ~320–340 — 300 popped on the
+    // first win alongside the two "firsts". 750 is past any heal-less 1v1
+    // (five rounds max ≈ 530): it's the 2v2 CARRY deed — three-quarters of
+    // the enemy side's HP over a five-round match — or grinding a healer
+    // down in 1v1.
+    description: "Deal 750 damage in a single ranked match.",
     icon: "deed-carnage",
     parent: damage[0]!.id,
     pos: { x: 255, y: -140 },
     trigger: {
       kind: "feat",
-      test: (s, p) => (s.stats[p]?.damageDealt ?? 0) >= 300,
+      test: (s, p) => (s.stats[p]?.damageDealt ?? 0) >= 750,
     },
   },
   {
@@ -524,6 +542,7 @@ export const ACHIEVEMENT_DEFS: readonly BitsAchievementDef[] = [
   ...damage,
   ...healing,
   ...FEATS,
+  ...ACHIEVEMENT_DEFS_2V2,
 ];
 
 /**
@@ -554,6 +573,7 @@ export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
       ...idsOf(lossStreaks),
     ],
   },
+  CHAPTER_2V2,
   { title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
   { title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
   // Slice bounds = 3 tiers × chains per category cluster (offensive grew

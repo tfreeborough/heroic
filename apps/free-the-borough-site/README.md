@@ -6,6 +6,7 @@ site shared by every Free the Borough game.
 - `/` — landing page (the games)
 - `/privacy/` — privacy policy (App Store + Play Store privacy-policy URL)
 - `/terms/` — terms of service
+- `/delete-account/` — how to request account/data deletion (Play Console data-deletion URL)
 
 Plain HTML + one stylesheet in `public/`. No build step, no JS, no cookies.
 
@@ -29,6 +30,8 @@ auth — leave that record untouched; the site only claims the apex + www.
   `https://free-the-borough.com/privacy/`
 - **Play Console** → Store listing → privacy policy:
   `https://free-the-borough.com/privacy/`
+- **Play Console** → App content → Data safety → account deletion URL:
+  `https://free-the-borough.com/delete-account/`
 - Terms URL (optional fields / support pages): `https://free-the-borough.com/terms/`
 
 ## Editing

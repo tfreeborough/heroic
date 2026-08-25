@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@clerk/expo";
@@ -8,6 +8,7 @@ import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { CLERK_PUBLISHABLE_KEY, accountUnlink } from "../net/account";
 import { ensureIdentity, useWalletInfo } from "../net/api";
 import { loadLefty, saveLefty } from "../settings";
+import { SUPPORT_EMAIL, openSupportEmail } from "../support";
 import { runningVersion } from "../updates";
 
 export interface SettingsScreenProps {
@@ -18,6 +19,10 @@ export interface SettingsScreenProps {
   playerName: string;
   /** Commit a new non-empty name — persists and applies from the next match. */
   onRename: (name: string) => void;
+  /** HOW TO PLAY → replay the Primer (bits-onboarding.md). */
+  onPrimer: () => void;
+  /** FEEDBACK → the bug-report / feedback form (bits-feedback.md). */
+  onFeedback: () => void;
 }
 
 /**
@@ -25,7 +30,7 @@ export interface SettingsScreenProps {
  * gladiator name (first claimed on the way into PLAY — this is the only place
  * to change it afterwards). Saved on toggle / end of editing.
  */
-export const SettingsScreen = ({ onBack, onArmory, playerName, onRename }: SettingsScreenProps) => {
+export const SettingsScreen = ({ onBack, onArmory, playerName, onRename, onPrimer, onFeedback }: SettingsScreenProps) => {
   const insets = useSafeAreaInsets();
   const [lefty, setLefty] = useState(false);
   const [name, setName] = useState(playerName);
@@ -52,6 +57,10 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename }: Setti
       <ScreenHeader onBack={onBack} onPurse={onArmory} />
       <ScreenSign title="SETTINGS" />
 
+      {/* Scrolls since the support rows arrived (2026-08-24) — seven rows
+          plus the version footer no longer fit a small phone in one view;
+          flexGrow keeps the footer pinned to the bottom when they do. */}
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <View style={styles.row}>
         <View style={styles.rowText}>
           <Text style={styles.rowTitle}>Gladiator name</Text>
@@ -83,12 +92,50 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename }: Setti
         />
       </View>
 
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>How to play</Text>
+          <Text style={styles.rowHint}>the rules of the sand, one chapter at a time</Text>
+        </View>
+        <Pressable onPress={onPrimer} hitSlop={8}>
+          <Text style={styles.signInText}>REPLAY</Text>
+        </Pressable>
+      </View>
+
+      {/* The two support doors (bits-feedback.md): reports into the
+          database, contact into the mail app — both need no account. */}
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Feedback & bug reports</Text>
+          <Text style={styles.rowHint}>tell me what broke or what you'd change</Text>
+        </View>
+        <Pressable onPress={onFeedback} hitSlop={8}>
+          <Text style={styles.signInText}>FEEDBACK</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Contact</Text>
+          <Text style={styles.rowHint}>{SUPPORT_EMAIL}</Text>
+        </View>
+        <Pressable
+          onPress={() => {
+            void openSupportEmail(playerName);
+          }}
+          hitSlop={8}
+        >
+          <Text style={styles.signInText}>EMAIL</Text>
+        </Pressable>
+      </View>
+
       {CLERK_PUBLISHABLE_KEY.length > 0 ? <AccountRows /> : null}
 
       <View style={styles.version}>
         <Text style={styles.versionText}>{version.binary}</Text>
         <Text style={styles.versionText}>{version.bundle}</Text>
       </View>
+      </ScrollView>
     </View>
   );
 };
@@ -180,6 +227,7 @@ const version = runningVersion();
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
+  scroll: { flexGrow: 1 },
   row: {
     backgroundColor: "#1d1915",
     borderRadius: 8,

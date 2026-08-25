@@ -298,10 +298,10 @@ two) plus one accounting fix. Placeholder titles; Tom's naming pass owed.
 | --- | --- | --- | --- |
 | by-a-thread | By a Thread | win a decider (both sides took a round) alive under 10% HP | lastRoundHpFrac (Wave 2) |
 | return-to-sender | Return to Sender | turn 7 shots with Mirror Guard in one match | reflects (Wave 2) |
-| still-standing | Still Standing | win a match without dying | deaths |
+| still-standing | Still Standing | ~~win a match without dying~~ → three ranked wins in a row without dying (2026-08-25, see *First-win ceremony audit*) | `undying_streak_best` (adapter-folded) |
 | flawless | Flawless | win without dropping a round | roundWins |
 | the-old-ways | The Old Ways | win a match casting NO abilities | casts |
-| carnage | Carnage | deal 300 damage in one match | damageDealt |
+| carnage | Carnage | deal 750 damage in one match (was 300 — see *First-win ceremony audit*) | damageDealt |
 | killer-instinct | Killer Instinct | land 10 crits in one match | crits (NEW tally) |
 | never-doubted | Never Doubted | lose the opening round, win the match | roundWinners (NEW tally) |
 
@@ -313,9 +313,127 @@ The two NEW tallies are accumulator-only (`crits` per player,
 carry the data; no sim or wire changes. Feats cascade deliberately
 (Not a Scratch ⊃ Flawless ⊃ Still Standing can pop together — a great
 ceremony, not a bug). Thresholds: 7 reflects / 300 damage / 10 crits (reflects+crits
-Tom-tuned 2026-08-08; 300 damage still a first guess). Each feat needs a forged icon (subjects briefed
+Tom-tuned 2026-08-08; damage retuned 300 → 750 on 2026-08-25, see below). Each feat needs a forged icon (subjects briefed
 in the style bible; null until the PNG lands) and lives in a codex chapter
 (test-enforced). Rewards deliberately unset — economy/titles pass is Tom's.
+
+## First-win ceremony audit *(Tom 2026-08-25: five deeds off one 1v1 win "felt cheap")*
+
+What a first ranked 1v1 win actually pops, given first-to-3 rounds on 100hp
+bodies and hit damage that is NOT clamped to remaining HP (a kill credits
+~110 — the lethal blow's overkill counts):
+
+| deed | on a first 1v1 win | why |
+| --- | --- | --- |
+| Christened with blood | always | the root — intended |
+| Lights Out (1 killing blow) | always | a win is three kills — intended first-kill beat |
+| Carnage | **always** (at 300) | 3 kills ≈ 320–340 damage; **raised to 750** |
+| Flawless + Still Standing | together on any 3–0 | in a 1v1 they are the SAME condition (a dropped round = a death) — open, see below |
+| Killer Instinct (10 crits) | ~3% (free weapons) | ~15–35 hits/match at 15% crit → 2–5 crits; a long-match tail |
+| Never Doubted | when the opener is dropped | a real story beat, kept |
+| Not a Scratch / The Old Ways / By a Thread | rare | genuine feats |
+| I can go the distance (100 Glory) | never | a win pays 15–30 Glory (~4–5 wins in) |
+
+So a sweep popped FIVE: the two firsts (the doc's expected 2–3), a
+guaranteed Carnage, and the Flawless/Still Standing pair. Carnage at 750
+(Tom: "something you'd need to REALLY carry in 2v2") is past any heal-less
+1v1 — five rounds max ≈ 530 — so it's the 2v2 carry deed: three-quarters of
+the enemy side's 1000 HP over a five-round match, or grinding a healer down
+in 1v1.
+
+**Flawless ⊃ Still Standing collapse — RESOLVED (Tom, same day).** Losing a
+round means dying (barring a double-wipe draw), so Still Standing implied
+Flawless in every bracket; in 1v1 they were identical and always popped as
+a pair. Still Standing is now an undying STREAK: "win three ranked matches
+in a row without dying once" — a BITS-side `undying_streak_current/_best`
+(sim `counters.ts` `undyingStreakUpdates()`, folded by the adapter right
+after `streakUpdates()`; any death resets `_current`, `_best` high-waters)
+and the def is a milestone on `_best` at 3. Same id, icon and board slot;
+anyone who already holds the old feat keeps it (unlocks never un-fire).
+
+**Lights Out 1 → 5 (Tom, same day).** The first-blood tier popped in every
+first match beside Christened — two "firsts" on one card stack. Five
+killing blows is a second win. Its id moved with the threshold
+(`killing-blows-1` → `killing-blows-5`, chain ids embed it); pre-launch
+test accounts holding the old id just carry an orphan row.
+
+A first ranked 1v1 win now pops ONE deed (Christened) — two on a sweep
+(+ Flawless), three if the opener was dropped (+ Never Doubted).
+
+**Second-match wave — TRIPLED (Tom, same day: "too easy").** The next win
+with the same weapon crossed the 5-round weapon tier (3 + 3) and the
+10-cast ability tiers landed around match two or three. Every weapon and
+cast tier is now ×3: weapons 15/150/600 rounds (tier 1 ≈ five wins with the
+arm, tier 3 ≈ 250 matches); casts e.g. 30/150/750 (dash 75/300/1500,
+mirror guard 45/300/900, straw man 30/225/600, warding shout 60/300/750;
+war drums' tier 3 was 150 with a "250" description — fixed to the intended
+250 first, now 750). Ids moved with the thresholds; Return to Sender's
+parent is `casts-mirror-guard-45`.
+
+**Skew to watch:** Killer Instinct counts hits, so the many-small-hits
+signet arms (scorpion's triple bolt at 5 attack, the fang at 8) roll 3–4×
+the hits of a blade and clear 10 crits in most long matches. Not a
+first-match problem (bots and new players draft free arms); a per-hit
+crit-rate feat or a higher bar for those arms is the fix if it shows.
+
+## Wave-3 — the 2v2 board *(Tom 2026-08-24: "a special set of 2v2 ranked-only
+achievements, a little more interesting than the ones so far" — BUILT same day)*
+
+The Season I board counts things; this board marks **moments between two
+players**. Its own board (`ranked-2v2`, `accepts: ranked && bracket === "2v2"`),
+its own Chronicle chapter (*Brothers in Arms*, second in reading order), its own
+coordinate space (x ≥ 1400 — the overlap test is global). Content lives in
+`defs2v2.ts`; placeholder titles in the house voice, Tom's naming pass owed.
+
+**New accumulator stats** (`summary.ts` § Wave 3) — all derived from the ORDERED
+event stream inside a round, clocked by the sim tick (`ingest(events, tick)`;
+the room passes `sim.state.tick`). Per-round scratch (alive set, damage ledger
+target→attacker, killer-of, death ticks, kills, "outnumbered" marks, fight-start
+tick) resets on `roundStart`:
+
+| stat | meaning |
+| --- | --- |
+| `assists` | a teammate landed the lethal blow on an enemy you had damaged that round |
+| `doubleKills` | rounds where you landed the lethal blow on ≥ 2 enemies |
+| `clutchRounds` / `lastRoundClutch` | rounds won after being left alone vs a FULL enemy side (partner fell with every enemy standing) and you were standing at the close; the flag is the final round's |
+| `revengeKills` / `swiftRevenges` | lethal on the enemy who killed your partner earlier that round; swift = within 5 s |
+| `concertKills` | you and a teammate each felled an enemy within 2 s (credited to both; a solo double kill is NOT a concert) |
+| `fastestKillSec` | seconds from `fightStart` to your fastest lethal, across rounds |
+| `alliedHealing` | healing dealt to teammates (never self) |
+
+**Every one of these is structurally zero in a 1v1** (no teammate, one enemy) —
+that is what keeps the board's `accepts` gate sound against the crossing trap
+(§ M4 retired): a 1v1 match never moves a counter a 2v2 milestone reads
+(test-enforced). Counters: `ranked_matches:<bracket>` / `ranked_wins:<bracket>`
+(written for every bracket — the 1v1 pair is unused but free), `assists`,
+`double_kills`, `clutch_rounds`, `revenge_kills`.
+
+**The set** (17 icons FORGED same day — pair motifs, briefs in the style bible; driven straight through the Forge's HTTP API, 2 candidates each, picked on the 32px-on-void test; wired in `deedIcons.ts`):
+
+| id | placeholder | fires when |
+| --- | --- | --- |
+| two-blades | Two Blades, One Sand (title) | first 2v2 match — the root |
+| duo-wins 5/25/100/250 | Sworn Brothers → The Twin Lions → Blood Brothers → The Dioscuri | 2v2 wins spine |
+| assists 10/50/250 | Wingman → The Setup Man → The Second Blade | assists |
+| revenge-kills 5/25/100 | An Eye for an Eye → Vendetta → Nemesis | partner avenged |
+| clutch-rounds 1/10/50 | Against the Odds → One Against Two → The Last Man Standing | rounds won alone vs two |
+| double-kills 1/25/100 | Two for One → Reaper's Pair → Both Barrels | both lethals in a round |
+| in-concert | In Concert | you + partner each kill within 2 s |
+| the-ambush | The Ambush | a lethal within 5 s of fightStart |
+| swift-vengeance | Swift Vengeance | avenge within 5 s |
+| the-last-word | The Last Word | win the DECIDER alone vs both |
+| shieldwall | Shieldwall | win, neither of you died |
+| matching-set | Matching Set | win with the same weapon as your partner |
+| selfless | Selfless | 150 healing to your partner in one match |
+| even-split | Even Split | win with identical kill counts, ≥ 2 each |
+| the-meat-shield | The Meat Shield (title) | win having soaked ≥ 75% of your side's damage |
+| along-for-the-ride | Along for the Ride (joke title) | win dealing zero damage |
+| nobodys-hero | Nobody's Hero (joke title) | LOSE having out-damaged the other three combined |
+
+The two jokes are `TITLE_ONLY_2V2` — never Glory or items (one is a loss, the
+other is "contribute nothing"; the loss-streak rule, test-enforced). Thresholds
+are first guesses (the 2 s concert window and 5 s ambush/revenge windows are
+the ones to tune on device). Rewards otherwise sparse pending the economy pass.
 
 ## Secret items in the wizard
 

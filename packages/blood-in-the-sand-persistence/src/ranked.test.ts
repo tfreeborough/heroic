@@ -31,27 +31,25 @@ describe("recordRankedMatch", () => {
       matchId: "m1",
       season: 1,
       bracket: "1v1",
-      winnerId: alice,
-      loserId: bob,
-      winnerLoadout: { weapon: "sword", abilities: ["dash"] },
-      loserLoadout: { weapon: "bow", abilities: ["heal"] },
+      winners: [{ subjectId: alice, loadout: { weapon: "sword", abilities: ["dash"] } }],
+      losers: [{ subjectId: bob, loadout: { weapon: "bow", abilities: ["heal"] } }],
     });
     expect(result).not.toBeNull();
     // Both on placement K=24, even ratings: ±12.
-    expect(result!.winner.after).toBe(1512);
-    expect(result!.winner.delta).toBe(12);
-    expect(result!.loser.after).toBe(1488);
-    expect(result!.loser.delta).toBe(-12);
-    expect(result!.winner.tier).toBe("Gladiator");
-    expect(result!.winner.division).toBe(2); // 1512 sits in Gladiator II (1500–1549)
-    expect(result!.winner.rankChange).toBeNull(); // 1500 → 1512 stays inside Gladiator II
-    expect(result!.loser.tier).toBe("Gladiator");
-    expect(result!.loser.division).toBe(3); // 1488 is honestly Gladiator III (floor 1450)
-    expect(result!.loser.rankChange).toBe("down"); // II → III — divisions have no grace
-    expect(result!.winner.matchesPlayed).toBe(1); // both mid-placements
-    expect(result!.loser.matchesPlayed).toBe(1);
+    expect(result!.winners[0]!.after).toBe(1512);
+    expect(result!.winners[0]!.delta).toBe(12);
+    expect(result!.losers[0]!.after).toBe(1488);
+    expect(result!.losers[0]!.delta).toBe(-12);
+    expect(result!.winners[0]!.tier).toBe("Gladiator");
+    expect(result!.winners[0]!.division).toBe(2); // 1512 sits in Gladiator II (1500–1549)
+    expect(result!.winners[0]!.rankChange).toBeNull(); // 1500 → 1512 stays inside Gladiator II
+    expect(result!.losers[0]!.tier).toBe("Gladiator");
+    expect(result!.losers[0]!.division).toBe(3); // 1488 is honestly Gladiator III (floor 1450)
+    expect(result!.losers[0]!.rankChange).toBe("down"); // II → III — divisions have no grace
+    expect(result!.winners[0]!.matchesPlayed).toBe(1); // both mid-placements
+    expect(result!.losers[0]!.matchesPlayed).toBe(1);
     // Even-fight payouts: 23 / 5.
-    expect(result!.winner.glory).toBe(23);
+    expect(result!.winners[0]!.glory).toBe(23);
     expect(await gloryBalance(db, alice)).toBe(23);
     expect(await gloryBalance(db, bob)).toBe(5);
     // The ladder rows persisted.
@@ -61,7 +59,7 @@ describe("recordRankedMatch", () => {
   });
 
   test("a replayed match id is a no-op (crash-retry safety)", async () => {
-    const input = { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob };
+    const input = { matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] };
     expect(await recordRankedMatch(db, input)).not.toBeNull();
     expect(await recordRankedMatch(db, input)).toBeNull();
     expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
@@ -69,14 +67,14 @@ describe("recordRankedMatch", () => {
   });
 
   test("brackets are independent ladders", async () => {
-    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
+    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] });
     expect((await getRating(db, alice, 1, "2v2")).rating).toBe(RATING_START);
     const summary = await rankedSummary(db, alice, 1);
     expect(summary.map((r) => r.bracket)).toEqual(["1v1"]);
   });
 
   test("seasons are independent too", async () => {
-    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
+    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] });
     expect((await getRating(db, alice, 2, "1v1")).rating).toBe(RATING_START);
   });
 
@@ -85,9 +83,8 @@ describe("recordRankedMatch", () => {
       matchId: "m1",
       season: 1,
       bracket: "1v1",
-      winnerId: alice,
-      loserId: bob,
-      winnerLoadout: { weapon: "sword" },
+      winners: [{ subjectId: alice, loadout: { weapon: "sword" } }],
+      losers: [{ subjectId: bob }],
     });
     const rows = await db.execute("SELECT winner_loadout, loser_loadout FROM ranked_matches");
     expect(JSON.parse(String(rows.rows[0]!["winner_loadout"]))).toEqual({ weapon: "sword" });
@@ -109,10 +106,10 @@ describe("recordRankedBotMatch", () => {
   test("settles the human exactly like an even human match", async () => {
     const result = await recordRankedBotMatch(db, botMatch("m1", true));
     expect(result).not.toBeNull();
-    expect(result!.winner.subjectId).toBe(alice);
-    expect(result!.winner.after).toBe(1512); // placement K=24, even ratings
-    expect(result!.winner.matchesPlayed).toBe(1);
-    expect(result!.winner.glory).toBe(23);
+    expect(result!.winners[0]!.subjectId).toBe(alice);
+    expect(result!.winners[0]!.after).toBe(1512); // placement K=24, even ratings
+    expect(result!.winners[0]!.matchesPlayed).toBe(1);
+    expect(result!.winners[0]!.glory).toBe(23);
     expect(await gloryBalance(db, alice)).toBe(23);
     expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
     expect(await recentForm(db, alice, 1, "1v1")).toEqual([true]);
@@ -120,17 +117,17 @@ describe("recordRankedBotMatch", () => {
 
   test("a human loss settles the other way", async () => {
     const result = await recordRankedBotMatch(db, botMatch("m1", false));
-    expect(result!.loser.subjectId).toBe(alice);
-    expect(result!.loser.after).toBe(1488);
-    expect(result!.loser.glory).toBe(5);
-    expect(result!.winner.subjectId).toBe("bot:0000-test");
+    expect(result!.losers[0]!.subjectId).toBe(alice);
+    expect(result!.losers[0]!.after).toBe(1488);
+    expect(result!.losers[0]!.glory).toBe(5);
+    expect(result!.winners[0]!.subjectId).toBe("bot:0000-test");
     expect(await gloryBalance(db, alice)).toBe(5);
     expect(await recentForm(db, alice, 1, "1v1")).toEqual([false]);
   });
 
   test("the fabricated bot side is settled-K and never in placements", async () => {
     const result = await recordRankedBotMatch(db, botMatch("m1", true, 1512));
-    const bot = result!.loser;
+    const bot = result!.losers[0]!;
     expect(bot.subjectId).toBe("bot:0000-test");
     expect(bot.before).toBe(1512);
     expect(bot.matchesPlayed).toBe(20); // > PLACEMENT_MATCHES → placement: null upstream
@@ -173,11 +170,11 @@ describe("recordRankedBotMatch", () => {
 
 describe("season peak", () => {
   test("the peak rises with the rating and survives the fall", async () => {
-    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
+    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] });
     const climbed = await getRating(db, alice, 1, "1v1");
     expect(climbed.rating).toBe(1512);
     expect(climbed.peak).toBe(1512);
-    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winnerId: bob, loserId: alice });
+    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winners: [{ subjectId: bob }], losers: [{ subjectId: alice }] });
     const dipped = await getRating(db, alice, 1, "1v1");
     expect(dipped.rating).toBeLessThan(1512);
     expect(dipped.peak).toBe(1512); // monotonic — the whole point
@@ -186,27 +183,27 @@ describe("season peak", () => {
 
   test("the settle result flags a new best (and only a new best)", async () => {
     const first = await recordRankedMatch(db, {
-      matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob,
+      matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }],
     });
-    expect(first!.winner.newBest).toBe(true);
-    expect(first!.winner.peak).toBe(1512);
-    expect(first!.loser.newBest).toBe(false);
-    expect(first!.loser.peak).toBe(1500); // the start rating is the initial peak
+    expect(first!.winners[0]!.newBest).toBe(true);
+    expect(first!.winners[0]!.peak).toBe(1512);
+    expect(first!.losers[0]!.newBest).toBe(false);
+    expect(first!.losers[0]!.peak).toBe(1500); // the start rating is the initial peak
     // Alice loses back to 1500-ish, then wins again without passing 1512.
-    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winnerId: bob, loserId: alice });
+    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winners: [{ subjectId: bob }], losers: [{ subjectId: alice }] });
     const third = await recordRankedMatch(db, {
-      matchId: "m3", season: 1, bracket: "1v1", winnerId: alice, loserId: bob,
+      matchId: "m3", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }],
     });
-    expect(third!.winner.after).toBeLessThanOrEqual(1512);
-    expect(third!.winner.newBest).toBe(false);
+    expect(third!.winners[0]!.after).toBeLessThanOrEqual(1512);
+    expect(third!.winners[0]!.newBest).toBe(false);
   });
 });
 
 describe("recent form", () => {
   test("reads oldest → newest, capped, from either side of the matches", async () => {
-    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
-    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winnerId: bob, loserId: alice });
-    await recordRankedMatch(db, { matchId: "m3", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
+    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] });
+    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winners: [{ subjectId: bob }], losers: [{ subjectId: alice }] });
+    await recordRankedMatch(db, { matchId: "m3", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] });
     expect(await recentForm(db, alice, 1, "1v1")).toEqual([true, false, true]);
     expect(await recentForm(db, bob, 1, "1v1")).toEqual([false, true, false]);
     expect(await recentForm(db, alice, 1, "1v1", 2)).toEqual([false, true]); // the LAST two
@@ -217,11 +214,165 @@ describe("recent form", () => {
 describe("leaderboard", () => {
   test("orders by rating within a season+bracket", async () => {
     const carol = (await registerPlayer(db)).playerId;
-    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winnerId: alice, loserId: bob });
-    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winnerId: alice, loserId: carol });
+    await recordRankedMatch(db, { matchId: "m1", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: bob }] });
+    await recordRankedMatch(db, { matchId: "m2", season: 1, bracket: "1v1", winners: [{ subjectId: alice }], losers: [{ subjectId: carol }] });
     const top = await leaderboard(db, 1, "1v1");
     expect(top.map((e) => e.subjectId)[0]).toBe(alice);
     expect(top).toHaveLength(3);
     expect(top[0]!.rating).toBeGreaterThan(top[1]!.rating);
+  });
+});
+
+describe("team brackets (2v2)", () => {
+  let carol: string;
+  let dave: string;
+  beforeEach(async () => {
+    carol = (await registerPlayer(db)).playerId;
+    dave = (await registerPlayer(db)).playerId;
+  });
+
+  const seed = async (subjectId: string, rating: number, wins = 10, losses = 10): Promise<void> => {
+    await db.execute({
+      sql: `INSERT INTO ranked_ratings (subject_id, season, bracket, rating, wins, losses, peak_rating, updated_at)
+            VALUES (?, 1, '2v2', ?, ?, ?, ?, 0)`,
+      args: [subjectId, rating, wins, losses, rating],
+    });
+  };
+
+  test("every member rates against the ENEMY MEAN with their own K", async () => {
+    // Winners 1600 + 1400 (mean 1500) beat losers 1500 + 1500 (mean 1500):
+    // an even fight by team mean, but each winner's own E differs.
+    await seed(alice, 1600);
+    await seed(bob, 1400);
+    await seed(carol, 1500);
+    await seed(dave, 1500);
+    const result = await recordRankedMatch(db, {
+      matchId: "t1",
+      season: 1,
+      bracket: "2v2",
+      winners: [{ subjectId: alice }, { subjectId: bob }],
+      losers: [{ subjectId: carol }, { subjectId: dave }],
+    });
+    expect(result).not.toBeNull();
+    const [a, b] = result!.winners;
+    const [c, d] = result!.losers;
+    // Settled K=15. Alice (1600 vs mean 1500, E≈0.64) gains ~5; Bob (1400
+    // vs 1500, E≈0.36) gains ~10 — the underdog member earns more.
+    expect(a!.delta).toBe(5);
+    expect(b!.delta).toBe(10);
+    // Both losers sat at the winners' mean: even loss, −7 each (half rounds up).
+    expect(c!.delta).toBe(-7);
+    expect(d!.delta).toBe(-7);
+    expect(a!.matchesPlayed).toBe(21);
+    // The ladder rows moved per member.
+    expect((await getRating(db, alice, 1, "2v2")).rating).toBe(1605);
+    expect((await getRating(db, bob, 1, "2v2")).rating).toBe(1410);
+    expect((await getRating(db, carol, 1, "2v2")).losses).toBe(11);
+    // The 1v1 ladder is untouched — brackets are independent.
+    expect((await getRating(db, alice, 1, "1v1")).rating).toBe(RATING_START);
+  });
+
+  test("Glory is paid in FULL to every member — never split", async () => {
+    const result = await recordRankedMatch(db, {
+      matchId: "t1",
+      season: 1,
+      bracket: "2v2",
+      winners: [{ subjectId: alice }, { subjectId: bob }],
+      losers: [{ subjectId: carol }, { subjectId: dave }],
+    });
+    // Even means → the even-fight payout, 23 each; losers 5 each.
+    for (const w of result!.winners) expect(w.glory).toBe(23);
+    for (const l of result!.losers) expect(l.glory).toBe(5);
+    expect(await gloryBalance(db, alice)).toBe(23);
+    expect(await gloryBalance(db, bob)).toBe(23);
+    expect(await gloryBalance(db, carol)).toBe(5);
+    expect(await gloryBalance(db, dave)).toBe(5);
+  });
+
+  test("the header row holds comma-joined ids, team means, and loadout arrays; players table holds each member", async () => {
+    await seed(alice, 1600);
+    await seed(bob, 1400);
+    await recordRankedMatch(db, {
+      matchId: "t1",
+      season: 1,
+      bracket: "2v2",
+      winners: [{ subjectId: alice, loadout: { weapon: "sword" } }, { subjectId: bob }],
+      losers: [{ subjectId: carol, loadout: { weapon: "bow" } }, { subjectId: dave, loadout: { weapon: "axe" } }],
+    });
+    const header = (await db.execute("SELECT * FROM ranked_matches")).rows[0]!;
+    expect(String(header["winner_id"])).toBe(`${alice},${bob}`);
+    expect(String(header["loser_id"])).toBe(`${carol},${dave}`);
+    expect(Number(header["winner_rating_before"])).toBe(1500); // mean of 1600 + 1400
+    expect(Number(header["loser_rating_before"])).toBe(1500);
+    expect(JSON.parse(String(header["winner_loadout"]))).toEqual([{ weapon: "sword" }, null]);
+    expect(JSON.parse(String(header["loser_loadout"]))).toEqual([{ weapon: "bow" }, { weapon: "axe" }]);
+
+    const players = (await db.execute("SELECT * FROM ranked_match_players ORDER BY team, subject_id")).rows;
+    expect(players).toHaveLength(4);
+    const mine = players.find((r) => String(r["subject_id"]) === alice)!;
+    expect(Number(mine["team"])).toBe(1);
+    expect(Number(mine["won"])).toBe(1);
+    expect(Number(mine["rating_before"])).toBe(1600);
+    expect(JSON.parse(String(mine["loadout"]))).toEqual({ weapon: "sword" });
+    const theirs = players.find((r) => String(r["subject_id"]) === dave)!;
+    expect(Number(theirs["team"])).toBe(2);
+    expect(Number(theirs["won"])).toBe(0);
+  });
+
+  test("recent form reads per member across team matches", async () => {
+    const sides = (w: string[], l: string[]) => ({
+      winners: w.map((subjectId) => ({ subjectId })),
+      losers: l.map((subjectId) => ({ subjectId })),
+    });
+    await recordRankedMatch(db, { matchId: "t1", season: 1, bracket: "2v2", ...sides([alice, bob], [carol, dave]) });
+    await recordRankedMatch(db, { matchId: "t2", season: 1, bracket: "2v2", ...sides([carol, alice], [bob, dave]) });
+    expect(await recentForm(db, alice, 1, "2v2")).toEqual([true, true]);
+    expect(await recentForm(db, bob, 1, "2v2")).toEqual([true, false]);
+    expect(await recentForm(db, dave, 1, "2v2")).toEqual([false, false]);
+    expect(await recentForm(db, alice, 1, "1v1")).toEqual([]);
+  });
+
+  test("malformed sides are refused before anything is written", async () => {
+    await expect(
+      recordRankedMatch(db, { matchId: "t1", season: 1, bracket: "2v2", winners: [{ subjectId: alice }], losers: [] }),
+    ).rejects.toThrow("malformed sides");
+    expect((await db.execute("SELECT 1 FROM ranked_matches")).rows).toHaveLength(0);
+  });
+
+  test("a replayed team match id is a no-op", async () => {
+    const input = {
+      matchId: "t1",
+      season: 1,
+      bracket: "2v2",
+      winners: [{ subjectId: alice }, { subjectId: bob }],
+      losers: [{ subjectId: carol }, { subjectId: dave }],
+    };
+    expect(await recordRankedMatch(db, input)).not.toBeNull();
+    expect(await recordRankedMatch(db, input)).toBeNull();
+    expect(await gloryBalance(db, alice)).toBe(23);
+    expect((await db.execute("SELECT 1 FROM ranked_match_players")).rows).toHaveLength(4);
+  });
+});
+
+describe("ranked_match_players backfill", () => {
+  test("pre-table 1v1 history rows gain participant rows on schema apply, idempotently", async () => {
+    // A history row written the old way — no participant rows.
+    await db.execute({
+      sql: `INSERT INTO ranked_matches (id, season, bracket, winner_id, loser_id,
+              winner_rating_before, winner_rating_after, loser_rating_before, loser_rating_after,
+              winner_loadout, loser_loadout)
+            VALUES ('old1', 1, '1v1', ?, ?, 1500, 1512, 1500, 1488, '{"weapon":"sword"}', NULL)`,
+      args: [alice, bob],
+    });
+    expect(await recentForm(db, alice, 1, "1v1")).toEqual([]);
+    await ensureSchema(db); // the next boot
+    expect(await recentForm(db, alice, 1, "1v1")).toEqual([true]);
+    expect(await recentForm(db, bob, 1, "1v1")).toEqual([false]);
+    const rows = (await db.execute("SELECT * FROM ranked_match_players ORDER BY team")).rows;
+    expect(rows).toHaveLength(2);
+    expect(JSON.parse(String(rows[0]!["loadout"]))).toEqual({ weapon: "sword" });
+    expect(rows[1]!["loadout"]).toBeNull();
+    await ensureSchema(db); // and again — still two rows
+    expect((await db.execute("SELECT 1 FROM ranked_match_players")).rows).toHaveLength(2);
   });
 });

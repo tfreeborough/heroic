@@ -5,7 +5,10 @@
  * never double-apply.
  *
  * The math lives in elo.ts (pure); this module is the only place it meets
- * the database.
+ * the database. Sides are TEAMS (bits-ranked.md § 2v2 solo queue,
+ * 2026-08-24): a 1v1 is the size-one case of the same path — every member
+ * rates against the enemy team's mean with their own K, and Glory is paid in
+ * full to every member, never split.
  */
 import type { Db } from "./db";
 import {
@@ -13,6 +16,7 @@ import {
   displayRungFor,
   loserGlory,
   rankChangeBetween,
+  teamMean,
   tierFor,
   updateRating,
   winnerGlory,
@@ -69,19 +73,25 @@ export const getRating = async (
   };
 };
 
+/** One participant on a side of a match to settle. */
+export interface RankedSubjectInput {
+  subjectId: string;
+  /** Serialized as JSON into the history rows (the pick-rate analytics tap). */
+  loadout?: unknown;
+}
+
 export interface RankedMatchInput {
   /** Server-minted uuid — the idempotency root for the whole settlement. */
   matchId: string;
   season: number;
   bracket: string;
-  winnerId: string;
-  loserId: string;
-  /** Serialized as JSON into ranked_matches (the pick-rate analytics tap). */
-  winnerLoadout?: unknown;
-  loserLoadout?: unknown;
+  /** The winning side's members — one for 1v1, two for 2v2. Never empty. */
+  winners: RankedSubjectInput[];
+  /** The losing side's members. Same size as `winners`. */
+  losers: RankedSubjectInput[];
 }
 
-/** One side's settlement, shaped for the `rankedResult` wire message. */
+/** One participant's settlement, shaped for the `rankedResult` wire rows. */
 export interface RankedSideResult {
   subjectId: string;
   before: number;
@@ -109,8 +119,9 @@ export interface RankedSideResult {
 
 export interface RankedMatchResult {
   matchId: string;
-  winner: RankedSideResult;
-  loser: RankedSideResult;
+  /** In the order the input sides listed them. */
+  winners: RankedSideResult[];
+  losers: RankedSideResult[];
 }
 
 const ratingUpsert = (r: RankedRating, after: number, peak: number, won: boolean) => ({
@@ -131,85 +142,144 @@ const gloryInsert = (matchId: string, playerId: string, amount: number) => ({
   args: [playerId, amount, `ranked:${matchId}`, `ranked:${matchId}:${playerId}`],
 });
 
+const loadoutJson = (loadout: unknown): string | null => (loadout === undefined ? null : JSON.stringify(loadout));
+
+/** A side's header-row shape: one subject → its id and loadout verbatim (1v1
+ * rows are byte-identical to the pre-team schema); a team → ids comma-joined
+ * and loadouts as a JSON array, with the TEAM MEAN in the rating columns
+ * (enough to reconstruct the expected score offline). */
+const headerSide = (side: { subjectId: string; loadout?: unknown }[]) => ({
+  id: side.map((s) => s.subjectId).join(","),
+  loadout: side.length === 1 ? loadoutJson(side[0]!.loadout) : JSON.stringify(side.map((s) => s.loadout ?? null)),
+});
+
 const matchInsert = (
-  input: { matchId: string; season: number; bracket: string; winnerLoadout?: unknown; loserLoadout?: unknown },
-  winnerId: string,
-  loserId: string,
+  input: { matchId: string; season: number; bracket: string },
+  winners: { subjectId: string; loadout?: unknown }[],
+  losers: { subjectId: string; loadout?: unknown }[],
   winnerBefore: number,
   winnerAfter: number,
   loserBefore: number,
   loserAfter: number,
+) => {
+  const w = headerSide(winners);
+  const l = headerSide(losers);
+  return {
+    sql: `INSERT OR IGNORE INTO ranked_matches (
+            id, season, bracket, winner_id, loser_id,
+            winner_rating_before, winner_rating_after,
+            loser_rating_before, loser_rating_after,
+            winner_loadout, loser_loadout)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      input.matchId,
+      input.season,
+      input.bracket,
+      w.id,
+      l.id,
+      Math.round(winnerBefore),
+      Math.round(winnerAfter),
+      Math.round(loserBefore),
+      Math.round(loserAfter),
+      w.loadout,
+      l.loadout,
+    ],
+  };
+};
+
+/** The per-participant history row (ranked_match_players). `team` is the
+ * side's index in the match (1 = winners, 2 = losers) — a settlement
+ * convention, not the arena's blue/red. */
+const playerInsert = (
+  matchId: string,
+  subjectId: string,
+  team: 1 | 2,
+  won: boolean,
+  before: number,
+  after: number,
+  loadout: unknown,
 ) => ({
-  sql: `INSERT OR IGNORE INTO ranked_matches (
-          id, season, bracket, winner_id, loser_id,
-          winner_rating_before, winner_rating_after,
-          loser_rating_before, loser_rating_after,
-          winner_loadout, loser_loadout)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  args: [
-    input.matchId,
-    input.season,
-    input.bracket,
-    winnerId,
-    loserId,
-    winnerBefore,
-    winnerAfter,
-    loserBefore,
-    loserAfter,
-    input.winnerLoadout === undefined ? null : JSON.stringify(input.winnerLoadout),
-    input.loserLoadout === undefined ? null : JSON.stringify(input.loserLoadout),
-  ],
+  sql: `INSERT OR IGNORE INTO ranked_match_players
+          (match_id, subject_id, team, won, rating_before, rating_after, loadout)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  args: [matchId, subjectId, team, won ? 1 : 0, before, after, loadoutJson(loadout)],
 });
 
+/** One member's post-match numbers against the enemy team's mean. */
+const settleMember = (prior: RankedRating, enemyMean: number, won: boolean) => {
+  const after = updateRating({
+    rating: prior.rating,
+    opponent: enemyMean,
+    matchesPlayed: prior.wins + prior.losses,
+    won,
+  });
+  return { prior, after, peak: Math.max(prior.peak, after) };
+};
+
 /**
- * Settle a ranked match: both Elo updates, the history row, and both Glory
- * ledger rows in ONE write batch (a libsql batch is a transaction). Returns
- * null if the match id was already settled — the retry-after-crash no-op.
- * Single-writer by design (the one game server process); the existence check
- * is not a cross-process lock.
+ * Settle a ranked match: every member's Elo update, the history rows, and
+ * every member's Glory in ONE write batch (a libsql batch is a transaction).
+ * Returns null if the match id was already settled — the retry-after-crash
+ * no-op. Single-writer by design (the one game server process); the
+ * existence check is not a cross-process lock.
+ *
+ * Team math (bits-ranked.md § 2v2 solo queue): each member's expected score
+ * is against the ENEMY team's mean rating, updated with their own K and
+ * their own placement count; Glory is the full payout per member — winners
+ * get `winnerGlory(winnerMean, loserMean)` each, losers the participation
+ * floor each. A 1v1 is the size-one case and settles exactly as before.
  */
 export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promise<RankedMatchResult | null> => {
+  if (input.winners.length === 0 || input.winners.length !== input.losers.length) {
+    throw new Error(`ranked settle: malformed sides (${input.winners.length} vs ${input.losers.length})`);
+  }
   const already = await db.execute({
     sql: "SELECT 1 FROM ranked_matches WHERE id = ?",
     args: [input.matchId],
   });
   if (already.rows.length > 0) return null;
 
-  const winner = await getRating(db, input.winnerId, input.season, input.bracket);
-  const loser = await getRating(db, input.loserId, input.season, input.bracket);
+  const winnerPriors: RankedRating[] = [];
+  for (const s of input.winners) winnerPriors.push(await getRating(db, s.subjectId, input.season, input.bracket));
+  const loserPriors: RankedRating[] = [];
+  for (const s of input.losers) loserPriors.push(await getRating(db, s.subjectId, input.season, input.bracket));
+  const winnerMean = teamMean(winnerPriors.map((r) => r.rating));
+  const loserMean = teamMean(loserPriors.map((r) => r.rating));
 
-  const winnerAfter = updateRating({
-    rating: winner.rating,
-    opponent: loser.rating,
-    matchesPlayed: winner.wins + winner.losses,
-    won: true,
-  });
-  const loserAfter = updateRating({
-    rating: loser.rating,
-    opponent: winner.rating,
-    matchesPlayed: loser.wins + loser.losses,
-    won: false,
-  });
-  const winnerPay = winnerGlory(winner.rating, loser.rating);
+  const winners = winnerPriors.map((prior) => settleMember(prior, loserMean, true));
+  const losers = loserPriors.map((prior) => settleMember(prior, winnerMean, false));
+  const winnerPay = winnerGlory(winnerMean, loserMean);
   const loserPay = loserGlory();
-  const winnerPeak = Math.max(winner.peak, winnerAfter);
-  const loserPeak = Math.max(loser.peak, loserAfter);
 
   await db.batch(
     [
-      ratingUpsert(winner, winnerAfter, winnerPeak, true),
-      ratingUpsert(loser, loserAfter, loserPeak, false),
-      matchInsert(input, input.winnerId, input.loserId, winner.rating, winnerAfter, loser.rating, loserAfter),
-      gloryInsert(input.matchId, input.winnerId, winnerPay),
-      gloryInsert(input.matchId, input.loserId, loserPay),
+      ...winners.map((m) => ratingUpsert(m.prior, m.after, m.peak, true)),
+      ...losers.map((m) => ratingUpsert(m.prior, m.after, m.peak, false)),
+      matchInsert(
+        input,
+        input.winners,
+        input.losers,
+        winnerMean,
+        teamMean(winners.map((m) => m.after)),
+        loserMean,
+        teamMean(losers.map((m) => m.after)),
+      ),
+      ...winners.map((m, i) =>
+        playerInsert(input.matchId, m.prior.subjectId, 1, true, m.prior.rating, m.after, input.winners[i]!.loadout),
+      ),
+      ...losers.map((m, i) =>
+        playerInsert(input.matchId, m.prior.subjectId, 2, false, m.prior.rating, m.after, input.losers[i]!.loadout),
+      ),
+      ...winners.map((m) => gloryInsert(input.matchId, m.prior.subjectId, winnerPay)),
+      ...losers.map((m) => gloryInsert(input.matchId, m.prior.subjectId, loserPay)),
     ],
     "write",
   );
 
   return {
     matchId: input.matchId,
-    winner: sideOf(input.winnerId, winner, winnerAfter, winnerPeak, winnerPay),
-    loser: sideOf(input.loserId, loser, loserAfter, loserPeak, loserPay),
+    winners: winners.map((m) => sideOf(m.prior.subjectId, m.prior, m.after, m.peak, winnerPay)),
+    losers: losers.map((m) => sideOf(m.prior.subjectId, m.prior, m.after, m.peak, loserPay)),
   };
 };
 
@@ -220,7 +290,7 @@ export interface RankedBotMatchInput {
   bracket: string;
   humanId: string;
   humanWon: boolean;
-  /** Throwaway `bot:<uuid>` subject — lands ONLY in ranked_matches. */
+  /** Throwaway `bot:<uuid>` subject — lands ONLY in the history tables. */
   botId: string;
   /** The bot's advertised rating, frozen at room creation. */
   botRating: number;
@@ -230,13 +300,14 @@ export interface RankedBotMatchInput {
 
 /**
  * Settle a ranked match against a backfill bot (bits-ranked-bots.md): the
- * HUMAN's side only — their rating upsert, the history row, and their Glory —
- * in one batch. The bot never gets a ranked_ratings or glory_ledger row (no
- * ladder contamination, nothing for a future leaderboard filter to forget);
- * its side of the result is fabricated purely so the rankedResult broadcast
- * is shaped exactly like a human settlement. The fictional prior is 19 games
- * (settled K, matchesPlayed 20 after this one — never renders as "in
- * placements") with peak = advertised rating.
+ * HUMAN's side only — their rating upsert, the history rows, and their Glory
+ * — in one batch. The bot never gets a ranked_ratings or glory_ledger row
+ * (no ladder contamination, nothing for a future leaderboard filter to
+ * forget); its side of the result is fabricated purely so the rankedResult
+ * broadcast is shaped exactly like a human settlement. The fictional prior
+ * is 19 games (settled K, matchesPlayed 20 after this one — never renders as
+ * "in placements") with peak = advertised rating. 1v1 only by construction:
+ * backfill never fires in team brackets (bits-ranked.md § 2v2 solo queue).
  */
 export const recordRankedBotMatch = async (db: Db, input: RankedBotMatchInput): Promise<RankedMatchResult | null> => {
   const already = await db.execute({
@@ -273,26 +344,17 @@ export const recordRankedBotMatch = async (db: Db, input: RankedBotMatchInput): 
   const botPeak = Math.max(bot.peak, botAfter);
   const botPay = input.humanWon ? loserGlory() : winnerGlory(input.botRating, human.rating);
 
-  const winnerId = input.humanWon ? input.humanId : input.botId;
-  const loserId = input.humanWon ? input.botId : input.humanId;
+  const humanSubject = { subjectId: input.humanId, loadout: input.humanLoadout };
+  const botSubject = { subjectId: input.botId, loadout: input.botLoadout };
+  const [winner, loser] = input.humanWon ? [humanSubject, botSubject] : [botSubject, humanSubject];
+  const [winnerBefore, winnerAfter] = input.humanWon ? [human.rating, humanAfter] : [input.botRating, botAfter];
+  const [loserBefore, loserAfter] = input.humanWon ? [input.botRating, botAfter] : [human.rating, humanAfter];
   await db.batch(
     [
       ratingUpsert(human, humanAfter, humanPeak, input.humanWon),
-      matchInsert(
-        {
-          matchId: input.matchId,
-          season: input.season,
-          bracket: input.bracket,
-          winnerLoadout: input.humanWon ? input.humanLoadout : input.botLoadout,
-          loserLoadout: input.humanWon ? input.botLoadout : input.humanLoadout,
-        },
-        winnerId,
-        loserId,
-        input.humanWon ? human.rating : input.botRating,
-        input.humanWon ? humanAfter : botAfter,
-        input.humanWon ? input.botRating : human.rating,
-        input.humanWon ? botAfter : humanAfter,
-      ),
+      matchInsert(input, [winner], [loser], winnerBefore, winnerAfter, loserBefore, loserAfter),
+      playerInsert(input.matchId, winner.subjectId, 1, true, winnerBefore, winnerAfter, winner.loadout),
+      playerInsert(input.matchId, loser.subjectId, 2, false, loserBefore, loserAfter, loser.loadout),
       gloryInsert(input.matchId, input.humanId, humanPay),
     ],
     "write",
@@ -302,8 +364,8 @@ export const recordRankedBotMatch = async (db: Db, input: RankedBotMatchInput): 
   const botSide = sideOf(input.botId, bot, botAfter, botPeak, botPay);
   return {
     matchId: input.matchId,
-    winner: input.humanWon ? humanSide : botSide,
-    loser: input.humanWon ? botSide : humanSide,
+    winners: [input.humanWon ? humanSide : botSide],
+    losers: [input.humanWon ? botSide : humanSide],
   };
 };
 
@@ -382,8 +444,9 @@ export const rankedSummary = async (db: Db, subjectId: string, season: number): 
 
 /**
  * The subject's last `limit` results in a bracket, oldest → newest (reading
- * order for the form-dots row) — true = won. Straight off ranked_matches;
- * rowid breaks created_at's whole-second ties in insertion order.
+ * order for the form-dots row) — true = won. Off the per-participant table
+ * (every bracket writes it; pre-table 1v1 rows were backfilled at schema
+ * time); rowid breaks created_at's whole-second ties in insertion order.
  */
 export const recentForm = async (
   db: Db,
@@ -393,10 +456,11 @@ export const recentForm = async (
   limit = 10,
 ): Promise<boolean[]> => {
   const result = await db.execute({
-    sql: `SELECT winner_id FROM ranked_matches
-          WHERE season = ? AND bracket = ? AND (winner_id = ? OR loser_id = ?)
-          ORDER BY created_at DESC, rowid DESC LIMIT ?`,
-    args: [season, bracket, subjectId, subjectId, limit],
+    sql: `SELECT p.won FROM ranked_match_players p
+          JOIN ranked_matches m ON m.id = p.match_id
+          WHERE m.season = ? AND m.bracket = ? AND p.subject_id = ?
+          ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?`,
+    args: [season, bracket, subjectId, limit],
   });
-  return result.rows.map((row) => String(row["winner_id"]) === subjectId).reverse();
+  return result.rows.map((row) => Number(row["won"]) === 1).reverse();
 };
