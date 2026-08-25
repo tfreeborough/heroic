@@ -152,7 +152,14 @@ New hook `useConnectivity()` in `src/net/`:
   player-facing feature; the dev-menu shortcut stays. Card copy carries the
   promises: every weapon + ability unlocked (true today — no locking exists;
   when locking arrives, Practice ignores it), no glory, no achievements.
-- **STORY** — no-op beyond the shake/thud.
+- **STORY** — no-op beyond the shake/thud. Since 2026-08-25 the card carries
+  a live **countdown** under the pitch ("OPENS IN · 66 days · 04:12:33",
+  ticking once a second) to `STORY_UNLOCKS_AT` = midnight UTC 31 October
+  2026 — Tom's end-of-October target, shown so the closed door reads as a
+  promise rather than a dead end. Past the date with the mode still locked
+  it reads "OPENING · any day now" (never negatives). Generic: any locked
+  `ModeCard` given `unlocksAt` gets the same clock. Move the constant when
+  the date moves.
 
 ## Motion & premium feel
 

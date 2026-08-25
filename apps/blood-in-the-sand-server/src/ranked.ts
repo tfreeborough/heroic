@@ -24,6 +24,14 @@ export const WINDOW_GROWTH = 50;
 export const MATCHER_INTERVAL_MS = 2_000;
 /** Arming grace in a ranked room before the match is called off. */
 export const ARM_DEADLINE_MS = 60_000;
+/** How long a summoned player has to accept a pending match (bits-ranked.md
+ * § Queue roaming & match accept). Generous for a phone that may be mid-Armory,
+ * short enough that the other side never feels held. */
+export const ACCEPT_WINDOW_MS = 15_000;
+/** A backfill bot "accepts" this long after the summons — jittered inside
+ * [min, max] so an instant 2/2 (or an always-exactly-3s one) isn't a tell. */
+export const BOT_ACCEPT_MIN_MS = 1_000;
+export const BOT_ACCEPT_MAX_MS = 5_000;
 /** Queue lockout for the player who caused a void (never armed / bailed). */
 export const DODGE_LOCKOUT_MS = 30_000;
 
@@ -135,6 +143,78 @@ export interface QueueMatch {
   bracket: string;
   /** The two sides the matcher dictated — seated as teams 1 and 2. */
   teams: [QueueEntry[], QueueEntry[]];
+}
+
+/**
+ * The accept stage between a pairing and a room (bits-ranked.md § Queue
+ * roaming & match accept). Pure: the manager owns the clock and the sockets;
+ * this just remembers who has said yes. A bot match carries `botAcceptAtMs`
+ * — the bot counts as accepted once the clock passes it.
+ */
+export class PendingMatch {
+  private readonly accepted = new Set<string>();
+  /** The last accept count broadcast as matchPending (manager bookkeeping). */
+  announced = 0;
+
+  constructor(
+    readonly bracket: string,
+    readonly teams: [QueueEntry[], QueueEntry[]],
+    readonly deadlineMs: number,
+    readonly botAcceptAtMs: number | null = null,
+  ) {}
+
+  /** Every human entry, both sides. */
+  get humans(): QueueEntry[] {
+    return this.teams.flat();
+  }
+
+  /** Seats in the match — humans plus the bot, if any. */
+  get players(): number {
+    return this.humans.length + (this.botAcceptAtMs === null ? 0 : 1);
+  }
+
+  has(ws: Socket): boolean {
+    return this.humans.some((e) => e.ws === ws);
+  }
+
+  entryOf(ws: Socket): QueueEntry | undefined {
+    return this.humans.find((e) => e.ws === ws);
+  }
+
+  hasAccount(accountId: string): boolean {
+    return this.humans.some((e) => e.accountId === accountId);
+  }
+
+  /** Record a yes. Returns true if the count moved (idempotent otherwise). */
+  accept(accountId: string): boolean {
+    if (!this.hasAccount(accountId) || this.accepted.has(accountId)) return false;
+    this.accepted.add(accountId);
+    return true;
+  }
+
+  botAccepted(nowMs: number): boolean {
+    return this.botAcceptAtMs !== null && nowMs >= this.botAcceptAtMs;
+  }
+
+  acceptedCount(nowMs: number): number {
+    return this.accepted.size + (this.botAccepted(nowMs) ? 1 : 0);
+  }
+
+  everyoneIn(nowMs: number): boolean {
+    return this.acceptedCount(nowMs) === this.players;
+  }
+
+  expired(nowMs: number): boolean {
+    return nowMs >= this.deadlineMs;
+  }
+
+  /** The humans at fault right now: a dead socket is a dodge whenever it's
+   * noticed; not having answered is one only once the window has closed. */
+  dodgers(nowMs: number): QueueEntry[] {
+    return this.humans.filter(
+      (e) => e.ws.readyState !== 1 || (this.expired(nowMs) && !this.accepted.has(e.accountId)),
+    );
+  }
 }
 
 export interface BracketStatus {

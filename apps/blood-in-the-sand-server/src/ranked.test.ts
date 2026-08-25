@@ -18,7 +18,10 @@ import {
 import { RoomManager } from "./manager";
 import type { ClientData, Socket } from "./room";
 import {
+  ACCEPT_WINDOW_MS,
   ARM_DEADLINE_MS,
+  BOT_ACCEPT_MAX_MS,
+  PendingMatch,
   RankedQueue,
   SEASON,
   canGroup,
@@ -163,10 +166,31 @@ const queueJoin = (manager: RoomManager, s: FakeSocket, token: string, name: str
 // Private-member access for hand-driving beats — tests only.
 type Internals = {
   rankedBeat(): void;
+  tendPending(now: number): void;
   tendRankedRooms(now: number): void;
   rooms: Map<string, import("./room").Room>;
+  pending: PendingMatch[];
 };
 const internals = (m: RoomManager): Internals => m as unknown as Internals;
+
+// ── the accept stage (bits-ranked.md § Queue roaming & match accept) ───────
+// A beat no longer seats anyone: the pairing opens a PENDING match and the
+// room follows everyone's yes. These drive that stage like the wire would.
+
+const accept = (manager: RoomManager, s: FakeSocket): void => say(manager, s, { t: "matchAccept" });
+/** Everyone summoned says yes — the room builds on the last accept. */
+const acceptAll = (manager: RoomManager, ...socks: FakeSocket[]): void => {
+  for (const s of socks) accept(manager, s);
+};
+/** A bot match: the bot's own accept lands off the beat once its jittered
+ * delay has passed — fast-forward the pending tend past the longest. */
+const botAccepts = (manager: RoomManager): void =>
+  internals(manager).tendPending(performance.now() + BOT_ACCEPT_MAX_MS + 1);
+/** Human + bot both in: the seat follows. */
+const acceptBotMatch = (manager: RoomManager, s: FakeSocket): void => {
+  accept(manager, s);
+  botAccepts(manager);
+};
 
 // ── manager flow ───────────────────────────────────────────────────────────
 
@@ -203,6 +227,7 @@ describe("ranked flow", () => {
     expect(a.of("queueStatus")[0]!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }, { bracket: "2v2", size: 0 }]);
 
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     for (const s of [a, b]) {
       expect(s.of("matchFound")).toHaveLength(1);
       expect(s.of("welcome")).toHaveLength(1);
@@ -228,6 +253,7 @@ describe("ranked flow", () => {
     const b = makeSocket();
     await queueBoth(a, b);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     const code = String(a.of("matchFound")[0]!["code"]);
 
     const outsider = makeSocket();
@@ -248,6 +274,7 @@ describe("ranked flow", () => {
     const b = makeSocket();
     await queueBoth(a, b);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     const room = [...internals(manager).rooms.values()][0]!;
     const code = room.meta.code;
     const seatId = a.ws.data.playerId!;
@@ -286,6 +313,7 @@ describe("ranked flow", () => {
     const b = makeSocket();
     await queueBoth(a, b);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     const room = [...internals(manager).rooms.values()][0]!;
 
     // A second socket on the SAME bearer token while the first match is live
@@ -309,6 +337,7 @@ describe("ranked flow", () => {
     const b = makeSocket();
     await queueBoth(a, b);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     expect(manager.roomCount()).toBe(1);
 
     // Nobody armed; blow the deadline.
@@ -327,6 +356,7 @@ describe("ranked flow", () => {
     const b = makeSocket();
     await queueBoth(a, b);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
 
     say(manager, b, { t: "leaveRoom" }); // Bob bails during arming
     internals(manager).tendRankedRooms(performance.now());
@@ -347,6 +377,7 @@ describe("ranked flow", () => {
     const b = makeSocket();
     await queueBoth(a, b);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     const room = [...internals(manager).rooms.values()][0]!;
     const winnerTeam = room.sim.state.players[a.ws.data.playerId!]!.team as Team;
 
@@ -395,6 +426,189 @@ describe("ranked flow", () => {
   });
 });
 
+// ── the accept stage (bits-ranked.md § Queue roaming & match accept) ───────
+
+describe("PendingMatch", () => {
+  const entry = (accountId: string, alive = true): QueueEntry =>
+    ({ ws: { readyState: alive ? 1 : 3 } as unknown as Socket, accountId, name: accountId, announcer: "default", title: "", items: [], rating: 1500, joinedMs: 0 });
+
+  test("accept is idempotent and counts only summoned accounts", () => {
+    const p = new PendingMatch("1v1", [[entry("a")], [entry("b")]], 15_000);
+    expect(p.players).toBe(2);
+    expect(p.accept("a")).toBe(true);
+    expect(p.accept("a")).toBe(false);
+    expect(p.accept("stranger")).toBe(false);
+    expect(p.acceptedCount(0)).toBe(1);
+    expect(p.everyoneIn(0)).toBe(false);
+    p.accept("b");
+    expect(p.everyoneIn(0)).toBe(true);
+  });
+
+  test("a bot seat counts as accepted only once its delay has passed", () => {
+    const p = new PendingMatch("1v1", [[entry("a")], []], 15_000, 3_000);
+    expect(p.players).toBe(2);
+    p.accept("a");
+    expect(p.everyoneIn(2_999)).toBe(false);
+    expect(p.acceptedCount(2_999)).toBe(1);
+    expect(p.everyoneIn(3_000)).toBe(true);
+  });
+
+  test("dodgers: a dead socket at once, silence only after the window", () => {
+    const p = new PendingMatch("1v1", [[entry("a")], [entry("b")]], 15_000);
+    expect(p.dodgers(0)).toEqual([]);
+    p.accept("a");
+    expect(p.dodgers(14_999)).toEqual([]);
+    expect(p.dodgers(15_000).map((e) => e.accountId)).toEqual(["b"]);
+    const dead = new PendingMatch("1v1", [[entry("a")], [entry("b", false)]], 15_000);
+    expect(dead.dodgers(0).map((e) => e.accountId)).toEqual(["b"]);
+  });
+});
+
+describe("match accept flow", () => {
+  let db: Db;
+  let manager: RoomManager;
+  let tokenA: string;
+  let tokenB: string;
+
+  beforeEach(async () => {
+    db = createDb(":memory:");
+    await ensureSchema(db);
+    tokenA = (await registerPlayer(db)).token;
+    tokenB = (await registerPlayer(db)).token;
+    manager = new RoomManager(db, { enabled: false, minWaitMs: 15_000, maxWaitMs: 25_000, ratingJitter: 50 });
+    (manager as unknown as { server: Server<ClientData> }).server = makeServer().server;
+  });
+
+  /** Two in line, one beat: both summoned, nobody seated. */
+  const summonBoth = async (): Promise<[FakeSocket, FakeSocket]> => {
+    const a = makeSocket();
+    const b = makeSocket();
+    queueJoin(manager, a, tokenA, "Alice");
+    queueJoin(manager, b, tokenB, "Bob");
+    await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
+    return [a, b];
+  };
+
+  const lockedOut = async (s: FakeSocket, token: string, name: string): Promise<void> => {
+    queueJoin(manager, s, token, name);
+    await until(() => s.of("reject").length > 0);
+    expect(s.of("reject").at(-1)!["reason"]).toContain("lockout");
+  };
+
+  test("a pairing summons; the room follows the LAST accept, with progress announced", async () => {
+    const [a, b] = await summonBoth();
+    for (const s of [a, b]) {
+      expect(s.of("matchReady")).toEqual([{ t: "matchReady", bracket: "1v1", players: 2, acceptSec: ACCEPT_WINDOW_MS / 1000 }]);
+      expect(s.of("welcome")).toHaveLength(0);
+    }
+    expect(manager.roomCount()).toBe(0);
+    expect(internals(manager).pending).toHaveLength(1);
+
+    accept(manager, a);
+    accept(manager, a); // a repeat tap announces nothing new
+    for (const s of [a, b]) expect(s.of("matchPending")).toEqual([{ t: "matchPending", accepted: 1, players: 2 }]);
+    expect(manager.roomCount()).toBe(0);
+
+    accept(manager, b);
+    for (const s of [a, b]) {
+      expect(s.of("matchPending").at(-1)).toEqual({ t: "matchPending", accepted: 2, players: 2 });
+      expect(s.of("matchFound")).toHaveLength(1);
+      expect(s.of("welcome")).toHaveLength(1);
+    }
+    expect(manager.roomCount()).toBe(1);
+    expect(internals(manager).pending).toHaveLength(0);
+  });
+
+  test("a decline voids at once: the decliner is locked out, the other is back in line", async () => {
+    const [a, b] = await summonBoth();
+    say(manager, b, { t: "matchDecline" });
+
+    expect(b.of("matchCancelled")).toEqual([{ t: "matchCancelled", dodged: true, lockoutSec: 30 }]);
+    expect(a.of("matchCancelled")).toEqual([{ t: "matchCancelled", dodged: false }]);
+    // Alice is queued again (a fresh queueStatus followed) — her wait intact.
+    expect(a.of("queueStatus").at(-1)!["brackets"]).toEqual([{ bracket: "1v1", size: 1, waitedSec: 0 }, { bracket: "2v2", size: 0 }]);
+    expect(manager.roomCount()).toBe(0);
+    await lockedOut(b, tokenB, "Bob");
+  });
+
+  test("a re-queue after a void keeps the wait already earned", async () => {
+    const [a, b] = await summonBoth();
+    // Backdate Alice's summons entry: she'd been waiting a while.
+    internals(manager).pending[0]!.humans.find((e) => e.name === "Alice")!.joinedMs -= 40_000;
+    say(manager, b, { t: "matchDecline" });
+    expect((a.of("queueStatus").at(-1)!["brackets"] as { waitedSec?: number }[])[0]!.waitedSec).toBe(40);
+  });
+
+  test("the window lapsing is a dodge for the silent one only", async () => {
+    const [a, b] = await summonBoth();
+    accept(manager, a);
+    internals(manager).tendPending(performance.now() + ACCEPT_WINDOW_MS - 1000);
+    expect(internals(manager).pending).toHaveLength(1); // still open
+    internals(manager).tendPending(performance.now() + ACCEPT_WINDOW_MS + 1);
+    expect(a.of("matchCancelled")).toEqual([{ t: "matchCancelled", dodged: false }]);
+    expect(b.of("matchCancelled")[0]!["dodged"]).toBe(true);
+    expect(manager.roomCount()).toBe(0);
+    await lockedOut(b, tokenB, "Bob");
+  });
+
+  test("nobody answering locks both out", async () => {
+    const [a, b] = await summonBoth();
+    internals(manager).tendPending(performance.now() + ACCEPT_WINDOW_MS + 1);
+    for (const s of [a, b]) expect(s.of("matchCancelled")[0]!["dodged"]).toBe(true);
+    await lockedOut(a, tokenA, "Alice");
+    await lockedOut(b, tokenB, "Bob");
+  });
+
+  test("a socket that drops mid-summons is the dodger", async () => {
+    const [a, b] = await summonBoth();
+    manager.close(b.ws);
+    expect(a.of("matchCancelled")).toEqual([{ t: "matchCancelled", dodged: false }]);
+    expect(internals(manager).pending).toHaveLength(0);
+    await lockedOut(makeSocket(), tokenB, "Bob");
+  });
+
+  test("queueLeave while summoned is a decline", async () => {
+    const [a, b] = await summonBoth();
+    say(manager, b, { t: "queueLeave" });
+    expect(b.of("matchCancelled")[0]!["dodged"]).toBe(true);
+    expect(a.of("matchCancelled")[0]!["dodged"]).toBe(false);
+    await lockedOut(b, tokenB, "Bob");
+  });
+
+  test("hopping into a skirmish room while summoned is a decline", async () => {
+    const [a, b] = await summonBoth();
+    say(manager, b, { t: "createRoom", v: PROTOCOL_VERSION, playerName: "Bob" });
+    expect(b.of("matchCancelled")[0]!["dodged"]).toBe(true);
+    expect(b.of("welcome")).toHaveLength(1); // the skirmish room still opens
+    expect(a.of("matchCancelled")[0]!["dodged"]).toBe(false);
+    expect(manager.roomCount()).toBe(1); // Bob's skirmish room, no ranked one
+  });
+
+  test("a twin socket can't queue while its account's match is pending", async () => {
+    await summonBoth();
+    const twin = makeSocket();
+    queueJoin(manager, twin, tokenA, "Alice");
+    await until(() => twin.of("reject").length > 0);
+    expect(twin.of("reject")[0]!["reason"]).toBe("you're already in a live ranked match");
+  });
+
+  test("a pairing whose socket died between beats is never summoned; the survivor re-queues quietly", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    queueJoin(manager, a, tokenA, "Alice");
+    queueJoin(manager, b, tokenB, "Bob");
+    await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
+    b.ws.close(); // dead, but the close handler hasn't run yet
+    internals(manager).rankedBeat();
+    expect(a.of("matchReady")).toHaveLength(0);
+    expect(a.of("matchCancelled")).toHaveLength(0);
+    expect(internals(manager).pending).toHaveLength(0);
+    say(manager, a, { t: "queueInfo" });
+    expect((a.of("queueStatus").at(-1)!["brackets"] as { waitedSec?: number }[])[0]!.waitedSec).toBe(0);
+  });
+});
+
 // ── ranked bot backfill (bits-ranked-bots.md) ──────────────────────────────
 
 describe("ranked bot backfill", () => {
@@ -437,6 +651,7 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
 
     expect(manager.roomCount()).toBe(1);
     expect(a.of("matchFound")).toHaveLength(1);
@@ -455,6 +670,47 @@ describe("ranked bot backfill", () => {
     expect(JSON.stringify(a.sent)).not.toContain('"bot":true');
   });
 
+  test("a bot match is summoned like any other; the bot accepts after its delay", async () => {
+    await boot(instantCfg);
+    const a = makeSocket();
+    await queueOne(a, tokenA, "Alice");
+    internals(manager).rankedBeat();
+    expect(a.of("matchReady")).toEqual([{ t: "matchReady", bracket: "1v1", players: 2, acceptSec: ACCEPT_WINDOW_MS / 1000 }]);
+    expect(manager.roomCount()).toBe(0);
+
+    accept(manager, a);
+    expect(a.of("matchPending")).toEqual([{ t: "matchPending", accepted: 1, players: 2 }]);
+    internals(manager).tendPending(performance.now()); // the bot hasn't answered yet
+    expect(manager.roomCount()).toBe(0);
+
+    botAccepts(manager);
+    expect(a.of("matchPending").at(-1)).toEqual({ t: "matchPending", accepted: 2, players: 2 });
+    expect(a.of("matchFound")).toHaveLength(1);
+    expect(manager.roomCount()).toBe(1);
+    expect(JSON.stringify(a.sent)).not.toContain('"bot":true');
+  });
+
+  test("declining a bot match is a dodge; a silent human is too", async () => {
+    await boot(instantCfg);
+    const a = makeSocket();
+    await queueOne(a, tokenA, "Alice");
+    internals(manager).rankedBeat();
+    say(manager, a, { t: "matchDecline" });
+    expect(a.of("matchCancelled")).toEqual([{ t: "matchCancelled", dodged: true, lockoutSec: 30 }]);
+    expect(manager.roomCount()).toBe(0);
+    queueJoin(manager, a, tokenA, "Alice");
+    await until(() => a.of("reject").length > 0);
+    expect(a.of("reject")[0]!["reason"]).toContain("lockout");
+
+    await boot(instantCfg);
+    const b = makeSocket();
+    await queueOne(b, tokenA, "Alice");
+    internals(manager).rankedBeat();
+    internals(manager).tendPending(performance.now() + ACCEPT_WINDOW_MS + 1);
+    expect(b.of("matchCancelled")[0]!["dodged"]).toBe(true);
+    expect(manager.roomCount()).toBe(0);
+  });
+
   test("the human pairing pass always wins the beat", async () => {
     await boot(instantCfg);
     const a = makeSocket();
@@ -462,6 +718,7 @@ describe("ranked bot backfill", () => {
     await queueOne(a, tokenA, "Alice");
     await queueOne(b, tokenB, "Bob");
     internals(manager).rankedBeat(); // both overdue AND pairable
+    acceptAll(manager, a, b);
 
     expect(manager.roomCount()).toBe(1);
     const room = [...internals(manager).rooms.values()][0]!;
@@ -495,6 +752,7 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     const room = [...internals(manager).rooms.values()][0]!;
     const humanTeam = room.sim.state.players[a.ws.data.playerId!]!.team as Team;
 
@@ -528,6 +786,7 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     const room = [...internals(manager).rooms.values()][0]!;
     const humanTeam = room.sim.state.players[a.ws.data.playerId!]!.team as Team;
     const botTeam = (humanTeam === 1 ? 2 : 1) as Team;
@@ -548,6 +807,7 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     expect(manager.roomCount()).toBe(1);
 
     say(manager, a, { t: "leaveRoom" }); // deserts the room — only a bot remains
@@ -563,9 +823,12 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     expect(manager.roomCount()).toBe(1);
 
-    internals(manager).tendRankedRooms(performance.now() + ARM_DEADLINE_MS + 1000);
+    // (The room was built on the bot's fast-forwarded accept clock — the
+    // deadline counts from there.)
+    internals(manager).tendRankedRooms(performance.now() + BOT_ACCEPT_MAX_MS + ARM_DEADLINE_MS + 1000);
     expect(manager.roomCount()).toBe(0);
     expect(a.of("roomClosed").at(-1)!["reason"]).toBe("the match was called off");
 
@@ -581,6 +844,7 @@ describe("ranked bot backfill", () => {
       const a = makeSocket();
       await queueOne(a, tokenA, "Alice");
       internals(manager).rankedBeat();
+      acceptBotMatch(manager, a);
       const room = [...internals(manager).rooms.values()][0]!;
       names.push(botAccountOf(room).account.name);
       // Finish the match cleanly so no lockout blocks the next queue entry.
@@ -612,6 +876,7 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     const room = [...internals(manager).rooms.values()][0]!;
     const botSeatId = botAccountOf(room).seatId;
 
@@ -640,6 +905,7 @@ describe("ranked bot backfill", () => {
     const a = makeSocket();
     await queueOne(a, tokenA, "Alice");
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     const room = [...internals(manager).rooms.values()][0]!;
     const botSeatId = botAccountOf(room).seatId;
     const now = performance.now();
@@ -730,6 +996,7 @@ describe("2v2 solo queue", () => {
     queueJoin(manager, d, tokens[3]!, "Dave", ["2v2"]);
     await until(() => d.of("queueStatus").length > 0);
     internals(manager).rankedBeat();
+    acceptAll(manager, ...socks, d);
     expect(manager.roomCount()).toBe(1);
     const all = [...socks, d];
     for (const s of all) {
@@ -750,6 +1017,7 @@ describe("2v2 solo queue", () => {
     await seedRating(tokens[3]!, 1700); // Dave
     const socks = await queueFour();
     internals(manager).rankedBeat();
+    acceptAll(manager, ...socks);
     expect(manager.roomCount()).toBe(1);
     const teamOf = (s: FakeSocket) => s.of("welcome")[0]!["team"];
     expect(teamOf(socks[0]!)).toBe(teamOf(socks[3]!)); // Alice + Dave
@@ -764,6 +1032,7 @@ describe("2v2 solo queue", () => {
     await seedRating(tokens[3]!, 1500); // Dave
     const socks = await queueFour();
     internals(manager).rankedBeat();
+    acceptAll(manager, ...socks);
     const room = [...internals(manager).rooms.values()][0]!;
     // Sorted 1400 (Bob) 1500 (Carol) 1500 (Dave) 1600 (Alice): Bob + Alice
     // vs Carol + Dave — means 1500 vs 1500.
@@ -799,6 +1068,7 @@ describe("2v2 solo queue", () => {
   test("a four-seat void: the leaver is locked out, the other three go straight back in line", async () => {
     const socks = await queueFour();
     internals(manager).rankedBeat();
+    acceptAll(manager, ...socks);
     expect(manager.roomCount()).toBe(1);
 
     say(manager, socks[2]!, { t: "leaveRoom" }); // Carol bails during arming
@@ -813,6 +1083,22 @@ describe("2v2 solo queue", () => {
     expect(socks[2]!.of("reject")[0]!["reason"]).toContain("lockout");
   });
 
+  test("a four-seat summons: one dodger sends the other three straight back in line", async () => {
+    const socks = await queueFour();
+    internals(manager).rankedBeat();
+    for (const s of socks) expect(s.of("matchReady")[0]!["players"]).toBe(4);
+    acceptAll(manager, socks[0]!, socks[1]!);
+    expect(socks[3]!.of("matchPending").at(-1)).toEqual({ t: "matchPending", accepted: 2, players: 4 });
+    say(manager, socks[2]!, { t: "matchDecline" }); // Carol bails
+    expect(manager.roomCount()).toBe(0);
+    expect(socks[2]!.of("matchCancelled")[0]!["dodged"]).toBe(true);
+    for (const s of [socks[0]!, socks[1]!, socks[3]!]) {
+      expect(s.of("matchCancelled")[0]!["dodged"]).toBe(false);
+      const brackets = s.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number; waitedSec?: number }[];
+      expect(brackets.find((b) => b.bracket === "2v2")).toEqual({ bracket: "2v2", size: 3, waitedSec: 0 });
+    }
+  });
+
   test("multi-queue: 1v1 + 2v2 at once, the first match wins and the other entry evaporates", async () => {
     const a = makeSocket();
     const b = makeSocket();
@@ -820,6 +1106,7 @@ describe("2v2 solo queue", () => {
     queueJoin(manager, b, tokens[1]!, "Bob", ["1v1", "2v2"]);
     await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     expect(manager.roomCount()).toBe(1);
     expect(a.of("matchFound")[0]!["bracket"]).toBe("1v1");
     expect(a.ws.data.roomCode).toBe(b.ws.data.roomCode);

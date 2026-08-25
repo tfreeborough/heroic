@@ -130,11 +130,53 @@ const CardArt = ({ mode, w, h, locked }: { mode: ModeKey; w: number; h: number; 
 const ENTRANCE_STAGGER = 0.18;
 const ENTRANCE_SLICE = 0.4;
 
+/**
+ * When Story opens (Tom, 2026-08-25: build lands end of October — the date
+ * on the card keeps the closed door interesting rather than dead). Midnight
+ * UTC on the day; the countdown reads "days · hh:mm:ss" until then and
+ * "opening any day now" past it, so a slipped ship never shows negatives.
+ */
+export const STORY_UNLOCKS_AT = Date.UTC(2026, 9, 31); // 31 October 2026
+
+const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
+
+/** "67 days · 04:12:33" / "1 day · 00:00:09" / null once the moment passed. */
+export const formatCountdown = (msLeft: number): string | null => {
+  if (msLeft <= 0) return null;
+  const total = Math.floor(msLeft / 1000);
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const clock = `${pad2(hours)}:${pad2(mins)}:${pad2(secs)}`;
+  if (days === 0) return clock;
+  return `${days} ${days === 1 ? "day" : "days"} · ${clock}`;
+};
+
+/** The ticking line for a locked card with an opening date. One re-render a
+ * second of one Text — the card's art and entrance don't repaint. */
+const Countdown = ({ unlocksAt }: { unlocksAt: number }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const left = formatCountdown(unlocksAt - now);
+  return (
+    <View style={styles.countdown}>
+      <Text style={styles.countdownLabel}>{left === null ? "OPENING" : "OPENS IN"}</Text>
+      <Text style={styles.countdownClock}>{left ?? "any day now"}</Text>
+    </View>
+  );
+};
+
 interface ModeCardProps {
   mode: ModeKey;
   title: string;
   pitch: string;
   state: CardState;
+  /** Locked cards with a known opening: a live countdown under the pitch. */
+  unlocksAt?: number;
   /** Only fires for "live" — locked cards shake instead. */
   onEnter?: () => void;
   /** The screen's shared entrance clock + this card's slot in the stagger. */
@@ -145,7 +187,7 @@ interface ModeCardProps {
   compact?: boolean;
 }
 
-const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact = false }: ModeCardProps) => {
+const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact = false, unlocksAt }: ModeCardProps) => {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [pressed, setPressed] = useState(false);
   const shake = useRef(new Animated.Value(0)).current;
@@ -235,6 +277,7 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact
         <View style={styles.copy} pointerEvents="none">
           <Text style={[styles.title, compact && styles.titleCompact, locked && styles.titleDim]}>{title}</Text>
           <Text style={[styles.pitch, locked && styles.pitchDim]}>{pitch}</Text>
+          {locked && unlocksAt !== undefined && <Countdown unlocksAt={unlocksAt} />}
         </View>
       </Pressable>
     </Animated.View>
@@ -333,6 +376,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
           title="STORY"
           pitch="Carve your legend into the sand."
           state="locked"
+          unlocksAt={STORY_UNLOCKS_AT}
           entrance={entrance}
           index={3}
         />
@@ -373,4 +417,15 @@ const styles = StyleSheet.create({
   titleDim: { color: "#cfc4b0" },
   pitch: { color: "#d9cbb4", fontSize: 13, lineHeight: 18, maxWidth: 240, flexShrink: 1 },
   pitchDim: { color: "#8d8272" },
+  /** The locked-card clock: a small label then the ticking time, warmer
+   * than the dimmed pitch so it's the one live thing on a cold card. */
+  countdown: { marginTop: 4, gap: 1 },
+  countdownLabel: { color: "#8a6d44", fontSize: 10, fontWeight: "900", letterSpacing: 2 },
+  countdownClock: {
+    fontFamily: DISPLAY_FONT,
+    color: "#d9b46a",
+    fontSize: 15,
+    letterSpacing: 1.5,
+    fontVariant: ["tabular-nums"],
+  },
 });

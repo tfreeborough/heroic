@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Blur, Canvas, Fill, Group, Oval, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
+import { QueuePill } from "../components/QueueContext";
+import { CommunityIcons } from "../components/CommunityIcons";
 import { devFlags } from "../dev";
 import { devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
 import { setEntitlements } from "../deeds/entitlements";
@@ -562,6 +564,9 @@ export const HomeScreen = ({
             <View style={styles.gem} />
             <View style={styles.ruleLine} />
           </View>
+          {/* The ranked queue follows the player home too (QueueContext):
+              nothing while not queued, the counting pill while in line. */}
+          <QueuePill style={styles.queuePill} />
         </Animated.View>
 
         <View style={styles.spacer} pointerEvents="none" />
@@ -587,6 +592,9 @@ export const HomeScreen = ({
           <Pressable onPress={withTap("uiTap", onSettings)} style={styles.ghost}>
             <Text style={styles.ghostText}>SETTINGS</Text>
           </Pressable>
+          {/* The community doors (Discord + subreddit) ride the menu's
+              entrance — visible on the title, not buried in Settings. */}
+          <CommunityIcons style={styles.community} />
         </Animated.View>
       </View>
 
@@ -671,6 +679,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(58,48,36,0.6)",
   },
   ui: { flex: 1, alignItems: "center", paddingHorizontal: 24 },
+  queuePill: { alignSelf: "center", marginTop: 14 },
   // RN letterSpacing adds a trailing space — tracked centered text needs the
   // negative marginRight (the wizard's YOU ARE ARMED lesson).
   // Title palette rule (backdrop era): every line must read over BOTH the
@@ -748,6 +757,7 @@ const styles = StyleSheet.create({
   },
   updatePillText: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 2, marginRight: -2 },
   menu: { width: 250, gap: 12 },
+  community: { marginTop: 2 },
   play: {
     backgroundColor: "#8c2f2f",
     borderColor: "#e0503c",

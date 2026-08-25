@@ -247,8 +247,20 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * exposes it). No new message shapes; the bump exists because a v28 client
  * has no 2v2 card to seat into and would be reading a 4-row settlement it
  * never expected.
+ * v30 (2026-08-25): QUEUE ROAMING + MATCH ACCEPT (bits-ranked.md § Queue
+ * roaming & match accept). A pairing no longer seats anyone: the server opens
+ * a PENDING match and every player must say yes within the window. NEW server
+ * msgs: `matchReady` (the summons — bracket, seats, seconds to answer),
+ * `matchPending` (accept progress, `accepted` of `players`), `matchCancelled`
+ * (the pending match fell through: `dodged` = YOU were at fault, out of the
+ * queue with `lockoutSec` to serve; otherwise you're already back in line
+ * with your earned wait and a queueStatus follows). NEW client msgs:
+ * `matchAccept`, `matchDecline`. Once everyone is in, the v19 flow runs
+ * unchanged (`matchFound` → seat → `welcome`). Bot backfill matches go
+ * through the same stage. Bump: a v29 client would sit through every
+ * summons in silence and eat a lockout each time.
  */
-export const PROTOCOL_VERSION = 29;
+export const PROTOCOL_VERSION = 30;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -308,7 +320,11 @@ export type ClientMsg =
   | { t: "queueLeave" }
   /** Unauthenticated queue-size read — the ranked screen's population display
    * before the player commits to queueing. Answered with `queueStatus`. */
-  | { t: "queueInfo" };
+  | { t: "queueInfo" }
+  /** Answer the summons (`matchReady`). Accepting is idempotent; declining —
+   * like not answering, or dropping the socket — is a dodge (v30). */
+  | { t: "matchAccept" }
+  | { t: "matchDecline" };
 
 // ── server → client ────────────────────────────────────────────────────────
 
@@ -533,7 +549,19 @@ export type ServerMsg =
   | { t: "queueStatus"; brackets: { bracket: string; size: number; waitedSec?: number }[] }
   /** You left the queue (queueLeave, or a lockout bounced your join). */
   | { t: "queueLeft" }
-  /** A pairing landed. Informational — the server seats you itself and the
+  /** The summons (v30): a pairing landed and needs your yes within
+   * `acceptSec`. `players` = seats in the match (2 in 1v1, 4 in 2v2) — the
+   * accept sheet's "N OF M". Nobody is seated until everyone accepts. */
+  | { t: "matchReady"; bracket: string; players: number; acceptSec: number }
+  /** Accept progress on a pending match — sent to every human in it each
+   * time the count moves. */
+  | { t: "matchPending"; accepted: number; players: number }
+  /** The pending match fell through. `dodged` = you were the one who didn't
+   * answer (declined / timed out) — you're out of the queue and locked out
+   * for `lockoutSec`. Otherwise someone else was, and you're already back in
+   * line with your earned wait (a queueStatus follows). */
+  | { t: "matchCancelled"; dodged: boolean; lockoutSec?: number }
+  /** Everyone accepted. Informational — the server seats you itself and the
    * standard `welcome` follows on this socket; no joinRoom round-trip, no
    * code entry (ranked rooms are unlisted and unjoinable from outside). */
   | { t: "matchFound"; bracket: string; code: string }

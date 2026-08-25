@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Alert, BackHandler, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
@@ -11,6 +11,8 @@ import {
   takeFirstWinNudge,
 } from "./src/net/account";
 import { AccountSheet } from "./src/components/AccountSheet";
+import { MatchAcceptSheet } from "./src/components/MatchAcceptSheet";
+import { QueueContext, type QueuePresence } from "./src/components/QueueContext";
 import { ensureIdentity, fetchWallet } from "./src/net/api";
 import { StatusBar } from "expo-status-bar";
 import { useKeepAwake } from "expo-keep-awake";
@@ -61,7 +63,13 @@ import { FeedbackScreen } from "./src/screens/FeedbackScreen";
  *   play              → SKIRMISH: connecting / RoomList / Room (lobby) / Game, by client state
  *   ranked            → RANKED: connecting / RankedScreen (queue) / Room / Game
  *                       (bits-ranked.md — matchFound seats us server-side, so the
- *                       same client-state routing carries the whole flow)
+ *                       same client-state routing carries the whole flow). The
+ *                       QUEUE ROAMS (§ Queue roaming & match accept, 2026-08-25):
+ *                       once queued the player may wander every menu route; the
+ *                       header pill (QueueContext) shows the wait, the summons
+ *                       (MatchAcceptSheet) rises over any of them, and a ranked
+ *                       welcome pulls the route back here. Only the doors into
+ *                       ANOTHER match — skirmish, practice — leave the line.
  *   practice          → bots-or-dummies front door; an offline sim match
  *   settings          → device settings (lefty mode)
  *   feedback          → bug reports / feedback form, from Settings (bits-feedback.md)
@@ -189,9 +197,55 @@ export default function App() {
   // respawning target dummies (the player-facing way in is PRACTICE →
   // TARGET DUMMIES; this jump just skips the two screens between).
   const startTargetDummies = useCallback(() => {
+    client?.queueLeave(); // an offline match is a match — the line is given up
     setPractice(new PracticeClient(playerName || "gladiator", RANGE_TEAM_SIZE, "dummies"));
     setRoute("practice");
-  }, [playerName]);
+  }, [playerName, client]);
+
+  // The doors into another match while queued: confirm, then leave the line.
+  // (Everything else — the Armory, Deeds, Settings, home — stays open; the
+  // queue follows.) A no-op passthrough while not queued.
+  const leaveQueueThen = useCallback(
+    (what: string, next: () => void): void => {
+      if (!client?.queued) return next();
+      Alert.alert("Leave the ranked queue?", `${what} means giving up your place in line.`, [
+        { text: "Stay queued", style: "cancel" },
+        {
+          text: "Leave queue",
+          style: "destructive",
+          onPress: () => {
+            client.queueLeave();
+            next();
+          },
+        },
+      ]);
+    },
+    [client],
+  );
+
+  // A ranked welcome pulls the route home from wherever the player roamed:
+  // the accept stage seated us, and the arming wizard lives on the ranked
+  // route's RoomScreen. (A welcome on the play route is a skirmish seat.)
+  const rankedSeated = client?.welcome != null && client.rankedMatch !== null;
+  useEffect(() => {
+    if (rankedSeated && route !== "ranked") setRoute("ranked");
+  }, [rankedSeated, route]);
+
+  // What every menu screen's header needs to show the roaming queue.
+  const queued = conn.state === "online" && client?.queued === true;
+  const queuedIn = client?.queueStatus.filter((b) => b.waitedSec !== undefined) ?? [];
+  const waitedSec = queued && queuedIn.length > 0 ? Math.max(...queuedIn.map((b) => b.waitedSec!)) : undefined;
+  const queuePresence = useMemo<QueuePresence>(
+    () => ({
+      queued,
+      waitedSec,
+      goToRanked: () => {
+        conn.wake();
+        setRoute("ranked");
+      },
+    }),
+    [queued, waitedSec, conn],
+  );
 
   useEffect(() => {
     if (!practice) return;
@@ -271,7 +325,7 @@ export default function App() {
       confirmLeave(client.phase === "lobby" ? "lobby" : "match", () => client.leaveRoom());
     } else if (route === "play" || route === "ranked" || route === "practice") {
       // All were entered from the mode select — back retraces that step.
-      if (route === "ranked" && client?.queued) client.queueLeave();
+      // (A ranked back KEEPS the queue — it roams; the header pill carries it.)
       setRoute("modes");
     } else if (route === "armory") {
       setRoute(armoryFrom.current);
@@ -354,15 +408,17 @@ export default function App() {
     screen = (
       <ModeSelectScreen
         onBack={() => setRoute("home")}
-        onSkirmish={() => {
-          conn.wake();
-          setRoute("play");
-        }}
+        onSkirmish={() =>
+          leaveQueueThen("Skirmish", () => {
+            conn.wake();
+            setRoute("play");
+          })
+        }
         onRanked={() => {
           conn.wake();
           setRoute("ranked");
         }}
-        onPractice={() => setRoute("practice")}
+        onPractice={() => leaveQueueThen("Practice", () => setRoute("practice"))}
         onDeeds={() => setRoute("deeds")}
         onArmory={() => openArmory("modes")}
       />
@@ -454,27 +510,41 @@ export default function App() {
   const tree = (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        {/* Home is the sunlit High Sun scene — dark icons; everywhere else stays dark-ground. */}
-        <StatusBar style={route === "home" ? "dark" : "light"} hidden={inMatch} />
-        {/* Dark root until the display face is ready (see useFonts above) —
-            the same ground as the launch screen, so nothing visibly flashes. */}
-        {typographyReady ? screen : null}
-        {/* takeFirstWinNudge only fires under a shipped Clerk key, so this
-            sheet always has the provider below it. */}
-        {firstWinNudge ? (
-          <AccountSheet
-            mode="firstWin"
-            onClose={() => setFirstWinNudge(false)}
-            onLinked={() => {
-              setFirstWinNudge(false);
-              // A link (or adoption) changed the wallet under every purse —
-              // one authoritative fetch republishes to all of them.
-              void ensureIdentity().then((id) => {
-                if (id) void fetchWallet(id);
-              });
-            }}
-          />
-        ) : null}
+        <QueueContext.Provider value={queuePresence}>
+          {/* Home is the sunlit High Sun scene — dark icons; everywhere else stays dark-ground. */}
+          <StatusBar style={route === "home" ? "dark" : "light"} hidden={inMatch} />
+          {/* Dark root until the display face is ready (see useFonts above) —
+              the same ground as the launch screen, so nothing visibly flashes. */}
+          {typographyReady ? screen : null}
+          {/* The summons (bits-ranked.md § Queue roaming & match accept): over
+              every route, since the queue may have roamed anywhere. A dodge
+              lands on the ranked home, where the lockout explains itself. */}
+          {typographyReady && client?.pendingMatch ? (
+            <MatchAcceptSheet
+              client={client}
+              onDismissed={(dodged) => {
+                client.dismissPending();
+                if (dodged) setRoute("ranked");
+              }}
+            />
+          ) : null}
+          {/* takeFirstWinNudge only fires under a shipped Clerk key, so this
+              sheet always has the provider below it. */}
+          {firstWinNudge ? (
+            <AccountSheet
+              mode="firstWin"
+              onClose={() => setFirstWinNudge(false)}
+              onLinked={() => {
+                setFirstWinNudge(false);
+                // A link (or adoption) changed the wallet under every purse —
+                // one authoritative fetch republishes to all of them.
+                void ensureIdentity().then((id) => {
+                  if (id) void fetchWallet(id);
+                });
+              }}
+            />
+          ) : null}
+        </QueueContext.Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -53,7 +53,7 @@ export type BitsSoundEvent =
   | "matchEnd" //       the match resolves            (qualifier: win|loss)
   | "startCancelled" // a bot-filled start vetoed — the veil collapses (bits-bot-backfill.md)
   // ── Ranked (bits-ranked.md § audio owed) ──────────────────────────────────
-  | "queueMatchFound" //the matcher paired you — the summons (ranked room mount)
+  | "queueMatchFound" //the matcher paired you — the summons (the accept sheet's rise)
   | "rankUp" //         the displayed rank climbed (server-computed rankChange)
   | "rankDown" //       …or slipped — deliberately subtle, never punishing
   | "gloryEarned" //    the Glory payout lands on the ceremony plate

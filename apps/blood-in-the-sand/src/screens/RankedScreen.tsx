@@ -26,6 +26,7 @@ import {
 } from "@shopify/react-native-skia";
 import { playSound, unlockAudio } from "../audio";
 import { ScreenHeader } from "../components/ScreenHeader";
+import { formatWait, useSmoothWait } from "../components/QueueContext";
 import { badgeFor } from "../components/rankBadges";
 import {
   ensureIdentity,
@@ -86,9 +87,6 @@ const DEFAULT_FOCUS = "1v1";
 /** How often to refresh the population display while NOT queued (the server
  * pushes queueStatus every matcher beat once we are). */
 const QUEUE_INFO_POLL_MS = 5000;
-
-const formatWait = (sec: number): string =>
-  `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
 /** The forged bracket art is a 900×360 band (ART_ASPECT 2.5:1) with its
  * focal scene composed into the RIGHT two thirds and a quiet left third for
@@ -235,31 +233,9 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
   const placing = standing === null || standing.placementsLeft > 0;
   const played = standing ? standing.wins + standing.losses : 0;
 
-  // The wait timer counts on the LOCAL clock — smooth by definition. The
-  // server's waitedSec is floored AND arrives on a 2s beat, so it routinely
-  // disagrees with local elapsed by up to ~2s; treating that as drift is what
-  // made the digits jump. Anchor once on entry, and re-anchor only on a REAL
-  // discontinuity (a void's re-queue that preserved earned wait). The 250ms
-  // tick outpaces the second boundary so the display can never skip a digit.
-  const waitAnchor = useRef<number | null>(null);
-  const [, tickWait] = useReducer((x: number) => x + 1, 0);
-  if (waitedSec === undefined) {
-    waitAnchor.current = null;
-  } else {
-    const nowMs = performance.now();
-    if (waitAnchor.current === null) {
-      waitAnchor.current = nowMs - waitedSec * 1000;
-    } else if (Math.abs((nowMs - waitAnchor.current) / 1000 - waitedSec) > 2.5) {
-      waitAnchor.current = nowMs - waitedSec * 1000;
-    }
-  }
-  useEffect(() => {
-    if (!client.queued) return;
-    const timer = setInterval(tickWait, 250);
-    return () => clearInterval(timer);
-  }, [client.queued]);
-  const displayWait =
-    waitAnchor.current === null ? 0 : Math.max(0, Math.floor((performance.now() - waitAnchor.current) / 1000));
+  // The wait timer counts on the LOCAL clock, anchored to the server's
+  // floored beat (QueueContext.useSmoothWait — shared with the header pill).
+  const displayWait = useSmoothWait(waitedSec);
 
   const canQueue = identity !== null && identity !== "loading";
 
@@ -282,18 +258,22 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
     else client.queueRanked(playerName, identity.token, rest);
   };
 
+  // Leaving the screen KEEPS the line (bits-ranked.md § Queue roaming &
+  // match accept, 2026-08-25): the header pill carries the wait everywhere,
+  // and the summons rises wherever the player is. CANCEL on the card is the
+  // one way out.
   const back = (): void => {
     unlockAudio();
     playSound("uiBack");
-    if (client.queued) client.queueLeave(); // v1 rule: leaving the screen leaves the line
     onBack();
   };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
-      {/* The purse is a door to the Armory — except while QUEUED: a match
-          can land any second and the ranked route is where it shows. */}
-      <ScreenHeader style={styles.header} onBack={back} onPurse={client.queued ? undefined : onArmory} />
+      {/* The purse is a door to the Armory, queued or not — the summons
+          finds the player there too. No queue pill here: the SEARCHING
+          line on the card already says it. */}
+      <ScreenHeader style={styles.header} onBack={back} onPurse={onArmory} queuePill={false} />
 
       {/* Your standing. During PLACEMENTS (first 10 matches — and the safe
           default while /ranked/me loads) rank and rating stay hidden: the

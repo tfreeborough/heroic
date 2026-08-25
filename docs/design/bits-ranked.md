@@ -2,7 +2,8 @@
 
 Status: **designed 2026-07-28 · revised 2026-07-29 · M1+M2+M3 BUILT 2026-07-29 ·
 display v2 + 14-rung divisions BUILT 2026-07-30 · 2v2 solo queue DESIGNED +
-BUILT 2026-08-24 (protocol v29)** (rating core + schema + server queue/ranked
+BUILT 2026-08-24 (protocol v29) · queue roaming + match accept DESIGNED + BUILT
+2026-08-25 (protocol v30)** (rating core + schema + server queue/ranked
 rooms/recorder + client; on-device pass + M4 ladder polish pending) ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-08-24
@@ -270,8 +271,10 @@ Tapping the RANKED card opens **RankedScreen** — the ranked home, not a spinne
   first `matchFound` wins, the others are auto-left (WoW battlegrounds model). Season I
   UI exposes only `1v1`, so the array always has one element; shipping multi-queue is
   a UI change, not a protocol bump.
-- **v1 simplification:** leaving RankedScreen (or losing the socket) leaves the queue.
-  Queueing-while-roaming-the-app is future polish.
+- ~~**v1 simplification:** leaving RankedScreen (or losing the socket) leaves the queue.
+  Queueing-while-roaming-the-app is future polish.~~ **Reversed 2026-08-25** — the queue
+  now follows the player around the app and a match must be ACCEPTED before it seats
+  (§ Queue roaming & match accept). Losing the socket still leaves the queue.
 
 ## The queue & matchmaker
 
@@ -306,7 +309,8 @@ trivial at this shape.
 
 ### Match found → ranked room
 
-On a pairing the server creates a **ranked room** in-process and seats both players —
+On a pairing — **and once everyone has accepted it (§ Queue roaming & match accept,
+2026-08-25)** — the server creates a **ranked room** in-process and seats both players —
 same `Room` machinery, different rules:
 
 | | Skirmish | Ranked |
@@ -406,6 +410,108 @@ persisted display name column is a fast follow decided at build time.)
   v19, unshipped). Matched accounts auto-leave their other queues (first match wins).
 - Ranked rooms reject `forceStart` / `cancelStart` / `switchTeam` / outside
   `joinRoom` (the mid-match rejoin of a disconnected seat is the one exception).
+
+## Queue roaming & match accept *(designed + BUILT 2026-08-25 · protocol v30)*
+
+> Tom, 2026-08-25: the queue shouldn't hold the player hostage on one screen, and a
+> match should be something you say yes to, not something you're dumped into. Both
+> came out of a bigger idea — queue, background the app, get a push notification when
+> a match lands (the League of Legends model) — that we **parked** (§ Parked: background
+> queue + push). This is the slice that stands on its own today: no native modules, no
+> credentials, OTA-shippable, and the accept step is exactly what the push version
+> would bolt onto later.
+
+### Decisions
+
+1. **The queue follows the player.** Once queued, every menu surface is open: home,
+   the mode select, the Armory, Deeds, Settings, Feedback, even a Primer replay. The
+   socket stays alive because the app is foregrounded — nothing changes server-side
+   for roaming; the client simply stops leaving the queue on back. **The only doors
+   that leave the queue are the ones into another match**: SKIRMISH and PRACTICE on
+   the mode select confirm ("Leave the ranked queue?") before proceeding. Losing the
+   socket still loses the spot (the reconnect layer's rule, unchanged).
+2. **A queued pill in the shared header** (`ScreenHeader`, between the chevron and the
+   purse — and on the title screen): `IN QUEUE · 1:23`, breathing like the ranked
+   screen's SEARCHING line, tap → back to RankedScreen. The purse door stays open
+   while queued (it was inert before — "a match can land any second and the ranked
+   route is where it shows" no longer applies: the match shows *everywhere*).
+3. **Explicit accept, 15 s.** A pairing no longer seats anyone. It opens a **pending
+   match**: everyone gets `matchReady`, a full-screen sheet rises over whatever screen
+   they're on (the summons sting + a heavy haptic play HERE now — this is the real
+   "match found" moment; the room mount is silent), and each player has 15 s to
+   ACCEPT or DECLINE. Accepting shows `N OF M ACCEPTED` until the last one lands; then
+   the standard `matchFound` → seat → `welcome` → arming wizard flow runs unchanged
+   (the 60 s arm deadline stands — after a yes it's generous, not hostage-taking).
+4. **Not accepting is dodging.** Decline, letting the 15 s lapse, or dropping the socket
+   mid-pending all read as the existing dodge: **30 s queue lockout**, `matchCancelled
+   { dodged: true, lockoutSec }`, out of the queue. Everyone else gets `matchCancelled
+   { dodged: false }` and goes **straight back in line with their earned wait**
+   (`joinedMs` preserved = the widest rating window = the front of the line in
+   practice — the same void rule the arming lobby already had). A void re-queues only
+   the matched bracket (existing behaviour; a multi-queue's other bracket evaporated at
+   match time).
+5. **Bots accept too.** A backfill match (bits-ranked-bots.md) goes through the same
+   pending stage: the human sees the same sheet, the bot "accepts" after a jittered
+   1–5 s (a fraction of the window, so `1 OF 2 ACCEPTED` shows up organically and an
+   instant 2/2 isn't a tell), and only then does the bot room build — the disguised
+   identity is drawn at room time as before, so a declined bot match burns no roster
+   name. A human who declines a bot match eats the lockout like any other dodge.
+6. **One live ranked seat per account** extends to pending matches: a second socket on
+   the same token can't queue while its twin has a match pending (the parallel-farm
+   hole from the store audit, closed at this stage too).
+7. **No new sounds.** `queueMatchFound` moves from the ranked-room mount to
+   `matchReady` (a catalogue comment change, not a new clip); ACCEPT = `uiConfirm`,
+   DECLINE = `uiBack`, the last five seconds tick with `countdownTick`.
+
+### Server
+
+- `PendingMatch` (`ranked.ts`, pure, tested): the matched `teams`, the accept
+  `deadlineMs`, the set of accepted account ids, and for a bot match the bot's
+  `acceptAtMs`. `everyoneIn(now)`, `expired(now)`, `dodgers(now)` (the humans who
+  haven't accepted, plus anyone whose socket died).
+- The manager keeps `pending: PendingMatch[]`. The beat now runs **tendPending →
+  tendRankedRooms → match → backfill**: a pairing (`queue.match`) or an overdue entry
+  (`takeOverdue`) opens a pending match instead of a room. `matchAccept` resolves
+  immediately when it completes the set (no waiting for the beat); `matchDecline`,
+  `queueLeave`, a `joinRoom`/`createRoom`/`queueJoin` re-send, and socket close while
+  pending all void it at once with that account as the dodger. Expiry and the bot's
+  accept are beat-granular (≤ 2 s late — invisible under a 15 s window).
+- Room creation is the unchanged `createRankedRoom` / `createRankedBotRoom`, called
+  from the pending stage's "go" — their dead-socket guards still stand.
+
+### Client
+
+- `ArenaClient.pendingMatch` (`matchReady` → `matchPending` progress → either
+  `matchFound`, which clears it, or `matchCancelled`, which parks the outcome on it
+  for the sheet's farewell beat, then `dismissPending()`), `acceptMatch()`,
+  `declineMatch()`. A dodge also sets `lastError` so RankedScreen explains the
+  lockout.
+- `MatchAcceptSheet` (App-level, over every route): eyebrow `MATCH FOUND · 1v1`, the
+  countdown ring in the arming veil's vocabulary, ACCEPT (the brand red) / DECLINE
+  (ghost); after accepting, `WAITING FOR THE OTHERS · 1 OF 2 ACCEPTED`; on a cancel,
+  2.5 s of `AN OPPONENT DIDN'T ANSWER — BACK IN LINE` (innocent — you're still queued,
+  the pill keeps counting) or `YOU MISSED THE MATCH — QUEUE LOCKED 30 S` (dodged —
+  then the ranked screen).
+- App routing: a `welcome` that belongs to a ranked match pulls the route to `ranked`
+  from wherever the player was roaming. `QueueContext` (queued + server wait +
+  go-to-ranked) feeds the header pill without threading props through seven screens.
+- RankedScreen's back and the Android back gesture no longer leave the queue; the
+  CANCEL on the bracket card is the one way out (plus the match doors above).
+
+### Parked: background queue + push *(2026-08-25)*
+
+The full idea — queue, background the app, a push notification (and an iOS Live
+Activity / Android ongoing notification for "in queue · 1:23") when a match lands, tap
+to accept from outside the app — is **possible but not worth it yet**: the queue
+would have to become account-keyed and survive socket death (iOS suspends the app
+within seconds of backgrounding; the socket WILL die), it needs `expo-notifications`
++ APNs/FCM credentials + a native rebuild, push delivery is 1–5 s on a good day and
+device-only to test, and ghost queuers (queued, backgrounded, went to dinner) void
+matches for live players unless TTLs and escalating lockouts are added. And today
+the bot pops at 15–25 s regardless, so a backgrounded player never waits long enough
+for the notification to matter. Revisit when the population makes "wait three minutes
+for a human instead of twenty seconds for a bot" a real trade; the accept stage
+above is the piece it bolts onto.
 
 ## 2v2 solo queue *(designed + BUILT 2026-08-24 · protocol v29)*
 
@@ -560,8 +666,9 @@ of places that assume exactly two people.
 - **Win-trading / feeding:** visible in `ranked_matches` (repeat pairs, one-sided
   streaks). No automated action in v1 — audit trail first, enforcement when there's a
   population worth protecting.
-- **Queue dodging:** 30 s lockout via the arm deadline. Escalating lockouts if it
-  becomes a pattern — deferred.
+- **Queue dodging:** 30 s lockout via the arm deadline — and, since 2026-08-25, via
+  the match-accept stage (decline / no answer / dropped socket). Escalating lockouts
+  if it becomes a pattern — deferred.
 
 ## Seasons
 
@@ -598,13 +705,18 @@ of places that assume exactly two people.
 5. **M5 — 2v2 solo queue** *(designed 2026-08-24, § 2v2 solo queue)*: team-shaped
    recorder + `ranked_match_players`, group matcher + dictated seating, no bots,
    bracket selection + multi-queue UI on RankedScreen.
+6. **M6 — queue roaming + match accept** ✅ *(built 2026-08-25, protocol v30, § Queue
+   roaming & match accept)*: `PendingMatch` accept stage before every ranked room
+   (humans and bots), dodge-on-no-answer, the header queue pill + `QueueContext`,
+   `MatchAcceptSheet`, roaming rules. On-device pass owed.
 
 ## Audio & art owed (Forge done-tick, per bits-audio.md)
 
 - `queue_match_found` sting · `rank_up` fanfare · `rank_down` (subtle, non-punishing)
   · Glory payout tick on the post-match ceremony. **WIRED 2026-08-01, clips owed**: all
-  four are on the sfx-bits checklist + catalogue (`queueMatchFound` on ranked-room
-  mount = the seat IS the match-found moment; `rankUp`/`rankDown` off the settle
+  four are on the sfx-bits checklist + catalogue (`queueMatchFound` on `matchReady`
+  since 2026-08-25 — the accept sheet IS the match-found moment; it used to play on
+  the ranked-room mount; `rankUp`/`rankDown` off the settle
   broadcast's server-computed `rankChange` — display-rung compare, so a grace-absorbed
   dip is silent and placements never fire it; `gloryEarned` with every settlement —
   a low wordless CHORAL SWELL, deliberately never a coin sound: Glory is renown and

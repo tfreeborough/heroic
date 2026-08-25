@@ -17,6 +17,7 @@ import {
   type Db,
 } from "@heroic/blood-in-the-sand-persistence";
 import { RoomManager } from "./manager";
+import { BOT_ACCEPT_MAX_MS } from "./ranked";
 import type { ClientData, Socket } from "./room";
 
 interface FakeSocket {
@@ -54,8 +55,19 @@ const until = async (pred: () => boolean, ms = 2000): Promise<void> => {
   }
 };
 
-type Internals = { rankedBeat(): void; rooms: Map<string, import("./room").Room> };
+type Internals = { rankedBeat(): void; tendPending(now: number): void; rooms: Map<string, import("./room").Room> };
 const internals = (m: RoomManager): Internals => m as unknown as Internals;
+
+/** The v30 accept stage (bits-ranked.md § Queue roaming & match accept): a
+ * beat only summons — everyone says yes before the room builds. */
+const acceptAll = (manager: RoomManager, ...socks: FakeSocket[]): void => {
+  for (const s of socks) say(manager, s, { t: "matchAccept" });
+};
+/** …and a bot match needs the bot's own (delayed) accept off the beat. */
+const acceptBotMatch = (manager: RoomManager, s: FakeSocket): void => {
+  say(manager, s, { t: "matchAccept" });
+  internals(manager).tendPending(performance.now() + BOT_ACCEPT_MAX_MS + 1);
+};
 
 const say = (manager: RoomManager, s: FakeSocket, msg: object): void =>
   manager.message(s.ws, JSON.stringify(msg));
@@ -93,6 +105,7 @@ describe("achievement awards at settle", () => {
     queueJoin(manager, b, tokenB, "Bob");
     await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     const room = [...internals(manager).rooms.values()][0]!;
     return { room, seatA: a.ws.data.playerId!, seatB: b.ws.data.playerId! };
   };
@@ -194,8 +207,9 @@ describe("achievement awards at settle", () => {
     const a = makeSocket();
     queueJoin(manager, a, tokenA, "Alice");
     await until(() => a.of("queueStatus").length > 0);
-    // Deadline 0 → the next beat backfills a bot room immediately.
+    // Deadline 0 → the next beat summons a bot match immediately.
     internals(manager).rankedBeat();
+    acceptBotMatch(manager, a);
     await until(() => a.of("welcome").length > 0);
     const room = [...internals(manager).rooms.values()][0]!;
     const seatA = a.ws.data.playerId!;
@@ -236,6 +250,7 @@ describe("achievement awards at settle", () => {
     });
     await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
     internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
     const room = [...internals(manager).rooms.values()][0]!;
 
     expect(room.sim.state.players[a.ws.data.playerId!]!.title).toBe("sworn-to-the-sand");

@@ -182,7 +182,7 @@ export class ConnectionManager {
     if (c !== this.client) return;
     // Remember what the death cost before the client goes — the notice rides
     // the NEXT successful connection.
-    this.dropped ||= c.welcome !== null || c.queued;
+    this.dropped ||= c.welcome !== null || c.queued || c.pendingMatch !== null;
     this.client = null;
     c.close();
     this.clearDialTimers();

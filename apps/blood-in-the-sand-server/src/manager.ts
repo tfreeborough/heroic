@@ -61,8 +61,12 @@ import {
 } from "@heroic/blood-in-the-sand-persistence";
 import { Room, type ClientData, type RankedSeatAccount, type Socket } from "./room";
 import {
+  ACCEPT_WINDOW_MS,
   ARM_DEADLINE_MS,
+  BOT_ACCEPT_MAX_MS,
+  BOT_ACCEPT_MIN_MS,
   MATCHER_INTERVAL_MS,
+  PendingMatch,
   RankedQueue,
   SEASON,
   type BracketStatus,
@@ -107,6 +111,9 @@ const SETTLE_BACKOFF_MS = 1_000;
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
   private readonly queue = new RankedQueue(Object.keys(RANKED_BRACKETS));
+  /** Pairings awaiting everyone's yes (bits-ranked.md § Queue roaming &
+   * match accept) — between the queue and a room, in neither. */
+  private readonly pending: PendingMatch[] = [];
   private server: Server<ClientData> | null = null;
   private accumulator = 0;
   private lastMs = 0;
@@ -239,16 +246,24 @@ export class RoomManager {
       case "queueJoin":
         return this.onQueueJoin(ws, msg);
       case "queueLeave": {
+        // Leaving while summoned IS declining — the others must not wait
+        // out the window on someone who already walked.
+        this.declinePending(ws);
         if (this.queue.removeSocket(ws)) this.send(ws, { t: "queueLeft" });
         return;
       }
       case "queueInfo":
         return this.send(ws, { t: "queueStatus", brackets: this.queueStatusFor(ws, performance.now()) });
+      case "matchAccept":
+        return this.onMatchAccept(ws);
+      case "matchDecline":
+        return this.declinePending(ws);
     }
   }
 
   close(ws: Socket): void {
     this.queue.removeSocket(ws); // a dead socket can't hold a place in line
+    this.declinePending(ws); // …nor answer a summons: a drop mid-pending is a dodge
     const room = this.roomOf(ws);
     room?.dropSocket(ws, performance.now());
     // A host who drops in the LOBBY frees their seat here → the crown hands off
@@ -501,6 +516,9 @@ export class RoomManager {
    * all set it), and a closed room leaves the registry entirely. Rejoining
    * that match stays open the whole time — this only bars a fresh queue. */
   private inLiveRankedMatch(accountId: string): boolean {
+    // A pending match is a live seat too — the same twin-socket farm would
+    // otherwise slip in between the summons and the room.
+    if (this.pending.some((p) => p.hasAccount(accountId))) return true;
     for (const room of this.rooms.values()) {
       if (!room.ranked || room.ranked.settled) continue;
       for (const account of room.ranked.accounts.values()) {
@@ -514,14 +532,18 @@ export class RoomManager {
    * every queued client's status. */
   private rankedBeat(): void {
     const now = performance.now();
+    this.tendPending(now);
     this.tendRankedRooms(now);
     // Human pairing always wins the beat — backfill only takes what it left.
-    for (const match of this.queue.match(now)) this.createRankedRoom(match, now);
+    // Neither builds a room yet: a pairing opens a PENDING match and the
+    // room follows everyone's accept (bits-ranked.md § Queue roaming & match
+    // accept).
+    for (const match of this.queue.match(now)) this.openPending(match, now);
     if (this.botBackfillOn()) {
       // TODO(v2): population-aware trigger — skip backfill while the bracket's
       // queue size is ≥ N and let the wait ride instead.
       for (const { bracket, entry } of this.queue.takeOverdue(now, BACKFILL_BRACKETS)) {
-        this.createRankedBotRoom(bracket, entry, now);
+        this.openBotPending(bracket, entry, now);
       }
     }
     for (const ws of this.queue.queuedSockets()) {
@@ -540,6 +562,117 @@ export class RoomManager {
     return brackets.map((b) =>
       BACKFILL_BRACKETS.includes(b.bracket) ? { ...b, size: fuzzedQueueSize(b.size, b.bracket, now) } : b,
     );
+  }
+
+  // ── the accept stage (bits-ranked.md § Queue roaming & match accept) ─────
+
+  /** A pairing → a pending match: everyone is summoned, nobody is seated.
+   * A socket that died between beats never gets summoned (nor blamed) — the
+   * survivors go straight back in line, as the room builder always did. */
+  private openPending(match: QueueMatch, now: number): void {
+    const everyone = match.teams.flat();
+    if (everyone.some((e) => e.ws.readyState !== 1)) {
+      for (const e of everyone) {
+        if (e.ws.readyState === 1) this.queue.enqueue(match.bracket, this.requeued(e));
+      }
+      return;
+    }
+    const p = new PendingMatch(match.bracket, match.teams, now + ACCEPT_WINDOW_MS);
+    this.pending.push(p);
+    this.summon(p);
+  }
+
+  /** An overdue lone queuer's bot match goes through the SAME stage: the
+   * human sees the same summons, the bot "accepts" after a jittered delay
+   * (an instant 2/2 would be a tell), and the disguised room builds only
+   * on the human's yes — a declined bot match burns no roster name. */
+  private openBotPending(bracket: string, entry: QueueEntry, now: number): void {
+    if (entry.ws.readyState !== 1) return; // died between beats — already unqueued
+    const botAt = now + BOT_ACCEPT_MIN_MS + Math.random() * (BOT_ACCEPT_MAX_MS - BOT_ACCEPT_MIN_MS);
+    const p = new PendingMatch(bracket, [[entry], []], now + ACCEPT_WINDOW_MS, botAt);
+    this.pending.push(p);
+    this.summon(p);
+  }
+
+  private summon(p: PendingMatch): void {
+    for (const e of p.humans) {
+      this.trySend(e.ws, { t: "matchReady", bracket: p.bracket, players: p.players, acceptSec: ACCEPT_WINDOW_MS / 1000 });
+    }
+  }
+
+  private pendingOf(ws: Socket): PendingMatch | undefined {
+    return this.pending.find((p) => p.has(ws));
+  }
+
+  private onMatchAccept(ws: Socket): void {
+    const p = this.pendingOf(ws);
+    if (!p) return;
+    const now = performance.now();
+    if (!p.accept(p.entryOf(ws)!.accountId)) return; // a repeat tap
+    this.announcePending(p, now);
+    // The last yes builds the room NOW — never a beat late.
+    if (p.everyoneIn(now)) this.goPending(p, now);
+  }
+
+  /** A decline / queueLeave / socket death / room hop while summoned: that
+   * account is the dodger, the match is void at once. No-op if not summoned. */
+  private declinePending(ws: Socket): void {
+    const p = this.pendingOf(ws);
+    if (!p) return;
+    this.voidPending(p, new Set([p.entryOf(ws)!.accountId]), performance.now());
+  }
+
+  /** Accept progress to every human in the match — only when the count moved
+   * (the bot's flip lands here too, off the beat). */
+  private announcePending(p: PendingMatch, now: number): void {
+    const accepted = p.acceptedCount(now);
+    if (accepted === p.announced) return;
+    p.announced = accepted;
+    for (const e of p.humans) this.trySend(e.ws, { t: "matchPending", accepted, players: p.players });
+  }
+
+  /** One pass per beat: dead sockets and blown windows void (the culprits
+   * eat the lockout); a bot's accept flips; a complete set goes to a room. */
+  private tendPending(now: number): void {
+    for (const p of [...this.pending]) {
+      const dodgers = p.dodgers(now);
+      if (dodgers.length > 0) {
+        this.voidPending(p, new Set(dodgers.map((d) => d.accountId)), now);
+        continue;
+      }
+      this.announcePending(p, now);
+      if (p.everyoneIn(now)) this.goPending(p, now);
+    }
+  }
+
+  /** Everyone said yes: the v19 flow from here — matchFound, seat, welcome. */
+  private goPending(p: PendingMatch, now: number): void {
+    this.pending.splice(this.pending.indexOf(p), 1);
+    if (p.botAcceptAtMs !== null) this.createRankedBotRoom(p.bracket, p.humans[0]!, now);
+    else this.createRankedRoom({ bracket: p.bracket, teams: p.teams }, now);
+  }
+
+  /** The pending match falls through: `dodgers` (account ids) are locked out
+   * and told so; everyone else still connected goes straight back in line
+   * with their earned wait — a dodge never costs the innocent their place. */
+  private voidPending(p: PendingMatch, dodgers: ReadonlySet<string>, now: number): void {
+    this.pending.splice(this.pending.indexOf(p), 1);
+    const innocents: QueueEntry[] = [];
+    for (const e of p.humans) {
+      if (dodgers.has(e.accountId)) {
+        this.queue.lockout(e.accountId, now);
+        this.trySend(e.ws, { t: "matchCancelled", dodged: true, lockoutSec: this.queue.lockoutLeft(e.accountId, now) });
+        console.log(`⚔ ranked ${p.bracket} summons void — ${e.name} didn't answer (lockout)`);
+      } else if (e.ws.readyState === 1) {
+        this.queue.enqueue(p.bracket, this.requeued(e));
+        innocents.push(e);
+      }
+    }
+    // Everyone is back in line before anyone reads the line's length.
+    for (const e of innocents) {
+      this.trySend(e.ws, { t: "matchCancelled", dodged: false });
+      this.trySend(e.ws, { t: "queueStatus", brackets: this.queueStatusFor(e.ws, now) });
+    }
   }
 
   private createRankedRoom(match: QueueMatch, now: number): void {
@@ -937,6 +1070,7 @@ export class RoomManager {
    * — and entering a room always leaves the queue (one place at a time). */
   private leaveFirst(ws: Socket): boolean {
     this.queue.removeSocket(ws);
+    this.declinePending(ws); // hopping into a room while summoned is a dodge
     const room = this.roomOf(ws);
     room?.dropSocket(ws, performance.now());
     if (room) this.reconcileHost(room, performance.now()); // a host who hops hands off the room they left

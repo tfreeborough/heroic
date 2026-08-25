@@ -8,7 +8,7 @@ import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { CLERK_PUBLISHABLE_KEY, accountUnlink } from "../net/account";
 import { ensureIdentity, useWalletInfo } from "../net/api";
 import { loadLefty, saveLefty } from "../settings";
-import { SUPPORT_EMAIL, openSupportEmail } from "../support";
+import { SUPPORT_EMAIL, openCommunity, openSupportEmail } from "../support";
 import { runningVersion } from "../updates";
 
 export interface SettingsScreenProps {
@@ -57,7 +57,7 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename, onPrime
       <ScreenHeader onBack={onBack} onPurse={onArmory} />
       <ScreenSign title="SETTINGS" />
 
-      {/* Scrolls since the support rows arrived (2026-08-24) — seven rows
+      {/* Scrolls since the support rows arrived (2026-08-24) — nine rows
           plus the version footer no longer fit a small phone in one view;
           flexGrow keeps the footer pinned to the bottom when they do. */}
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -126,6 +126,40 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename, onPrime
           hitSlop={8}
         >
           <Text style={styles.signInText}>EMAIL</Text>
+        </Pressable>
+      </View>
+
+      {/* The community doors (2026-08-25): where the players and Tom meet
+          between matches — a Discord for the live chat, a subreddit for the
+          slower posts. Plain links out of the app; nothing here needs an
+          account or a server. */}
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Discord</Text>
+          <Text style={styles.rowHint}>chat with other gladiators and the developer</Text>
+        </View>
+        <Pressable
+          onPress={() => {
+            void openCommunity("discord");
+          }}
+          hitSlop={8}
+        >
+          <Text style={styles.signInText}>JOIN</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Reddit</Text>
+          <Text style={styles.rowHint}>r/HeroicGame — news, clips and discussion</Text>
+        </View>
+        <Pressable
+          onPress={() => {
+            void openCommunity("reddit");
+          }}
+          hitSlop={8}
+        >
+          <Text style={styles.signInText}>VISIT</Text>
         </Pressable>
       </View>
 

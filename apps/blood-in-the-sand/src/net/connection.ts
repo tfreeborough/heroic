@@ -118,6 +118,28 @@ export interface RankedResultInfo {
   results: RankedResultRow[];
 }
 
+/** The summons (protocol v30, bits-ranked.md § Queue roaming & match
+ * accept): a pairing awaiting everyone's yes. Lives from `matchReady` until
+ * either `matchFound` (everyone in — cleared, the welcome follows) or
+ * `matchCancelled`, which parks the `outcome` here so the accept sheet can
+ * say its farewell before `dismissPending()` clears it. */
+export interface PendingMatchInfo {
+  bracket: string;
+  /** Seats in the match (2 in 1v1, 4 in 2v2). */
+  players: number;
+  /** How many have said yes so far — the sheet's "N OF M". */
+  accepted: number;
+  acceptSec: number;
+  /** Local clock at the summons — the sheet's countdown anchor. */
+  readyAtMs: number;
+  /** Whether WE have said yes. */
+  mine: "pending" | "accepted";
+  /** Non-null once the match fell through: `dodged` = we were the one who
+   * didn't answer (out of the queue, `lockoutSec` to serve); otherwise
+   * someone else was and we're already back in line. */
+  outcome: { dodged: boolean; lockoutSec: number | null } | null;
+}
+
 /** One bracket's queue population (queueStatus) — `waitedSec` present only
  * on brackets THIS socket is queued in. */
 export interface BracketQueueStatus {
@@ -210,6 +232,9 @@ export class ArenaClient {
   queueStatus: BracketQueueStatus[] = [];
   /** True while this socket holds a place in line. */
   queued = false;
+  /** The live summons, if any (v30) — App raises the accept sheet over
+   * whatever screen the player is roaming while this is set. */
+  pendingMatch: PendingMatchInfo | null = null;
   /** Set at matchFound — the current (or just-ended) room is a ranked one.
    * Cleared when the seat drops. */
   rankedMatch: { bracket: string } | null = null;
@@ -362,8 +387,43 @@ export class ArenaClient {
         this.queued = false;
         this.onChange?.();
         return;
+      case "matchReady":
+        // Summoned: the server took us out of the line for the duration —
+        // no queueStatus reaches a pending socket, so clear the flag here.
+        this.queued = false;
+        this.pendingMatch = {
+          bracket: msg.bracket,
+          players: msg.players,
+          accepted: 0,
+          acceptSec: msg.acceptSec,
+          readyAtMs: performance.now(),
+          mine: "pending",
+          outcome: null,
+        };
+        this.onChange?.();
+        return;
+      case "matchPending":
+        if (this.pendingMatch) {
+          this.pendingMatch = { ...this.pendingMatch, accepted: msg.accepted, players: msg.players };
+          this.onChange?.();
+        }
+        return;
+      case "matchCancelled":
+        if (this.pendingMatch) {
+          this.pendingMatch = { ...this.pendingMatch, outcome: { dodged: msg.dodged, lockoutSec: msg.lockoutSec ?? null } };
+        }
+        if (msg.dodged) {
+          // Out of the line and locked out — RankedScreen's error line
+          // explains why the QUEUE button bounces for the next while.
+          this.queued = false;
+          this.lastError = `you missed the match — queue locked for ${msg.lockoutSec ?? 30}s`;
+        }
+        // Innocent: the server re-queued us and a queueStatus is right behind.
+        this.onChange?.();
+        return;
       case "matchFound":
         this.queued = false;
+        this.pendingMatch = null; // everyone's in — the welcome follows
         this.rankedMatch = { bracket: msg.bracket };
         // The server seats us itself — the welcome follows on this socket.
         this.onChange?.();
@@ -445,6 +505,29 @@ export class ArenaClient {
 
   queueLeave(): void {
     this.send({ t: "queueLeave" });
+  }
+
+  /** Answer the summons. Idempotent; the server's matchPending / matchFound
+   * carry the consequences back. */
+  acceptMatch(): void {
+    if (!this.pendingMatch || this.pendingMatch.mine === "accepted") return;
+    this.pendingMatch = { ...this.pendingMatch, mine: "accepted" };
+    this.send({ t: "matchAccept" });
+    this.onChange?.();
+  }
+
+  /** Decline the summons — a dodge (lockout). The server answers with
+   * matchCancelled { dodged: true }; the sheet's farewell reads from that. */
+  declineMatch(): void {
+    if (!this.pendingMatch || this.pendingMatch.outcome !== null) return;
+    this.send({ t: "matchDecline" });
+  }
+
+  /** The accept sheet has shown its farewell — drop the dead summons. */
+  dismissPending(): void {
+    if (this.pendingMatch === null) return;
+    this.pendingMatch = null;
+    this.onChange?.();
   }
 
   /** Unauthenticated queue-size read — RankedScreen's population display. */

@@ -79,3 +79,35 @@ export const openSupportEmail = async (playerName: string): Promise<void> => {
     ]);
   }
 };
+
+/**
+ * The community doors (Settings § COMMUNITY): where players find Tom and
+ * each other between matches. Plain `Linking.openURL` — the Discord invite
+ * hands off to the Discord app when it's installed and the browser when not;
+ * Reddit likewise. Both are permanent links, so nothing here expires.
+ */
+export const COMMUNITY_LINKS = {
+  discord: "https://discord.gg/8FHgBmaSnT",
+  reddit: "https://www.reddit.com/r/HeroicGame/",
+} as const;
+
+export type CommunityChannel = keyof typeof COMMUNITY_LINKS;
+
+/** Open a community link; a device that can't open it (no browser, odd
+ * Android profile) gets the address to copy instead of a silent nothing. */
+export const openCommunity = async (channel: CommunityChannel): Promise<void> => {
+  const url = COMMUNITY_LINKS[channel];
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert("Couldn't open link", url, [
+      {
+        text: "Copy link",
+        onPress: () => {
+          void Clipboard.setStringAsync(url);
+        },
+      },
+      { text: "OK", style: "cancel" },
+    ]);
+  }
+};

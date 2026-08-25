@@ -14,6 +14,12 @@
  * anything ("new device, give me my armory"). Linked players see nothing:
  * signed-in is the quiet state.
  *
+ * Between them, only while the ranked queue is running: the queue pill
+ * (`IN QUEUE · 1:23`, QueueContext) — the queue follows the player around
+ * the app since 2026-08-25, and this is how every screen shows it and
+ * offers the way back. RankedScreen opts out (`queuePill={false}`): its
+ * SEARCHING line already says it.
+ *
  * No page name in the bar. A screen that wants one puts a `ScreenSign` as
  * its first content row (Deeds: name + earned count; Settings: its name) —
  * the bar is navigation + wallet and nothing else, so it never fights the
@@ -33,6 +39,7 @@ import { useWalletInfo, type Wallet } from "../net/api";
 import { CLERK_PUBLISHABLE_KEY } from "../net/account";
 import { DISPLAY_FONT } from "../typography";
 import { AccountSheet } from "./AccountSheet";
+import { QueuePill } from "./QueueContext";
 
 export interface ScreenHeaderProps {
   onBack: () => void;
@@ -54,13 +61,16 @@ export interface ScreenHeaderProps {
   /** Extra horizontal padding so the bar lands 20pt from the screen edge
    * regardless of what the screen's root already pads. */
   style?: StyleProp<ViewStyle>;
+  /** The queued pill between chevron and purse (default on). */
+  queuePill?: boolean;
 }
 
-export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style }: ScreenHeaderProps) => (
+export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style, queuePill = true }: ScreenHeaderProps) => (
   <View style={[styles.bar, style]}>
     <Pressable onPress={onBack} hitSlop={12} style={styles.back}>
       <Text style={styles.backText}>‹</Text>
     </Pressable>
+    <View style={styles.middle}>{queuePill ? <QueuePill /> : null}</View>
     {wallet === undefined ? (
       <LivePurse onPress={onPurse} onLinked={onLinked} />
     ) : (
@@ -165,6 +175,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   back: { width: 44, paddingVertical: 2 },
+  middle: { flex: 1, alignItems: "center" },
   backText: { color: "#8a7f70", fontSize: 26, fontWeight: "800", lineHeight: 28 },
 
   purseRow: { flexDirection: "row", alignItems: "center", gap: 8 },
