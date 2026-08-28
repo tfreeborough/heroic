@@ -151,7 +151,7 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename, onPrime
       <View style={styles.row}>
         <View style={styles.rowText}>
           <Text style={styles.rowTitle}>Reddit</Text>
-          <Text style={styles.rowHint}>r/HeroicGame — news, clips and discussion</Text>
+          <Text style={styles.rowHint}>r/FreeTheBoroughGames — news, clips and discussion</Text>
         </View>
         <Pressable
           onPress={() => {

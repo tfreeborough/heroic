@@ -24,7 +24,7 @@ Both doors sit in **Settings**, the app's one "about this app" surface:
 | Feedback & bug reports | tell me what broke or what you'd change | `FEEDBACK` → the Feedback screen |
 | Contact | `tfreeborough@gmail.com` | `EMAIL` → mail app, prefilled |
 | Discord | chat with other gladiators and the developer | `JOIN` → `https://discord.gg/8FHgBmaSnT` |
-| Reddit | r/HeroicGame — news, clips and discussion | `VISIT` → `https://www.reddit.com/r/HeroicGame/` |
+| Reddit | r/FreeTheBoroughGames — news, clips and discussion | `VISIT` → `https://www.reddit.com/r/FreeTheBoroughGames/` |
 
 The two **community** rows (added 2026-08-25) are plain `Linking.openURL`
 doors — the Discord invite hands off to the Discord app when installed, the
@@ -33,9 +33,12 @@ browser otherwise; same for Reddit. Links live in `support.ts`
 can't-open → alert-with-COPY fallback as the mail door.
 
 They also sit on the **title screen** (2026-08-26, Tom: players should see
-them, not dig for them): `CommunityIcons` — two round ghost buttons under
-SETTINGS, the brand marks drawn monochrome in Skia (Simple Icons paths,
-CC0) so they stay inside the parchment palette. Same `openCommunity` door.
+them, not dig for them): `IconDock` — a row of round ghost buttons under
+ARMORY: Discord, Reddit, and the **Settings cog** (2026-08-27: the cog
+replaced the full-width SETTINGS button — three stacked text buttons ate the
+title's vertical). Brand marks drawn monochrome in Skia (Simple Icons, CC0;
+gear from Bootstrap Icons, MIT) so they stay inside the parchment palette.
+Same `openCommunity` door.
 
 The Feedback screen also carries the email door as its **fallback** — when
 the API can't be reached (which is exactly when "the game is down" reports

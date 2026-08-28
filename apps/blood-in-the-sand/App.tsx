@@ -193,15 +193,6 @@ export default function App() {
     setPractice(null);
   }, [practice]);
 
-  // The Primer's "try the range" exit: offline sim, you vs a line of
-  // respawning target dummies (the player-facing way in is PRACTICE →
-  // TARGET DUMMIES; this jump just skips the two screens between).
-  const startTargetDummies = useCallback(() => {
-    client?.queueLeave(); // an offline match is a match — the line is given up
-    setPractice(new PracticeClient(playerName || "gladiator", RANGE_TEAM_SIZE, "dummies"));
-    setRoute("practice");
-  }, [playerName, client]);
-
   // The doors into another match while queued: confirm, then leave the line.
   // (Everything else — the Armory, Deeds, Settings, home — stays open; the
   // queue follows.) A no-op passthrough while not queued.
@@ -391,7 +382,6 @@ export default function App() {
     screen = (
       <PrimerScreen
         onDone={() => finishPrimer(() => setRoute("modes"))}
-        onRange={() => finishPrimer(startTargetDummies)}
         onExit={() => setRoute("home")}
       />
     );

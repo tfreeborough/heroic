@@ -6,7 +6,7 @@ import { Blur, Canvas, Fill, Group, Oval, Path, Picture, Rect, RoundedRect, Shad
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { QueuePill } from "../components/QueueContext";
-import { CommunityIcons } from "../components/CommunityIcons";
+import { IconDock } from "../components/IconDock";
 import { devFlags } from "../dev";
 import { devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
 import { setEntitlements } from "../deeds/entitlements";
@@ -589,12 +589,10 @@ export const HomeScreen = ({
           <Pressable onPress={withTap("uiConfirm", onArmory)} style={styles.ghost}>
             <Text style={styles.ghostText}>ARMORY</Text>
           </Pressable>
-          <Pressable onPress={withTap("uiTap", onSettings)} style={styles.ghost}>
-            <Text style={styles.ghostText}>SETTINGS</Text>
-          </Pressable>
-          {/* The community doors (Discord + subreddit) ride the menu's
-              entrance — visible on the title, not buried in Settings. */}
-          <CommunityIcons style={styles.community} />
+          {/* Discord + subreddit + the Settings cog, one row — rides the
+              menu's entrance; the cog replaced a full-width SETTINGS button
+              (2026-08-27: three stacked buttons ate the title's vertical). */}
+          <IconDock onSettings={onSettings} style={styles.dock} />
         </Animated.View>
       </View>
 
@@ -757,7 +755,7 @@ const styles = StyleSheet.create({
   },
   updatePillText: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 2, marginRight: -2 },
   menu: { width: 250, gap: 12 },
-  community: { marginTop: 2 },
+  dock: { marginTop: 2 },
   play: {
     backgroundColor: "#8c2f2f",
     borderColor: "#e0503c",

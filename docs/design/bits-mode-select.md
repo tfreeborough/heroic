@@ -3,7 +3,8 @@
 Status: **designed + BUILT 2026-07-23.** Decisions locked same day: RANKED
 label (not COMPETITIVE); Ranked v1 ships gated with its own "Season I —
 opening soon" flavour (queue server is a later project); title screen
-collapses to PLAY + SETTINGS (PRACTICE button absorbed into mode select);
+collapses to PLAY + SETTINGS (PRACTICE button absorbed into mode select;
+SETTINGS became a cog in the icon dock 2026-08-27 — bits-feedback.md);
 the rooms mode is **SKIRMISH** (renamed from Casual same day — Quickplay was
 considered and parked: it implies instant matchmaking, which is Ranked's
 shape, not a room browser's; it stays available for a future one-tap-join).

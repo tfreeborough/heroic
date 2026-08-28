@@ -88,7 +88,7 @@ export const openSupportEmail = async (playerName: string): Promise<void> => {
  */
 export const COMMUNITY_LINKS = {
   discord: "https://discord.gg/8FHgBmaSnT",
-  reddit: "https://www.reddit.com/r/HeroicGame/",
+  reddit: "https://www.reddit.com/r/FreeTheBoroughGames/",
 } as const;
 
 export type CommunityChannel = keyof typeof COMMUNITY_LINKS;

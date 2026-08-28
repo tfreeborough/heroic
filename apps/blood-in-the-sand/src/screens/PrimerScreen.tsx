@@ -24,8 +24,6 @@ import { DISPLAY_FONT } from "../typography";
 export interface PrimerScreenProps {
   /** TO THE FIGHT / SKIP → the mode select. */
   onDone: () => void;
-  /** ENTER THE RANGE → the target-dummy firing range, straight in. */
-  onRange: () => void;
   /** ‹ on chapter I → home, the Primer unretired. */
   onExit: () => void;
 }
@@ -44,7 +42,6 @@ const word = (n: number): string => NUMBER_WORDS[n] ?? String(n);
 
 interface Chapter {
   key: string;
-  numeral: string;
   title: string;
   quote: string;
   facts: string;
@@ -56,47 +53,42 @@ interface Chapter {
 const CHAPTERS: readonly Chapter[] = [
   {
     key: "sand",
-    numeral: "I",
     title: "THE SAND",
     quote: "There is no second life on the sand.",
-    facts: `One life a round. Last team standing takes it — first to ${word(WINS_TO_TAKE_MATCH)} rounds takes the match. Blue is your side. Red is theirs.`,
+    facts: `One life a round. The first to win ${word(WINS_TO_TAKE_MATCH)} rounds wins the match. You are Blue, the enemy is Red.`,
     Stage: TheSandStage,
   },
   {
     key: "move",
-    numeral: "II",
     title: "MOVE",
     quote: "The sand goes where your thumb goes.",
-    facts: "Touch anywhere on the left. The pad rises under your thumb — push, and you move. It follows you, so your thumb can wander.",
+    facts: "Use your thumb to control movement, change to left-hand mode in the settings.",
     Stage: MoveStage,
   },
   {
     key: "strike",
-    numeral: "III",
     title: "STRIKE",
-    quote: "Your blade knows the way. Your feet decide the fight.",
-    facts: "You never aim. The nearest enemy in reach becomes your mark, and your weapon strikes on its own. Your job is where you stand.",
+    quote: "Your blade knows the way.",
+    facts: "You don't need to aim, the nearest enemy in reach becomes your mark, and your weapon strikes on its own. Position yourself wisely to get the edge.",
     Stage: StrikeStage,
   },
   {
     key: "arm",
-    numeral: "IV",
     title: "ARM YOURSELF",
     quote: "Choose your steel. Choose it well.",
-    facts: `Before every fight: one weapon, ${word(LOADOUT_ABILITY_COUNT)} powers. Pick order is button order. Powers have charges per round — spent stays spent until the next round.`,
+    facts: `Before every fight you will select a single weapon and ${word(LOADOUT_ABILITY_COUNT)} abilities, some abilities can be used more than once. Look for ways to combine their power.`,
     Stage: ArmStage,
   },
   {
     key: "glory",
-    numeral: "V",
     title: "GLORY",
     quote: "The crowd remembers.",
-    facts: "Win and earn Glory. Carve deeds into your Chronicle. Climb the ladder in Ranked.",
+    facts: "Playing ranked mode earns you glory that you can use to unlock new devastating weapons and abilities from the armory.",
     Stage: GloryStage,
   },
 ];
 
-export const PrimerScreen = ({ onDone, onRange, onExit }: PrimerScreenProps) => {
+export const PrimerScreen = ({ onDone, onExit }: PrimerScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
@@ -231,7 +223,6 @@ export const PrimerScreen = ({ onDone, onRange, onExit }: PrimerScreenProps) => 
         </Animated.View>
 
         <View style={[styles.copy, compact && styles.copyCompact]} pointerEvents="none">
-          <Animated.Text style={[styles.eyebrow, { opacity: slice(0, 0.3, [0, 1]) }]}>CHAPTER {chapter.numeral}</Animated.Text>
           <Animated.Text
             style={[
               styles.title,
@@ -270,11 +261,8 @@ export const PrimerScreen = ({ onDone, onRange, onExit }: PrimerScreenProps) => 
 
         {last ? (
           <Animated.View style={[styles.doors, { opacity: slice(0.7, 1, [0, 1]), transform: [{ translateY: slice(0.7, 1, [12, 0]) }] }]}>
-            <Pressable onPress={door(onRange)} style={styles.primary}>
-              <Text style={styles.primaryText}>ENTER THE RANGE</Text>
-            </Pressable>
-            <Pressable onPress={door(onDone)} style={styles.ghost}>
-              <Text style={styles.ghostText}>TO THE FIGHT</Text>
+            <Pressable onPress={door(onDone)} style={styles.primary}>
+              <Text style={styles.primaryText}>ENTER THE ARENA</Text>
             </Pressable>
           </Animated.View>
         ) : (
