@@ -1,0 +1,25 @@
+{
+  "name": "bits-promos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "bun scripts/sync-assets.ts",
+    "studio": "bun run sync && remotion studio",
+    "render": "bun run sync && remotion render",
+    "still": "bun run sync && remotion still",
+    "render:roster": "bun run sync && bun scripts/render-roster.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/fonts": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@heroic/blood-in-the-sand-sim": "workspace:*",
+    "@types/react": "^19.0.0"
+  }
+}

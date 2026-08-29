@@ -1,0 +1,409 @@
+{
+  "weapons": [
+    {
+      "id": "blade",
+      "name": "Blade",
+      "icon": "assets/icons/blade.png",
+      "stats": [
+        [
+          "STYLE",
+          "MELEE ARC"
+        ],
+        [
+          "REACH",
+          "90"
+        ],
+        [
+          "WINDUP",
+          "0.25s"
+        ],
+        [
+          "BLEED",
+          "35%"
+        ]
+      ]
+    },
+    {
+      "id": "bow",
+      "name": "Bow",
+      "icon": "assets/icons/bow.png",
+      "stats": [
+        [
+          "STYLE",
+          "PROJECTILE"
+        ],
+        [
+          "REACH",
+          "360"
+        ],
+        [
+          "WINDUP",
+          "0.5s"
+        ]
+      ]
+    },
+    {
+      "id": "staff",
+      "name": "Staff",
+      "icon": "assets/icons/staff.png",
+      "stats": [
+        [
+          "STYLE",
+          "PROJECTILE"
+        ],
+        [
+          "REACH",
+          "320"
+        ],
+        [
+          "WINDUP",
+          "0.6s"
+        ]
+      ]
+    },
+    {
+      "id": "hammer",
+      "name": "Hammer",
+      "icon": "assets/icons/hammer.png",
+      "stats": [
+        [
+          "STYLE",
+          "MELEE ARC"
+        ],
+        [
+          "REACH",
+          "125"
+        ],
+        [
+          "WINDUP",
+          "0.65s"
+        ]
+      ]
+    },
+    {
+      "id": "trident",
+      "name": "Trident",
+      "icon": "assets/icons/trident.png",
+      "stats": [
+        [
+          "STYLE",
+          "MELEE ARC"
+        ],
+        [
+          "REACH",
+          "180"
+        ],
+        [
+          "WINDUP",
+          "0.35s"
+        ],
+        [
+          "BLEED",
+          "100%"
+        ]
+      ]
+    },
+    {
+      "id": "fang",
+      "name": "Fang",
+      "icon": "assets/icons/fang.png",
+      "stats": [
+        [
+          "STYLE",
+          "MELEE ARC"
+        ],
+        [
+          "REACH",
+          "60"
+        ],
+        [
+          "WINDUP",
+          "0.15s"
+        ]
+      ]
+    },
+    {
+      "id": "scorpion",
+      "name": "Scorpion",
+      "icon": "assets/icons/scorpion.png",
+      "stats": [
+        [
+          "STYLE",
+          "PROJECTILE"
+        ],
+        [
+          "REACH",
+          "240"
+        ],
+        [
+          "WINDUP",
+          "0.45s"
+        ]
+      ]
+    },
+    {
+      "id": "bombard",
+      "name": "Bombard",
+      "icon": "assets/icons/bombard.png",
+      "stats": [
+        [
+          "STYLE",
+          "PROJECTILE"
+        ],
+        [
+          "REACH",
+          "360"
+        ],
+        [
+          "WINDUP",
+          "0.55s"
+        ]
+      ]
+    },
+    {
+      "id": "lifeline",
+      "name": "Lifeline",
+      "icon": "assets/icons/lifeline.png",
+      "stats": [
+        [
+          "STYLE",
+          "PROJECTILE"
+        ],
+        [
+          "REACH",
+          "300"
+        ],
+        [
+          "WINDUP",
+          "0s"
+        ]
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "sandtrap",
+      "name": "Sandtrap",
+      "category": "offensive",
+      "icon": "assets/icons/sandtrap.png",
+      "stats": [
+        [
+          "CHARGES",
+          "2"
+        ],
+        [
+          "COOLDOWN",
+          "10s"
+        ]
+      ]
+    },
+    {
+      "id": "tremor",
+      "name": "Tremor",
+      "category": "offensive",
+      "icon": "assets/icons/tremor.png",
+      "stats": [
+        [
+          "CHARGES",
+          "2"
+        ],
+        [
+          "COOLDOWN",
+          "9s"
+        ]
+      ]
+    },
+    {
+      "id": "harpoon",
+      "name": "Harpoon",
+      "category": "offensive",
+      "icon": "assets/icons/harpoon.png",
+      "stats": [
+        [
+          "CHARGES",
+          "2"
+        ],
+        [
+          "COOLDOWN",
+          "12s"
+        ]
+      ]
+    },
+    {
+      "id": "dash",
+      "name": "Dash",
+      "category": "defensive",
+      "icon": "assets/icons/dash.png",
+      "stats": [
+        [
+          "CHARGES",
+          "4"
+        ],
+        [
+          "COOLDOWN",
+          "3s"
+        ]
+      ]
+    },
+    {
+      "id": "mirror-guard",
+      "name": "Mirror Guard",
+      "category": "defensive",
+      "icon": "assets/icons/mirror-guard.png",
+      "stats": [
+        [
+          "CHARGES",
+          "3"
+        ],
+        [
+          "COOLDOWN",
+          "12s"
+        ]
+      ]
+    },
+    {
+      "id": "ironhide",
+      "name": "Ironhide",
+      "category": "defensive",
+      "icon": "assets/icons/ironhide.png",
+      "stats": [
+        [
+          "CHARGES",
+          "3"
+        ],
+        [
+          "COOLDOWN",
+          "12s"
+        ]
+      ]
+    },
+    {
+      "id": "straw-man",
+      "name": "Straw Man",
+      "category": "defensive",
+      "icon": "assets/icons/straw-man.png",
+      "stats": [
+        [
+          "CHARGES",
+          "2"
+        ],
+        [
+          "COOLDOWN",
+          "14s"
+        ]
+      ]
+    },
+    {
+      "id": "warding-shout",
+      "name": "Warding Shout",
+      "category": "defensive",
+      "icon": "assets/icons/warding-shout.png",
+      "stats": [
+        [
+          "CHARGES",
+          "3"
+        ],
+        [
+          "COOLDOWN",
+          "7s"
+        ]
+      ]
+    },
+    {
+      "id": "war-drums",
+      "name": "War Drums",
+      "category": "support",
+      "icon": "assets/icons/war-drums.png",
+      "stats": [
+        [
+          "CHARGES",
+          "3"
+        ],
+        [
+          "COOLDOWN",
+          "12s"
+        ]
+      ]
+    },
+    {
+      "id": "blood-font",
+      "name": "Blood Font",
+      "category": "support",
+      "icon": "assets/icons/blood-font.png",
+      "stats": [
+        [
+          "CHARGES",
+          "1"
+        ],
+        [
+          "COOLDOWN",
+          "16s"
+        ]
+      ]
+    },
+    {
+      "id": "sandstorm",
+      "name": "Sandstorm",
+      "category": "support",
+      "icon": "assets/icons/sandstorm.png",
+      "stats": [
+        [
+          "CHARGES",
+          "2"
+        ],
+        [
+          "COOLDOWN",
+          "14s"
+        ]
+      ]
+    },
+    {
+      "id": "sinkhole",
+      "name": "Sinkhole",
+      "category": "offensive",
+      "icon": "assets/icons/sinkhole.png",
+      "stats": [
+        [
+          "CHARGES",
+          "1"
+        ],
+        [
+          "COOLDOWN",
+          "16s"
+        ]
+      ]
+    },
+    {
+      "id": "tar-pit",
+      "name": "Tar Pit",
+      "category": "support",
+      "icon": "assets/icons/tar-pit.png",
+      "stats": [
+        [
+          "CHARGES",
+          "1"
+        ],
+        [
+          "COOLDOWN",
+          "14s"
+        ]
+      ]
+    },
+    {
+      "id": "titans-draught",
+      "name": "Titan's Draught",
+      "category": "offensive",
+      "icon": "assets/icons/titans-draught.png",
+      "stats": [
+        [
+          "CHARGES",
+          "2"
+        ],
+        [
+          "COOLDOWN",
+          "14s"
+        ]
+      ]
+    }
+  ]
+}

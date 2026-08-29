@@ -1,0 +1,6 @@
+# Synced from apps/blood-in-the-sand/assets by `bun run sync` — never edit here.
+public/assets/
+# Your screen recordings — big binaries, keep them out of git.
+public/clips/*
+!public/clips/README.md
+out/
