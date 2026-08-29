@@ -2,9 +2,7 @@ import type * as React from "react";
 import { Composition } from "remotion";
 import { FPS, VERTICAL } from "./brand";
 import { GameplayClip } from "./GameplayClip";
-import { Spotlight } from "./Spotlight";
-
-const SPOTLIGHT_SECONDS = 9;
+import { Spotlight, spotlightSeconds } from "./Spotlight";
 
 /**
  * Everything renders vertical 1080×1920 — the one format TikTok, Reels and
@@ -15,18 +13,20 @@ export const Root: React.FC = () => (
     <Composition
       id="WeaponSpotlight"
       component={Spotlight}
-      durationInFrames={FPS * SPOTLIGHT_SECONDS}
+      durationInFrames={FPS * 9}
       fps={FPS}
       {...VERTICAL}
       defaultProps={{ kind: "weapon" as const, id: "blade" }}
+      calculateMetadata={({ props }) => ({ durationInFrames: Math.round(spotlightSeconds(props) * FPS) })}
     />
     <Composition
       id="AbilitySpotlight"
       component={Spotlight}
-      durationInFrames={FPS * SPOTLIGHT_SECONDS}
+      durationInFrames={FPS * 9}
       fps={FPS}
       {...VERTICAL}
       defaultProps={{ kind: "ability" as const, id: "sinkhole" }}
+      calculateMetadata={({ props }) => ({ durationInFrames: Math.round(spotlightSeconds(props) * FPS) })}
     />
     <Composition
       id="GameplayClip"

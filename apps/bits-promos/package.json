@@ -9,6 +9,8 @@
     "render": "bun run sync && remotion render",
     "still": "bun run sync && remotion still",
     "render:roster": "bun run sync && bun scripts/render-roster.ts",
+    "capture": "bun run sync && bun scripts/capture.ts",
+    "capture:roster": "bun run sync && bun scripts/capture.ts --all",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

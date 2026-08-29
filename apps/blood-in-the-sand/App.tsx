@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Alert, BackHandler, StyleSheet } from "react-native";
+import { Alert, BackHandler, Linking, LogBox, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { ClerkProvider } from "@clerk/expo";
@@ -33,6 +33,7 @@ import { useFonts } from "expo-font";
 import { DISPLAY_FONT_SOURCE } from "./src/typography";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
+import { parseShowcaseUrl, SHOWCASE_ENABLED } from "./src/net/showcase";
 import { ConnectScreen } from "./src/screens/ConnectScreen";
 import { ArmoryScreen } from "./src/screens/ArmoryScreen";
 import { DeedsScreen } from "./src/screens/DeedsScreen";
@@ -192,6 +193,41 @@ export default function App() {
     practice?.close();
     setPractice(null);
   }, [practice]);
+
+  // Showcase deep links (src/net/showcase.ts): the promo capture rig opens
+  // `bloodinthesand://showcase?...` on the simulator and the app drops
+  // straight into an autopiloted 1v1 with that loadout. Compiled out of
+  // shipped bundles (EXPO_PUBLIC_SHOWCASE gates it at build time). Waits for
+  // the stored name so the tag reads right; a second link replaces the match.
+  const nameLoaded = playerName !== null;
+  useEffect(() => {
+    if (!SHOWCASE_ENABLED || !nameLoaded) return;
+    const start = (url: string | null): void => {
+      const req = url ? parseShowcaseUrl(url) : null;
+      if (!req) return;
+      setPractice((prev) => {
+        prev?.close();
+        const next = new PracticeClient(playerName || "GLADIATOR", 1, "bot", req.tier, {
+          feature: req.feature,
+        });
+        next.setWeapon(req.weapon);
+        next.setAbilities(req.abilities);
+        return next;
+      });
+      setRoute("practice");
+    };
+    // Footage must never carry a dev overlay (yellow/red boxes are LogBox).
+    LogBox.ignoreAllLogs(true);
+    // A cold launch straight into a match trips Skia's "disposed object"
+    // dev error as the title scene unmounts mid-animation — let it settle.
+    const settle = setTimeout(() => void Linking.getInitialURL().then(start), 1500);
+    const sub = Linking.addEventListener("url", (e) => start(e.url));
+    return () => {
+      clearTimeout(settle);
+      sub.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- name is read once, on load
+  }, [nameLoaded]);
 
   // The doors into another match while queued: confirm, then leave the line.
   // (Everything else — the Armory, Deeds, Settings, home — stays open; the

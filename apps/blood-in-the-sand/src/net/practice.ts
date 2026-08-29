@@ -70,6 +70,21 @@ const DUMMY_NAMES = ["Dummy I", "Dummy II", "Dummy III", "Dummy IV", "Dummy V"];
 /** Dev nicety: the range clamps the 5s arming ceremony to a quick beat. */
 const RANGE_ARM_SECONDS = 2;
 
+/**
+ * Showcase (src/net/showcase.ts): the promo capture rig. Seat 0 is driven
+ * by the shared brain instead of the stick, bots arm on arrival, the arming
+ * ceremony is clamped to a beat, and the featured ability is pressed the
+ * moment it's ready with an enemy in reach — footage of the item in use,
+ * no thumbs required.
+ */
+export interface ShowcaseOptions {
+  /** Ability slot to fire eagerly; null = just let the brain play. */
+  feature: AbilityId | null;
+}
+const SHOWCASE_ARM_SECONDS = 1;
+/** Eager-cast gate: nearest living enemy within this many px. */
+const SHOWCASE_CAST_RANGE = 340;
+
 /** Per-bot brain state — one entry per bot seat (every id except the human's
  * 0). No archetype here: the brain derives it from the bot's own loadout
  * every tick (botArchetypes.ts), so a re-armed bot re-derives for free. */
@@ -131,6 +146,8 @@ export class PracticeClient implements LobbyClient {
   private readonly history = new SnapshotHistory();
   /** Brain state per bot seat, keyed by player id (every id except 0). */
   private readonly bots = new Map<number, BotSeat>();
+  /** Autopilot for seat 0 — set only for showcase matches. */
+  private readonly showcase: (ShowcaseOptions & { memory: BotMemory; difficulty: DifficultyId }) | null;
   private lobbyEnteredMs: number;
   private lobbyTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnap: SnapshotMsg;
@@ -141,8 +158,12 @@ export class PracticeClient implements LobbyClient {
     teamSize: number = 1,
     mode: PracticeMode = "bot",
     difficulty: DifficultyId = DEFAULT_DIFFICULTY,
+    showcase: ShowcaseOptions | null = null,
   ) {
     this.mode = mode;
+    this.showcase = showcase
+      ? { ...showcase, memory: createBotMemory((Math.random() * 0x7fffffff) | 0), difficulty }
+      : null;
     // Practice needn't be replayable — wall-clock seeding is fine here. The
     // practice flag lifts the per-round charge budget (cooldown-only casts).
     this.sim = createSim(ARENA_00, Date.now() >>> 0, teamSize, mode === "dummies", true);
@@ -246,7 +267,7 @@ export class PracticeClient implements LobbyClient {
   private startLobbyClock(): void {
     if (this.lobbyTimer !== null) return;
     this.lobbyEnteredMs = performance.now();
-    for (const bot of this.bots.values()) bot.armAtMs = randomArmBeat();
+    for (const bot of this.bots.values()) bot.armAtMs = this.showcase ? 0 : randomArmBeat();
     this.lobbyTimer = setInterval(() => this.lobbyTick(), 1000 / TICK_RATE);
   }
 
@@ -276,6 +297,10 @@ export class PracticeClient implements LobbyClient {
     if (this.mode === "dummies" && round.phase === "lobby" && round.timer > RANGE_ARM_SECONDS) {
       round.timer = RANGE_ARM_SECONDS;
     }
+    // The showcase rig wants footage, not ceremony — same clamp, shorter.
+    if (this.showcase && round.phase === "lobby" && round.timer > SHOWCASE_ARM_SECONDS) {
+      round.timer = SHOWCASE_ARM_SECONDS;
+    }
 
     this.step(new Map()); // nobody moves pre-countdown; the clock still runs
     if (this.sim.state.round.phase !== "lobby" && this.lobbyTimer !== null) {
@@ -288,7 +313,12 @@ export class PracticeClient implements LobbyClient {
   sendInput(sx: number, sy: number, casts: boolean[]): void {
     if (this.lobbyTimer !== null) return; // the lobby still owns the clock
     const inputs = new Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>();
-    inputs.set(0, { seq: this.seq++, sx, sy, casts });
+    if (this.showcase) {
+      const auto = this.autopilot();
+      inputs.set(0, { seq: this.seq++, sx: auto.sx, sy: auto.sy, casts: auto.casts });
+    } else {
+      inputs.set(0, { seq: this.seq++, sx, sy, casts });
+    }
     for (const [id, seat] of this.bots) {
       // Stale WORLD, current self: the tier's reaction time is how old a view
       // of everyone else this bot acts on; its own body it always knows.
@@ -304,6 +334,30 @@ export class PracticeClient implements LobbyClient {
       inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
     }
     this.step(inputs);
+  }
+
+  /** Seat 0 as a bot (current world — proprioception AND perception are
+   * instant; the tier still shapes execution), plus the eager feature cast. */
+  private autopilot(): { sx: number; sy: number; casts: boolean[] } {
+    const sc = this.showcase!;
+    const me = this.lastSnap.players.find((p) => p.id === 0);
+    const decision = botThink(sc.memory, me, this.lastSnap, this.nav, { difficulty: sc.difficulty });
+    const casts = [...decision.casts];
+    if (sc.feature && me?.alive) {
+      const slot = me.abilities.findIndex((s) => s.id === sc.feature);
+      const ready = slot >= 0 && me.abilities[slot]!.cd === 0 && me.abilities[slot]!.charges > 0;
+      if (ready) {
+        let nearest = Infinity;
+        for (const p of this.lastSnap.players) {
+          if (p.alive && p.team !== me.team) nearest = Math.min(nearest, Math.hypot(p.x - me.x, p.y - me.y));
+        }
+        if (nearest <= SHOWCASE_CAST_RANGE) {
+          while (casts.length <= slot) casts.push(false);
+          casts[slot] = true;
+        }
+      }
+    }
+    return { sx: decision.sx, sy: decision.sy, casts };
   }
 
   private step(inputs: Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>): void {
