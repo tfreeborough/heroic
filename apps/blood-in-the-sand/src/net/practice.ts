@@ -80,6 +80,9 @@ const RANGE_ARM_SECONDS = 2;
 export interface ShowcaseOptions {
   /** Ability slot to fire eagerly; null = just let the brain play. */
   feature: AbilityId | null;
+  /** Every other seat gets THIS kit and tier instead of a random draft —
+   * a sparring partner who never upstages the star. */
+  enemy: { weapon: WeaponId; abilities: AbilityId[]; difficulty: DifficultyId };
 }
 const SHOWCASE_ARM_SECONDS = 1;
 /** Eager-cast gate: nearest living enemy within this many px. */
@@ -191,7 +194,8 @@ export class PracticeClient implements LobbyClient {
         const bot = addPlayer(this.sim, names[i % names.length]!)!;
         this.bots.set(bot.id, {
           memory: createBotMemory((Math.random() * 0x7fffffff) | 0),
-          difficulty,
+          // Showcase: the constructor's tier is OURS; the sparring partner has its own.
+          difficulty: showcase ? showcase.enemy.difficulty : difficulty,
           armAtMs: randomArmBeat(),
         });
       }
@@ -280,8 +284,8 @@ export class PracticeClient implements LobbyClient {
     for (const [id, seat] of this.bots) {
       const bot = this.sim.state.players[id];
       if (bot && bot.weapon === null && sinceMs >= seat.armAtMs) {
-        setPlayerWeapon(this.sim, id, randomWeapon());
-        setPlayerAbilities(this.sim, id, randomHand());
+        setPlayerWeapon(this.sim, id, this.showcase?.enemy.weapon ?? randomWeapon());
+        setPlayerAbilities(this.sim, id, this.showcase?.enemy.abilities ?? randomHand());
         armed = true;
       }
     }

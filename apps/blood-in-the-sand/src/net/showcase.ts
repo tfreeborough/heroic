@@ -31,8 +31,22 @@ export interface ShowcaseRequest {
   abilities: AbilityId[];
   /** The ability the autopilot fires eagerly (must be in `abilities`). */
   feature: AbilityId | null;
+  /** OUR execution tier — defaults to the top of the ladder so the star of
+   * the clip looks like the best player in the room. */
   tier: DifficultyId;
+  /** The opponent: a low tier and a quiet kit by default, so nothing on
+   * their side upstages the item being shown (Tom, 2026-08-29). */
+  enemy: { weapon: WeaponId; abilities: AbilityId[]; tier: DifficultyId };
 }
+
+const TOP_TIER = DIFFICULTY_IDS[DIFFICULTY_IDS.length - 1] ?? DEFAULT_DIFFICULTY;
+const BOTTOM_TIER = DIFFICULTY_IDS[0] ?? DEFAULT_DIFFICULTY;
+/** A sparring partner's kit: melee (keeps the fight in frame) + the least
+ * spectacular hand — a dodge and a self-buff, no zones, pulls or decoys. */
+const QUIET_ENEMY: { weapon: WeaponId; abilities: AbilityId[] } = {
+  weapon: "blade",
+  abilities: ["dash", "ironhide"],
+};
 
 const isWeapon = (s: string): s is WeaponId => (WEAPON_IDS as readonly string[]).includes(s);
 const isAbility = (s: string): s is AbilityId => (ABILITY_IDS as readonly string[]).includes(s);
@@ -41,6 +55,18 @@ const isTier = (s: string): s is DifficultyId => (DIFFICULTY_IDS as readonly str
 /** Fill a hand up to LOADOUT_ABILITY_COUNT with sensible, distinct picks. */
 const FILLERS: AbilityId[] = ["dash", "harpoon", "ironhide"];
 
+/** A distinct hand from a comma list, topped up with fillers. */
+const parseHand = (raw: string | null, lead: AbilityId | null, fillers: AbilityId[]): AbilityId[] => {
+  const hand: AbilityId[] = [];
+  const add = (a: AbilityId) => {
+    if (hand.length < LOADOUT_ABILITY_COUNT && !hand.includes(a)) hand.push(a);
+  };
+  if (lead) add(lead);
+  for (const s of (raw ?? "").split(",")) if (isAbility(s)) add(s);
+  for (const f of fillers) add(f);
+  return hand;
+};
+
 /** Parse a showcase URL; null for anything that isn't one (or is malformed). */
 export const parseShowcaseUrl = (url: string): ShowcaseRequest | null => {
   const m = /^bloodinthesand:\/\/showcase\/?(?:\?(.*))?$/.exec(url);
@@ -48,22 +74,20 @@ export const parseShowcaseUrl = (url: string): ShowcaseRequest | null => {
   const q = new URLSearchParams(m[1] ?? "");
   const weaponRaw = q.get("weapon") ?? "blade";
   if (!isWeapon(weaponRaw)) return null;
-  const abilities: AbilityId[] = [];
-  for (const raw of (q.get("abilities") ?? "").split(",")) {
-    if (isAbility(raw) && !abilities.includes(raw)) abilities.push(raw);
-  }
   const featureRaw = q.get("feature");
   const feature = featureRaw && isAbility(featureRaw) ? featureRaw : null;
-  if (feature && !abilities.includes(feature)) abilities.unshift(feature);
-  for (const f of FILLERS) {
-    if (abilities.length >= LOADOUT_ABILITY_COUNT) break;
-    if (!abilities.includes(f)) abilities.push(f);
-  }
   const tierRaw = q.get("tier") ?? "";
+  const enemyWeaponRaw = q.get("enemyWeapon") ?? "";
+  const enemyTierRaw = q.get("enemyTier") ?? "";
   return {
     weapon: weaponRaw,
-    abilities: abilities.slice(0, LOADOUT_ABILITY_COUNT),
+    abilities: parseHand(q.get("abilities"), feature, FILLERS),
     feature,
-    tier: isTier(tierRaw) ? tierRaw : DEFAULT_DIFFICULTY,
+    tier: isTier(tierRaw) ? tierRaw : TOP_TIER,
+    enemy: {
+      weapon: isWeapon(enemyWeaponRaw) ? enemyWeaponRaw : QUIET_ENEMY.weapon,
+      abilities: parseHand(q.get("enemyAbilities"), null, QUIET_ENEMY.abilities),
+      tier: isTier(enemyTierRaw) ? enemyTierRaw : BOTTOM_TIER,
+    },
   };
 };

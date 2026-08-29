@@ -54,6 +54,11 @@ bun run capture:roster                            # every weapon + ability, ~20s
 bun run render:roster                             # spotlights now cut to the footage automatically
 ```
 
+The star plays at the top tier (`godlike`) against a `novice` sparring
+partner armed with the quietest kit (blade + dash/ironhide) — nothing on
+their side upstages the featured item. `--tier`, `--enemy-tier`,
+`--enemy-weapon`, `--enemy-abilities` override per capture.
+
 `render:roster` uses a clip whenever `public/clips/<kind>-<id>.mp4` exists,
 whatever produced it — so if the autopilot looks daft for some item, record
 that one yourself on a phone and drop it in under the same name. Re-run

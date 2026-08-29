@@ -209,6 +209,7 @@ export default function App() {
         prev?.close();
         const next = new PracticeClient(playerName || "GLADIATOR", 1, "bot", req.tier, {
           feature: req.feature,
+          enemy: { weapon: req.enemy.weapon, abilities: req.enemy.abilities, difficulty: req.enemy.tier },
         });
         next.setWeapon(req.weapon);
         next.setAbilities(req.abilities);

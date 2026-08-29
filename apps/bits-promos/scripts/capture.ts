@@ -30,7 +30,14 @@ const flag = (name: string): string | undefined => {
 const has = (name: string) => args.includes(`--${name}`);
 
 const seconds = Number(flag("seconds") ?? 20);
-const tier = flag("tier") ?? "skilled";
+/** Our autopilot plays at the top of the ladder; the sparring partner at the
+ * bottom with a quiet kit (blade + dash/ironhide) so nothing on their side
+ * upstages the featured item. Override with --tier / --enemy-tier /
+ * --enemy-weapon / --enemy-abilities. */
+const tier = flag("tier") ?? "godlike";
+const enemyTier = flag("enemy-tier") ?? "novice";
+const enemyWeapon = flag("enemy-weapon");
+const enemyAbilities = flag("enemy-abilities");
 const clipsDir = join(import.meta.dir, "../public/clips");
 
 /** Lobby clamp (1s) + the 3-2-1 countdown + app/link latency, in seconds. */
@@ -57,6 +64,9 @@ const bootedUdid = (): string => {
 const showcaseUrl = (kind: "weapon" | "ability", id: string): string => {
   const q = new URLSearchParams();
   q.set("tier", tier);
+  q.set("enemyTier", enemyTier);
+  if (enemyWeapon) q.set("enemyWeapon", enemyWeapon);
+  if (enemyAbilities) q.set("enemyAbilities", enemyAbilities);
   if (kind === "weapon") {
     q.set("weapon", id);
     q.set("abilities", "dash,harpoon");
@@ -101,7 +111,7 @@ const capture = async (udid: string, kind: "weapon" | "ability", id: string): Pr
   if (!existsSync(out)) throw new Error(`recording missing: ${out}`);
   writeFileSync(
     join(clipsDir, `${kind}-${id}.json`),
-    JSON.stringify({ fightStartsAt: FIGHT_STARTS_AT, seconds, tier }, null, 2) + "\n",
+    JSON.stringify({ fightStartsAt: FIGHT_STARTS_AT, seconds, tier, enemyTier }, null, 2) + "\n",
   );
 };
 
@@ -114,7 +124,9 @@ const jobs: { kind: "weapon" | "ability"; id: string }[] = has("all")
       const kind = flag("kind");
       const id = flag("id");
       if ((kind !== "weapon" && kind !== "ability") || !id) {
-        console.error("usage: capture --kind weapon|ability --id <id> [--seconds N] [--tier skilled] | --all");
+        console.error(
+          "usage: capture --kind weapon|ability --id <id> [--seconds N] [--tier godlike] [--enemy-tier novice] [--enemy-weapon blade] [--enemy-abilities dash,ironhide] | --all",
+        );
         process.exit(2);
       }
       return [{ kind, id }];
