@@ -317,6 +317,17 @@ export class PracticeClient implements LobbyClient {
   sendInput(sx: number, sy: number, casts: boolean[]): void {
     if (this.lobbyTimer !== null) return; // the lobby still owns the clock
     const inputs = new Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>();
+    // Brains only run while the round is live. The sim idles every input
+    // outside "active" anyway, but a brain that thinks through the
+    // countdown sees a body that won't move and decides it's wedged
+    // (unstick's slide, flipping every half-second) — the round then opens
+    // with a burst of sideways lunges that reads as pure machine (Tom,
+    // 2026-08-29). Same rule server-side (room.ts thinkBots).
+    if (this.sim.state.round.phase !== "active") {
+      inputs.set(0, { seq: this.seq++, sx: 0, sy: 0, casts: [] });
+      this.step(inputs);
+      return;
+    }
     if (this.showcase) {
       const auto = this.autopilot();
       inputs.set(0, { seq: this.seq++, sx: auto.sx, sy: auto.sy, casts: auto.casts });

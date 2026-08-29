@@ -662,6 +662,18 @@ export class Room {
   private thinkBots(): void {
     if (this.botSeats.size === 0 || this.lastSnap === null) return;
     if (this.sim.state.round.phase === "lobby") return;
+    // Countdown / round-end: the sim idles every input, so a brain that
+    // keeps thinking only learns the wrong lesson — a body that won't move
+    // trips unstick's "wedged" slide, and the next round opens with a
+    // burst of sideways lunges (the practice autopilot made it obvious,
+    // 2026-08-29). Emit a climbing-seq idle instead (a seat frozen at one
+    // seq is itself a tell).
+    if (this.sim.state.round.phase !== "active") {
+      for (const [id, seat] of this.botSeats) {
+        this.inputs.set(id, sanitizeInput({ seq: ++seat.seq, sx: 0, sy: 0, casts: [] }));
+      }
+      return;
+    }
     for (const [id, seat] of this.botSeats) {
       // Stale WORLD, current self (bot-brains.md step 4) — each seat reads
       // the world its own tier's reaction time behind.
