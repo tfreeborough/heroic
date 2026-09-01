@@ -1,6 +1,7 @@
 /**
  * Ranked bot backfill (bits-ranked-bots.md): the pure toolbox behind styling
- * a server bot as a queue opponent — env config + kill switch, the
+ * server bots as queue opponents — and, in 2v2, teammates — env config +
+ * kill switch, the
  * rating→difficulty bands, the advertised-rating mirror, the gamer-tag
  * generator with its repeat-avoidance book, and the queue-size fuzz. No IO,
  * injectable rand throughout; the manager wires it to the queue and rooms.

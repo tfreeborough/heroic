@@ -1,19 +1,19 @@
 import type * as React from "react";
 import { Composition } from "remotion";
 import { FPS, VERTICAL } from "./brand";
-import { GameplayClip } from "./GameplayClip";
+import { CLIP_TIMING, GameplayClip } from "./GameplayClip";
 import { Spotlight, spotlightSeconds } from "./Spotlight";
 
 /**
  * Everything renders vertical 1080×1920 — the one format TikTok, Reels and
- * Shorts all take natively.
+ * Shorts all take natively. Every video is intro → footage with one card → outro.
  */
 export const Root: React.FC = () => (
   <>
     <Composition
       id="WeaponSpotlight"
       component={Spotlight}
-      durationInFrames={FPS * 9}
+      durationInFrames={FPS * 13}
       fps={FPS}
       {...VERTICAL}
       defaultProps={{ kind: "weapon" as const, id: "blade" }}
@@ -22,7 +22,7 @@ export const Root: React.FC = () => (
     <Composition
       id="AbilitySpotlight"
       component={Spotlight}
-      durationInFrames={FPS * 9}
+      durationInFrames={FPS * 13}
       fps={FPS}
       {...VERTICAL}
       defaultProps={{ kind: "ability" as const, id: "sinkhole" }}
@@ -31,19 +31,19 @@ export const Root: React.FC = () => (
     <Composition
       id="GameplayClip"
       component={GameplayClip}
-      durationInFrames={FPS * 15}
+      durationInFrames={FPS * 17}
       fps={FPS}
       {...VERTICAL}
       defaultProps={{
         clip: "",
-        hook: "He had one HP left. Then the Harpoon.",
+        title: "Match point",
+        line: "He had one HP left. Then the Harpoon.",
         durationSeconds: 12,
         startFrom: 0,
         muted: false,
       }}
       calculateMetadata={({ props }) => ({
-        // clip body + 3s end card
-        durationInFrames: Math.round((props.durationSeconds + 3) * FPS),
+        durationInFrames: Math.round((props.durationSeconds + CLIP_TIMING.outro) * FPS),
       })}
     />
   </>

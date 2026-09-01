@@ -396,7 +396,27 @@ export interface ArenaRenderInput {
    *  world centre + zoom, bypassing follow/fit entirely. Matches never set
    *  this — the arena camera stays the one every player shares. */
   camera?: { cx: number; cy: number; zoom: number };
+  /** Kill kicks (bits-blood.md §8a): a lethal hit in view nudges the camera
+   *  a few px along the spray line for KILL_KICK_MS. The caller prunes. */
+  kicks?: readonly KillKick[];
 }
+
+/** One camera shake — pushed by GameScreen on every lethal hit; only kicks
+ *  whose kill is INSIDE the viewport move the camera (an off-screen death
+ *  shouldn't jolt you). The shake: a hard punch along the spray line, then
+ *  a decaying oscillation back through centre (~2 cycles) with a smaller
+ *  perpendicular rattle on a different phase — a jolt, not a nudge (Tom,
+ *  2026-08-29: "beefier"). */
+export interface KillKick {
+  x: number;
+  y: number;
+  dirX: number;
+  dirY: number;
+  bornMs: number;
+}
+export const KILL_KICK_PX = 13;
+export const KILL_KICK_MS = 320;
+const KILL_KICK_CYCLES = 2.2;
 
 // ── Premium blood material ──────────────────────────────────────────────────
 // Blood reads as gore, not paint, from three things flat circles never had:
@@ -1579,15 +1599,19 @@ const drawFlyingBlood = (
     const ease = 1 - (1 - t) * (1 - t); // launched fast, settles in
     const px = drop.x0 + (drop.tx - drop.x0) * ease;
     const py = drop.y0 + (drop.ty - drop.y0) * ease;
+    // v3 (bits-blood.md §8a): airborne drops draw BIGGER than they land —
+    // the old ≤2.4px clamp made the flight beat invisible on a phone. The
+    // floor decal is still the small droplet it always was.
+    const air = Math.min(drop.r * 1.6, 5.5) * (1 - 0.25 * t);
     bloodFill.setColor(RAMP_EDGE[0]!); // airborne blood catches the light
-    bloodFill.setAlphaf(0.85);
-    canvas.drawCircle(px, py, Math.min(drop.r, 2.4) * 0.9, bloodFill);
-    const tail = 9 * (1 - t);
+    bloodFill.setAlphaf(0.9);
+    canvas.drawCircle(px, py, air, bloodFill);
+    const tail = 14 * (1 - t);
     if (tail > 1.5) {
       const len = Math.hypot(drop.tx - drop.x0, drop.ty - drop.y0) || 1;
       bloodStroke.setColor(RAMP_EDGE[0]!);
-      bloodStroke.setAlphaf(0.4);
-      bloodStroke.setStrokeWidth(Math.min(drop.r, 2) * 0.8);
+      bloodStroke.setAlphaf(0.45);
+      bloodStroke.setStrokeWidth(Math.min(air, 3) * 0.8);
       canvas.drawLine(
         px,
         py,
@@ -1986,8 +2010,34 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     fill.setColor(C_VOID);
     canvas.drawRect(Skia.XYWHRect(0, 0, screenW, screenH), fill);
 
+    // Kill shake: punch along the spray line, then ring down through centre
+    // over KILL_KICK_MS (decaying cosine — the first half-cycle IS the punch,
+    // the rest is the recoil) plus a smaller perpendicular rattle offset in
+    // phase. Summed over simultaneous kills; only kills in the viewport count.
+    let kickX = 0;
+    let kickY = 0;
+    if (r.kicks && r.kicks.length > 0) {
+      const halfW = viewW / 2 / zoom;
+      const halfH = viewH / 2 / zoom;
+      for (const k of r.kicks) {
+        const t = (r.nowMs - k.bornMs) / KILL_KICK_MS;
+        if (t < 0 || t >= 1) continue;
+        if (Math.abs(k.x - cx) > halfW || Math.abs(k.y - cy) > halfH) continue;
+        const decay = (1 - t) * (1 - t);
+        const along = KILL_KICK_PX * decay * Math.cos(Math.PI * 2 * KILL_KICK_CYCLES * t);
+        const across = KILL_KICK_PX * 0.45 * decay * Math.sin(Math.PI * 2 * (KILL_KICK_CYCLES + 0.7) * t);
+        kickX += k.dirX * along - k.dirY * across;
+        kickY += k.dirY * along + k.dirX * across;
+      }
+      const mag = Math.hypot(kickX, kickY);
+      if (mag > KILL_KICK_PX * 1.6) {
+        kickX *= (KILL_KICK_PX * 1.6) / mag;
+        kickY *= (KILL_KICK_PX * 1.6) / mag;
+      }
+    }
+
     canvas.save();
-    canvas.translate(vcx - cx * zoom, vcy - cy * zoom);
+    canvas.translate(vcx - cx * zoom + kickX, vcy - cy * zoom + kickY);
     canvas.scale(zoom, zoom);
 
     // Floor: the baked world image when the atlas is ready, else the flat sand

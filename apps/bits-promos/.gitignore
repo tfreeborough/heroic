@@ -3,4 +3,6 @@ public/assets/
 # Your screen recordings — big binaries, keep them out of git.
 public/clips/*
 !public/clips/README.md
+public/music/*
+!public/music/README.md
 out/

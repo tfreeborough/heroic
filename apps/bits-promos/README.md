@@ -14,23 +14,36 @@ video is picking a template and passing props.
 
 ## Templates
 
-| Composition | What it makes | Props |
-| --- | --- | --- |
-| `WeaponSpotlight` | Spotlight: icon slam → name → tagline → stat chips → (in-game footage) → end card | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?}` |
-| `AbilitySpotlight` | Same, for the ability roster | `{kind:"ability", id:"sinkhole", …}` |
-| `GameplayClip` | Your screen recording + hook banner + watermark + end card | `{clip, hook, durationSeconds, startFrom?, muted?}` |
+Every video **cold-opens on the footage** — no logo screen (it reads as an
+ad and eats the scroll-decision second). A preview banner rides the first
+~3s ("ABILITY PREVIEW · SINKHOLE · ● real gameplay, recorded in-match"),
+a corner REC chip keeps the raw-capture framing, the tagline card slides
+through mid-clip, and the whole pitch (features, FREE TO PLAY, iOS +
+Android, support-indie line) lives in the outro — seen only by people who
+watched. Text in Inter, the game's name in Cinzel; every word in
+`src/data/copy.ts` (`TAGLINES`, `DEV`).
 
-Taglines live in `src/data/copy.ts` (keyed by id); brand tokens in
-`src/brand.ts` mirror `docs/design/bits-art-style.md`.
+| Composition | Props |
+| --- | --- |
+| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?}` |
+| `AbilitySpotlight` | `{kind:"ability", id:"sinkhole", …}` |
+| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?}` |
+
+**Sound:** simulator recordings are silent (`simctl` captures no audio) and
+the footage plays muted. Drop a track in `public/music/` and pass
+`music: "bed.mp3"` (or `bun run render:roster -- --music bed.mp3`) to lay it
+under the whole video; phone recordings in `GameplayClip` keep their own
+audio unless `muted`.
 
 ## Hands-free gameplay footage (the capture rig)
 
 The spotlights get real in-game footage of the item without anyone
 playing: the game has a dev-only deep link (`src/net/showcase.ts`) that
-starts an offline 1v1 where *your* seat is driven by the bot brain with the
-featured loadout, firing the featured ability the moment an enemy is in
-reach. The capture script opens that link on the iOS Simulator and records
-the screen.
+starts an offline match where *every* seat plays the item's choreographed
+script (`src/net/showcaseScripts.ts`, docs/design/bits-showcase-scripts.md)
+— melee holds its reach, ranged kites, each ability gets one clean beat;
+Lifeline is a 2v2, Sinkhole a 1v3. No bot brains. The capture script opens
+that link on the iOS Simulator and records the screen.
 
 One-time: `bun run --cwd apps/blood-in-the-sand ios` (builds + installs the
 dev app on a booted simulator). Gotcha: with an iPhone plugged in, Expo
@@ -54,13 +67,27 @@ bun run capture:roster                            # every weapon + ability, ~20s
 bun run render:roster                             # spotlights now cut to the footage automatically
 ```
 
-The star plays at the top tier (`godlike`) against a `novice` sparring
-partner armed with the quietest kit (blade + dash/ironhide) — nothing on
-their side upstages the featured item. `--tier`, `--enemy-tier`,
-`--enemy-weapon`, `--enemy-abilities` override per capture.
+The script decides every seat's kit, placement and movement, so there are
+no per-capture flags beyond `--seconds`. A take is deterministic (fixed
+seed) — re-shoot after a balance patch and the beat is identical.
+
+**Pushing renders to Google Drive:** `bun run upload` copies every mp4 in
+`out/` to the `blood-in-the-sand/promos` folder of your Drive via rclone
+(only new/changed files transfer — it's a sync, so re-renders re-upload and
+already-current files are skipped). `bun run publish` = render the whole
+roster, then upload. One-time setup: `rclone config create gdrive drive scope=drive.file`
+(opens a browser to sign in; the drive.file scope means rclone can only
+touch files it created, nothing else in your Drive). Change the destination
+folder in package.json's `upload` script.
+
+**Tuning a script without the simulator:** `bun scripts/dry-run.ts --kind
+weapon --id staff` shoots the script headlessly and prints the beat
+timeline — every hp change, cast, death and the round end, in seconds
+since FIGHT. The showcase seeds a fixed RNG, so this is the exact fight the
+capture would record; size foe hp and beats here, then capture once.
 
 `render:roster` uses a clip whenever `public/clips/<kind>-<id>.mp4` exists,
-whatever produced it — so if the autopilot looks daft for some item, record
+whatever produced it — so if a script reads badly for some item, record
 that one yourself on a phone and drop it in under the same name. Re-run
 `capture` after any balance change; nothing else needs touching.
 

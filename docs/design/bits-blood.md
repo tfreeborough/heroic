@@ -209,3 +209,145 @@ Cracks v2 removes cracks from the scar cache entirely:
 | `SLAM_EXPAND_MS` | 450 | cast-slam web reveal (quake webs use zone duration) |
 | `LURCH_STEPS` | 9 | reveal jolts mixed over the linear front |
 | `CRACK_SETTLE_FADE_MS` | 800 | quake death → drama fades to the baked stain |
+
+## 8. Blood v3 — feral spray + kill shake (BUILT 2026-08-29); glass splat PARKED
+
+Tom's read after living with v2: a kill still isn't **bombastic** enough. Two
+additions, both inside the existing contract (client-derived, never networked;
+the floor is the scar cache's business, everything here lives *outside* it):
+
+### 8a. The death spray goes feral
+
+`deathBurst` keeps its structure (jets + mist + anchors + seeping pool) and
+gains **an eruption on top of it**:
+
+- **Burst ring.** ~16–22 fat drops (r 2.5–4.5) launched in *every* direction
+  from the body, landing fast (60–140ms) within ~70px — the instant gout of
+  a body opening, not the directional throw. Today's spray is strictly
+  through-wound; the sideways ring is what makes the kill read as *violent*
+  rather than *neat*.
+- **More, longer jets.** 5–8 jets (was 3–5); the guaranteed long one reaches
+  ~300px (was ~230); one **rogue jet** fires 60–120° off the back-cone axis.
+- **Airborne drops get bigger while flying.** `drawFlyingBlood` currently
+  clamps them to ≤2.4px — the flight beat is nearly invisible on device.
+  Airborne radius = 1.6× landing radius, with a brighter glint, so you *see*
+  the arc. Floor decals are unchanged (the sand stays "small droplets, lots
+  of them").
+- **Kill shake.** A 320ms camera shake (13px punch along the spray
+  direction, then a decaying ~2-cycle oscillation back through centre plus
+  a smaller perpendicular rattle on a different phase) when a kill lands *in
+  your view* (`KillKick` list on `ArenaRenderInput`; render.ts decides
+  in-view from the camera; simultaneous kicks sum, clamped). Started as a
+  5px/120ms nudge — Tom wanted it "beefier" — now a jolt with recoil. Not
+  gated by the screen-blood setting — it's the blow landing, not the gore.
+
+Weapon-flavoured sprays (future list above) stay future (Tom, 2026-08-29:
+"another day"); the ring + rogue jet get most of the way to "crazy" without
+a per-weapon switch.
+
+### 8b. The screen splat — blood on the phone's glass — PARKED 2026-08-29
+
+> **Status: pulled before shipping.** Three cuts on device the same day
+> (blobs around the corpse → whole-screen droplet spray with a gravity slide
+> → scatter-in arrival + break-and-run streaks with residue) and Tom's
+> verdict was "it just doesn't look good enough to put out in the game".
+> The module `src/game/screenBlood.ts` stays in the tree **unwired** (nothing
+> imports it; its header lists the four hooks to re-wire) so a future attempt
+> starts from the last shape. The settings toggle, `bloodOnGlass` sound slot
+> and Forge row were removed with it. What follows is the design as last
+> built, kept for that future attempt. **§8a (feral spray + kill shake)
+> shipped and stays.**
+
+**Proximity, for everyone** (Tom's third read, 2026-08-29 — it started as
+victim + killer only, then: "if you are within 100 range of a death we should
+pop the screen blood for everyone, as this is likely what would happen"):
+when **you die**, or **anyone dies within ~100 of your living fighter**,
+blood hits the *screen*: a **fine spray of small droplets across the whole
+screen** that lands in a scatter, sits, and then the heavier drops break and
+*run* down the glass as everything fades. (Second cut: the first cut's big
+blobs seeded around the corpse read as paint; Tom wanted "smaller droplets
+that spray the whole screen and streak down with gravity a little".)
+
+**Trigger + intensity.** On a lethal `hit` event, `d` = world distance from
+your (alive) fighter to the victim. Intensity
+`k = 1 − smoothstep(SPLAT_NEAR, SPLAT_FAR, d)` with `NEAR = 50` / `FAR = 100`
+— a melee exchange's kill qualifies whichever way it went; a bow kill from
+range never does. `k` scales drop count and size. **Your own death** is
+always `k = OWN_DEATH_K = 1.25` — the biggest spray in the game, then the
+death camera takes over. Once you're down, nearby deaths no longer spray
+you. Straw men and dummies never trigger it (no blood).
+
+**Where on the glass.** Hits queue in *world* coords (GameScreen doesn't know
+the camera) and materialise on the next recorded frame through that frame's
+camera (`GlassCamera`) — at most ~16ms late, inside the snap-on. ~88 drops
+per unit of `k` (own death ≈ 110): 60% uniform over the whole safe screen,
+40% fanned out from the victim's screen position along the attacker→victim
+line — the lean that says which way the blood flew. Radii 1.4–6.5px,
+pow-biased small (most are flecks, a few are beads). **Never all at once**
+(Tom): each drop lands with its own arrival time — the bulk inside the
+first ~150ms (pow-biased early), stragglers across a 420ms window, and a
+late second spatter (15% of drops) out to 900ms; a mild distance term keeps
+the sweep reading outward from the corpse.
+
+**Keep the middle readable.** Falls out of the size rule: nothing on the
+glass is bigger than ~6px, so the fight stays legible through it even at
+`k = 1.25`. Bombastic, never blinding.
+
+**Life of a drop** — a pure function of age, drawn per frame (unit-space
+`blobPath` + darker off-centre core; a wet glint on beads > 3.8px):
+
+| Phase | Window | What |
+| --- | --- | --- |
+| Hit | 0–70ms | scale 0.5 → 1.0 ease-out |
+| Hold | 0–600ms | alpha at peak |
+| Run | breaks at 150–1100ms (heavier sooner) | drops ≥ 2.6px (75% of them) sit, then **break** and run 10–24× their radius over 0.7–1.7s on a smootherstep (slow release, quick middle, dying away as it runs dry), drifting sideways just a little (a fraction of the drop's width, one slow bend per run — the first cut meandered too much) as a fixed function of distance run (the head traces a shape; the trail never wriggles), leaving a trail that widens from a hairline at the origin to ~0.6r at the head and 1–3 **residue beads** stuck along it; the head swells mid-run then thins as it dries. The first cut's constant-acceleration straight slide "looked cheap" (Tom) — motion with a break, a meander and residue is what reads as blood on glass. |
+| Fade | 600–3400ms | alpha → 0, ease-in (lingers, then goes). |
+
+Per-frame cost: 2–3 `drawPath` per drop plus ~5–15 trail segments per
+running drop, for ~3.4s after a qualifying kill. Cap at 220 live drops (a point-blank team-wipe can't stack
+forever — new drops evict the oldest).
+
+**Where it draws.** `recordArena` already has a screen-space pass after
+`canvas.restore()` (off-screen ally arrows). The splat layer draws there —
+above the world, below the RN HUD (buttons/stick/banners stay clean; blood
+is on the *canvas* glass, the controls sit on top). Module
+`src/game/screenBlood.ts` (`ScreenBloodField`: `hit(k, wx, wy, dirX, dirY,
+nowMs)`, `draw(canvas, nowMs, cam)`), owned by GameScreen next to
+`BloodField`, passed as the optional `screenBlood` render input (the Primer
+doesn't pass one — its kill burst stays crimson Sparks). Blobs are unit-space
+`blobPath`s drawn with per-frame paint alpha (a recorded SkPicture can't
+take an alpha without a saveLayer per blob).
+
+**Sound** (done-tick rule, bits-audio.md): one new static bank
+**`blood_glass`** (event `bloodOnGlass`) — a wet slap against the lens,
+played only when `k ≥ 0.6` (your death and the closest kills), non-positional
+(it's on *your* screen). Catalogue + Forge mirror + brief landed with the
+feature; silent until forged. Haptics unchanged — the victim and the killer
+already get the `heavy` pulse, and nobody else is party to the spray.
+
+**Setting.** `Settings → Screen blood` toggle (default ON, `bits.screenBlood`
+in settings.ts). Cheap, and some players genuinely can't stand lens gore —
+the floor blood is the game's identity, the glass splat is a flourish.
+
+**Not networked, not in the Primer** (the Primer's kill burst is Sparks in
+crimson and stays that way), not for straw men (no blood) or dummies.
+
+### Tuning constants (initial)
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `SPLAT_NEAR` / `SPLAT_FAR` | 50 / 100 world px | full intensity … nothing (any death near your live fighter) |
+| `SPLAT_HOLD_MS` / `SPLAT_TOTAL_MS` | 600 / 3400 | hold, then fade out |
+| `DROPS_PER_K` / `SPLAT_MAX_DROPS` | 88 / 220 | spray density, live cap |
+| `DROP_R_MIN` / `DROP_R_MAX` | 1.4 / 6.5 px | always small |
+| `ARRIVE_SPREAD_MS` / `ARRIVE_LATE_MS` / `LATE_SHARE` | 420 / 900 / 0.15 | arrival scatter + late spatter |
+| `RUN_MIN_R` | 2.6 px | drops below this never run |
+| `RUN_BREAK_MIN/MAX_MS` | 150 / 1100 | when a drop breaks and starts to run |
+| `RUN_MS_MIN/MAX` | 700 / 1700 | how long a run takes |
+| `OWN_DEATH_K` | 1.25 | your own death's intensity |
+| `RING_DROPS` | 16–22 | omnidirectional eruption at the body |
+| `JETS` | 5–8, long one ~300px | was 3–5, ~230px |
+| `KILL_KICK_PX` / `KILL_KICK_MS` / `KILL_KICK_CYCLES` | 13 / 320 / 2.2 | camera shake on in-view kills |
+
+**8a device-checked 2026-08-29** (Tom: "shake and density are fine") —
+nothing owed. 8b is parked — nothing owed until it's picked up again.

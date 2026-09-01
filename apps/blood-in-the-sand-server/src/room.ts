@@ -498,10 +498,11 @@ export class Room {
    * to 1, never the tier's speedFactor (inhuman/godlike carry 1.05/1.10;
    * decided 2026-08-01: a super-human run speed is both a tell and unfair
    * where Elo is at stake — difficulty stays brain-only in ranked). The bot
-   * arms 2–8 s in, off the sim rng.
+   * arms 2–8 s in, off the sim rng. `team` pins the side the way ranked
+   * human seating does — a backfill bot fills a specific empty seat.
    */
-  seatRankedBot(name: string, difficulty: DifficultyId, title: string, nowMs: number): number | null {
-    const bot = addBot(this.sim, name);
+  seatRankedBot(name: string, difficulty: DifficultyId, title: string, nowMs: number, team?: Team): number | null {
+    const bot = addBot(this.sim, name, team);
     if (!bot) return null;
     bot.announcer = "default";
     bot.title = title; // part of the disguise — see the manager's BOT_TITLES

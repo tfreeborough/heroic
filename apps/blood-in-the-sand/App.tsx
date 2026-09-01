@@ -196,7 +196,7 @@ export default function App() {
 
   // Showcase deep links (src/net/showcase.ts): the promo capture rig opens
   // `bloodinthesand://showcase?...` on the simulator and the app drops
-  // straight into an autopiloted 1v1 with that loadout. Compiled out of
+  // straight into the item's choreographed showcase match. Compiled out of
   // shipped bundles (EXPO_PUBLIC_SHOWCASE gates it at build time). Waits for
   // the stored name so the tag reads right; a second link replaces the match.
   const nameLoaded = playerName !== null;
@@ -207,13 +207,8 @@ export default function App() {
       if (!req) return;
       setPractice((prev) => {
         prev?.close();
-        const next = new PracticeClient(playerName || "GLADIATOR", 1, "bot", req.tier, {
-          feature: req.feature,
-          enemy: { weapon: req.enemy.weapon, abilities: req.enemy.abilities, difficulty: req.enemy.tier },
-        });
-        next.setWeapon(req.weapon);
-        next.setAbilities(req.abilities);
-        return next;
+        // The script seats and arms the whole cast itself.
+        return new PracticeClient(playerName || "GLADIATOR", req.script.teamSize, "bot", undefined, req.script);
       });
       setRoute("practice");
     };

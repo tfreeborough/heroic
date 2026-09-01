@@ -15,13 +15,29 @@ const PRE_FIGHT_LEAD = 0.8;
 const clipProps = (kind: string, id: string): Record<string, unknown> => {
   const file = `${kind}-${id}.mp4`;
   if (!existsSync(join(clipsDir, file))) return {};
-  let fightStartsAt = 0;
+  // Sidecar: `fightStartsAt` (auto captures — the template cuts in 0.8s
+  // before it) and/or `clipSeconds` (hand-edited clips: run the whole thing).
+  let fightStartsAt = PRE_FIGHT_LEAD;
+  let clipSeconds = CLIP_SECONDS;
+  const extra: Record<string, unknown> = {};
   try {
-    fightStartsAt = (JSON.parse(readFileSync(join(clipsDir, `${kind}-${id}.json`), "utf8")) as { fightStartsAt?: number }).fightStartsAt ?? 0;
+    const side = JSON.parse(readFileSync(join(clipsDir, `${kind}-${id}.json`), "utf8")) as {
+      fightStartsAt?: number;
+      clipSeconds?: number;
+      cropTop?: number;
+      cropBottom?: number;
+      muted?: boolean;
+    };
+    fightStartsAt = side.fightStartsAt ?? fightStartsAt;
+    clipSeconds = side.clipSeconds ?? clipSeconds;
+    for (const k of ["cropTop", "cropBottom", "muted"] as const) if (side[k] !== undefined) extra[k] = side[k];
   } catch {}
-  return { clip: file, clipSeconds: CLIP_SECONDS, clipStartFrom: Math.max(0, fightStartsAt - PRE_FIGHT_LEAD) };
+  return { clip: file, clipSeconds, clipStartFrom: Math.max(0, fightStartsAt - PRE_FIGHT_LEAD), ...extra, ...(music ? { music } : {}) };
 };
 
+/** `--music bed.mp3` lays a track from public/music/ under every video. */
+const musicArg = process.argv.indexOf("--music");
+const music = musicArg >= 0 ? process.argv[musicArg + 1] : undefined;
 const onlyArg = process.argv.find((a) => a.startsWith("--only"));
 const only = onlyArg
   ? new Set((onlyArg.split("=")[1] ?? process.argv[process.argv.indexOf(onlyArg) + 1] ?? "").split(","))

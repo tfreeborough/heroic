@@ -265,14 +265,15 @@ export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
  * ladder — per-subject ratings are keyed by it — and maps to the room shape
- * its matches run. `botBackfill`: whether a lone queuer may draw a disguised
- * server bot after the wait (bits-ranked-bots.md) — 1v1 only, never a team
- * bracket (a bot teammate feels awful; bits-ranked.md § 2v2 solo queue,
- * 2026-08-24). Team brackets' displayed queue sizes are honest for the same
- * reason (the fuzz exists to hide bot matches, and there are none). */
+ * its matches run. `botBackfill`: whether overdue queuers may draw disguised
+ * server bots after the wait (bits-ranked-bots.md). 2v2 backfill reversed ON
+ * 2026-08-31 (Tom: the launch population can't sustain a bots-never team
+ * queue): seats the queue can't fill with humans are filled with bots — a
+ * lone queuer may face (or partner) up to three. Both brackets' displayed
+ * queue sizes ride the fuzz while backfill is on. */
 export const RANKED_BRACKETS = {
   "1v1": { teamSize: 1, botBackfill: true },
-  "2v2": { teamSize: 2, botBackfill: false },
+  "2v2": { teamSize: 2, botBackfill: true },
 } as const;
 
 export type RankedBracket = keyof typeof RANKED_BRACKETS;

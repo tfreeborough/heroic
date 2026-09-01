@@ -1,17 +1,8 @@
 import type * as React from "react";
-import {
-  AbsoluteFill,
-  OffthreadVideo,
-  Sequence,
-  interpolate,
-  spring,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig,
-} from "remotion";
-import { CINZEL, palette } from "./brand";
-import { Backdrop, EndCard, PixelIcon, StatChip } from "./components";
-import { DEFAULT_TAGLINE, TAGLINES } from "./data/copy";
+import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { palette } from "./brand";
+import { Backdrop, Card, Footage, Outro, PixelIcon, PreviewBanner, RecChip } from "./components";
+import { DEFAULT_TAGLINE, DEV, TAGLINES } from "./data/copy";
 import roster from "./data/roster.json";
 
 export interface RosterEntry {
@@ -29,193 +20,70 @@ export const findEntry = (kind: "weapon" | "ability", id: string): RosterEntry =
   return entry;
 };
 
-const KIND_LABEL = { weapon: "WEAPON", ability: "ABILITY" } as const;
-
 export type SpotlightProps = {
   kind: "weapon" | "ability";
   id: string;
-  /** Optional in-game footage under public/clips/ (the capture script's
-   * `<kind>-<id>.mp4`). With a clip the video becomes card → footage → end
-   * card; without one it's the card alone. */
+  /** In-game footage under public/clips/ (`<kind>-<id>.mp4`). */
   clip?: string;
   clipSeconds?: number;
   /** Seconds into the recording to start from (skips the lobby beat). */
   clipStartFrom?: number;
-};
-
-/** Timeline in seconds — Root's calculateMetadata sums the same numbers. */
-export const SPOTLIGHT_TIMING = { cardOnly: 6.4, cardWithClip: 4, endCard: 2.6, defaultClip: 8 } as const;
-export const spotlightSeconds = (p: SpotlightProps): number =>
-  p.clip
-    ? SPOTLIGHT_TIMING.cardWithClip + (p.clipSeconds ?? SPOTLIGHT_TIMING.defaultClip) + SPOTLIGHT_TIMING.endCard
-    : SPOTLIGHT_TIMING.cardOnly + SPOTLIGHT_TIMING.endCard;
-
-/** The footage beat: full-bleed recording with the item pinned as a tag. */
-const ClipBeat: React.FC<{ entry: RosterEntry; clip: string; startFrom: number }> = ({
-  entry,
-  clip,
-  startFrom,
-}) => {
-  const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
-  const fadeIn = interpolate(frame, [0, 8], [0, 1], { extrapolateRight: "clamp" });
-  const fadeOut = interpolate(frame, [durationInFrames - 10, durationInFrames], [1, 0], {
-    extrapolateLeft: "clamp",
-  });
-  const tagIn = spring({ frame: frame - 4, fps, config: { damping: 13, stiffness: 160 } });
-  return (
-    <AbsoluteFill style={{ opacity: Math.min(fadeIn, fadeOut), backgroundColor: palette.night }}>
-      <OffthreadVideo
-        src={staticFile(`clips/${clip}`)}
-        startFrom={Math.round(startFrom * fps)}
-        muted
-        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          top: 120,
-          left: 0,
-          right: 0,
-          display: "flex",
-          justifyContent: "center",
-          transform: `translateY(${(1 - tagIn) * -60}px)`,
-          opacity: tagIn,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 22,
-            background: "rgba(20,10,4,0.82)",
-            border: `4px solid ${palette.crimson}`,
-            padding: "16px 36px 16px 20px",
-            boxShadow: "0 16px 48px rgba(0,0,0,0.55)",
-          }}
-        >
-          <PixelIcon src={entry.icon} size={96} style={{ filter: "none" }} />
-          <div>
-            <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 48, color: palette.bone, lineHeight: 1.1 }}>
-              {entry.name.toUpperCase()}
-            </div>
-            <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 24, letterSpacing: 6, color: palette.sand }}>
-              IN THE SAND
-            </div>
-          </div>
-        </div>
-      </div>
-    </AbsoluteFill>
-  );
+  /** A music track under public/music/, played under the whole video. */
+  music?: string;
+  /** Phone recordings carry the game's audio — keep it unless it's noisy. */
+  muted?: boolean;
+  /** Shave the phone's status strip / nav bar: fractions of the recording's height. */
+  cropTop?: number;
+  cropBottom?: number;
 };
 
 /**
- * 9s vertical spotlight: category tag → icon slam → name → tagline →
- * stat chips → end card. Everything is driven by the roster entry, so a new
- * video is just a new `--props='{"kind":"ability","id":"sinkhole"}'`.
+ * COLD OPEN — the footage is playing at frame zero (a logo screen reads as
+ * an ad and eats the scroll-decision second). The preview banner rides the
+ * opening beats and says what this is and that it's real; a corner REC chip
+ * keeps that framing; the tagline card follows; the pitch lives in the outro.
  */
-export const Spotlight: React.FC<SpotlightProps> = (props) => {
-  const { kind, id, clip, clipStartFrom } = props;
+export const TIMING = { outro: 6, defaultClip: 8, noClip: 5, banner: 3.2, cardAt: 3.5, cardFor: 4 } as const;
+export const spotlightSeconds = (p: SpotlightProps): number =>
+  (p.clip ? (p.clipSeconds ?? TIMING.defaultClip) : TIMING.noClip) + TIMING.outro;
+
+export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartFrom, music, muted = false, cropTop, cropBottom }) => {
   const entry = findEntry(kind, id);
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-
-  const endCardFrames = Math.round(fps * SPOTLIGHT_TIMING.endCard);
-  const cardEnd = Math.round(fps * (clip ? SPOTLIGHT_TIMING.cardWithClip : SPOTLIGHT_TIMING.cardOnly));
-  const clipEnd = durationInFrames - endCardFrames;
-  const bodyEnd = cardEnd;
-
-  const iconIn = spring({ frame: frame - 6, fps, config: { damping: 11, stiffness: 120 } });
-  const nameIn = spring({ frame: frame - 22, fps, config: { damping: 13, stiffness: 170 } });
-  const tagOpacity = interpolate(frame, [46, 62], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const bodyFade = interpolate(frame, [bodyEnd - 12, bodyEnd], [1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const drift = interpolate(frame, [0, bodyEnd], [0, -30]);
-
-  const tagline = TAGLINES[entry.id] ?? DEFAULT_TAGLINE;
-  const tagText = (entry.category ?? KIND_LABEL[kind]).toUpperCase();
+  const bodyEnd = durationInFrames - Math.round(TIMING.outro * fps);
+  const bodyOut = interpolate(frame, [bodyEnd - 8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const line = TAGLINES[entry.id] ?? DEFAULT_TAGLINE;
+  const bannerFrames = Math.round(TIMING.banner * fps);
+  const cardAt = Math.round(TIMING.cardAt * fps);
 
   return (
-    <AbsoluteFill>
-      <Backdrop glow={0.6} />
+    <AbsoluteFill style={{ backgroundColor: palette.night }}>
+      {music ? <Audio src={staticFile(`music/${music}`)} volume={0.8} loop /> : null}
       <Sequence durationInFrames={bodyEnd}>
-        <AbsoluteFill
-          style={{
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 56,
-            opacity: bodyFade,
-            transform: `translateY(${drift}px)`,
-            padding: "0 70px",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: CINZEL,
-              fontWeight: 700,
-              fontSize: 34,
-              letterSpacing: 12,
-              color: palette.bone,
-              background: palette.crimson,
-              border: `3px solid ${palette.umber}`,
-              padding: "14px 40px",
-              opacity: iconIn,
-            }}
-          >
-            {tagText}
-          </div>
-          <PixelIcon
-            src={entry.icon}
-            size={620}
-            style={{ transform: `scale(${iconIn})` }}
-          />
-          <div
-            style={{
-              fontFamily: CINZEL,
-              fontWeight: 700,
-              fontSize: 120,
-              lineHeight: 1.05,
-              textAlign: "center",
-              color: palette.bone,
-              textShadow: `0 8px 0 ${palette.umber}`,
-              transform: `scale(${0.6 + nameIn * 0.4})`,
-              opacity: nameIn,
-            }}
-          >
-            {entry.name.toUpperCase()}
-          </div>
-          <div
-            style={{
-              fontFamily: CINZEL,
-              fontWeight: 700,
-              fontSize: 44,
-              textAlign: "center",
-              color: palette.sand,
-              opacity: tagOpacity,
-              maxWidth: 860,
-            }}
-          >
-            {tagline}
-          </div>
-          <div style={{ display: "flex", gap: 28, flexWrap: "wrap", justifyContent: "center" }}>
-            {entry.stats.map(([label, value], i) => (
-              <StatChip key={label} label={label} value={value} delay={70 + i * 8} />
-            ))}
-          </div>
+        <AbsoluteFill style={{ opacity: bodyOut }}>
+          {clip ? (
+            <Footage cropTop={cropTop} cropBottom={cropBottom}>
+              <OffthreadVideo
+                src={staticFile(`clips/${clip}`)}
+                startFrom={Math.round((clipStartFrom ?? 0) * fps)}
+                muted={muted}
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
+            </Footage>
+          ) : (
+            <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+              <Backdrop glow={0.6} />
+              <PixelIcon src={entry.icon} size={640} style={{ transform: "translateY(-160px)" }} />
+            </AbsoluteFill>
+          )}
+          <PreviewBanner kindLabel={DEV.preview[kind]} name={entry.name} until={bannerFrames} />
+          <RecChip from={bannerFrames + 6} />
+          <Card icon={entry.icon} name={entry.name} line={line} delay={cardAt} until={cardAt + Math.round(TIMING.cardFor * fps)} />
         </AbsoluteFill>
       </Sequence>
-      {clip ? (
-        <Sequence from={cardEnd} durationInFrames={clipEnd - cardEnd}>
-          <ClipBeat entry={entry} clip={clip} startFrom={clipStartFrom ?? 0} />
-        </Sequence>
-      ) : null}
-      <Sequence from={clipEnd}>
-        <EndCard />
+      <Sequence from={bodyEnd}>
+        <Outro />
       </Sequence>
     </AbsoluteFill>
   );

@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "heroic-monorepo",
@@ -15,6 +14,7 @@
       "dependencies": {
         "@remotion/cli": "^4.0.0",
         "@remotion/fonts": "^4.0.0",
+        "@remotion/google-fonts": "4.0.518",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "remotion": "^4.0.0",
@@ -720,6 +720,8 @@
     "@remotion/compositor-win32-x64-msvc": ["@remotion/compositor-win32-x64-msvc@4.0.518", "", { "os": "win32", "cpu": "x64" }, "sha512-m9gJuCeI7oUz57slFVk1YBJqXVUUlBwaWalptkiBsoh7EQZbUbzjGotsDaoVCJ0arwNoMJK5cN5BE5asUsEHYg=="],
 
     "@remotion/fonts": ["@remotion/fonts@4.0.518", "", { "dependencies": { "remotion": "4.0.518" } }, "sha512-Mn8OJIIyVWHIv1+8oOk4Vi7z4WHJRkLZCyIpSGLDCwLgp93jFXE5hoPLUVsKTA/HI2wYQCQTOa4Oj7Xg0xMWCQ=="],
+
+    "@remotion/google-fonts": ["@remotion/google-fonts@4.0.518", "", { "dependencies": { "remotion": "4.0.518" } }, "sha512-qGgpmlsETtZkbJaLOXA51T8qn9soCM+MqyhOx2oQ0xwdV7m089mzvMwSPdqeO8e7PeqiMRrVQm2Zvnv/cWmRKA=="],
 
     "@remotion/licensing": ["@remotion/licensing@4.0.518", "", {}, "sha512-YoGKkBRlRRQrBvhgckJnUhfoEROTYkTxyPFSNnGMNtgrSgHI+3LM+Fvm538GtwOrBGyD6b/u3CCJt0Xt/Mm54Q=="],
 

@@ -1,7 +1,26 @@
 /**
- * The marketing voice, keyed by roster id. Names/numbers come from the sim
- * via roster.json; these one-liners are the only hand-written part.
+ * The words. Names come from the sim via roster.json; the one-liners and
+ * the intro/outro text are the only hand-written part.
  */
+
+export const DEV = {
+  game: "BLOOD IN THE SAND",
+  preview: {
+    weapon: "WEAPON PREVIEW",
+    ability: "ABILITY PREVIEW",
+    real: "REAL IN-APP GAMEPLAY",
+    rec: "REC",
+  },
+  outro: {
+    headline: "Rise to glory in the arena.",
+    features: ["1v1 and 2v2 ranked modes", "Custom games with friends", "100+ achievements", "Completely free to play"],
+    free: "FREE TO PLAY",
+    where: "OUT NOW ON iOS + ANDROID",
+    support: "Support indie game developers",
+  },
+  handles: ["discord.gg/8FHgBmaSnT", "r/FreeTheBoroughGames"],
+} as const;
+
 export const TAGLINES: Record<string, string> = {
   // Weapons
   blade: "Stay close. Let the bleed do the talking.",
@@ -10,9 +29,9 @@ export const TAGLINES: Record<string, string> = {
   hammer: "Every hit slows them down. Then the next one lands.",
   trident: "A steady drain they can't shake off.",
   fang: "Poison stacks. Panic follows.",
-  scorpion: "Reach out and ruin someone's day.",
-  bombard: "Why aim when the ground can explode?",
-  lifeline: "Their health is your health.",
+  scorpion: "A burst of bolts. Don't stand still.",
+  bombard: "Shells land where you were. Keep moving.",
+  lifeline: "Their health is your teammate's health.",
   // Abilities
   sandtrap: "Make the ground the weapon.",
   tremor: "Shake them off their feet.",
@@ -29,11 +48,4 @@ export const TAGLINES: Record<string, string> = {
   "tar-pit": "The ground you leave behind wins fights.",
   "titans-draught": "Drink. Grow. Crush.",
 };
-
 export const DEFAULT_TAGLINE = "Pick it in the lobby. Prove it in the sand.";
-
-export const CTA = {
-  title: "BLOOD IN THE SAND",
-  sub: "1v1 arena duels · first to 3 · one life per round",
-  action: "OUT NOW ON iOS",
-} as const;

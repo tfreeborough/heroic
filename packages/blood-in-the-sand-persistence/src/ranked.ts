@@ -78,6 +78,14 @@ export interface RankedSubjectInput {
   subjectId: string;
   /** Serialized as JSON into the history rows (the pick-rate analytics tap). */
   loadout?: unknown;
+  /** Present = a disguised backfill bot (bits-ranked-bots.md): its advertised
+   * rating, frozen at room creation. The subject then lands ONLY in the
+   * history tables — no ranked_ratings or glory_ledger row (no ladder
+   * contamination, nothing for a future leaderboard filter to forget) — but
+   * its rating still weighs into the team means every human settles against,
+   * and its side of the result is fabricated so the rankedResult broadcast is
+   * shaped exactly like a human settlement. */
+  botRating?: number;
 }
 
 export interface RankedMatchInput {
@@ -216,6 +224,19 @@ const settleMember = (prior: RankedRating, enemyMean: number, won: boolean) => {
   return { prior, after, peak: Math.max(prior.peak, after) };
 };
 
+/** A backfill bot's fictional prior: 19 games (settled K, matchesPlayed 20
+ * after this one — never renders as "in placements") at the advertised
+ * rating, with peak = advertised. */
+const botPrior = (s: RankedSubjectInput, season: number, bracket: string): RankedRating => ({
+  subjectId: s.subjectId,
+  season,
+  bracket,
+  rating: s.botRating!,
+  wins: 10,
+  losses: 9,
+  peak: s.botRating!,
+});
+
 /**
  * Settle a ranked match: every member's Elo update, the history rows, and
  * every member's Glory in ONE write batch (a libsql batch is a transaction).
@@ -228,6 +249,12 @@ const settleMember = (prior: RankedRating, enemyMean: number, won: boolean) => {
  * their own placement count; Glory is the full payout per member — winners
  * get `winnerGlory(winnerMean, loserMean)` each, losers the participation
  * floor each. A 1v1 is the size-one case and settles exactly as before.
+ *
+ * A member with `botRating` is a disguised backfill bot: its fabricated
+ * prior stands in wherever a human's ladder row would (the means, the
+ * history rows, its fabricated result side), but the persistent writes —
+ * rating upsert and Glory — land for humans only. A 1v1 against a bot and a
+ * 2v2 with bots in any seats are the same path.
  */
 export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promise<RankedMatchResult | null> => {
   if (input.winners.length === 0 || input.winners.length !== input.losers.length) {
@@ -239,13 +266,16 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
   });
   if (already.rows.length > 0) return null;
 
+  const priorOf = async (s: RankedSubjectInput): Promise<RankedRating> =>
+    s.botRating !== undefined ? botPrior(s, input.season, input.bracket) : getRating(db, s.subjectId, input.season, input.bracket);
   const winnerPriors: RankedRating[] = [];
-  for (const s of input.winners) winnerPriors.push(await getRating(db, s.subjectId, input.season, input.bracket));
+  for (const s of input.winners) winnerPriors.push(await priorOf(s));
   const loserPriors: RankedRating[] = [];
-  for (const s of input.losers) loserPriors.push(await getRating(db, s.subjectId, input.season, input.bracket));
+  for (const s of input.losers) loserPriors.push(await priorOf(s));
   const winnerMean = teamMean(winnerPriors.map((r) => r.rating));
   const loserMean = teamMean(loserPriors.map((r) => r.rating));
 
+  const human = (i: number, side: RankedSubjectInput[]): boolean => side[i]!.botRating === undefined;
   const winners = winnerPriors.map((prior) => settleMember(prior, loserMean, true));
   const losers = loserPriors.map((prior) => settleMember(prior, winnerMean, false));
   const winnerPay = winnerGlory(winnerMean, loserMean);
@@ -253,8 +283,8 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
 
   await db.batch(
     [
-      ...winners.map((m) => ratingUpsert(m.prior, m.after, m.peak, true)),
-      ...losers.map((m) => ratingUpsert(m.prior, m.after, m.peak, false)),
+      ...winners.filter((_, i) => human(i, input.winners)).map((m) => ratingUpsert(m.prior, m.after, m.peak, true)),
+      ...losers.filter((_, i) => human(i, input.losers)).map((m) => ratingUpsert(m.prior, m.after, m.peak, false)),
       matchInsert(
         input,
         input.winners,
@@ -270,8 +300,8 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
       ...losers.map((m, i) =>
         playerInsert(input.matchId, m.prior.subjectId, 2, false, m.prior.rating, m.after, input.losers[i]!.loadout),
       ),
-      ...winners.map((m) => gloryInsert(input.matchId, m.prior.subjectId, winnerPay)),
-      ...losers.map((m) => gloryInsert(input.matchId, m.prior.subjectId, loserPay)),
+      ...winners.filter((_, i) => human(i, input.winners)).map((m) => gloryInsert(input.matchId, m.prior.subjectId, winnerPay)),
+      ...losers.filter((_, i) => human(i, input.losers)).map((m) => gloryInsert(input.matchId, m.prior.subjectId, loserPay)),
     ],
     "write",
   );
@@ -280,92 +310,6 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
     matchId: input.matchId,
     winners: winners.map((m) => sideOf(m.prior.subjectId, m.prior, m.after, m.peak, winnerPay)),
     losers: losers.map((m) => sideOf(m.prior.subjectId, m.prior, m.after, m.peak, loserPay)),
-  };
-};
-
-export interface RankedBotMatchInput {
-  /** Server-minted uuid — the idempotency root, exactly like a human match. */
-  matchId: string;
-  season: number;
-  bracket: string;
-  humanId: string;
-  humanWon: boolean;
-  /** Throwaway `bot:<uuid>` subject — lands ONLY in the history tables. */
-  botId: string;
-  /** The bot's advertised rating, frozen at room creation. */
-  botRating: number;
-  humanLoadout?: unknown;
-  botLoadout?: unknown;
-}
-
-/**
- * Settle a ranked match against a backfill bot (bits-ranked-bots.md): the
- * HUMAN's side only — their rating upsert, the history rows, and their Glory
- * — in one batch. The bot never gets a ranked_ratings or glory_ledger row
- * (no ladder contamination, nothing for a future leaderboard filter to
- * forget); its side of the result is fabricated purely so the rankedResult
- * broadcast is shaped exactly like a human settlement. The fictional prior
- * is 19 games (settled K, matchesPlayed 20 after this one — never renders as
- * "in placements") with peak = advertised rating. 1v1 only by construction:
- * backfill never fires in team brackets (bits-ranked.md § 2v2 solo queue).
- */
-export const recordRankedBotMatch = async (db: Db, input: RankedBotMatchInput): Promise<RankedMatchResult | null> => {
-  const already = await db.execute({
-    sql: "SELECT 1 FROM ranked_matches WHERE id = ?",
-    args: [input.matchId],
-  });
-  if (already.rows.length > 0) return null;
-
-  const human = await getRating(db, input.humanId, input.season, input.bracket);
-  const humanAfter = updateRating({
-    rating: human.rating,
-    opponent: input.botRating,
-    matchesPlayed: human.wins + human.losses,
-    won: input.humanWon,
-  });
-  const humanPeak = Math.max(human.peak, humanAfter);
-  const humanPay = input.humanWon ? winnerGlory(human.rating, input.botRating) : loserGlory();
-
-  const bot: RankedRating = {
-    subjectId: input.botId,
-    season: input.season,
-    bracket: input.bracket,
-    rating: input.botRating,
-    wins: 10,
-    losses: 9,
-    peak: input.botRating,
-  };
-  const botAfter = updateRating({
-    rating: input.botRating,
-    opponent: human.rating,
-    matchesPlayed: bot.wins + bot.losses,
-    won: !input.humanWon,
-  });
-  const botPeak = Math.max(bot.peak, botAfter);
-  const botPay = input.humanWon ? loserGlory() : winnerGlory(input.botRating, human.rating);
-
-  const humanSubject = { subjectId: input.humanId, loadout: input.humanLoadout };
-  const botSubject = { subjectId: input.botId, loadout: input.botLoadout };
-  const [winner, loser] = input.humanWon ? [humanSubject, botSubject] : [botSubject, humanSubject];
-  const [winnerBefore, winnerAfter] = input.humanWon ? [human.rating, humanAfter] : [input.botRating, botAfter];
-  const [loserBefore, loserAfter] = input.humanWon ? [input.botRating, botAfter] : [human.rating, humanAfter];
-  await db.batch(
-    [
-      ratingUpsert(human, humanAfter, humanPeak, input.humanWon),
-      matchInsert(input, [winner], [loser], winnerBefore, winnerAfter, loserBefore, loserAfter),
-      playerInsert(input.matchId, winner.subjectId, 1, true, winnerBefore, winnerAfter, winner.loadout),
-      playerInsert(input.matchId, loser.subjectId, 2, false, loserBefore, loserAfter, loser.loadout),
-      gloryInsert(input.matchId, input.humanId, humanPay),
-    ],
-    "write",
-  );
-
-  const humanSide = sideOf(input.humanId, human, humanAfter, humanPeak, humanPay);
-  const botSide = sideOf(input.botId, bot, botAfter, botPeak, botPay);
-  return {
-    matchId: input.matchId,
-    winners: [input.humanWon ? humanSide : botSide],
-    losers: [input.humanWon ? botSide : humanSide],
   };
 };
 

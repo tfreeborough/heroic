@@ -148,8 +148,9 @@ export interface QueueMatch {
 /**
  * The accept stage between a pairing and a room (bits-ranked.md § Queue
  * roaming & match accept). Pure: the manager owns the clock and the sockets;
- * this just remembers who has said yes. A bot match carries `botAcceptAtMs`
- * — the bot counts as accepted once the clock passes it.
+ * this just remembers who has said yes. A bot match carries `botAccepts` —
+ * one jittered moment per bot seat, each counting as accepted once the clock
+ * passes it (they flip one by one, the way four strangers actually answer).
  */
 export class PendingMatch {
   private readonly accepted = new Set<string>();
@@ -160,7 +161,7 @@ export class PendingMatch {
     readonly bracket: string,
     readonly teams: [QueueEntry[], QueueEntry[]],
     readonly deadlineMs: number,
-    readonly botAcceptAtMs: number | null = null,
+    readonly botAccepts: readonly number[] = [],
   ) {}
 
   /** Every human entry, both sides. */
@@ -168,9 +169,9 @@ export class PendingMatch {
     return this.teams.flat();
   }
 
-  /** Seats in the match — humans plus the bot, if any. */
+  /** Seats in the match — humans plus the bots, if any. */
   get players(): number {
-    return this.humans.length + (this.botAcceptAtMs === null ? 0 : 1);
+    return this.humans.length + this.botAccepts.length;
   }
 
   has(ws: Socket): boolean {
@@ -192,12 +193,12 @@ export class PendingMatch {
     return true;
   }
 
-  botAccepted(nowMs: number): boolean {
-    return this.botAcceptAtMs !== null && nowMs >= this.botAcceptAtMs;
+  botsAccepted(nowMs: number): number {
+    return this.botAccepts.filter((at) => nowMs >= at).length;
   }
 
   acceptedCount(nowMs: number): number {
-    return this.accepted.size + (this.botAccepted(nowMs) ? 1 : 0);
+    return this.accepted.size + this.botsAccepted(nowMs);
   }
 
   everyoneIn(nowMs: number): boolean {
@@ -327,25 +328,37 @@ export class RankedQueue {
   }
 
   /**
-   * Entries whose bot deadline has passed (bits-ranked-bots.md) — runs AFTER
-   * the pairing pass each beat, so a human match always wins. Claims each
-   * taken account from every bracket, mirroring match()'s
-   * first-match-wins rule for the multi-queued.
+   * Backfill groups (bits-ranked-bots.md) — runs AFTER the pairing pass each
+   * beat, so a human match always wins. An entry whose bot deadline has
+   * passed FOUNDS a group of up to `2 × teamSize` entries: every seat the
+   * match needs is offered to the bracket's other waiting humans first
+   * (longest wait first, overdue or not, rating window be damned — a human
+   * beats a bot in every seat, and the founder was about to fight
+   * rating-mirrored bots anyway); only the seats no human can fill are left
+   * for the caller to stock with bots — possibly none, when the leftovers
+   * were merely window-blocked. Claims every taken account from every
+   * bracket, mirroring match()'s first-match-wins rule for the multi-queued.
    */
-  takeOverdue(nowMs: number, brackets: readonly string[]): { bracket: string; entry: QueueEntry }[] {
-    const taken: { bracket: string; entry: QueueEntry }[] = [];
+  takeOverdue(nowMs: number, brackets: readonly string[]): { bracket: string; entries: QueueEntry[] }[] {
+    const groups: { bracket: string; entries: QueueEntry[] }[] = [];
     for (const bracket of brackets) {
       const queue = this.queues.get(bracket);
       if (!queue) continue;
-      // Iterate a snapshot — the claim splices the live arrays under us.
-      for (const entry of [...queue]) {
-        if (entry.botAtMs === undefined || entry.botAtMs > nowMs) continue;
-        if (!queue.includes(entry)) continue; // claimed via another bracket this pass
-        taken.push({ bracket, entry });
-        this.removeAccount(entry.accountId);
+      const size = this.matchSize(bracket);
+      // Re-find from the live array each round — every claim splices it.
+      for (;;) {
+        const founder = queue.find((e) => e.botAtMs !== undefined && e.botAtMs <= nowMs);
+        if (!founder) break;
+        const companions = queue
+          .filter((e) => e !== founder)
+          .sort((a, b) => a.joinedMs - b.joinedMs)
+          .slice(0, size - 1);
+        const entries = [founder, ...companions];
+        for (const e of entries) this.removeAccount(e.accountId);
+        groups.push({ bracket, entries });
       }
     }
-    return taken;
+    return groups;
   }
 
   /** Every socket with at least one live queue entry (the status audience). */

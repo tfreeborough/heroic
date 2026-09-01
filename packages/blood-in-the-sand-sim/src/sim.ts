@@ -183,14 +183,16 @@ export const addDummy = (sim: ArenaSim, name: string): ArenaPlayer | null => {
 /**
  * Seat a backfill bot (docs/design/bits-bot-backfill.md): the server fills a
  * host force-start's empty seats with these. Assignment runs the production
- * addPlayer path (random-balanced, deterministic), and the bot arrives
+ * addPlayer path (random-balanced, deterministic; `forcedTeam` pins the side
+ * the way ranked seating does — a ranked backfill bot fills a DICTATED
+ * seat), and the bot arrives
  * UNARMED — forceStartMatch's random-fill sweep drafts its weapon and hand
  * exactly the way it arms an AFK human. What makes it a bot is the flag: the
  * server thinks for the seat, rooms exclude it from human bookkeeping, and
  * every lobby return dismisses it.
  */
-export const addBot = (sim: ArenaSim, name: string): ArenaPlayer | null => {
-  const bot = addPlayer(sim, name);
+export const addBot = (sim: ArenaSim, name: string, forcedTeam?: Team): ArenaPlayer | null => {
+  const bot = addPlayer(sim, name, forcedTeam);
   if (bot) bot.bot = true;
   return bot;
 };

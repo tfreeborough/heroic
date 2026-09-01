@@ -1,7 +1,7 @@
 /**
  * Hands-free gameplay capture for the spotlights.
  *
- *   bun scripts/capture.ts --kind ability --id sinkhole [--seconds 20] [--tier skilled]
+ *   bun scripts/capture.ts --kind ability --id sinkhole [--seconds 20]
  *   bun scripts/capture.ts --all                       # every weapon + ability
  *
  * Needs: a booted iOS Simulator with the dev app installed
@@ -11,10 +11,10 @@
  *   EXPO_PUBLIC_SHOWCASE=1 bun run --cwd apps/blood-in-the-sand start
  *
  * Each capture opens `bloodinthesand://showcase?...` (src/net/showcase.ts):
- * an offline 1v1 where seat 0 is autopiloted by the bot brain with the
- * featured loadout, then records the simulator screen into
- * public/clips/<kind>-<id>.mp4 plus a sidecar .json noting when the fight
- * starts, which render-roster uses to trim the lobby beat.
+ * an offline match where every seat plays the item's choreographed script
+ * (src/net/showcaseScripts.ts — no bot brains), then records the simulator
+ * screen into public/clips/<kind>-<id>.mp4 plus a sidecar .json noting when
+ * the fight starts, which render-roster uses to trim the lobby beat.
  */
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,14 +30,6 @@ const flag = (name: string): string | undefined => {
 const has = (name: string) => args.includes(`--${name}`);
 
 const seconds = Number(flag("seconds") ?? 20);
-/** Our autopilot plays at the top of the ladder; the sparring partner at the
- * bottom with a quiet kit (blade + dash/ironhide) so nothing on their side
- * upstages the featured item. Override with --tier / --enemy-tier /
- * --enemy-weapon / --enemy-abilities. */
-const tier = flag("tier") ?? "godlike";
-const enemyTier = flag("enemy-tier") ?? "novice";
-const enemyWeapon = flag("enemy-weapon");
-const enemyAbilities = flag("enemy-abilities");
 const clipsDir = join(import.meta.dir, "../public/clips");
 
 /** Lobby clamp (1s) + the 3-2-1 countdown + app/link latency, in seconds. */
@@ -60,23 +52,10 @@ const bootedUdid = (): string => {
   return booted.udid;
 };
 
-/** The loadout that shows the item off: the featured item plus a lively hand. */
-const showcaseUrl = (kind: "weapon" | "ability", id: string): string => {
-  const q = new URLSearchParams();
-  q.set("tier", tier);
-  q.set("enemyTier", enemyTier);
-  if (enemyWeapon) q.set("enemyWeapon", enemyWeapon);
-  if (enemyAbilities) q.set("enemyAbilities", enemyAbilities);
-  if (kind === "weapon") {
-    q.set("weapon", id);
-    q.set("abilities", "dash,harpoon");
-  } else {
-    q.set("weapon", "blade"); // melee keeps the fight close, where most abilities live
-    q.set("abilities", id === "dash" ? "dash,harpoon" : `${id},dash`);
-    q.set("feature", id);
-  }
-  return `bloodinthesand://showcase?${q.toString()}`;
-};
+/** The item's script decides every seat's kit and blocking — the link just
+ * names the item. */
+const showcaseUrl = (kind: "weapon" | "ability", id: string): string =>
+  `bloodinthesand://showcase?${kind === "weapon" ? "weapon" : "feature"}=${encodeURIComponent(id)}`;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -111,7 +90,7 @@ const capture = async (udid: string, kind: "weapon" | "ability", id: string): Pr
   if (!existsSync(out)) throw new Error(`recording missing: ${out}`);
   writeFileSync(
     join(clipsDir, `${kind}-${id}.json`),
-    JSON.stringify({ fightStartsAt: FIGHT_STARTS_AT, seconds, tier, enemyTier }, null, 2) + "\n",
+    JSON.stringify({ fightStartsAt: FIGHT_STARTS_AT, seconds }, null, 2) + "\n",
   );
 };
 
@@ -125,7 +104,7 @@ const jobs: { kind: "weapon" | "ability"; id: string }[] = has("all")
       const id = flag("id");
       if ((kind !== "weapon" && kind !== "ability") || !id) {
         console.error(
-          "usage: capture --kind weapon|ability --id <id> [--seconds N] [--tier godlike] [--enemy-tier novice] [--enemy-weapon blade] [--enemy-abilities dash,ironhide] | --all",
+          "usage: capture --kind weapon|ability --id <id> [--seconds N] | --all",
         );
         process.exit(2);
       }

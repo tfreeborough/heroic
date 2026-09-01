@@ -58,6 +58,7 @@ import {
 import { getActiveAnnouncer } from "../audio/announcer";
 import { getWornTitle } from "../deeds/wornTitle";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
+import type { ShowcaseScript } from "./showcaseScripts";
 
 const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus", "Spartacus", "Agron", "Duro"];
 
@@ -71,22 +72,14 @@ const DUMMY_NAMES = ["Dummy I", "Dummy II", "Dummy III", "Dummy IV", "Dummy V"];
 const RANGE_ARM_SECONDS = 2;
 
 /**
- * Showcase (src/net/showcase.ts): the promo capture rig. Seat 0 is driven
- * by the shared brain instead of the stick, bots arm on arrival, the arming
- * ceremony is clamped to a beat, and the featured ability is pressed the
- * moment it's ready with an enemy in reach — footage of the item in use,
- * no thumbs required.
+ * Showcase (src/net/showcase.ts, showcaseScripts.ts): the promo capture rig.
+ * EVERY seat is driven by the item's choreographed script — no brain runs —
+ * seats arm on arrival with the script's kits, the arming ceremony is
+ * clamped to a beat, partial rooms force-start, and each round is staged
+ * from the script's placements on the countdown. Footage of the item
+ * demonstrated once, clearly; no thumbs required.
  */
-export interface ShowcaseOptions {
-  /** Ability slot to fire eagerly; null = just let the brain play. */
-  feature: AbilityId | null;
-  /** Every other seat gets THIS kit and tier instead of a random draft —
-   * a sparring partner who never upstages the star. */
-  enemy: { weapon: WeaponId; abilities: AbilityId[]; difficulty: DifficultyId };
-}
 const SHOWCASE_ARM_SECONDS = 1;
-/** Eager-cast gate: nearest living enemy within this many px. */
-const SHOWCASE_CAST_RANGE = 340;
 
 /** Per-bot brain state — one entry per bot seat (every id except the human's
  * 0). No archetype here: the brain derives it from the bot's own loadout
@@ -149,8 +142,10 @@ export class PracticeClient implements LobbyClient {
   private readonly history = new SnapshotHistory();
   /** Brain state per bot seat, keyed by player id (every id except 0). */
   private readonly bots = new Map<number, BotSeat>();
-  /** Autopilot for seat 0 — set only for showcase matches. */
-  private readonly showcase: (ShowcaseOptions & { memory: BotMemory; difficulty: DifficultyId }) | null;
+  /** The choreography — set only for showcase matches. */
+  private readonly showcase: ShowcaseScript | null;
+  /** Showcase scene clock: seconds since the round went active. */
+  private showcaseT = 0;
   private lobbyEnteredMs: number;
   private lobbyTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnap: SnapshotMsg;
@@ -161,15 +156,15 @@ export class PracticeClient implements LobbyClient {
     teamSize: number = 1,
     mode: PracticeMode = "bot",
     difficulty: DifficultyId = DEFAULT_DIFFICULTY,
-    showcase: ShowcaseOptions | null = null,
+    showcase: ShowcaseScript | null = null,
   ) {
     this.mode = mode;
-    this.showcase = showcase
-      ? { ...showcase, memory: createBotMemory((Math.random() * 0x7fffffff) | 0), difficulty }
-      : null;
+    this.showcase = showcase;
+    if (showcase) teamSize = showcase.teamSize;
     // Practice needn't be replayable — wall-clock seeding is fine here. The
     // practice flag lifts the per-round charge budget (cooldown-only casts).
-    this.sim = createSim(ARENA_00, Date.now() >>> 0, teamSize, mode === "dummies", true);
+    // A showcase seeds FIXED so a take is re-shootable identically.
+    this.sim = createSim(ARENA_00, showcase ? 7 : Date.now() >>> 0, teamSize, mode === "dummies", true);
     this.nav = createBotNav(this.sim.zone);
 
     // The human takes seat 0. In bot mode, bots fill every other seat, BOTH
@@ -177,14 +172,30 @@ export class PracticeClient implements LobbyClient {
     // so you can land RED or BLUE, exactly like a real room. On the range the
     // line-up is fixed instead: you on team 1, armed-on-arrival dummies
     // filling team 2 (an empty `bots` map — nothing thinks, nothing arms).
+    // A showcase seats exactly the script's cast, teams forced.
     const me =
-      mode === "dummies" ? addPlayer(this.sim, playerName, 1)! : addPlayer(this.sim, playerName)!;
+      mode === "dummies" || showcase
+        ? addPlayer(this.sim, playerName, showcase ? showcase.seats[0]!.team : 1)!
+        : addPlayer(this.sim, playerName)!;
     // Your kills announce in YOUR picked voice offline too (bots keep the
     // default) — practice mirrors the real room, announcer included. Same
     // for the worn title: it shows on your own name tag offline.
     me.announcer = getActiveAnnouncer();
     me.title = getWornTitle();
-    if (mode === "dummies") {
+    if (showcase) {
+      // The star arms now; the cast arms on the lobby's first tick.
+      setPlayerWeapon(this.sim, me.id, showcase.seats[0]!.weapon);
+      setPlayerAbilities(this.sim, me.id, showcase.seats[0]!.abilities);
+      const names = [...BOT_NAMES];
+      for (let i = 1; i < showcase.seats.length; i++) {
+        const seat = addPlayer(this.sim, names[(i - 1) % names.length]!, showcase.seats[i]!.team)!;
+        this.bots.set(seat.id, {
+          memory: createBotMemory(i),
+          difficulty,
+          armAtMs: 0,
+        });
+      }
+    } else if (mode === "dummies") {
       for (let i = 0; i < teamSize * 2 - 1; i++) {
         addDummy(this.sim, DUMMY_NAMES[i % DUMMY_NAMES.length]!);
       }
@@ -194,8 +205,7 @@ export class PracticeClient implements LobbyClient {
         const bot = addPlayer(this.sim, names[i % names.length]!)!;
         this.bots.set(bot.id, {
           memory: createBotMemory((Math.random() * 0x7fffffff) | 0),
-          // Showcase: the constructor's tier is OURS; the sparring partner has its own.
-          difficulty: showcase ? showcase.enemy.difficulty : difficulty,
+          difficulty,
           armAtMs: randomArmBeat(),
         });
       }
@@ -210,7 +220,9 @@ export class PracticeClient implements LobbyClient {
       teamNames: this.sim.state.teamNames,
       roomCode: "BOT",
       roomName:
-        mode === "dummies"
+        showcase
+          ? "showcase"
+          : mode === "dummies"
           ? "target practice"
           : teamSize === 1
             ? `practice vs ${this.sim.state.players[1]!.name}`
@@ -284,14 +296,23 @@ export class PracticeClient implements LobbyClient {
     for (const [id, seat] of this.bots) {
       const bot = this.sim.state.players[id];
       if (bot && bot.weapon === null && sinceMs >= seat.armAtMs) {
-        setPlayerWeapon(this.sim, id, this.showcase?.enemy.weapon ?? randomWeapon());
-        setPlayerAbilities(this.sim, id, this.showcase?.enemy.abilities ?? randomHand());
+        const kit = this.showcase?.seats[id];
+        setPlayerWeapon(this.sim, id, kit?.weapon ?? randomWeapon());
+        setPlayerAbilities(this.sim, id, kit?.abilities ?? randomHand());
         armed = true;
       }
     }
     if (armed) {
       this.refreshRoomState();
       this.onChange?.();
+    }
+    // A showcase cast smaller than the room (1v3, 2v2 in a 3-a-side sim)
+    // never fills it: force-start is the partial-room launcher (round.ts).
+    if (this.showcase && this.sim.state.round.phase === "lobby" && !this.sim.state.round.forced) {
+      const seated = this.sim.state.players.filter((p) => p !== null);
+      if (seated.length < this.sim.state.players.length && seated.every((p) => p!.weapon !== null)) {
+        forceStartMatch(this.sim);
+      }
     }
 
     // The range skips the arming ceremony: the dummies armed on arrival, so
@@ -329,11 +350,30 @@ export class PracticeClient implements LobbyClient {
       return;
     }
     if (this.showcase) {
-      const auto = this.autopilot();
-      inputs.set(0, { seq: this.seq++, sx: auto.sx, sy: auto.sy, casts: auto.casts });
-    } else {
-      inputs.set(0, { seq: this.seq++, sx, sy, casts });
+      // Every seat reads its line from the script; the stick is ignored.
+      const script = this.showcase;
+      const t = this.showcaseT;
+      this.showcaseT += TICK_DT;
+      for (let id = 0; id < script.seats.length; id++) {
+        const me = this.lastSnap.players.find((p) => p.id === id);
+        if (!me) continue;
+        const line = script.input(id, {
+          t,
+          me,
+          players: this.lastSnap.players,
+          projectiles: this.lastSnap.projectiles,
+        });
+        inputs.set(id, {
+          seq: id === 0 ? this.seq++ : 0,
+          sx: line?.sx ?? 0,
+          sy: line?.sy ?? 0,
+          casts: line?.casts ?? [],
+        });
+      }
+      this.step(inputs);
+      return;
     }
+    inputs.set(0, { seq: this.seq++, sx, sy, casts });
     for (const [id, seat] of this.bots) {
       // Stale WORLD, current self: the tier's reaction time is how old a view
       // of everyone else this bot acts on; its own body it always knows.
@@ -351,32 +391,32 @@ export class PracticeClient implements LobbyClient {
     this.step(inputs);
   }
 
-  /** Seat 0 as a bot (current world — proprioception AND perception are
-   * instant; the tier still shapes execution), plus the eager feature cast. */
-  private autopilot(): { sx: number; sy: number; casts: boolean[] } {
-    const sc = this.showcase!;
-    const me = this.lastSnap.players.find((p) => p.id === 0);
-    const decision = botThink(sc.memory, me, this.lastSnap, this.nav, { difficulty: sc.difficulty });
-    const casts = [...decision.casts];
-    if (sc.feature && me?.alive) {
-      const slot = me.abilities.findIndex((s) => s.id === sc.feature);
-      const ready = slot >= 0 && me.abilities[slot]!.cd === 0 && me.abilities[slot]!.charges > 0;
-      if (ready) {
-        let nearest = Infinity;
-        for (const p of this.lastSnap.players) {
-          if (p.alive && p.team !== me.team) nearest = Math.min(nearest, Math.hypot(p.x - me.x, p.y - me.y));
-        }
-        if (nearest <= SHOWCASE_CAST_RANGE) {
-          while (casts.length <= slot) casts.push(false);
-          casts[slot] = true;
-        }
-      }
+  /** Stage a showcase round: the script's placements, applied on the
+   * countdown (after the sim's own spawn reset) — positions hold through
+   * the count since inputs idle outside "active". */
+  private stage(): void {
+    const script = this.showcase!;
+    this.showcaseT = 0;
+    const star = this.sim.state.players[0];
+    for (let id = 0; id < script.seats.length; id++) {
+      const p = this.sim.state.players[id];
+      if (!p) continue;
+      const at = script.place(id);
+      p.mover.pos.x = at.x;
+      p.mover.pos.y = at.y;
+      p.mover.vel.x = 0;
+      p.mover.vel.y = 0;
+      if (at.facing !== undefined) p.facing = at.facing;
+      else if (id !== 0 && star) p.facing = Math.atan2(star.mover.pos.y - at.y, star.mover.pos.x - at.x);
+      p.lockedFacing = p.facing;
+      if (at.hp !== undefined) p.combatant.hp = at.hp;
+      p.moveFactor = at.moveFactor ?? 1;
     }
-    return { sx: decision.sx, sy: decision.sy, casts };
   }
 
   private step(inputs: Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>): void {
     const events = stepSim(this.sim, inputs, TICK_DT);
+    if (this.showcase && this.sim.state.round.phase === "countdown" && this.phase !== "countdown") this.stage();
     this.lastSnap = toSnapshot(this.sim.state, events);
     this.history.push(this.lastSnap);
     const drained = this.buffer.push(this.lastSnap, performance.now());

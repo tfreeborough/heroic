@@ -318,7 +318,7 @@ same `Room` machinery, different rules:
 | Discovery | listed / code / passcode | never listed, unjoinable, no code shown |
 | Host | host powers + migration | no host — server owns the room |
 | forceStart / cancelStart | host / any-seated | disabled |
-| Bots | backfill on forceStart | **1v1 only:** queue backfill after a 15–25 s empty-queue wait, disguised as a player (bits-ranked-bots.md; was "never" — reversed 2026-08-01, env kill switch). **Never in 2v2** (2026-08-24) |
+| Bots | backfill on forceStart | queue backfill after a 15–25 s empty-queue wait, disguised as players (bits-ranked-bots.md; was "never" — reversed 2026-08-01, env kill switch). Every bracket: 2v2 fills its human-less seats with bots too (was "never in 2v2" — reversed 2026-08-31) |
 | switchTeam | open seat hop | disabled |
 | Team size | host-picked 1–4 | fixed by bracket (Season I: 1v1) |
 | Start | arming wizard, auto-start when full+armed | same wizard, **60 s arm deadline** |
@@ -451,11 +451,12 @@ persisted display name column is a fast follow decided at build time.)
    the matched bracket (existing behaviour; a multi-queue's other bracket evaporated at
    match time).
 5. **Bots accept too.** A backfill match (bits-ranked-bots.md) goes through the same
-   pending stage: the human sees the same sheet, the bot "accepts" after a jittered
-   1–5 s (a fraction of the window, so `1 OF 2 ACCEPTED` shows up organically and an
-   instant 2/2 isn't a tell), and only then does the bot room build — the disguised
-   identity is drawn at room time as before, so a declined bot match burns no roster
-   name. A human who declines a bot match eats the lockout like any other dodge.
+   pending stage: the humans see the same sheet, each bot "accepts" after its own
+   jittered 1–5 s (a fraction of the window, so `1 OF 2 ACCEPTED` — or a 2v2's
+   `3 OF 4` — shows up organically and an instant full house isn't a tell), and only
+   then does the bot room build — the disguised identities are drawn at room time as
+   before, so a declined bot match burns no roster names. A human who declines a bot
+   match eats the lockout like any other dodge.
 6. **One live ranked seat per account** extends to pending matches: a second socket on
    the same token can't queue while its twin has a match pending (the parallel-farm
    hole from the store audit, closed at this stage too).
@@ -466,9 +467,9 @@ persisted display name column is a fast follow decided at build time.)
 ### Server
 
 - `PendingMatch` (`ranked.ts`, pure, tested): the matched `teams`, the accept
-  `deadlineMs`, the set of accepted account ids, and for a bot match the bot's
-  `acceptAtMs`. `everyoneIn(now)`, `expired(now)`, `dodgers(now)` (the humans who
-  haven't accepted, plus anyone whose socket died).
+  `deadlineMs`, the set of accepted account ids, and for a bot match each bot's
+  accept moment (`botAccepts[]` since 2026-08-31). `everyoneIn(now)`, `expired(now)`,
+  `dodgers(now)` (the humans who haven't accepted, plus anyone whose socket died).
 - The manager keeps `pending: PendingMatch[]`. The beat now runs **tendPending →
   tendRankedRooms → match → backfill**: a pairing (`queue.match`) or an overdue entry
   (`takeOverdue`) opens a pending match instead of a room. `matchAccept` resolves
@@ -524,15 +525,18 @@ of places that assume exactly two people.
 
 ### Decisions (Tom, 2026-08-24)
 
-1. **No bot backfill in 2v2 — ever.** A bot teammate feels awful (and a disguised
+1. ~~**No bot backfill in 2v2 — ever.** A bot teammate feels awful (and a disguised
    ally is far easier to catch out than a disguised enemy). 2v2 waits for four humans;
-   an empty 2v2 queue is honest about it. Consequences: `RANKED_BRACKETS` entries
-   carry a `botBackfill: boolean` (1v1 true, 2v2 false); `takeOverdue` skips 2v2;
-   `fuzzedQueueSize` applies only to backfill brackets — 2v2 shows real counts
-   (the point of the fuzz is hiding bot matches, and there are none). Multi-queue
-   (already built server-side, `queueJoin.brackets[]`, first match wins) is the
-   counter to a thin 2v2 population: a player queued for both gets whichever fills
-   first — see § Client below.
+   an empty 2v2 queue is honest about it.~~ **REVERSED 2026-08-31** (Tom, after
+   outside counsel: "the population initially isn't going to be high enough to
+   support it"): 2v2 backfills too — seats the queue can't fill with humans get
+   bots after the same 15–25 s window, humans land on random sides, and the fuzz
+   rides 2v2 as well. `RANKED_BRACKETS.botBackfill` is now true for both; the
+   per-bracket flag survives for future brackets. Full mechanics:
+   bits-ranked-bots.md § 2v2 backfill. Multi-queue
+   (already built server-side, `queueJoin.brackets[]`, first match wins) remains
+   the first line against a thin 2v2 population: a player queued for both gets
+   whichever fills first — see § Client below.
 2. **Premade pairs (future) queue into the SAME 2v2 pool.** One `2v2` ladder, players
    are the rated subject — no `2v2-premade` bracket, no `teams` table. Splitting the
    queue would halve an already-small population. The solo-vs-premade fairness gap is
