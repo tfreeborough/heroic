@@ -241,6 +241,16 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const buttonIdsKey = useRef("");
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const hudKey = useRef("");
+  // Dying unmounts the controls mid-gesture, and gesture-handler never
+  // delivers the release for a detector that's gone — so a stick held at the
+  // death moment would stay latched and walk the character at next round's
+  // revive. Zero the latches whenever the controls leave the screen.
+  useEffect(() => {
+    if (hud.dead) {
+      stickRef.current = STICK_ZERO;
+      castRequests.current.fill(false);
+    }
+  }, [hud.dead]);
   // Death spectator: the ally id the camera trails once we're down. Sticky —
   // re-picked only when that ally dies or leaves; cleared while we're alive.
   const spectateId = useRef<number | null>(null);
