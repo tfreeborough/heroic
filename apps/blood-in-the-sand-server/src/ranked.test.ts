@@ -445,12 +445,23 @@ describe("PendingMatch", () => {
   });
 
   test("a bot seat counts as accepted only once its delay has passed", () => {
-    const p = new PendingMatch("1v1", [[entry("a")], []], 15_000, 3_000);
+    const p = new PendingMatch("1v1", [[entry("a")], []], 15_000, [3_000]);
     expect(p.players).toBe(2);
     p.accept("a");
     expect(p.everyoneIn(2_999)).toBe(false);
     expect(p.acceptedCount(2_999)).toBe(1);
     expect(p.everyoneIn(3_000)).toBe(true);
+  });
+
+  test("multiple bots flip one by one, each on its own clock", () => {
+    const p = new PendingMatch("2v2", [[entry("a")], []], 15_000, [2_000, 3_000, 4_000]);
+    expect(p.players).toBe(4);
+    p.accept("a");
+    expect(p.acceptedCount(1_999)).toBe(1);
+    expect(p.acceptedCount(2_500)).toBe(2);
+    expect(p.acceptedCount(3_500)).toBe(3);
+    expect(p.everyoneIn(3_999)).toBe(false);
+    expect(p.everyoneIn(4_000)).toBe(true);
   });
 
   test("dodgers: a dead socket at once, silence only after the window", () => {
@@ -937,8 +948,8 @@ describe("2v2 solo queue", () => {
   let published: { t: string; [k: string]: unknown }[];
   let tokens: string[];
 
-  /** Backfill ON with a zero wait — the harshest setting for "2v2 never pops
-   * a bot": every 1v1 entry would be overdue on the first beat. */
+  /** Backfill ON with a zero wait: every entry is overdue on the first beat.
+   * Jitter 0 keeps the Elo assertions exact (bot ratings = the human mean). */
   const instantCfg = { enabled: true, minWaitMs: 0, maxWaitMs: 0, ratingJitter: 0 };
 
   beforeEach(async () => {
@@ -973,24 +984,125 @@ describe("2v2 solo queue", () => {
     });
   };
 
-  test("a lone 2v2 queuer NEVER draws a bot, however overdue; the count is honest", async () => {
+  /** Bot seats + bot accounts in the room, by team. */
+  const botsOf = (room: import("./room").Room): { seatId: number; team: Team }[] => {
+    const bots: { seatId: number; team: Team }[] = [];
+    for (const [seatId, account] of room.ranked!.accounts) {
+      if (account.bot) bots.push({ seatId, team: room.sim.state.players[seatId]!.team });
+    }
+    return bots;
+  };
+
+  test("a lone overdue 2v2 queuer draws three disguised bots into a full room", async () => {
     const a = makeSocket();
     queueJoin(manager, a, tokens[0]!, "Alice", ["2v2"]);
     await until(() => a.of("queueStatus").length > 0);
-    for (let i = 0; i < 5; i++) internals(manager).rankedBeat();
+    internals(manager).rankedBeat();
+    // Summoned like any four-human match; the bots answer one by one.
+    expect(a.of("matchReady")).toEqual([{ t: "matchReady", bracket: "2v2", players: 4, acceptSec: ACCEPT_WINDOW_MS / 1000 }]);
+    accept(manager, a);
+    botAccepts(manager);
+
+    expect(manager.roomCount()).toBe(1);
+    expect(a.of("matchPending").at(-1)).toEqual({ t: "matchPending", accepted: 4, players: 4 });
+    expect(a.of("welcome")[0]!["teamSize"]).toBe(2);
+    const room = [...internals(manager).rooms.values()][0]!;
+    expect(room.sim.state.players.filter((p) => p !== null)).toHaveLength(4);
+    const bots = botsOf(room);
+    expect(bots).toHaveLength(3);
+    // Every seat filled: Alice has exactly one bot partner and two bot enemies.
+    const aliceTeam = room.sim.state.players[a.ws.data.playerId!]!.team;
+    expect(bots.filter((b) => b.team === aliceTeam)).toHaveLength(1);
+    expect(bots.filter((b) => b.team !== aliceTeam)).toHaveLength(2);
+    // Distinct disguises, nothing on the wire saying bot.
+    const names = new Set(bots.map((b) => room.ranked!.accounts.get(b.seatId)!.name));
+    expect(names.size).toBe(3);
+    expect(JSON.stringify(a.sent)).not.toContain('"bot":true');
+  });
+
+  test("two 2v2 queuers share one room with two bots filling the empty seats", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    queueJoin(manager, a, tokens[0]!, "Alice", ["2v2"]);
+    queueJoin(manager, b, tokens[1]!, "Bob", ["2v2"]);
+    await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
+    // 2 humans < 4 seats: the human pass forms nothing; backfill takes both.
+    for (const s of [a, b]) expect(s.of("matchReady")[0]!["players"]).toBe(4);
+    acceptAll(manager, a, b);
+    botAccepts(manager);
+
+    expect(manager.roomCount()).toBe(1);
+    expect(a.ws.data.roomCode).toBe(b.ws.data.roomCode);
+    const room = [...internals(manager).rooms.values()][0]!;
+    expect(botsOf(room)).toHaveLength(2);
+    expect(room.sim.state.players.filter((p) => p !== null)).toHaveLength(4);
+  });
+
+  test("a 2v2 bot match settles the human only: Elo vs the advertised mean, no bot rows", async () => {
+    const a = makeSocket();
+    queueJoin(manager, a, tokens[0]!, "Alice", ["2v2"]);
+    await until(() => a.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
+    accept(manager, a);
+    botAccepts(manager);
+    const room = [...internals(manager).rooms.values()][0]!;
+    const humanTeam = room.sim.state.players[a.ws.data.playerId!]!.team as Team;
+
+    room.onRankedMatchEnd!(humanTeam);
+    await until(() => published.some((m) => m.t === "rankedResult"));
+    const result = published.find((m) => m.t === "rankedResult") as unknown as {
+      bracket: string;
+      results: { playerId: number; after: number; glory: number; placement: unknown }[];
+    };
+    expect(result.bracket).toBe("2v2");
+    expect(result.results).toHaveLength(4);
+    const mine = result.results.find((r) => r.playerId === a.ws.data.playerId)!;
+    expect(mine.after).toBe(1512); // placement K=24 vs the even advertised mean
+    expect(mine.glory).toBe(23);
+    expect(mine.placement).toEqual({ number: 1, of: 10 });
+    // The fabricated bot sides: settled K, never "in placements".
+    for (const r of result.results.filter((r) => r.playerId !== a.ws.data.playerId)) {
+      expect(r.placement).toBeNull();
+    }
+
+    // The DB holds exactly one player's story — and all four history rows.
+    const accountA = a.ws.data.accountId!;
+    expect((await getRating(db, accountA, SEASON, "2v2")).rating).toBe(1512);
+    expect(await gloryBalance(db, accountA)).toBe(23);
+    const ratings = await db.execute("SELECT subject_id FROM ranked_ratings");
+    expect(ratings.rows.map((r) => String(r["subject_id"]))).toEqual([accountA]);
+    const glory = await db.execute("SELECT player_id FROM glory_ledger");
+    expect(glory.rows.map((r) => String(r["player_id"]))).toEqual([accountA]);
+    const players = await db.execute("SELECT subject_id FROM ranked_match_players");
+    expect(players.rows).toHaveLength(4);
+    expect(players.rows.filter((r) => String(r["subject_id"]).startsWith("bot:"))).toHaveLength(3);
+  });
+
+  test("the queue count is fuzzed in 2v2 too while backfill is on", async () => {
+    const a = makeSocket();
+    // A long wait: no pop this beat, just the status read.
+    manager = new RoomManager(db, { ...instantCfg, minWaitMs: 600_000, maxWaitMs: 600_000 });
+    (manager as unknown as { server: Server<ClientData> }).server = makeServer().server;
+    queueJoin(manager, a, tokens[0]!, "Alice", ["2v2"]);
+    await until(() => a.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
     expect(manager.roomCount()).toBe(0);
     const brackets = a.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number }[];
-    // 1v1 is fuzzed (backfill bracket); 2v2 shows the real 1.
-    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBe(1);
-    expect(brackets.find((b) => b.bracket === "1v1")!.size).toBeGreaterThanOrEqual(1);
+    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBeGreaterThanOrEqual(2); // 1 real + baseline ≥ 1
   });
 
   test("three queued wait; the fourth completes the match into one 2v2 room", async () => {
+    // Long bot deadlines: this test is about the HUMAN pass — three waiting
+    // must not draw a bot mid-story.
+    manager = new RoomManager(db, { ...instantCfg, minWaitMs: 600_000, maxWaitMs: 600_000 });
+    (manager as unknown as { server: Server<ClientData> }).server = makeServer().server;
     const socks = names.slice(0, 3).map(() => makeSocket());
     socks.forEach((s, i) => queueJoin(manager, s, tokens[i]!, names[i]!, ["2v2"]));
     await until(() => socks.every((s) => s.of("queueStatus").length > 0));
     internals(manager).rankedBeat();
     expect(manager.roomCount()).toBe(0);
+    expect(internals(manager).pending).toHaveLength(0); // waiting, not summoned
 
     const d = makeSocket();
     queueJoin(manager, d, tokens[3]!, "Dave", ["2v2"]);
@@ -1077,7 +1189,7 @@ describe("2v2 solo queue", () => {
 
     say(manager, socks[0]!, { t: "queueInfo" });
     const brackets = socks[0]!.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number }[];
-    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBe(3);
+    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBeGreaterThanOrEqual(4); // 3 real + fuzz ≥ 1
     queueJoin(manager, socks[2]!, tokens[2]!, "Carol", ["2v2"]);
     await until(() => socks[2]!.of("reject").length > 0);
     expect(socks[2]!.of("reject")[0]!["reason"]).toContain("lockout");
@@ -1095,7 +1207,9 @@ describe("2v2 solo queue", () => {
     for (const s of [socks[0]!, socks[1]!, socks[3]!]) {
       expect(s.of("matchCancelled")[0]!["dodged"]).toBe(false);
       const brackets = s.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number; waitedSec?: number }[];
-      expect(brackets.find((b) => b.bracket === "2v2")).toEqual({ bracket: "2v2", size: 3, waitedSec: 0 });
+      const row = brackets.find((b) => b.bracket === "2v2")!;
+      expect(row.waitedSec).toBe(0);
+      expect(row.size).toBeGreaterThanOrEqual(4); // 3 real + fuzz ≥ 1
     }
   });
 
@@ -1110,10 +1224,10 @@ describe("2v2 solo queue", () => {
     expect(manager.roomCount()).toBe(1);
     expect(a.of("matchFound")[0]!["bracket"]).toBe("1v1");
     expect(a.ws.data.roomCode).toBe(b.ws.data.roomCode);
-    const outsider = makeSocket();
-    say(manager, outsider, { t: "queueInfo" });
-    const brackets = outsider.of("queueStatus").at(-1)!["brackets"] as { bracket: string; size: number }[];
-    expect(brackets.find((b) => b.bracket === "2v2")!.size).toBe(0);
+    // The wire's 2v2 count is fuzzed while backfill is on — read the queue
+    // itself to see the evaporated entries.
+    const queues = (manager as unknown as { queue: { queues: Map<string, QueueEntry[]> } }).queue.queues;
+    expect(queues.get("2v2")!).toHaveLength(0);
   });
 
   test("re-sending the bracket set keeps the wait already earned", async () => {
@@ -1182,17 +1296,40 @@ describe("RankedQueue", () => {
     expect(q.lockoutLeft("acct", 31_000)).toBe(0);
   });
 
-  test("takeOverdue claims only past-deadline entries", () => {
+  test("takeOverdue needs a past-deadline founder; a lone waiter is left alone", () => {
+    const q = new RankedQueue(["1v1"]);
+    const b = makeSocket();
+    const c = makeSocket();
+    q.enqueue("1v1", { ...entry("b", b.ws), botAtMs: 5_000 }); // not yet overdue
+    q.enqueue("1v1", entry("c", c.ws)); // no deadline — backfill off for this entry
+    expect(q.takeOverdue(2_000, ["1v1"])).toEqual([]);
+    expect(q.statusFor(null, 0)).toEqual([{ bracket: "1v1", size: 2 }]);
+  });
+
+  test("an overdue founder scoops the longest-waiting companion over a bot", () => {
     const q = new RankedQueue(["1v1"]);
     const a = makeSocket();
     const b = makeSocket();
     const c = makeSocket();
     q.enqueue("1v1", { ...entry("a", a.ws), botAtMs: 1_000 });
-    q.enqueue("1v1", { ...entry("b", b.ws), botAtMs: 5_000 });
-    q.enqueue("1v1", entry("c", c.ws)); // no deadline — backfill off for this entry
+    q.enqueue("1v1", { ...entry("b", b.ws, 1500, 500), botAtMs: 5_000 }); // deadline irrelevant for a companion
+    q.enqueue("1v1", entry("c", c.ws, 1500, 100)); // in line longer than b
     const taken = q.takeOverdue(2_000, ["1v1"]);
-    expect(taken.map((t) => t.entry.accountId)).toEqual(["a"]);
-    expect(q.statusFor(null, 0)).toEqual([{ bracket: "1v1", size: 2 }]);
+    expect(taken).toHaveLength(1);
+    expect(taken[0]!.entries.map((e) => e.accountId)).toEqual(["a", "c"]);
+    expect(q.statusFor(null, 0)).toEqual([{ bracket: "1v1", size: 1 }]); // b waits on
+  });
+
+  test("a 2v2 founder takes every waiting human before any bot seat", () => {
+    const q = new RankedQueue(["2v2"]);
+    const socks = ["a", "b", "c"].map(() => makeSocket());
+    q.enqueue("2v2", { ...entry("a", socks[0]!.ws), botAtMs: 1_000 });
+    q.enqueue("2v2", { ...entry("b", socks[1]!.ws, 1500, 200), botAtMs: 9_000 });
+    q.enqueue("2v2", { ...entry("c", socks[2]!.ws, 1500, 100), botAtMs: 9_000 });
+    const taken = q.takeOverdue(2_000, ["2v2"]);
+    expect(taken).toHaveLength(1); // one group of three — the fourth seat is the caller's bot
+    expect(taken[0]!.entries.map((e) => e.accountId)).toEqual(["a", "c", "b"]);
+    expect(q.statusFor(null, 0)).toEqual([{ bracket: "2v2", size: 0 }]);
   });
 
   test("takeOverdue claims the account from every bracket (multi-queue)", () => {

@@ -53,7 +53,6 @@ import {
   findPlayerByToken,
   getRating,
   gloryEarned,
-  recordRankedBotMatch,
   recordRankedMatch,
   type AchievementAward,
   type Db,
@@ -98,13 +97,13 @@ const MAX_SEAT_TOKEN = 64;
  * not. Ids are persistence-frozen content, safe to hand-write here. */
 const BOT_TITLE_CHANCE = 0.3;
 const BOT_TITLES = ["sworn-to-the-sand", "ranked-wins-5"] as const;
-/** DB settlement retries — the batch is idempotent, so retrying is free. */
-/** The brackets a lone queuer may draw a bot in (bits-ranked-bots.md) —
- * derived from the protocol table so a new team bracket can never backfill
- * by omission (bits-ranked.md § 2v2 solo queue: never in 2v2). */
+/** The brackets whose overdue queuers may draw bots (bits-ranked-bots.md) —
+ * derived from the protocol table, per-bracket by design (a future bracket
+ * decides for itself; 2v2 flipped ON 2026-08-31 for launch population). */
 const BACKFILL_BRACKETS: readonly string[] = Object.entries(RANKED_BRACKETS)
   .filter(([, spec]) => spec.botBackfill)
   .map(([key]) => key);
+/** DB settlement retries — the batch is idempotent, so retrying is free. */
 const SETTLE_ATTEMPTS = 3;
 const SETTLE_BACKOFF_MS = 1_000;
 
@@ -542,8 +541,8 @@ export class RoomManager {
     if (this.botBackfillOn()) {
       // TODO(v2): population-aware trigger — skip backfill while the bracket's
       // queue size is ≥ N and let the wait ride instead.
-      for (const { bracket, entry } of this.queue.takeOverdue(now, BACKFILL_BRACKETS)) {
-        this.openBotPending(bracket, entry, now);
+      for (const { bracket, entries } of this.queue.takeOverdue(now, BACKFILL_BRACKETS)) {
+        this.openBotPending(bracket, entries, now);
       }
     }
     for (const ws of this.queue.queuedSockets()) {
@@ -554,8 +553,8 @@ export class RoomManager {
   /** The displayed queue numbers: honest, unless backfill is on — then the
    * fuzz rides EVERY read of a BACKFILL bracket (queueStatus and queueInfo
    * agree by construction) so "1 in queue → match found" never appears
-   * (bits-ranked-bots.md). Team brackets never backfill, so their counts
-   * stay honest either way (bits-ranked.md § 2v2 solo queue). */
+   * (bits-ranked-bots.md). A bracket with backfill off keeps honest counts
+   * either way. */
   private queueStatusFor(ws: Socket | null, now: number): BracketStatus[] {
     const brackets = this.queue.statusFor(ws, now);
     if (!this.botBackfillOn()) return brackets;
@@ -582,14 +581,32 @@ export class RoomManager {
     this.summon(p);
   }
 
-  /** An overdue lone queuer's bot match goes through the SAME stage: the
-   * human sees the same summons, the bot "accepts" after a jittered delay
-   * (an instant 2/2 would be a tell), and the disguised room builds only
-   * on the human's yes — a declined bot match burns no roster name. */
-  private openBotPending(bracket: string, entry: QueueEntry, now: number): void {
-    if (entry.ws.readyState !== 1) return; // died between beats — already unqueued
-    const botAt = now + BOT_ACCEPT_MIN_MS + Math.random() * (BOT_ACCEPT_MAX_MS - BOT_ACCEPT_MIN_MS);
-    const p = new PendingMatch(bracket, [[entry], []], now + ACCEPT_WINDOW_MS, botAt);
+  /** An overdue group's bot match goes through the SAME stage: every human
+   * sees the same summons, each bot "accepts" after its own jittered delay
+   * (an instant N/N would be a tell), and the disguised room builds only on
+   * every human's yes — a declined bot match burns no roster names. Humans
+   * land on RANDOM sides (Tom, 2026-08-31): partner or opponent, the dice
+   * decide — with bots filling the rest, the snake draft has nothing to
+   * balance. A window-blocked group that needs no bots at all falls through
+   * to the ordinary pending stage. */
+  private openBotPending(bracket: string, group: QueueEntry[], now: number): void {
+    const live = group.filter((e) => e.ws.readyState === 1);
+    if (live.length === 0) return; // died between beats — already unqueued
+    const teamSize = RANKED_BRACKETS[bracket as keyof typeof RANKED_BRACKETS].teamSize;
+    const slots: Team[] = Array.from({ length: 2 * teamSize }, (_, i) => (i < teamSize ? 1 : 2));
+    for (let i = slots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [slots[i], slots[j]] = [slots[j]!, slots[i]!];
+    }
+    const teams: [QueueEntry[], QueueEntry[]] = [[], []];
+    live.forEach((e, i) => teams[slots[i]! - 1]!.push(e));
+    const botCount = 2 * teamSize - live.length;
+    if (botCount === 0) return this.openPending({ bracket, teams }, now);
+    const botAccepts = Array.from(
+      { length: botCount },
+      () => now + BOT_ACCEPT_MIN_MS + Math.random() * (BOT_ACCEPT_MAX_MS - BOT_ACCEPT_MIN_MS),
+    );
+    const p = new PendingMatch(bracket, teams, now + ACCEPT_WINDOW_MS, botAccepts);
     this.pending.push(p);
     this.summon(p);
   }
@@ -648,7 +665,7 @@ export class RoomManager {
   /** Everyone said yes: the v19 flow from here — matchFound, seat, welcome. */
   private goPending(p: PendingMatch, now: number): void {
     this.pending.splice(this.pending.indexOf(p), 1);
-    if (p.botAcceptAtMs !== null) this.createRankedBotRoom(p.bracket, p.humans[0]!, now);
+    if (p.botAccepts.length > 0) this.createRankedBotRoom(p.bracket, p.teams, now);
     else this.createRankedRoom({ bracket: p.bracket, teams: p.teams }, now);
   }
 
@@ -721,12 +738,21 @@ export class RoomManager {
     console.log(`⚔ ranked ${match.bracket} room ${code}: ${sideLog(match.teams[0])} vs ${sideLog(match.teams[1])}`);
   }
 
-  /** A queue entry whose bot deadline passed with no human to pair: a room
-   * against a server bot styled as a player (bits-ranked-bots.md). Mirrors
-   * createRankedRoom; the `[bot]` marker below is the ONLY place the truth
+  /** A backfill group whose bot deadline passed: a room where server bots
+   * styled as players fill every seat the queue couldn't (bits-ranked-bots.md)
+   * — a lone queuer may face (and partner) up to three. Mirrors
+   * createRankedRoom; the `[bot]` markers below are the ONLY place the truth
    * is written — nothing on the wire carries it. */
-  private createRankedBotRoom(bracket: string, entry: QueueEntry, now: number): void {
-    if (entry.ws.readyState !== 1) return; // died between beats — already unqueued
+  private createRankedBotRoom(bracket: string, teams: [QueueEntry[], QueueEntry[]], now: number): void {
+    const humans = teams.flat();
+    // A socket can die between beats — never build a room around a corpse;
+    // the survivors go straight back in line.
+    if (humans.some((e) => e.ws.readyState !== 1)) {
+      for (const e of humans) {
+        if (e.ws.readyState === 1) this.queue.enqueue(bracket, this.requeued(e));
+      }
+      return;
+    }
     const teamSize = RANKED_BRACKETS[bracket as keyof typeof RANKED_BRACKETS].teamSize;
     const code = generateRoomCode(new Set(this.rooms.keys()), Math.random);
     const room = new Room(
@@ -740,58 +766,76 @@ export class RoomManager {
     room.onRankedMatchEnd = (winnerTeam) => void this.settleRanked(room, winnerTeam);
     this.rooms.set(code, room);
 
-    this.trySend(entry.ws, { t: "matchFound", bracket, code });
-    const humanId = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now);
-    if (humanId === null) {
-      // A fresh room can't be full — belt-and-braces: never leak the room.
-      this.closeRoom(room, "the match was called off");
-      return;
+    const sideLogs: [string[], string[]] = [[], []];
+    for (let i = 0; i < 2; i++) {
+      const team = (i + 1) as Team;
+      for (const entry of teams[i]!) {
+        this.trySend(entry.ws, { t: "matchFound", bracket, code });
+        const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now, team);
+        if (id === null) {
+          // A fresh room can't be full — belt-and-braces: never leak the room.
+          this.closeRoom(room, "the match was called off");
+          return;
+        }
+        room.ranked.accounts.set(id, {
+          accountId: entry.accountId,
+          name: entry.name,
+          announcer: entry.announcer,
+          title: entry.title,
+          items: entry.items,
+          rating: entry.rating,
+          joinedMs: entry.joinedMs,
+        });
+        sideLogs[i]!.push(`${entry.name} (${entry.rating})`);
+      }
     }
-    room.ranked.accounts.set(humanId, {
-      accountId: entry.accountId,
-      name: entry.name,
-      announcer: entry.announcer,
-      title: entry.title,
-      items: entry.items,
-      rating: entry.rating,
-      joinedMs: entry.joinedMs,
-    });
 
-    // Wall clock, not the beat's performance.now() — the roster rotation is
-    // a time-of-day schedule.
-    const { name: botName, rating: botRating } = this.identityBook.pick(
-      entry.accountId,
-      entry.rating,
-      this.botCfg.ratingJitter,
-      Date.now(),
-      Math.random,
-    );
-    const difficulty = difficultyForRating(entry.rating);
-    // The disguise extends to titles: like its name and rating, off the same
-    // dice as the rest of the bot's identity (achievements.md § wearing titles).
-    const botTitle = Math.random() < BOT_TITLE_CHANCE ? BOT_TITLES[Math.floor(Math.random() * BOT_TITLES.length)]! : "";
-    const botSeat = room.seatRankedBot(botName, difficulty, botTitle, now);
-    if (botSeat === null) {
-      this.identityBook.release(botName);
-      this.voidRanked(room, now, () => false); // nobody's fault — requeue the human
-      return;
+    // Every bot in the room anchors to the HUMANS' mean rating — the one
+    // number that reads as "the lobby you landed in": difficulty band and
+    // advertised-rating mirror alike. The identity book's last-faced
+    // bookkeeping keys on the first human (its promise is pairwise-adjacent
+    // distinctness; inUse keeps this room's names distinct regardless).
+    const humanMean = humans.reduce((sum, e) => sum + e.rating, 0) / humans.length;
+    const difficulty = difficultyForRating(humanMean);
+    for (let i = 0; i < 2; i++) {
+      const team = (i + 1) as Team;
+      for (let seatNo = teams[i]!.length; seatNo < teamSize; seatNo++) {
+        // Wall clock, not the beat's performance.now() — the roster rotation
+        // is a time-of-day schedule.
+        const { name: botName, rating: botRating } = this.identityBook.pick(
+          humans[0]!.accountId,
+          humanMean,
+          this.botCfg.ratingJitter,
+          Date.now(),
+          Math.random,
+        );
+        // The disguise extends to titles: like its name and rating, off the
+        // same dice as the rest of the bot's identity (achievements.md §
+        // wearing titles).
+        const botTitle = Math.random() < BOT_TITLE_CHANCE ? BOT_TITLES[Math.floor(Math.random() * BOT_TITLES.length)]! : "";
+        const botSeat = room.seatRankedBot(botName, difficulty, botTitle, now, team);
+        if (botSeat === null) {
+          this.identityBook.release(botName);
+          this.voidRanked(room, now, () => false); // nobody's fault — requeue the humans
+          return;
+        }
+        // EVERY seat lands in the map so the settleRanked guard passes; the
+        // bot flag keeps its subject out of the ladder and the ledger.
+        room.ranked.accounts.set(botSeat, {
+          accountId: botSubjectId(),
+          name: botName,
+          announcer: "default",
+          title: botTitle,
+          items: [], // bots own nothing gated, ever (bits-secret-items.md)
+          rating: botRating,
+          joinedMs: now,
+          bot: true,
+        });
+        sideLogs[i]!.push(`${botName} (${botRating}) [bot:${difficulty}]`);
+      }
     }
-    // BOTH accounts land in the map so the settleRanked guard passes; the
-    // bot entry's flag routes settlement to the one-sided writer.
-    room.ranked.accounts.set(botSeat, {
-      accountId: botSubjectId(),
-      name: botName,
-      announcer: "default",
-      title: botTitle,
-      items: [], // bots own nothing gated, ever (bits-secret-items.md)
-      rating: botRating,
-      joinedMs: now,
-      bot: true,
-    });
     this.attachMatchStats(room);
-    console.log(
-      `⚔ ranked ${bracket} room ${code}: ${entry.name} (${entry.rating}) vs ${botName} (${botRating}) [bot:${difficulty}]`,
-    );
+    console.log(`⚔ ranked ${bracket} room ${code}: ${sideLogs[0]!.join(" + ")} vs ${sideLogs[1]!.join(" + ")}`);
   }
 
   /** Ranked-room lifecycle, one pass per beat: close settled rooms whose sim
@@ -906,37 +950,26 @@ export class RoomManager {
         return;
       }
       const loadoutOf = (p: (typeof seated)[number]) => ({ weapon: p.weapon, abilities: p.abilities });
-      // A bot on either side routes to the one-sided writer: the human's Elo,
-      // history, and Glory land; the bot's side of the result is fabricated
-      // upstream (bits-ranked-bots.md) and never touches the ladder. Bots
-      // only ever exist in 1v1 rooms (RANKED_BRACKETS.botBackfill), so a
-      // bot match is exactly one human against one bot.
-      const winner = winners[0]!;
-      const loser = losers[0]!;
-      const winnerAccount = accountOf(winner)!;
-      const loserAccount = accountOf(loser)!;
-      const botSide = winnerAccount.bot ? "winner" : loserAccount.bot ? "loser" : null;
-      const record = botSide
-        ? () =>
-            recordRankedBotMatch(this.db!, {
-              matchId: ctx.matchId,
-              season: SEASON,
-              bracket: ctx.bracket,
-              humanId: (botSide === "winner" ? loserAccount : winnerAccount).accountId,
-              humanWon: botSide === "loser",
-              botId: (botSide === "winner" ? winnerAccount : loserAccount).accountId,
-              botRating: (botSide === "winner" ? winnerAccount : loserAccount).rating,
-              humanLoadout: loadoutOf(botSide === "winner" ? loser : winner),
-              botLoadout: loadoutOf(botSide === "winner" ? winner : loser),
-            })
-        : () =>
-            recordRankedMatch(this.db!, {
-              matchId: ctx.matchId,
-              season: SEASON,
-              bracket: ctx.bracket,
-              winners: winners.map((p) => ({ subjectId: accountOf(p)!.accountId, loadout: loadoutOf(p) })),
-              losers: losers.map((p) => ({ subjectId: accountOf(p)!.accountId, loadout: loadoutOf(p) })),
-            });
+      // One writer for every mix of seats: a bot subject carries its
+      // advertised rating (frozen at room creation) and the writer keeps it
+      // out of the ladder and the ledger — its Elo weight and its fabricated
+      // result side are handled downstream (bits-ranked-bots.md).
+      const subjectOf = (p: (typeof seated)[number]) => {
+        const account = accountOf(p)!;
+        return {
+          subjectId: account.accountId,
+          loadout: loadoutOf(p),
+          ...(account.bot ? { botRating: account.rating } : {}),
+        };
+      };
+      const record = () =>
+        recordRankedMatch(this.db!, {
+          matchId: ctx.matchId,
+          season: SEASON,
+          bracket: ctx.bracket,
+          winners: winners.map(subjectOf),
+          losers: losers.map(subjectOf),
+        });
       for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt++) {
         try {
           const result = await record();

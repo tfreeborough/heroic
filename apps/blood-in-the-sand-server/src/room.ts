@@ -498,10 +498,11 @@ export class Room {
    * to 1, never the tier's speedFactor (inhuman/godlike carry 1.05/1.10;
    * decided 2026-08-01: a super-human run speed is both a tell and unfair
    * where Elo is at stake — difficulty stays brain-only in ranked). The bot
-   * arms 2–8 s in, off the sim rng.
+   * arms 2–8 s in, off the sim rng. `team` pins the side the way ranked
+   * human seating does — a backfill bot fills a specific empty seat.
    */
-  seatRankedBot(name: string, difficulty: DifficultyId, title: string, nowMs: number): number | null {
-    const bot = addBot(this.sim, name);
+  seatRankedBot(name: string, difficulty: DifficultyId, title: string, nowMs: number, team?: Team): number | null {
+    const bot = addBot(this.sim, name, team);
     if (!bot) return null;
     bot.announcer = "default";
     bot.title = title; // part of the disguise — see the manager's BOT_TITLES
@@ -662,6 +663,18 @@ export class Room {
   private thinkBots(): void {
     if (this.botSeats.size === 0 || this.lastSnap === null) return;
     if (this.sim.state.round.phase === "lobby") return;
+    // Countdown / round-end: the sim idles every input, so a brain that
+    // keeps thinking only learns the wrong lesson — a body that won't move
+    // trips unstick's "wedged" slide, and the next round opens with a
+    // burst of sideways lunges (the practice autopilot made it obvious,
+    // 2026-08-29). Emit a climbing-seq idle instead (a seat frozen at one
+    // seq is itself a tell).
+    if (this.sim.state.round.phase !== "active") {
+      for (const [id, seat] of this.botSeats) {
+        this.inputs.set(id, sanitizeInput({ seq: ++seat.seq, sx: 0, sy: 0, casts: [] }));
+      }
+      return;
+    }
     for (const [id, seat] of this.botSeats) {
       // Stale WORLD, current self (bot-brains.md step 4) — each seat reads
       // the world its own tier's reaction time behind.

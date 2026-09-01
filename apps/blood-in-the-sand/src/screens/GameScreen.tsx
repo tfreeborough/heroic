@@ -38,7 +38,7 @@ import {
   recordAbilityButton,
 } from "../game/AbilityButton";
 import { useAbilityIconImages } from "../game/abilityIcons";
-import { EMPTY_ARENA_PICTURE, recordArena, type FxItem } from "../game/render";
+import { EMPTY_ARENA_PICTURE, KILL_KICK_MS, recordArena, type FxItem, type KillKick } from "../game/render";
 import { resolveTitleText } from "../deeds/wornTitle";
 import { noteFirstOnlineWin } from "../net/account";
 import { useArenaAtlas } from "../game/tilesets";
@@ -199,6 +199,8 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const tarRef = useRef<TarField | null>(null);
   tarRef.current ??= new TarField();
   const tar = tarRef.current;
+  // Kill shakes (bits-blood.md §8a): 320ms transients, nothing persists.
+  const kicksRef = useRef<KillKick[]>([]);
   /** Where each drunk titan last cracked the ground — the footfall cadence. */
   const titanStrides = useRef(new Map<number, { x: number; y: number }>());
   // Tremor's cracked earth — same lifecycle as the blood (arena remembers).
@@ -426,6 +428,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           }
           if (e.lethal) {
             blood.deathBurst(e.x, e.y, dx / len, dy / len, now);
+            // Kill shake: every kill in view jolts the camera along the
+            // spray (render decides "in view"). Straw men too — it's the
+            // blow landing, not the blood.
+            kicksRef.current.push({ x: e.x, y: e.y, dirX: dx / len, dirY: dy / len, bornMs: now });
             // First Blood + Unreal-style kill chains (everyone hears them). Only
             // real players count — dummies never report a lethal hit anyway.
             if (!isDeployableId(e.targetId)) {
@@ -818,6 +824,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             titlesRef.current = { src: client.roomState, map };
           }
 
+          // Spent kicks fall off the front (birth-ordered).
+          const kicks = kicksRef.current;
+          while (kicks.length > 0 && now - kicks[0]!.bornMs >= KILL_KICK_MS) kicks.shift();
+
           const prevPic = picture.value;
           picture.value = recordArena({
             view,
@@ -838,6 +848,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             atlas,
             abilityIcons,
             titles: titlesRef.current.map,
+            kicks,
           });
           if (prevPic !== EMPTY_ARENA_PICTURE) {
             retiredPics.current.push(prevPic);

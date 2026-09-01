@@ -1,17 +1,22 @@
 # Blood in the Sand — Ranked Bot Backfill (Implementation Plan)
 
 Status: **BUILT 2026-08-01** (steps 1–7 including the ceremony hold + client
-touches; on-device pass owed — see § verification) ·
+touches; on-device pass owed — see § verification) · **2v2 backfill BUILT
+2026-08-31** (see § 2v2 backfill) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-08-24
+Last decided: 2026-08-31
 
-> **Scope: 1v1 only.** Decided 2026-08-24 with the 2v2 design (bits-ranked.md
-> § 2v2 solo queue): backfill never fires in team brackets — a bot teammate feels
-> awful and a disguised ally is far easier to catch out than a disguised enemy.
-> `RANKED_BRACKETS` carries the per-bracket `botBackfill` flag; the queue-size fuzz
-> below is likewise per-bracket and 2v2 shows honest counts. Since the same build the
-> bot's fabricated side also lands in `ranked_match_players` (history, like
-> `ranked_matches`) — `ranked_ratings` and `glory_ledger` stay bot-free as before.
+> **Scope: every bracket** (REVERSED 2026-08-31; was 1v1-only from 2026-08-24).
+> The 08-24 stance — a bot teammate feels awful, a disguised ally is easier to
+> catch out than a disguised enemy — lost to arithmetic: a 2v2 queue that needs
+> FOUR simultaneous humans is even less likely to pop at launch population than
+> the 1v1 queue that already justified backfill, and a bots-never team queue
+> would simply read as dead (Tom, 2026-08-31: "the population initially isn't
+> going to be high enough to support it"). `RANKED_BRACKETS` keeps the
+> per-bracket `botBackfill` flag (now true for both), the queue-size fuzz rides
+> the same flag, and the bots' fabricated sides land in `ranked_match_players`
+> (history, like `ranked_matches`) — `ranked_ratings` and `glory_ledger` stay
+> bot-free as before.
 
 Build-time deviations (all minor):
 
@@ -74,6 +79,11 @@ Each bot match uses a throwaway subject id `bot:<uuid>` written ONLY into
 `ranked_ratings` have no FKs (`packages/blood-in-the-sand-persistence/src/db.ts:68-99`);
 only `glory_ledger` references `players(id)`, and the bot never gets a glory
 row. A new writer `recordRankedBotMatch` settles the human's side only.
+*(2026-08-31: that writer is gone — with 2v2 backfill any seat can be a bot,
+so `recordRankedMatch` itself now takes an optional per-subject `botRating`
+and is the ONE writer for every mix: bot priors are fabricated at the
+advertised rating and weigh into the team means, but rating upserts and Glory
+land for humans only. Same rows, same idempotency, one code path.)*
 
 Why not real bot accounts:
 
@@ -384,6 +394,50 @@ with injected tiny-wait config:
 - **Future fair-matching mode** (`MATCH_ANYONE=false`): two mutually
   out-of-window humans can each draw a bot — acceptable; they survived the
   pairing pass by definition.
+
+## 2v2 backfill (BUILT 2026-08-31)
+
+The scope reversal (see the header note): seats the 2v2 queue can't fill with
+humans are filled with bots — a lone queuer may face (and partner) up to
+three. Decisions, all Tom's 2026-08-31:
+
+- **Bots can be teammates.** 1 human + 3 bots is fine; your Elo partly rides
+  a disguised bot's play. The K/2-ish transfer against advertised ratings
+  keeps the stakes modest, and a whiffing bot partner reads as… a teammate.
+- **Random sides.** Humans in a backfilled match land on random teams
+  (partner or opponent, the dice decide) — with bots filling the rest, the
+  snake draft has nothing to balance. Real 4-human matches keep the snake.
+- **Same 15–25 s window as 1v1** — "players shouldn't be punished for doing
+  2v2". One config, both brackets.
+- **Deeds count** — consistent with the 1v1 stance (bots count toward deeds);
+  the 2v2 partnership board is earnable with/against bots.
+
+Mechanics (generalizations of the 1v1 build, one code path throughout):
+
+- `RankedQueue.takeOverdue` now returns GROUPS: an overdue entry *founds* a
+  group and scoops the bracket's other waiting humans first (longest wait
+  first, overdue or not, rating window be damned — a human beats a bot in
+  every seat); only the seats no human fills get bots. A window-blocked
+  group that needs zero bots falls through to the ordinary pending stage.
+- `PendingMatch` carries `botAccepts: number[]` — each bot flips to accepted
+  on its own jittered clock, so the human watches 2/4 → 3/4 → 4/4 tick in
+  like four strangers answering.
+- `createRankedBotRoom` seats humans on their dictated random sides
+  (`Room.seat` team pin) and bots into the leftovers (`seatRankedBot` grew
+  the same `team` pin, via `addBot(sim, name, forcedTeam)`).
+- Every bot in the room anchors to the HUMANS' mean rating — difficulty band
+  and advertised-rating mirror alike; the identity book's `inUse` set keeps
+  the room's names distinct, and its last-faced bookkeeping keys on the
+  first human.
+- Settlement: `recordRankedMatch` with per-subject `botRating` (see the
+  amended § Bot identity) — humans settle against the enemy mean with bot
+  advertised ratings weighed in; bots history-only.
+- The queue-size fuzz now rides 2v2 too (`BACKFILL_BRACKETS` derives from
+  the flag), so "1 in 2v2 queue → match found" can't appear either.
+
+No wire changes — `matchReady/matchPending` already carried `players`, and a
+backfilled 2v2 room is indistinguishable from a human one by construction.
+No protocol bump.
 
 ## Rollout / removal path (no code changes)
 

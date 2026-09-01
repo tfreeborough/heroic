@@ -10,7 +10,7 @@ import * as Clipboard from "expo-clipboard";
 import { storedIdentity } from "./net/api";
 import { runningVersion } from "./updates";
 
-export const SUPPORT_EMAIL = "tfreeborough@gmail.com";
+export const SUPPORT_EMAIL = "freetheborough.games@gmail.com";
 
 export interface DeviceContext {
   /** `ios` / `android`. */

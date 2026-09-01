@@ -75,6 +75,13 @@ const BAKE_MAX_WAIT_MS = 2_500;
  * the splatter paints outward from the corpse. */
 const FLIGHT_BASE_MS = 110;
 const FLIGHT_PER_PX_MS = 0.75;
+/** v3 (bits-blood.md §8a): the omnidirectional eruption at the body — fat
+ * drops in EVERY direction, landing fast and close. The sideways ring is
+ * what makes a kill read as violent rather than neat. */
+const RING_DROPS_MIN = 16;
+const RING_DROPS_MAX = 22;
+const RING_REACH = 70;
+const RING_FLIGHT_MS = 60;
 
 // ── Bloody footprints (bits-blood.md §3) ───────────────────────────────────
 /** Stepping in a pool younger than this re-inks your soles (≈ wetness 0.25 —
@@ -508,16 +515,51 @@ export class BloodField {
       });
     };
 
+    // The burst ring (v3): the body opening — fat drops flung every way,
+    // touching down within ~RING_REACH almost at once (the directional throw
+    // below is the through-wound; this is the instant gout).
+    const ringDrops = RING_DROPS_MIN + Math.floor(Math.random() * (RING_DROPS_MAX - RING_DROPS_MIN + 1));
+    for (let i = 0; i < ringDrops; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 14 + Math.sqrt(Math.random()) * (RING_REACH - 14);
+      const streak = Math.random() < 0.5;
+      const slen = streak ? 4 + Math.random() * 9 : 0;
+      const px = x + Math.cos(ang) * dist;
+      const py = y + Math.sin(ang) * dist;
+      this.flying.push({
+        x0: x,
+        y0: y,
+        tx: px,
+        ty: py,
+        r: 2.5 + Math.random() * 2,
+        bornMs: nowMs,
+        landMs: nowMs + RING_FLIGHT_MS + dist * 0.9,
+        ...(streak ? { dx: Math.cos(ang) * slen, dy: Math.sin(ang) * slen } : {}),
+        alpha: 0.4 + Math.random() * 0.2,
+        ttlMs: POOL_TTL_MS,
+      });
+    }
+
     // The jets: stratified across the cone so two never merge, each with its
-    // own reach, the first always long.
-    const jets = 3 + Math.floor(Math.random() * 3);
+    // own reach, the first always long. v3: 5–8 of them (was 3–5), the long
+    // one reaching ~300px, plus one ROGUE jet 60–120° off the back-cone axis
+    // — blood doesn't only exit the back.
+    const jets = 5 + Math.floor(Math.random() * 4);
     const jetAngs: number[] = [];
-    for (let j = 0; j < jets; j++) {
+    const rogueSide = Math.random() < 0.5 ? 1 : -1;
+    const rogueAng = base + rogueSide * ((60 + Math.random() * 60) * Math.PI) / 180;
+    for (let j = 0; j <= jets; j++) {
+      const rogue = j === jets;
       const frac = (j + 0.5) / jets;
-      const ang =
-        base + (frac - 0.5) * 2 * CONE_HALF * 0.9 + (Math.random() - 0.5) * 0.07;
-      jetAngs.push(ang);
-      const len = j === 0 ? 195 + Math.random() * 35 : 90 + Math.random() * 120;
+      const ang = rogue
+        ? rogueAng
+        : base + (frac - 0.5) * 2 * CONE_HALF * 0.9 + (Math.random() - 0.5) * 0.07;
+      if (!rogue) jetAngs.push(ang);
+      const len = j === 0
+        ? 270 + Math.random() * 45
+        : rogue
+          ? 70 + Math.random() * 60
+          : 90 + Math.random() * 140;
       const drops = 11 + Math.floor(len / 16);
       for (let i = 0; i < drops; i++) {
         // pow > 1 biases t toward the base: dense/fat near the body,
@@ -542,10 +584,10 @@ export class BloodField {
     }
 
     // A thin uniform mist under the jets — they sit in a haze, not on clean
-    // sand.
-    for (let i = 0; i < 15; i++) {
+    // sand. Reaches as far as the long jet now does.
+    for (let i = 0; i < 18; i++) {
       const ang = base + (Math.random() - 0.5) * 2 * CONE_HALF;
-      const dist = 20 + Math.sqrt(Math.random()) * 190;
+      const dist = 20 + Math.sqrt(Math.random()) * 260;
       launch(
         x + Math.cos(ang) * dist,
         y + Math.sin(ang) * dist,

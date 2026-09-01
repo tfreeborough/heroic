@@ -3,7 +3,7 @@ import { createDb, ensureSchema, type Db } from "./db";
 import { registerPlayer } from "./players";
 import { gloryBalance } from "./glory";
 import { RATING_START } from "./elo";
-import { getRating, leaderboard, rankedSummary, recentForm, recordRankedBotMatch, recordRankedMatch } from "./ranked";
+import { getRating, leaderboard, rankedSummary, recentForm, recordRankedMatch } from "./ranked";
 
 let db: Db;
 let alice: string;
@@ -92,19 +92,22 @@ describe("recordRankedMatch", () => {
   });
 });
 
-describe("recordRankedBotMatch", () => {
+describe("bot subjects (recordRankedMatch with botRating)", () => {
+  const bot = (id: string, botRating = RATING_START, loadout?: unknown) => ({
+    subjectId: `bot:${id}`,
+    botRating,
+    ...(loadout === undefined ? {} : { loadout }),
+  });
   const botMatch = (matchId: string, humanWon: boolean, botRating = RATING_START) => ({
     matchId,
     season: 1,
     bracket: "1v1",
-    humanId: alice,
-    humanWon,
-    botId: "bot:0000-test",
-    botRating,
+    winners: humanWon ? [{ subjectId: alice }] : [bot("0000-test", botRating)],
+    losers: humanWon ? [bot("0000-test", botRating)] : [{ subjectId: alice }],
   });
 
   test("settles the human exactly like an even human match", async () => {
-    const result = await recordRankedBotMatch(db, botMatch("m1", true));
+    const result = await recordRankedMatch(db, botMatch("m1", true));
     expect(result).not.toBeNull();
     expect(result!.winners[0]!.subjectId).toBe(alice);
     expect(result!.winners[0]!.after).toBe(1512); // placement K=24, even ratings
@@ -116,7 +119,7 @@ describe("recordRankedBotMatch", () => {
   });
 
   test("a human loss settles the other way", async () => {
-    const result = await recordRankedBotMatch(db, botMatch("m1", false));
+    const result = await recordRankedMatch(db, botMatch("m1", false));
     expect(result!.losers[0]!.subjectId).toBe(alice);
     expect(result!.losers[0]!.after).toBe(1488);
     expect(result!.losers[0]!.glory).toBe(5);
@@ -126,19 +129,19 @@ describe("recordRankedBotMatch", () => {
   });
 
   test("the fabricated bot side is settled-K and never in placements", async () => {
-    const result = await recordRankedBotMatch(db, botMatch("m1", true, 1512));
-    const bot = result!.losers[0]!;
-    expect(bot.subjectId).toBe("bot:0000-test");
-    expect(bot.before).toBe(1512);
-    expect(bot.matchesPlayed).toBe(20); // > PLACEMENT_MATCHES → placement: null upstream
-    expect(bot.after).toBeLessThan(1512); // settled K=15 loss
-    expect(bot.before - bot.after).toBeLessThanOrEqual(15);
-    expect(bot.peak).toBe(1512);
+    const result = await recordRankedMatch(db, botMatch("m1", true, 1512));
+    const botSide = result!.losers[0]!;
+    expect(botSide.subjectId).toBe("bot:0000-test");
+    expect(botSide.before).toBe(1512);
+    expect(botSide.matchesPlayed).toBe(20); // > PLACEMENT_MATCHES → placement: null upstream
+    expect(botSide.after).toBeLessThan(1512); // settled K=15 loss
+    expect(botSide.before - botSide.after).toBeLessThanOrEqual(15);
+    expect(botSide.peak).toBe(1512);
   });
 
-  test("the bot never touches ranked_ratings or glory_ledger", async () => {
-    await recordRankedBotMatch(db, botMatch("m1", true));
-    await recordRankedBotMatch(db, botMatch("m2", false));
+  test("bots never touch ranked_ratings or glory_ledger", async () => {
+    await recordRankedMatch(db, botMatch("m1", true));
+    await recordRankedMatch(db, botMatch("m2", false));
     const ratings = await db.execute("SELECT subject_id FROM ranked_ratings");
     expect(ratings.rows.map((r) => String(r["subject_id"]))).toEqual([alice]);
     const glory = await db.execute("SELECT player_id FROM glory_ledger");
@@ -148,23 +151,50 @@ describe("recordRankedBotMatch", () => {
   });
 
   test("a replayed match id is a no-op", async () => {
-    expect(await recordRankedBotMatch(db, botMatch("m1", true))).not.toBeNull();
-    expect(await recordRankedBotMatch(db, botMatch("m1", true))).toBeNull();
+    expect(await recordRankedMatch(db, botMatch("m1", true))).not.toBeNull();
+    expect(await recordRankedMatch(db, botMatch("m1", true))).toBeNull();
     expect((await getRating(db, alice, 1, "1v1")).rating).toBe(1512);
     expect(await gloryBalance(db, alice)).toBe(23);
   });
 
   test("the history row carries the bot id and both loadouts", async () => {
-    await recordRankedBotMatch(db, {
-      ...botMatch("m1", true),
-      humanLoadout: { weapon: "sword" },
-      botLoadout: { weapon: "bow" },
+    await recordRankedMatch(db, {
+      matchId: "m1",
+      season: 1,
+      bracket: "1v1",
+      winners: [{ subjectId: alice, loadout: { weapon: "sword" } }],
+      losers: [bot("0000-test", RATING_START, { weapon: "bow" })],
     });
     const rows = await db.execute("SELECT winner_id, loser_id, winner_loadout, loser_loadout FROM ranked_matches");
     expect(String(rows.rows[0]!["winner_id"])).toBe(alice);
     expect(String(rows.rows[0]!["loser_id"])).toBe("bot:0000-test");
     expect(JSON.parse(String(rows.rows[0]!["winner_loadout"]))).toEqual({ weapon: "sword" });
     expect(JSON.parse(String(rows.rows[0]!["loser_loadout"]))).toEqual({ weapon: "bow" });
+  });
+
+  test("a mixed 2v2: bot ratings weigh into the means, humans settle, bots stay off the ladder", async () => {
+    // Alice (1500) + a 1600 bot partner vs a 1500 bot + Bob (1500): means
+    // 1550 vs 1500 — Alice's win settles against 1500 (even, +12 at
+    // placement K), Bob's loss against 1550 (underdog — sheds less than 12).
+    const result = await recordRankedMatch(db, {
+      matchId: "m1",
+      season: 1,
+      bracket: "2v2",
+      winners: [{ subjectId: alice }, bot("partner", 1600)],
+      losers: [bot("enemy", 1500), { subjectId: bob }],
+    });
+    expect(result!.winners).toHaveLength(2);
+    expect(result!.losers).toHaveLength(2);
+    expect(result!.winners[0]!.after).toBe(1512);
+    expect(result!.losers[1]!.after).toBeGreaterThan(1488); // vs 1550, not even
+    expect(result!.losers[1]!.after).toBeLessThan(1500);
+    // Humans only, both tables; all four in the history rows.
+    const ratings = await db.execute("SELECT subject_id FROM ranked_ratings ORDER BY subject_id");
+    expect(ratings.rows.map((r) => String(r["subject_id"])).sort()).toEqual([alice, bob].sort());
+    const glory = await db.execute("SELECT player_id FROM glory_ledger");
+    expect(glory.rows.map((r) => String(r["player_id"])).sort()).toEqual([alice, bob].sort());
+    const players = await db.execute("SELECT subject_id FROM ranked_match_players");
+    expect(players.rows).toHaveLength(4);
   });
 });
 

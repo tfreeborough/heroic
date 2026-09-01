@@ -22,7 +22,7 @@ Both doors sit in **Settings**, the app's one "about this app" surface:
 | Row | Hint | Action |
 |---|---|---|
 | Feedback & bug reports | tell me what broke or what you'd change | `FEEDBACK` → the Feedback screen |
-| Contact | `tfreeborough@gmail.com` | `EMAIL` → mail app, prefilled |
+| Contact | `freetheborough.games@gmail.com` | `EMAIL` → mail app, prefilled |
 | Discord | chat with other gladiators and the developer | `JOIN` → `https://discord.gg/8FHgBmaSnT` |
 | Reddit | r/FreeTheBoroughGames — news, clips and discussion | `VISIT` → `https://www.reddit.com/r/FreeTheBoroughGames/` |
 
@@ -79,7 +79,7 @@ view — Tom is the only reader.
 
 ## Contact
 
-`mailto:tfreeborough@gmail.com` with a subject of `Blood in the Sand` and
+`mailto:freetheborough.games@gmail.com` with a subject of `Blood in the Sand` and
 the same context lines — **player id included**, read from SecureStore
 without ever triggering a registration — pre-filled below a blank body, via
 RN `Linking`. If
