@@ -21,7 +21,7 @@ import type { ArenaEvent } from "../events";
 import type { ArenaPlayer, ArenaState, Deployable, DeployableKind } from "../state";
 import { dashInvulnerable } from "./dash";
 import { applyFixedHit, applyImpulse, killPlayer } from "./damage";
-import { ironhideActive } from "./statuses";
+import { frozenSolid, ironhideActive } from "./statuses";
 
 /** Place a deployable at the caster's feet (or `at`, for thrown kinds —
  * the sinkhole). Sandtrap enforces its one-live-mine rule here: planting a
@@ -121,6 +121,7 @@ const detonate = (
   for (const p of players) {
     if (p.team === mine.team || !p.alive || dashInvulnerable(p)) continue;
     if (distance(p.mover.pos, mine.pos) - PLAYER_RADIUS > SANDTRAP.blastRadius) continue;
+    const immune = frozenSolid(p);
     const damage = applyFixedHit(p, SANDTRAP.damage);
     const lethal = p.combatant.hp <= 0;
     events.push({
@@ -130,6 +131,7 @@ const detonate = (
       damage,
       crit: false,
       lethal,
+      ...(immune ? { immune: true as const } : {}),
       x: p.mover.pos.x,
       y: p.mover.pos.y,
     });
@@ -205,6 +207,7 @@ export const stepDeployables = (
         for (const p of players) {
           if (p.team === d.team || !p.alive || dashInvulnerable(p)) continue;
           if (distance(p.mover.pos, d.pos) - PLAYER_RADIUS > TREMOR.radius) continue;
+          const immune = frozenSolid(p);
           const damage = applyFixedHit(p, TREMOR.damagePerTick);
           const lethal = p.combatant.hp <= 0;
           events.push({
@@ -214,6 +217,7 @@ export const stepDeployables = (
             damage,
             crit: false,
             lethal,
+            ...(immune ? { immune: true as const } : {}),
             x: p.mover.pos.x,
             y: p.mover.pos.y,
           });
@@ -240,7 +244,8 @@ export const stepDeployables = (
       const ramp = Math.min(1, elapsed / SINKHOLE.rampSeconds);
       const speed = SINKHOLE.pullSpeedMin + ramp * (SINKHOLE.pullSpeedMax - SINKHOLE.pullSpeedMin);
       for (const p of players) {
-        if (!p.alive || dashInvulnerable(p) || ironhideActive(p)) continue;
+        // Frozen feet don't drag — true ice is a planted block (stasis).
+        if (!p.alive || dashInvulnerable(p) || ironhideActive(p) || frozenSolid(p)) continue;
         const gap = distance(p.mover.pos, d.pos);
         if (gap - PLAYER_RADIUS > SINKHOLE.radius || gap < 1) continue;
         const drag = Math.min(speed * dt, gap - 1); // never crosses the centre

@@ -22,6 +22,9 @@ export type ArenaEvent =
       bleed?: true;
       /** Present on poison ticks (the Fang's stacking dot) — tinted green. */
       poison?: true;
+      /** The victim was frozen in true ice: nothing landed (damage is 0) —
+       * the client floats "IMMUNE" instead of a number. */
+      immune?: true;
       x: number;
       y: number;
     }
@@ -48,6 +51,20 @@ export type ArenaEvent =
    * a hook for a future parry flash/sting. Shipped clients ignore unknown
    * event types (if/else drain), so this is additive like `deedUnlocks`. */
   | { type: "reflect"; playerId: number; attackerId: number; x: number; y: number }
+  /** A Shard of True Ice landed — the victim is entombed for `duration`
+   * seconds (already diminished). The encasement itself renders off the
+   * snapshot's `frozenLeft`; this is the impact flash/SFX moment. */
+  | { type: "freeze"; playerId: number; duration: number; x: number; y: number }
+  /** A Magic Mirror activated — the telegraph is opening over both bodies.
+   * The held swirl renders off the caster's snapshot (`mirrorTargetId` +
+   * the slot's active window); this event is the "it begins" sting. */
+  | { type: "mirror"; casterId: number; targetId: number; delay: number }
+  /** The mirror's swap RESOLVED — both bodies exchanged places (coordinates
+   * are post-swap, for the arrival flashes; a fizzled swap emits nothing). */
+  | { type: "mirror-swap"; casterId: number; targetId: number; cx: number; cy: number; tx: number; ty: number }
+  /** An Elven Cloak dropped (expiry) — the re-materialise shimmer. The
+   * cloak's opening shimmer rides the ordinary cast event. */
+  | { type: "decloak"; playerId: number; x: number; y: number }
   /** Every seat armed — the arming countdown just started (banner/SFX cue).
    * Cancels are NOT events: the client reads round.timer going back to 0. */
   | { type: "armingComplete" }

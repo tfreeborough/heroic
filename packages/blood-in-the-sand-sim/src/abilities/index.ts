@@ -12,15 +12,19 @@ import { seatedPlayers, type ArenaPlayer, type PlayerInput } from "../state";
 import { beginDash, dashVelocity, dashingSlot } from "./dash";
 import { applyTaunt, castDeployable } from "./deployables";
 import { fireHarpoon } from "./harpoon";
-import { inSandstorm, targetView, type TargetView } from "./targets";
+import { beginMirror, fireMirrorSwap } from "./magicMirror";
+import { cloakedId, inSandstorm, targetView, type TargetView } from "./targets";
+import { applyFreeze, trueIceMark } from "./trueIce";
 import { castWardingShout } from "./wardingShout";
 
 export * from "./dash";
 export * from "./damage";
 export * from "./deployables";
 export * from "./harpoon";
+export * from "./magicMirror";
 export * from "./statuses";
 export * from "./targets";
+export * from "./trueIce";
 export * from "./wardingShout";
 
 /**
@@ -44,9 +48,14 @@ export const stepPlayerAbilities = (
     // replenishes it. Gated presses never reach the lifecycle at all.
     const pressed = fighting && slot.chargesLeft > 0 && input.casts[i] === true;
     // No mark in chain range, no cast — Harpoon's rule: a gated press neither
-    // fires nor burns the cooldown, the button simply does nothing.
+    // fires nor burns the cooldown, the button simply does nothing. The
+    // shard follows the same rule with its own acquisition.
     const mark = pressed && slot.id === "harpoon" ? harpoonMark(sim, p) : null;
-    const triggered = pressed && (slot.id !== "harpoon" || mark !== null);
+    const iceMark = pressed && slot.id === "true-ice" ? trueIceMark(sim, p) : null;
+    const triggered =
+      pressed &&
+      (slot.id !== "harpoon" || mark !== null) &&
+      (slot.id !== "true-ice" || iceMark !== null);
 
     const step = stepAbility(slot.ability, ABILITIES[slot.id], dt, triggered);
     slot.ability = step.state;
@@ -122,7 +131,21 @@ export const stepPlayerAbilities = (
           slot.dropX = p.mover.pos.x;
           slot.dropY = p.mover.pos.y;
           break;
-        // mirror-guard / ironhide / war-drums: the active phase IS the status.
+        // The shard lands the instant it's thrown (the harpoon's landing
+        // grammar, no reel). The mark's spot rides the cast event for the
+        // client's shard-flight flash (the sinkhole's tx/ty precedent).
+        case "true-ice":
+          applyFreeze(iceMark!, events);
+          castEvent.tx = iceMark!.mover.pos.x;
+          castEvent.ty = iceMark!.mover.pos.y;
+          break;
+        // The mirror latches its mark now; the swap fires when the active
+        // window (the telegraph delay) closes below.
+        case "magic-mirror":
+          beginMirror(sim, p, slot, events);
+          break;
+        // mirror-guard / ironhide / war-drums / elven-cloak: the active
+        // phase IS the status.
         default:
           break;
       }
@@ -143,6 +166,12 @@ export const stepPlayerAbilities = (
     }
 
     if (step.ended && slot.id === "harpoon") fireHarpoon(sim, p, slot, events);
+    if (step.ended && slot.id === "magic-mirror") fireMirrorSwap(sim, p, slot, events);
+    // The cloak dropping is a moment (the re-materialise shimmer) the
+    // client can't cleanly derive from the interp-lagged view — an event.
+    if (step.ended && slot.id === "elven-cloak") {
+      events.push({ type: "decloak", playerId: p.id, x: p.mover.pos.x, y: p.mover.pos.y });
+    }
     slot.invulnLeft = Math.max(0, slot.invulnLeft - dt);
   }
 
@@ -164,13 +193,13 @@ const harpoonMark = (sim: ArenaSim, p: ArenaPlayer): TargetView | null => {
   const inReach = (aim: TargetView): boolean =>
     distance(p.mover.pos, aim.pos) - aim.radius <= HARPOON.maxRange;
   const current = targetView(state, p.targetId);
-  if (current && current.alive && inReach(current)) return current;
+  if (current && current.alive && inReach(current) && !cloakedId(state, current.id)) return current;
 
   let best: TargetView | null = null;
   let bestDist = Infinity;
   const consider = (aim: TargetView | null): void => {
     if (!aim || !aim.alive || aim.team === p.team) return;
-    if (inSandstorm(state, aim.pos)) return;
+    if (inSandstorm(state, aim.pos) || cloakedId(state, aim.id)) return;
     if (!segmentClear(p.mover.pos, aim.pos, zone.occluders)) return;
     const d = distance(p.mover.pos, aim.pos) - aim.radius;
     if (d > HARPOON.maxRange || d >= bestDist) return;

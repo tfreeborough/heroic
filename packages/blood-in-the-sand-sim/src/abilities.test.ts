@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { ZoneFile } from "@heroic/core";
 import {
   BLOOD_FONT,
+  COUNTDOWN_SECONDS,
   DEPLOYABLE_ID_BASE,
+  ELVEN_CLOAK,
   HARPOON,
+  MAGIC_MIRROR,
+  TRUE_ICE,
   IRONHIDE,
   PLAYER_MAX_SPEED,
   SANDTRAP,
@@ -1004,5 +1008,153 @@ describe("titan's draught", () => {
     expect(alice.mover.radius).toBeCloseTo(PLAYER_RADIUS * TITANS_DRAUGHT.sizeFactor, 5);
     run(sim, 30); // the half-second window expires
     expect(alice.mover.radius).toBe(PLAYER_RADIUS);
+  });
+});
+
+describe("shard of true ice", () => {
+  test("the press entombs the nearest enemy: stasis, immunity, thaw", () => {
+    const sim = makeFight({ a0: ["true-ice", "harpoon"] });
+    const bob = sim.state.players[1]!;
+    const events = run(sim, 1, () => press(sim, 0, "true-ice"));
+
+    const freezes = ofType(events, "freeze");
+    expect(freezes.length).toBe(1);
+    expect(freezes[0]!.event.playerId).toBe(1);
+    expect(freezes[0]!.event.duration).toBeCloseTo(TRUE_ICE.freezeSeconds, 5);
+    expect(bob.frozenLeft).toBeGreaterThan(0);
+
+    // Frozen feet: a full sprint input moves the body nowhere.
+    const xBefore = bob.mover.pos.x;
+    run(sim, 10, () => new Map([[1, { seq: 0, sx: 1, sy: 0, casts: [false, false] }]]));
+    expect(bob.mover.pos.x).toBe(xBefore);
+
+    // The harpoon lands on the block: 0 damage, flagged IMMUNE, no reel.
+    const hits = ofType(run(sim, 6, (t) => (t === sim.state.tick ? press(sim, 0, "harpoon") : new Map())), "hit");
+    expect(hits.length).toBe(1);
+    expect(hits[0]!.event.damage).toBe(0);
+    expect(hits[0]!.event.immune).toBe(true);
+    expect(hp(sim, 1)).toBe(bob.combatant.stats.maxHp);
+    expect(slotOf(sim.state.players[0]!, "harpoon")!.reelLeft).toBe(0);
+
+    // The thaw: the ice runs out and the feet work again.
+    run(sim, Math.ceil(TRUE_ICE.freezeSeconds / TICK_DT));
+    expect(bob.frozenLeft).toBe(0);
+    run(sim, 10, () => new Map([[1, { seq: 0, sx: 1, sy: 0, casts: [false, false] }]]));
+    expect(bob.mover.pos.x).toBeGreaterThan(xBefore);
+  });
+
+  test("diminishing returns: each later freeze on the same body is shorter", () => {
+    const sim = makeFight({ a0: ["true-ice", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    run(sim, 1, () => press(sim, 0, "true-ice"));
+    expect(bob.frozenLeft).toBeGreaterThan(TRUE_ICE.freezeSeconds - 0.1);
+
+    // Skip the wait: thaw and re-ready the slot by hand, then throw again.
+    bob.frozenLeft = 0;
+    slotOf(alice, "true-ice")!.ability = { phase: "ready", activeRemaining: 0, cooldownRemaining: 0 };
+    const events = run(sim, 1, () => press(sim, 0, "true-ice"));
+    expect(ofType(events, "freeze")[0]!.event.duration).toBeCloseTo(
+      TRUE_ICE.freezeSeconds * TRUE_ICE.diminishFactor,
+      5,
+    );
+
+    // And the round reset clears the ledger — next round freezes full-length.
+    resetForRound(sim, []);
+    expect(bob.freezesTaken).toBe(0);
+  });
+
+  test("no line of sight → the press neither fires nor costs (the harpoon rule)", () => {
+    const sim = makeFight({ a0: ["true-ice", "dash"] });
+    // The pillar (224–288 × 96–160) sits between them.
+    sim.state.players[0]!.mover.pos = { x: 256, y: 60 };
+    sim.state.players[1]!.mover.pos = { x: 256, y: 200 };
+    const events = run(sim, 1, () => press(sim, 0, "true-ice"));
+    expect(ofType(events, "cast").length).toBe(0);
+    expect(ofType(events, "freeze").length).toBe(0);
+    expect(slotOf(sim.state.players[0]!, "true-ice")!.chargesLeft).toBe(2);
+  });
+});
+
+describe("magic mirror", () => {
+  test("the slot is born locked — no opening-second cheese", () => {
+    const sim = makeFight({ a0: ["magic-mirror", "dash"] });
+    const slot = slotOf(sim.state.players[0]!, "magic-mirror")!;
+    expect(slot.ability.phase).toBe("cooldown");
+    expect(slot.ability.cooldownRemaining).toBeCloseTo(
+      MAGIC_MIRROR.lockoutSeconds + COUNTDOWN_SECONDS,
+      5,
+    );
+    const events = run(sim, 1, () => press(sim, 0, "magic-mirror"));
+    expect(ofType(events, "cast").length).toBe(0);
+    expect(slot.chargesLeft).toBe(1); // the gated press cost nothing
+  });
+
+  test("swaps places with the mark after the telegraph delay", () => {
+    const sim = makeFight({ a0: ["magic-mirror", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    slotOf(alice, "magic-mirror")!.ability = { phase: "ready", activeRemaining: 0, cooldownRemaining: 0 };
+    const ax = alice.mover.pos.x;
+    const bx = bob.mover.pos.x;
+
+    const castEvents = run(sim, 1, () => press(sim, 0, "magic-mirror"));
+    const mirror = ofType(castEvents, "mirror");
+    expect(mirror.length).toBe(1);
+    expect(mirror[0]!.event.targetId).toBe(1);
+    expect(mirror[0]!.event.delay).toBeCloseTo(MAGIC_MIRROR.delaySeconds, 5);
+    // The telegraph window: nobody has moved yet.
+    expect(alice.mover.pos.x).toBe(ax);
+
+    const swapEvents = run(sim, Math.ceil(MAGIC_MIRROR.delaySeconds / TICK_DT) + 1);
+    expect(ofType(swapEvents, "mirror-swap").length).toBe(1);
+    expect(alice.mover.pos.x).toBe(bx);
+    expect(bob.mover.pos.x).toBe(ax);
+  });
+
+  test("dash i-frames at the swap instant refuse the trip", () => {
+    const sim = makeFight({ a0: ["magic-mirror", "dash"], a1: ["dash", "tremor"] });
+    const alice = sim.state.players[0]!;
+    const ax = alice.mover.pos.x;
+    slotOf(alice, "magic-mirror")!.ability = { phase: "ready", activeRemaining: 0, cooldownRemaining: 0 };
+
+    const start = sim.state.tick;
+    const events = run(sim, Math.ceil(MAGIC_MIRROR.delaySeconds / TICK_DT) + 2, (t) => {
+      if (t === start) return press(sim, 0, "magic-mirror");
+      if (t === start + 27) return press(sim, 1, "dash"); // rolls through the flash
+      return new Map();
+    });
+    expect(ofType(events, "mirror").length).toBe(1);
+    expect(ofType(events, "mirror-swap").length).toBe(0); // fizzled, silently
+    expect(alice.mover.pos.x).toBe(ax);
+  });
+});
+
+describe("elven cloak", () => {
+  test("a faded body can't be acquired and an existing lock breaks — but the wearer aims out", () => {
+    const sim = makeFight({ a1: ["elven-cloak", "dash"] });
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    bob.mover.pos = { x: 200, y: 256 }; // inside both blades' engagement
+    run(sim, 1);
+    expect(alice.targetId).toBe(1); // locked before the fade
+
+    forceActive(bob, "elven-cloak", 3);
+    run(sim, 1);
+    expect(alice.targetId).toBe(null); // the lock broke with the fade
+    expect(bob.targetId).toBe(0); // one-way: the wearer still aims
+
+    run(sim, Math.ceil(3 / TICK_DT)); // the cloak runs out
+    run(sim, 1);
+    expect(alice.targetId).toBe(1); // re-acquired on re-materialise
+  });
+
+  test("the drop emits a decloak (the re-materialise shimmer's cue)", () => {
+    const sim = makeFight({ a1: ["elven-cloak", "dash"] });
+    forceActive(sim.state.players[1]!, "elven-cloak", 0.1);
+    const events = run(sim, 6);
+    const decloaks = ofType(events, "decloak");
+    expect(decloaks.length).toBe(1);
+    expect(decloaks[0]!.event.playerId).toBe(1);
   });
 });

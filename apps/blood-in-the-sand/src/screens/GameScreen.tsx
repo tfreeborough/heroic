@@ -98,6 +98,12 @@ const SHOUT_CONE_TTL = 380;
 /** Straw Man soaking a blow: the puff of flung straw settles just after the
  * hit ping — long enough to read "that landed on the DUMMY", not on flesh. */
 const STRAW_BURST_TTL = 520;
+/** True ice sealing shut: the crystalline burst around the fresh tomb. */
+const FREEZE_BURST_TTL = 520;
+/** The mirror swap's crossing thread + arrival shimmers — one blink. */
+const MIRROR_SWAP_TTL = 420;
+/** The cloak's enter/exit shimmer rings. */
+const CLOAK_SHIMMER_TTL = 420;
 
 interface AgedFx {
   item: FxItem;
@@ -407,6 +413,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // Ambient dot ticks (bleed AND poison): tinted number, blood, and
           // nothing else — no impact ring, no haptic, no strike SFX.
           const dot = e.bleed === true || e.poison === true;
+          // A blow refused by true ice: no wound, no blood, no thud — just
+          // the glacial IMMUNE float over the block.
+          const immune = e.immune === true;
           // The attacker→victim line: every splash exits the far side of the
           // victim along it (the through-wound), and the kill spray fires out
           // of the BACK on the same line. The victim auto-faces their
@@ -428,7 +437,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // Straw men don't bleed — deployable-target hits puff straw instead
           // of blood (the "sword fell on straw" tell).
           if (!isDeployableId(e.targetId)) {
-            blood.splatter(e.x, e.y, e.damage, e.lethal, now, dx / len, dy / len);
+            if (!immune) blood.splatter(e.x, e.y, e.damage, e.lethal, now, dx / len, dy / len);
           } else {
             fxRef.current.push({
               item: { kind: "strawBurst", x: e.x, y: e.y, life: 1 },
@@ -476,16 +485,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               x: e.x,
               y: e.y,
               life: 1,
-              text: String(e.damage),
+              text: immune ? "IMMUNE" : String(e.damage),
               crit: e.crit,
               bleed: e.bleed,
               poison: e.poison,
+              immune,
             },
             bornMs: now,
             ttlMs: NUMBER_TTL,
           });
           // Dot ticks are ambient damage — a tinted number, no impact ring.
-          if (!dot) {
+          // An IMMUNE gets no ring either: nothing landed to ping.
+          if (!dot && !immune) {
             fxRef.current.push({
               item: { kind: "ring", x: e.x, y: e.y, life: 1 },
               bornMs: now,
@@ -497,9 +508,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // Bleed ticks stay silent — ambient damage shouldn't buzz the hand.
           if (e.lethal && (e.attackerId === myId || e.targetId === myId)) {
             playStrikeHaptic("heavy", e.crit);
-          } else if (!dot && e.attackerId === myId) {
+          } else if (!dot && !immune && e.attackerId === myId) {
             playStrikeHaptic(WEAPON_HAPTIC[client.myWeapon ?? "blade"], e.crit);
-          } else if (!dot && e.targetId === myId) {
+          } else if (!dot && !immune && e.targetId === myId) {
             playStrikeHaptic("medium");
           }
           // SFX: your own pained grunt is reserved for CRITS — a normal hit on
@@ -509,7 +520,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // The impact thud, for every weapon incl. ranged — distinct from the
           // ranged release (the `shoot` event below). Your own pained grunt is
           // crit-only; getting hit otherwise just thuds.
-          if (!dot && !isDeployableId(e.targetId)) {
+          if (!dot && !immune && !isDeployableId(e.targetId)) {
             if (e.targetId === myId) {
               if (e.crit) playSound("hitTaken"); // your own pain — always full, it's you
             } else {
@@ -605,6 +616,26 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
                 ttlMs: SHOUT_CONE_TTL,
               });
             }
+            // True ice: the shard's flight — one icy line caster → victim
+            // (the mark's spot rides the event, the harpoon precedent; the
+            // landing burst is the freeze event's own FX).
+            if (e.ability === "true-ice" && e.tx !== undefined && e.ty !== undefined) {
+              fxRef.current.push({
+                item: { kind: "line", x: caster.x, y: caster.y, x2: e.tx, y2: e.ty, life: 1, ice: true },
+                bornMs: now,
+                ttlMs: 260,
+              });
+            }
+            // Elven Cloak: the fade-in shimmer — a ripple of two rings off
+            // the vanishing body (the re-materialise rides the decloak
+            // event below; the fade itself is snapshot-driven in render).
+            if (e.ability === "elven-cloak") {
+              fxRef.current.push(
+                { item: { kind: "ring", x: caster.x, y: caster.y, life: 1 }, bornMs: now, ttlMs: CLOAK_SHIMMER_TTL },
+                // A slower second ring — the two expand apart as a ripple.
+                { item: { kind: "ring", x: caster.x, y: caster.y, life: 1 }, bornMs: now, ttlMs: CLOAK_SHIMMER_TTL + 180 },
+              );
+            }
           }
         } else if (e.type === "harpoon") {
           // The chain flash: caster → hook point, gone in a blink.
@@ -630,6 +661,32 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           // Mirror Guard turned a shot (Wave 2) — the parry ting, spatialised
           // at the bounce. Silent until the Forge clip lands (catalogue.ts).
           playSound("reflect", undefined, undefined, gainAt(e.x, e.y));
+        } else if (e.type === "freeze") {
+          // The tomb slams shut: crystalline burst at the victim (the held
+          // encasement renders off the snapshot's frozenLeft).
+          fxRef.current.push({
+            item: { kind: "freezeBurst", x: e.x, y: e.y, life: 1 },
+            bornMs: now,
+            ttlMs: FREEZE_BURST_TTL,
+          });
+          if (e.playerId === myId) playStrikeHaptic("medium"); // you're iced
+        } else if (e.type === "mirror-swap") {
+          // The crossing: a violet thread between the exchanged spots and an
+          // arrival ring at each end. (The 1s warning swirl is snapshot-
+          // driven — drawMirrorTelegraphs — so it tracks moving bodies.)
+          fxRef.current.push(
+            { item: { kind: "line", x: e.cx, y: e.cy, x2: e.tx, y2: e.ty, life: 1, mirror: true }, bornMs: now, ttlMs: MIRROR_SWAP_TTL },
+            { item: { kind: "ring", x: e.cx, y: e.cy, life: 1 }, bornMs: now, ttlMs: MIRROR_SWAP_TTL },
+            { item: { kind: "ring", x: e.tx, y: e.ty, life: 1 }, bornMs: now, ttlMs: MIRROR_SWAP_TTL },
+          );
+          if (e.casterId === myId || e.targetId === myId) playStrikeHaptic("medium");
+        } else if (e.type === "decloak") {
+          // Re-materialise: the same ripple the fade-in wore, where the
+          // body reappears.
+          fxRef.current.push(
+            { item: { kind: "ring", x: e.x, y: e.y, life: 1 }, bornMs: now, ttlMs: CLOAK_SHIMMER_TTL },
+            { item: { kind: "ring", x: e.x, y: e.y, life: 1 }, bornMs: now, ttlMs: CLOAK_SHIMMER_TTL + 180 },
+          );
         } else if (e.type === "detonate") {
           fxRef.current.push({
             item: { kind: "ring", x: e.x, y: e.y, life: 1, big: true },

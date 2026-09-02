@@ -141,6 +141,15 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
   "titans-draught": {
     clips: ["cast_titans_draught_1"],
   },
+  // Owed from the Forge — silent until cast_true_ice_1 lands: a crystalline
+  // crack-and-chime, the shard leaving the hand and the tomb slamming shut.
+  "true-ice": { clips: ["cast_true_ice_1"] },
+  // Owed from the Forge — silent until cast_magic_mirror_1 lands: a rising
+  // glassy shimmer the length of the telegraph, so the victim HEARS it too.
+  "magic-mirror": { clips: ["cast_magic_mirror_1"] },
+  // Owed from the Forge — silent until cast_elven_cloak_1 lands: a soft
+  // woven whoosh, quieter than every other cast (hiding should sound like it).
+  "elven-cloak": { clips: ["cast_elven_cloak_1"] },
 };
 
 export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {

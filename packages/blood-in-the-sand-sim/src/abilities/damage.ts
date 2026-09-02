@@ -8,7 +8,7 @@ import { resolveAttack, type AttackResult, type Rng } from "@heroic/core";
 import { IRONHIDE } from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaPlayer } from "../state";
-import { damageFactorOf, ironhideActive, knockbackImmune } from "./statuses";
+import { damageFactorOf, frozenSolid, ironhideActive, knockbackImmune } from "./statuses";
 
 /** Stop a corpse: zero motion, drop riders, emit the death. */
 export const killPlayer = (p: ArenaPlayer, events: ArenaEvent[]): void => {
@@ -27,6 +27,15 @@ export const killPlayer = (p: ArenaPlayer, events: ArenaEvent[]): void => {
  * is re-scaled. Takes the attacking PLAYER now (it needs their statuses).
  */
 export const resolvePlayerHit = (attacker: ArenaPlayer, defender: ArenaPlayer, rng: Rng): AttackResult => {
+  // True ice refuses the blow entirely — but the FULL roll still happens
+  // (identical rng draws frozen or not, the no-fork rule above), then the
+  // hp is put back. Callers read frozenSolid to flag the event IMMUNE.
+  if (frozenSolid(defender)) {
+    const hpBefore = defender.combatant.hp;
+    const rolled = resolveAttack(attacker.combatant, defender.combatant, rng);
+    defender.combatant.hp = hpBefore;
+    return { ...rolled, damage: 0, crit: false, defenderHp: hpBefore, lethal: false };
+  }
   const out = damageFactorOf(attacker);
   const taken = ironhideActive(defender) ? IRONHIDE.damageTakenFactor : 1;
   if (out === 1 && taken === 1) return resolveAttack(attacker.combatant, defender.combatant, rng);
@@ -44,6 +53,7 @@ export const resolvePlayerHit = (attacker: ArenaPlayer, defender: ArenaPlayer, r
  * caller emits the event and checks lethality.
  */
 export const applyFixedHit = (victim: ArenaPlayer, base: number): number => {
+  if (frozenSolid(victim)) return 0; // no rng here, so a clean refusal
   const damage = ironhideActive(victim)
     ? Math.max(1, Math.round(base * IRONHIDE.damageTakenFactor))
     : base;

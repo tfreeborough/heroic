@@ -39,6 +39,9 @@ export const nearestEnemy = (
   let bestDist = Infinity;
   for (const p of players) {
     if (p.team === me.team || !p.alive) continue;
+    // An Elven Cloak fools the brain like it fools a thumb: a faded body
+    // isn't hunted (slot actives are public snapshot data, same as clocks).
+    if (p.abilities.some((s) => s.id === "elven-cloak" && s.active > 0)) continue;
     const dist = Math.hypot(p.x - me.x, p.y - me.y);
     if (dist < bestDist) {
       best = p;

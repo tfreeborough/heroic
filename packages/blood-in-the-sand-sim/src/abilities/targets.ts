@@ -8,7 +8,7 @@
 import { distance } from "@heroic/core";
 import type { Vec2 } from "@heroic/core";
 import { PLAYER_RADIUS, SANDSTORM } from "../config";
-import { isDeployableId, type ArenaState, type Team } from "../state";
+import { abilityActive, isDeployableId, type ArenaState, type Team } from "../state";
 import { radiusOf } from "./statuses";
 
 /** What targeting/attacks need to know about a mark, whatever it is. */
@@ -40,3 +40,13 @@ export const targetView = (state: ArenaState, id: number | null): TargetView | n
  * like every zone test. */
 export const inSandstorm = (state: ArenaState, pos: Vec2): boolean =>
   state.deployables.some((d) => d.kind === "sandstorm" && distance(pos, d.pos) <= SANDSTORM.radius);
+
+/** Faded under an Elven Cloak — the sandstorm's "can't be auto-targeted /
+ * existing locks break" rule, one body wide, checked wherever targeting
+ * resolves a mark id (a deployable can't wear a cloak). Unlike the storm
+ * this is one-way: the wearer aims out freely. */
+export const cloakedId = (state: ArenaState, id: number): boolean => {
+  if (isDeployableId(id)) return false;
+  const p = state.players[id];
+  return p != null && abilityActive(p, "elven-cloak");
+};

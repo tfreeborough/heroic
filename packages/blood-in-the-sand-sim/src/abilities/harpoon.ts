@@ -15,7 +15,7 @@ import type { ArenaSim } from "../sim";
 import { slotOf, type AbilityRuntime, type ArenaPlayer } from "../state";
 import { dashInvulnerable, isDashing } from "./dash";
 import { applyFixedHit, killPlayer } from "./damage";
-import { knockbackImmune, mirrorGuardActive } from "./statuses";
+import { frozenSolid, knockbackImmune, mirrorGuardActive } from "./statuses";
 import { targetView } from "./targets";
 
 /** Land the latched chain as the windup closes. A mark that died (or a dummy
@@ -67,7 +67,8 @@ export const fireHarpoon = (
     const lethal = caster.combatant.hp <= 0;
     events.push({
       type: "hit", attackerId: victim.id, targetId: caster.id, damage,
-      crit: false, lethal, x: caster.mover.pos.x, y: caster.mover.pos.y,
+      crit: false, lethal, ...(frozenSolid(caster) ? { immune: true as const } : {}),
+      x: caster.mover.pos.x, y: caster.mover.pos.y,
     });
     if (lethal) {
       killPlayer(caster, events);
@@ -89,7 +90,8 @@ export const fireHarpoon = (
   const lethal = victim.combatant.hp <= 0;
   events.push({
     type: "hit", attackerId: caster.id, targetId: victim.id, damage,
-    crit: false, lethal, x: victim.mover.pos.x, y: victim.mover.pos.y,
+    crit: false, lethal, ...(frozenSolid(victim) ? { immune: true as const } : {}),
+    x: victim.mover.pos.x, y: victim.mover.pos.y,
   });
   if (lethal) {
     killPlayer(victim, events);

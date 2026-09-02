@@ -40,6 +40,9 @@ export const SIGNET_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([
   "sinkhole",
   "tar-pit",
   "titans-draught",
+  "true-ice",
+  "magic-mirror",
+  "elven-cloak",
 ]);
 
 /** All gated ids regardless of kind — what pick validation and the
@@ -88,6 +91,9 @@ export const ITEM_NAMES: Record<string, string> = {
   "ability:sinkhole": "Sinkhole",
   "ability:tar-pit": "Tar Pit",
   "ability:titans-draught": "Titan's Draught",
+  "ability:true-ice": "Shard of True Ice",
+  "ability:magic-mirror": "Magic Mirror",
+  "ability:elven-cloak": "Elven Cloak",
 };
 
 /** Display name for an entitlement itemId, with the legacy kebab fallback

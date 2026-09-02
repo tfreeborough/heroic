@@ -35,8 +35,17 @@ export const reachFactorOf = (p: ArenaPlayer): number =>
 
 export const mirrorGuardActive = (p: ArenaPlayer): boolean => abilityActive(p, "mirror-guard");
 
-/** Ironhide shrugs off slows, knockback, dash shoves and the harpoon's pull. */
-export const knockbackImmune = ironhideActive;
+/** Entombed by a Shard of True Ice: total stasis — the frozen can't act,
+ * and nothing lands on them (damage.ts turns every hit into an IMMUNE). */
+export const frozenSolid = (p: ArenaPlayer): boolean => p.frozenLeft > 0;
+
+/** Faded under an Elven Cloak: can't be auto-targeted (the sandstorm rule,
+ * one body wide) — but unlike the storm, the wearer aims out freely. */
+export const elvenCloakActive = (p: ArenaPlayer): boolean => abilityActive(p, "elven-cloak");
+
+/** Ironhide shrugs off slows, knockback, dash shoves and the harpoon's pull.
+ * A body frozen in true ice is a planted block — same immunity. */
+export const knockbackImmune = (p: ArenaPlayer): boolean => ironhideActive(p) || frozenSolid(p);
 
 /**
  * The player's max-speed multiplier this tick: Ironhide's self-slow overrides

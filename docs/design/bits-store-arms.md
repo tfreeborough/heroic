@@ -411,6 +411,50 @@ downside that keeps it honest.
 
 ---
 
+## Drop 2 — the sorcery shelf grows *(Tom, 2026-09-02 — BUILT same day, protocol v31)*
+
+Three new SIGNET spells, Tom's pitches, built as pitched with the balance
+levers he flagged. All three are `SIGNET_ABILITIES` rows (1 Signet, hidden
+from the wizard until owned, free in practice — the launch-shelf rules).
+Full design notes live on each config table (config.ts).
+
+1. **Shard of True Ice** *(defensive, 2 charges, 12s cd)* — freezes the
+   NEAREST enemy solid for 3s: total stasis, and IMMUNE to everything while
+   iced (every hit and dot tick floats "IMMUNE" — the block is a promise,
+   not a loophole; riders resume on thaw). The 1v1 read is Tom's pitch
+   verbatim: buy the window to heal or reposition. The 2v2 chain-freeze he
+   worried about is answered with his diminishing-returns option: each
+   later freeze on the same victim in a round is HALF the last (3 → 1.5 →
+   0.75s), shared across both enemy casters; the ledger resets with the
+   round. Acquisition is the harpoon's grammar (nearest mark, LOS,
+   sandstorm rules, players only, no-mark presses free). NOT the cut
+   ice WALL — no obstacle, no pathing, one frozen body.
+2. **Magic Mirror** *(support, 1 charge, 16s cd)* — swap places with the
+   FURTHEST enemy, one loudly-telegraphed second later: a violet
+   double-swirl over BOTH bodies for the whole delay (snapshot-driven, so
+   it tracks them), exactly so the victim can pop a defensive — dash
+   i-frames or planted feet (Ironhide / true ice) at the crossing refuse
+   the swap outright. Dark for the first 5 fight-seconds of EVERY round
+   (AbilityDef grew `initialCooldown` for it) — spawn-cheese was Tom's
+   call and the lock is per-round because every round re-stages spawns.
+   Not the cut teleport-to-ally: it's an ENEMY trade with counterplay,
+   and it works at 1v1 (position, not distance, is what it moves).
+3. **Elven Cloak** *(defensive, 1 charge, 14s cd)* — 3s heavily
+   camouflaged: the body circle all but vanishes on enemy screens (allies
+   and self keep a ghost), and because aim is automatic here the fade is
+   also the sandstorm's targeting rule cut to one body — no new locks,
+   held locks break; unlike the storm the wearer aims OUT freely. Tom's
+   line is the law: projectiles and casts stay fully visible — the cloak
+   hides the body, never the deeds (cast flash included). Bots lose the
+   scent too (nearestEnemy skips cloaked bodies). Enter/exit both play a
+   ripple shimmer; a re-materialise `decloak` event marks the drop.
+
+Owed on all three, the usual launch-shelf debts: forge icons (harpoon barb
+/ mirror-guard shield / sandstorm swirl stand in), cast SFX (silent until
+the clips land), Tom's naming pass on the deed-chain placeholder titles,
+and an on-device tuning pass (freeze duration and the mirror lock are the
+live levers).
+
 ## The drop pool (post-launch, in rough order)
 
 1. **Boomerang — FIRST DROP (Tom, 2026-08-09).** Pierces through enemies,

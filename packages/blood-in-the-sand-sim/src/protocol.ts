@@ -259,8 +259,17 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * unchanged (`matchFound` → seat → `welcome`). Bot backfill matches go
  * through the same stage. Bump: a v29 client would sit through every
  * summons in silence and eat a lockout each time.
+ * v31 (2026-09-02): store drop 2 — THREE new signet abilities
+ * (config.ts has each design note): SHARD OF TRUE ICE (a freeze status:
+ * PlayerSnapshot gains `frozenLeft`, hit events gain `immune?: true`, new
+ * `freeze` event), MAGIC MIRROR (a telegraphed position swap:
+ * PlayerSnapshot gains `mirrorTargetId`, new `mirror`/`mirror-swap`
+ * events, and AbilityDef grows `initialCooldown` — the round-start lock),
+ * and ELVEN CLOAK (a concealment status — no new wire shapes; the client
+ * fades the body off the slot's broadcast active window, and a new
+ * `decloak` event marks the drop). New ability ids ⇒ bump, as ever.
  */
-export const PROTOCOL_VERSION = 30;
+export const PROTOCOL_VERSION = 31;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -387,6 +396,13 @@ export interface PlayerSnapshot {
   /** Seconds left on a Straw Man's forced lock (0 = free aim) — the straw
    * status ring, same pulse rule. */
   tauntLeft: number;
+  /** Seconds left entombed in true ice (0 = free) — drives the ice block
+   * over the body; while > 0 every hit on this player reads IMMUNE. */
+  frozenLeft: number;
+  /** The player id this player's Magic Mirror is about to swap with, or
+   * null — the client swirls BOTH bodies for the telegraph window (the
+   * caster's magic-mirror slot carries the countdown in `active`). */
+  mirrorTargetId: number | null;
   /** The picked hand in button order. Scrubbed to [] alongside `weapon` in
    * the lobby. In-match it IS broadcast (cooldown clocks need it), but the
    * client renders enemy abilities only as they're cast — the cast flash. */

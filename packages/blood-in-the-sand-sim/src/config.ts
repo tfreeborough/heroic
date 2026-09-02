@@ -476,7 +476,10 @@ export type AbilityId =
   | "sandstorm"
   | "sinkhole"
   | "tar-pit"
-  | "titans-draught";
+  | "titans-draught"
+  | "true-ice"
+  | "magic-mirror"
+  | "elven-cloak";
 
 export interface AbilityDef extends AbilityConfig {
   name: string;
@@ -485,6 +488,11 @@ export interface AbilityDef extends AbilityConfig {
    * that replenishes at every round reset, with the cooldown still gating
    * back-to-back uses. Spam-capped without cross-round snowballing. */
   charges: number;
+  /** Seconds the slot starts LOCKED at every round reset (seeded as a live
+   * cooldown, so the HUD wedge tells the story for free). Cooldowns tick
+   * through the pre-fight countdown, so a fight-relative lock must include
+   * COUNTDOWN_SECONDS. Must stay ≤ cooldown or the HUD wedge overflows. */
+  initialCooldown?: number;
 }
 
 // ── Dash ───────────────────────────────────────────────────────────────────
@@ -659,6 +667,58 @@ export const TAR_PIT = {
   slowLinger: 0.3,
 };
 
+/** Shard of True Ice (store drop 2, item 1 — SIGNET): hurl a shard at the
+ * NEAREST enemy in range and entomb them: frozen solid for freezeSeconds —
+ * can't move, aim, swing or cast, and IMMUNE to everything while iced
+ * (every hit and dot tick reads "IMMUNE"). A peel that removes a BODY from
+ * the fight instead of making space around one: in a 1v1 it buys the whole
+ * window to heal or reposition; in a 2v2 it makes the fight a 2v1. The 2v2
+ * chain-freeze lock (both enemies alternating shards on one victim) is
+ * answered by DIMINISHING RETURNS per victim per round: each later freeze
+ * on the same body lasts diminishFactor × the previous (3s → 1.5s → 0.75s),
+ * shared across BOTH enemy casters. Acquisition is the harpoon's grammar
+ * (nearest eligible mark, line of sight, sandstorm rules; players only —
+ * ice is wasted on straw): a press with no mark neither fires nor costs.
+ * Dash i-frames at the throw instant slip the shard (charge spent — it
+ * flew). NOT a dot-cleanse: riders resume when the ice drops; the ticks
+ * inside the window read IMMUNE and deal nothing. */
+export const TRUE_ICE = {
+  /** The shard's reach — the harpoon's chain range, same standoff logic. */
+  maxRange: 550,
+  freezeSeconds: 3,
+  /** Each LATER freeze on the same victim in a round lasts this × the
+   * previous one — the 2v2 chain-freeze answer (shared across casters). */
+  diminishFactor: 0.5,
+};
+
+/** Magic Mirror (store drop 2, item 2 — SIGNET): swap places with the enemy
+ * FURTHEST from you — after delaySeconds of loud telegraph over BOTH bodies
+ * (the victim's window to pop a defensive or brace; pvp-abilities.md's
+ * counterplay rule). The swap fizzles if either side dies first, and the
+ * victim's dash i-frames or Ironhide/ice stasis at the swap instant refuse
+ * it (the sinkhole's exemption grammar: i-frames dodge, planted feet don't
+ * move). The slot starts LOCKED for lockoutSeconds of every round — spawn
+ * positions are known, so an opening-second swap into a waiting blade is
+ * cheese, not play (Tom's rule: the mirror answers a fight, it doesn't
+ * open one). */
+export const MAGIC_MIRROR = {
+  /** Seconds of warning between the cast and the swap — the ability's
+   * active window IS this delay (the harpoon's windup grammar). */
+  delaySeconds: 1,
+  /** Fight-seconds the mirror stays dark at every round start. */
+  lockoutSeconds: 5,
+};
+
+/** Elven Cloak (store drop 2, item 3 — SIGNET): fade to a ghost for
+ * duration seconds. Two effects, one promise: the body CIRCLE is heavily
+ * camouflaged on enemy screens (allies and you keep a readable ghost), and
+ * — because aim is automatic here — the cloak is the sandstorm's targeting
+ * rule cut down to one body: a cloaked player can't be auto-targeted and
+ * existing locks break, but UNLIKE the storm they aim out freely. Every
+ * shot, cast flash and cast sound still shows/plays (the readability rule:
+ * acting reveals — the cloak hides the body, never the deeds). */
+export const ELVEN_CLOAK = { duration: 3 };
+
 export const SINKHOLE = {
   /** Thrown this far along the facing (aimable, so whiffable — the
    * Warding Shout rule); clamped inside the arena. */
@@ -678,6 +738,11 @@ export const SINKHOLE = {
   pullSpeedMin: 60,
   pullSpeedMax: 240,
 };
+
+/** Round-reset → fight countdown (declared here, above ABILITIES, because
+ * the Magic Mirror's initial lock is fight-relative and cooldowns tick
+ * through the countdown — see the Rounds section for the rest). */
+export const COUNTDOWN_SECONDS = 3;
 
 export const ABILITIES: Record<AbilityId, AbilityDef> = {
   sandtrap: { name: "Sandtrap", category: "offensive", cooldown: 10, activeDuration: 0, charges: 2 },
@@ -717,6 +782,26 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     activeDuration: TITANS_DRAUGHT.duration,
     charges: 2,
   },
+  // Two shards, but the cooldown outlasts the ice by a wide margin — one
+  // caster can never chain their own freezes back-to-back.
+  "true-ice": {
+    name: "Shard of True Ice", category: "defensive", cooldown: 12, activeDuration: 0, charges: 2,
+  },
+  // ONE swap per round; the active window IS the telegraph delay. The
+  // initial lock is fight-relative (+ the countdown the cooldown ticks
+  // through), so the mirror stays dark for the opening 5s of every round.
+  "magic-mirror": {
+    name: "Magic Mirror",
+    category: "support",
+    cooldown: 16,
+    activeDuration: MAGIC_MIRROR.delaySeconds,
+    charges: 1,
+    initialCooldown: MAGIC_MIRROR.lockoutSeconds + COUNTDOWN_SECONDS,
+  },
+  // ONE fade per round — an unfindable body is a round-warping moment.
+  "elven-cloak": {
+    name: "Elven Cloak", category: "defensive", cooldown: 14, activeDuration: ELVEN_CLOAK.duration, charges: 1,
+  },
 };
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
@@ -726,7 +811,13 @@ export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
  * list lives here (config can't import items.ts — that's a runtime cycle);
  * items.test.ts holds the two files consistent. */
 export const FREE_ABILITY_IDS: readonly AbilityId[] = ABILITY_IDS.filter(
-  (id) => id !== "sinkhole" && id !== "tar-pit" && id !== "titans-draught",
+  (id) =>
+    id !== "sinkhole" &&
+    id !== "tar-pit" &&
+    id !== "titans-draught" &&
+    id !== "true-ice" &&
+    id !== "magic-mirror" &&
+    id !== "elven-cloak",
 );
 
 /** Abilities per loadout; pick order = button order in the match. Two, not
@@ -758,7 +849,7 @@ export const LOBBY_COUNTDOWN_SECONDS = 5;
  * the host's force-start appears. Client-side gate only — the sim accepts a
  * force-start whenever someone is unarmed. */
 export const FORCE_START_GRACE_SECONDS = 30;
-export const COUNTDOWN_SECONDS = 3;
+// COUNTDOWN_SECONDS lives above ABILITIES (the Magic Mirror's lock reads it).
 export const ROUND_END_SECONDS = 2.5;
 export const MATCH_END_SECONDS = 8; // then a fresh match with the same players
 export const WINS_TO_TAKE_MATCH = 3;

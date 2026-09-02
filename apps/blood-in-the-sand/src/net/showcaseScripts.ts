@@ -644,6 +644,84 @@ const titansDraughtScript = (): ShowcaseScript =>
     },
   );
 
+/** Shard of True Ice — a charging blade is entombed mid-stride: the star
+ * freezes the diver, strolls clear while the swings-that-would-have-landed
+ * read IMMUNE on the block, then turns and finishes the thawed foe. */
+const trueIceScript = (): ShowcaseScript =>
+  duel(
+    { team: 1, weapon: "blade", abilities: hand("true-ice", "dash") },
+    BLADE_FOE,
+    starAt(),
+    foeAt(300, { hp: 30 }),
+    (seat, w, foe) => {
+      if (seat === 1) return approach(w, foe, BLADE_STOP);
+      if (w.t < 1.0) return IDLE; // let the charge build
+      if (w.t < 1.2) return withCast(IDLE, cast(w.me, "true-ice"));
+      if (w.t < 3.6) return away(w.me, foe, 0.7); // stroll clear of the tomb
+      return toward(w.me, foe, 1); // the thaw — now the fight resumes
+    },
+  );
+
+/** Magic Mirror — a 1v1 swap trades places without changing the GAP, so the
+ * story needs a pincer (the sinkhole's 1v3 staging): two blades herd the
+ * bow star up the lane while the mirror's round-start lock burns off — the
+ * whole wait IS the pitch — then the star trades places with the loiterer
+ * hanging back at the FAR end: out of the jaws in a violet blink, shooting
+ * the pack down from behind while the traded foe stands stranded in the
+ * corner the star just left. */
+const magicMirrorScript = (): ShowcaseScript => {
+  // The divers start OUTSIDE the bow's lock range (430 > 380 engagement) and
+  // the star gives ground at exactly their pace — the herding holds the gap,
+  // so no arrow flies before the trade (the wait must read as a problem the
+  // bow can't solve).
+  const divers: ShowcasePlacement[] = [
+    { x: LANE_X - 75, y: STAR_Y + 440, facing: NORTH, hp: 30, moveFactor: 0.4 },
+    { x: LANE_X + 75, y: STAR_Y + 440, facing: NORTH, hp: 30, moveFactor: 0.4 },
+  ];
+  // The mark: hangs deep south, creeping — always the furthest enemy.
+  const anchor: ShowcasePlacement = { x: LANE_X, y: STAR_Y + 620, facing: NORTH, hp: 30, moveFactor: 0.3 };
+  return {
+    seats: [
+      { team: 1, weapon: "bow", abilities: hand("magic-mirror", "dash") },
+      BLADE_FOE,
+      BLADE_FOE,
+      BLADE_FOE,
+    ],
+    teamSize: 3,
+    place: (seat) => (seat === 0 ? starAt() : seat === 3 ? anchor : divers[seat - 1]!),
+    input: (seat, w) => {
+      if (!w.me.alive) return null;
+      const foe = nearestFoe(w);
+      if (seat !== 0) return foe ? toward(w.me, foe, 1) : IDLE;
+      if (!foe) return IDLE;
+      // Give ground at the divers' own pace until the mirror lights — the
+      // gap holds just outside the bow's lock, so nothing fires. Then trade.
+      if (w.t < 5.1) return dist(w.me, foe) < 440 ? away(w.me, foe, 0.4) : IDLE;
+      if (w.t < 5.5) return withCast(IDLE, cast(w.me, "magic-mirror"));
+      // At the anchor's far corner now — walk back INTO bow range and shoot
+      // the pack down from behind.
+      return dist(w.me, foe) > 330 ? toward(w.me, foe, 0.6) : IDLE;
+    },
+  };
+};
+
+/** Elven Cloak — a bow foe is winning the range war until the star fades:
+ * the lock breaks mid-volley, the arrows stop, and a ghost walks calmly
+ * through the standoff and re-materialises at sword's length. */
+const elvenCloakScript = (): ShowcaseScript =>
+  duel(
+    { team: 1, weapon: "blade", abilities: hand("elven-cloak", "dash") },
+    BOW_FOE,
+    starAt(),
+    foeAt(300, { hp: 30 }),
+    (seat, w, foe) => {
+      if (seat === 1) return IDLE; // stands and fires — until there's nothing to fire at
+      if (w.t < 1.2) return IDLE; // take an arrow first: the problem on screen
+      if (w.t < 1.5) return withCast(IDLE, cast(w.me, "elven-cloak"));
+      return toward(w.me, foe, 1); // the unseen walk
+    },
+  );
+
 // ── The table ─────────────────────────────────────────────────────────────
 
 const RANGED: readonly WeaponId[] = ["bow", "staff", "scorpion"];
@@ -676,6 +754,9 @@ const ABILITY_SCRIPTS: Record<AbilityId, () => ShowcaseScript> = {
   sinkhole: sinkholeScript,
   "tar-pit": tarPitScript,
   "titans-draught": titansDraughtScript,
+  "true-ice": trueIceScript,
+  "magic-mirror": magicMirrorScript,
+  "elven-cloak": elvenCloakScript,
 };
 
 export const abilityScript = (id: AbilityId): ShowcaseScript => ABILITY_SCRIPTS[id]();

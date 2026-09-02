@@ -27,6 +27,8 @@ import { loadZone, tileSourceRect, TILESETS } from "@heroic/core";
 import {
   ARENA_00,
   BLOOD_FONT,
+  ELVEN_CLOAK,
+  MAGIC_MIRROR,
   PLAYER_RADIUS as SIM_PLAYER_RADIUS,
   SANDSTORM,
   SINKHOLE,
@@ -171,6 +173,13 @@ const C_BEAM_BEAD = Skia.Color("#f7e9c3");
 const C_RING_TAUNT = Skia.Color("#d9b34d");
 // Body-effect ring for Mirror Guard (Ironhide gets a full shield bubble).
 const C_RING_MIRROR = Skia.Color("#cfe0ec");
+// True ice: the tomb reads COLD against the warm sand — glacial blues no
+// other effect wears (IMMUNE floats share them, so cause and refusal match).
+const C_ICE_FILL = Skia.Color("#9fd4e8");
+const C_ICE_RIM = Skia.Color("#e2f4fc");
+// The magic mirror's telegraph: arcane violet — nothing else in the arena
+// is purple, so "you are about to travel" can't be misread.
+const C_MIRROR_SWIRL = Skia.Color("#b48ce0");
 // Ironhide's shield bubble: translucent iron dome + rotating plates.
 const C_IRON_FILL = Skia.Color("#aeb6bd");
 const C_IRON_RIM = Skia.Color("#d4dae0");
@@ -204,6 +213,10 @@ const bloodStroke = Skia.Paint();
 bloodStroke.setStyle(PaintStyle.Stroke);
 bloodStroke.setStrokeJoin(StrokeJoin.Round);
 bloodStroke.setStrokeCap(StrokeCap.Round); // flying-droplet motion tails
+
+// The Elven Cloak's whole-figure fade layer (drawPlayer saveLayer alpha) —
+// its own paint so the fade never leaks into the shared pair.
+const cloakLayer = Skia.Paint();
 
 // Dedicated paint so the dash effect never leaks into the shared stroke.
 const rangeStroke = Skia.Paint();
@@ -286,7 +299,7 @@ const WALL_RECTS = ZONE.walls.map((w) => ({
  * the cast flash (an ability icon popping above its caster), the warding
  * shout's cone blast. */
 export interface FxItem {
-  kind: "number" | "ring" | "line" | "castFlash" | "cone" | "strawBurst" | "lob";
+  kind: "number" | "ring" | "line" | "castFlash" | "cone" | "strawBurst" | "lob" | "freezeBurst";
   x: number;
   y: number;
   /** 1 → 0 over the effect's life. */
@@ -299,6 +312,12 @@ export interface FxItem {
   poison?: boolean;
   /** Heal numbers render green. */
   heal?: boolean;
+  /** "IMMUNE" floats (a hit refused by true ice) render glacial blue. */
+  immune?: boolean;
+  /** line: tint it ice (the shard's flight) instead of harpoon steel. */
+  ice?: boolean;
+  /** line: tint it mirror-violet (the swap's thread). */
+  mirror?: boolean;
   /** A big ring (the sandtrap detonation) instead of the hit ping. */
   big?: boolean;
   /** Line endpoint (the harpoon chain: x/y = caster, x2/y2 = the hook). */
@@ -660,6 +679,24 @@ const drawPlayer = (
   // cosmetic only.
   const reachF = titans && titans.active > 0 ? TITANS_DRAUGHT.sizeFactor : 1;
 
+  // Elven Cloak: the WHOLE figure — disc, rings, name, HP bar, telegraphs —
+  // fades as ONE layer (piecemeal alphas would leave a readable name tag
+  // hanging in mid-air). Enemies get a bare whisper; you, allies and
+  // spectators keep a readable ghost. Quick fade-in on the cast, and the
+  // re-materialise runs over the last 0.4s (Ironhide's expiry grammar).
+  const cloak = p.abilities.find((s) => s.id === "elven-cloak");
+  let cloaked = false;
+  if (p.alive && cloak && cloak.active > 0) {
+    const fadeIn = Math.min(1, (ELVEN_CLOAK.duration - cloak.active) / 0.3);
+    const fadeOut = Math.min(1, cloak.active / 0.4);
+    const depth = Math.min(fadeIn, fadeOut);
+    const enemyView = friendTeam !== 0 && p.team !== friendTeam;
+    const floor = enemyView ? 0.08 : 0.35;
+    cloakLayer.setAlphaf(1 - (1 - floor) * depth);
+    canvas.saveLayer(cloakLayer);
+    cloaked = true;
+  }
+
   // Windup telegraph, from the striker's own weapon table: melee grows an arc
   // wedge; ranged draws an aim line toward the locked target. Both ramp opaque
   // as the strike approaches.
@@ -770,6 +807,35 @@ const drawPlayer = (
     fill.setAlphaf(Math.min(0.42, 0.11 * p.poisonStacks));
     canvas.drawCircle(p.x, p.y, r, fill);
     fill.setAlphaf(1);
+  }
+
+  // True ice: the tomb — a faceted glacial shell over the body, cracking
+  // away (fading) over its last quarter-second. Drawn ON the disc: the
+  // block reads inert and untouchable, which is exactly the promise.
+  if (p.alive && p.frozenLeft > 0) {
+    const a = Math.min(1, p.frozenLeft / 0.25);
+    const iceR = r + 5;
+    fill.setColor(C_ICE_FILL);
+    fill.setAlphaf(0.55 * a);
+    canvas.drawCircle(p.x, p.y, iceR, fill);
+    stroke.setColor(C_ICE_RIM);
+    stroke.setAlphaf(0.9 * a);
+    stroke.setStrokeWidth(2.5);
+    canvas.drawCircle(p.x, p.y, iceR, stroke);
+    // Facet lines — a cut block, not a soap bubble.
+    stroke.setStrokeWidth(1.5);
+    stroke.setAlphaf(0.55 * a);
+    for (const ang of [0.4, 1.9, 3.6, 5.1]) {
+      canvas.drawLine(
+        p.x + Math.cos(ang) * iceR * 0.25,
+        p.y + Math.sin(ang) * iceR * 0.25,
+        p.x + Math.cos(ang) * iceR * 0.95,
+        p.y + Math.sin(ang) * iceR * 0.95,
+        stroke,
+      );
+    }
+    fill.setAlphaf(1);
+    stroke.setAlphaf(1);
   }
 
   if (p.alive && p.dashing) {
@@ -913,6 +979,50 @@ const drawPlayer = (
     fill.setColor(hpFrac > 0.35 ? C_HP_FILL : C_HP_LOW);
     canvas.drawRect(Skia.XYWHRect(bx, by, w * hpFrac, 5), fill);
   }
+
+  if (cloaked) canvas.restore(); // pop the Elven Cloak's fade layer
+};
+
+/**
+ * The Magic Mirror's held telegraph: while a caster's swap is pending (the
+ * snapshot's mirrorTargetId + the slot's broadcast active countdown), BOTH
+ * bodies wear a violet double-swirl that spins faster, tightens and
+ * brightens as the crossing nears — deliberately loud (config.ts
+ * MAGIC_MIRROR: the warning IS the victim's counterplay window).
+ */
+const drawMirrorTelegraphs = (
+  canvas: SkCanvas,
+  players: readonly PlayerSnapshot[],
+  nowMs: number,
+): void => {
+  for (const p of players) {
+    if (p.mirrorTargetId === null) continue;
+    const slot = p.abilities.find((s) => s.id === "magic-mirror");
+    if (!slot || slot.active <= 0) continue;
+    const other = players.find((e) => e.id === p.mirrorTargetId);
+    if (!other) continue;
+    const closeness = 1 - Math.min(1, slot.active / MAGIC_MIRROR.delaySeconds);
+    const spinDeg = ((nowMs / 1000) * (240 + closeness * 300)) % 360;
+    stroke.setColor(C_MIRROR_SWIRL);
+    stroke.setStrokeWidth(3);
+    stroke.setStrokeCap(StrokeCap.Round);
+    fill.setColor(C_MIRROR_SWIRL);
+    for (const body of [p, other]) {
+      const R = 26 - closeness * 8; // the swirl closes in
+      stroke.setAlphaf(0.45 + 0.5 * closeness);
+      for (const off of [0, 180]) {
+        const arc = Skia.PathBuilder.Make()
+          .addArc(Skia.XYWHRect(body.x - R, body.y - R, R * 2, R * 2), spinDeg + off, 120)
+          .detach();
+        canvas.drawPath(arc, stroke);
+      }
+      // A glow pip over the head — reads even inside a scrum.
+      fill.setAlphaf(0.35 + 0.45 * closeness);
+      canvas.drawCircle(body.x, body.y - R - 10, 4 + closeness * 3, fill);
+    }
+    stroke.setAlphaf(1);
+    fill.setAlphaf(1);
+  }
 };
 
 /** The cast flash's drawn size, world px. */
@@ -1023,6 +1133,32 @@ const drawFx = (
         );
       }
       stroke.setAlphaf(1);
+    } else if (f.kind === "freezeBurst") {
+      // The shard striking home: a crystalline burst — frost shards flung
+      // out on deterministic angles (the strawBurst pattern) around a hard
+      // rim snapping to rest where the tomb now stands.
+      const out = 1 - f.life * f.life;
+      stroke.setColor(C_ICE_RIM);
+      stroke.setAlphaf(0.85 * f.life);
+      stroke.setStrokeWidth(2.5);
+      canvas.drawCircle(f.x, f.y, 12 + out * 16, stroke);
+      stroke.setStrokeCap(StrokeCap.Round);
+      stroke.setStrokeWidth(2);
+      for (let i = 0; i < 8; i++) {
+        const h1 = hash01(i * 5.07 + f.x * 0.41 + f.y * 0.67);
+        const ang = (i / 8) * Math.PI * 2 + h1 * 0.5;
+        const reach = (18 + h1 * 18) * out;
+        stroke.setColor(h1 > 0.5 ? C_ICE_RIM : C_ICE_FILL);
+        stroke.setAlphaf(Math.min(1, f.life * 1.6));
+        canvas.drawLine(
+          f.x + Math.cos(ang) * reach * 0.55,
+          f.y + Math.sin(ang) * reach * 0.55,
+          f.x + Math.cos(ang) * (reach * 0.55 + 6 + h1 * 5),
+          f.y + Math.sin(ang) * (reach * 0.55 + 6 + h1 * 5),
+          stroke,
+        );
+      }
+      stroke.setAlphaf(1);
     } else if (f.kind === "cone" && f.angle !== undefined) {
       // Warding Shout: the bellow made visible — a wedge blasting out to the
       // shout's TRUE range (the honest-telegraph rule) then gone in a blink.
@@ -1050,13 +1186,16 @@ const drawFx = (
       stroke.setAlphaf(1);
     } else if (f.kind === "line" && f.x2 !== undefined && f.y2 !== undefined) {
       // The harpoon chain flash: one taut line, a hook at the far end, chain
-      // dots along it — gone in a blink, like the throw itself.
-      stroke.setColor(C_HARPOON);
+      // dots along it — gone in a blink, like the throw itself. The ice
+      // shard's flight and the mirror's crossing thread reuse the shape in
+      // their own colours.
+      const lineColor = f.ice ? C_ICE_RIM : f.mirror ? C_MIRROR_SWIRL : C_HARPOON;
+      stroke.setColor(lineColor);
       stroke.setAlphaf(Math.min(1, f.life * 1.5));
       stroke.setStrokeWidth(3);
       stroke.setStrokeCap(StrokeCap.Round);
       canvas.drawLine(f.x, f.y, f.x2, f.y2, stroke);
-      fill.setColor(C_HARPOON);
+      fill.setColor(lineColor);
       fill.setAlphaf(Math.min(1, f.life * 1.5));
       canvas.drawCircle(f.x2, f.y2, 5, fill);
       const dx = f.x2 - f.x;
@@ -1072,13 +1211,15 @@ const drawFx = (
       fill.setColor(
         f.crit
           ? C_FX_CRIT
-          : f.bleed
-            ? C_FX_BLEED
-            : f.poison
-              ? C_FX_POISON
-              : f.heal
-                ? C_FX_HEAL
-                : C_FX_NUM,
+          : f.immune
+            ? C_ICE_FILL
+            : f.bleed
+              ? C_FX_BLEED
+              : f.poison
+                ? C_FX_POISON
+                : f.heal
+                  ? C_FX_HEAL
+                  : C_FX_NUM,
       );
       fill.setAlphaf(Math.min(1, f.life * 2));
       canvas.drawText(
@@ -2142,6 +2283,8 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     drawShells(canvas, view.shells);
     drawBeams(canvas, view.players, r.nowMs);
     drawReelChains(canvas, view.players);
+    // The mirror's pending-swap swirl rides over both bodies, storm under FX.
+    drawMirrorTelegraphs(canvas, view.players, r.nowMs);
     drawFlyingBlood(canvas, r.blood.flying, r.nowMs);
     // The storm's swirling body sits OVER bodies and shots — it obscures.
     drawSandstormOverlays(canvas, view.deployables, r.nowMs);

@@ -28,6 +28,8 @@ const player = (id: number, over: Partial<PlayerSnapshot> = {}): PlayerSnapshot 
   beamTargetId: null,
   beamLink: 0,
   tauntLeft: 0,
+  frozenLeft: 0,
+  mirrorTargetId: null,
   abilities: [],
   reeling: null,
   lastSeq: 0,

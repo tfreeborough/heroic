@@ -49,10 +49,13 @@ import {
 import {
   applyDashShove,
   applyFixedHit,
+  cloakedId,
   damageFactorOf,
   applyImpulse,
   damageDummy,
   dashInvulnerable,
+  elvenCloakActive,
+  frozenSolid,
   inSandstorm,
   ironhideActive,
   isDashing,
@@ -153,6 +156,9 @@ const resolveArcStrike = (
     const defender = seats[hitId];
     if (!defender || dashInvulnerable(defender)) continue; // dodged through it
 
+    // The ice refuses the whole blow (damage AND riders) — the hit still
+    // lands as an event so the swing reads, floated as IMMUNE.
+    const immune = frozenSolid(defender);
     const result = resolvePlayerHit(p, defender, sim.rng);
     const knockback = weapon.attack.knockback ?? 0;
     let away = normalize(sub(defender.mover.pos, p.mover.pos));
@@ -168,12 +174,13 @@ const resolveArcStrike = (
       damage: result.damage,
       crit: result.crit,
       lethal: result.lethal,
+      ...(immune ? { immune: true as const } : {}),
       x: defender.mover.pos.x,
       y: defender.mover.pos.y,
     });
     if (result.lethal) {
       killPlayer(defender, events);
-    } else {
+    } else if (!immune) {
       if (weapon.bleed && sim.rng.next() < weapon.bleed.chance) {
         // A refresh-flagged bleed (the trident) resets the wielder's existing
         // dot instead of stacking a second — re-pokes restart the drip.
@@ -337,7 +344,17 @@ export const stepSim = (
     if (!p.alive) continue;
     const latest = inputs.get(p.id);
     if (latest !== undefined && Number.isFinite(latest.seq)) p.lastSeq = latest.seq;
-    const input = sanitizeInput(fighting ? (latest ?? IDLE_INPUT) : IDLE_INPUT);
+    // True ice: total stasis while it holds — inputs are dead (no moving,
+    // no casting; the aim/attack gates live in the stages below), the body
+    // stops COLD (no decel glide), and only the thaw clock runs. Ticked
+    // here so a freeze landed this tick keeps its full duration.
+    p.frozenLeft = Math.max(0, p.frozenLeft - dt);
+    const iced = frozenSolid(p);
+    const input = sanitizeInput(fighting && !iced ? (latest ?? IDLE_INPUT) : IDLE_INPUT);
+    if (iced) {
+      p.mover.vel.x = 0;
+      p.mover.vel.y = 0;
+    }
 
     // Speed statuses cap run speed while they last (hammer slow, Ironhide's
     // self-slow, a War Drums aura). They deliberately do NOT touch dash: the
@@ -390,6 +407,7 @@ export const stepSim = (
     // can't take aim either — no hiding inside while shooting out.
     for (const p of players) {
       if (!p.alive || p.dummy) continue; // a dummy never takes aim
+      if (frozenSolid(p)) continue; // iced: aim and lock stay as the ice caught them
       candidateScratch.length = 0;
       if (inSandstorm(state, p.mover.pos)) {
         p.targetId = null;
@@ -425,7 +443,9 @@ export const stepSim = (
       if (p.tauntLeft <= 0) {
         for (const e of players) {
           if (e.team === p.team || !e.alive) continue;
-          if (inSandstorm(state, e.mover.pos)) continue;
+          // An Elven Cloak is the sandstorm's no-new-locks rule, one body
+          // wide — a faded body can't be acquired.
+          if (inSandstorm(state, e.mover.pos) || elvenCloakActive(e)) continue;
           if (!canSeePos(sim, p, e.mover.pos)) continue;
           candidateScratch.push({ id: e.id, pos: e.mover.pos });
         }
@@ -454,6 +474,10 @@ export const stepSim = (
     // player killed earlier this tick never gets their swing) ───────────────
     for (const p of players) {
       if (!p.alive || p.dummy) continue; // a dummy never swings
+      // Iced: the whole combat stage pauses — no swings, no volley bolts,
+      // no beam, and the cycle clock itself holds (the freeze interrupt in
+      // trueIce.ts already cancelled any in-flight windup/thrust/volley).
+      if (frozenSolid(p)) continue;
       const weapon = weaponOf(p);
 
       // Follow-up volley bolts (the scorpion's burst): fired on their own
@@ -470,7 +494,8 @@ export const stepSim = (
           mark === null ||
           !mark.alive ||
           inSandstorm(state, mark.pos) ||
-          inSandstorm(state, p.mover.pos)
+          inSandstorm(state, p.mover.pos) ||
+          cloakedId(state, mark.id) // a faded mark ends the volley, like smoke
         ) {
           p.burstLeft = 0;
           p.burstTargetId = null;
@@ -515,6 +540,7 @@ export const stepSim = (
         distance(p.mover.pos, locked.pos) <= weapon.engagementRadius &&
         !inSandstorm(state, locked.pos) &&
         !inSandstorm(state, p.mover.pos) &&
+        !cloakedId(state, locked.id) && // fading mid-windup breaks the lock
         canSeePos(sim, p, locked.pos);
 
       const step = stepAttackCycle(p.attack, weapon.attack, dt, { targetInRange, lockValid });
@@ -691,6 +717,7 @@ const stepProjectiles = (
         break;
       }
 
+      const immune = frozenSolid(defender);
       const rolled = resolvePlayerHit(owner, defender, sim.rng);
       const impulse = projectileKnockback(shot, weapon.attack.knockback ?? 0);
       applyImpulse(defender, impulse.x, impulse.y, 1);
@@ -701,6 +728,7 @@ const stepProjectiles = (
         damage: rolled.damage,
         crit: rolled.crit,
         lethal: rolled.lethal,
+        ...(immune ? { immune: true as const } : {}),
         x: defender.mover.pos.x,
         y: defender.mover.pos.y,
       });
@@ -757,6 +785,8 @@ const respawnDummies = (sim: ArenaSim, players: readonly ArenaPlayer[], dt: numb
     p.beam = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
+    p.frozenLeft = 0;
+    p.freezesTaken = 0; // a fresh dummy freezes at full length again
     p.alive = true;
   }
 };
@@ -791,6 +821,7 @@ const stepShells = (
     for (const p of players) {
       if (!p.alive || dashInvulnerable(p)) continue;
       if (distance(p.mover.pos, s.target) - PLAYER_RADIUS > s.blastRadius) continue;
+      const immune = frozenSolid(p);
       const damage = applyFixedHit(p, s.damage);
       const lethal = p.combatant.hp <= 0;
       events.push({
@@ -800,6 +831,7 @@ const stepShells = (
         damage,
         crit: false,
         lethal,
+        ...(immune ? { immune: true as const } : {}),
         x: p.mover.pos.x,
         y: p.mover.pos.y,
       });
@@ -822,16 +854,20 @@ const stepShells = (
  */
 const stepBleeds = (players: readonly ArenaPlayer[], events: ArenaEvent[], dt: number): void => {
   const applyTick = (p: ArenaPlayer, damage: number, sourceId: number, poison: boolean): void => {
-    p.combatant.hp = Math.max(0, p.combatant.hp - damage);
+    // True ice pauses the pain, not the clock: a tick due while frozen deals
+    // nothing and floats IMMUNE — the rider resumes biting on thaw.
+    const immune = frozenSolid(p);
+    if (!immune) p.combatant.hp = Math.max(0, p.combatant.hp - damage);
     const lethal = p.combatant.hp <= 0;
     events.push({
       type: "hit",
       attackerId: sourceId,
       targetId: p.id,
-      damage,
+      damage: immune ? 0 : damage,
       crit: false,
       lethal,
       ...(poison ? { poison: true as const } : { bleed: true as const }),
+      ...(immune ? { immune: true as const } : {}),
       x: p.mover.pos.x,
       y: p.mover.pos.y,
     });

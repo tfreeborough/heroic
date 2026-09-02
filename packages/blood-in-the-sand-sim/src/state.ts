@@ -90,7 +90,12 @@ export interface AbilityRuntime {
 
 export const createAbilityRuntime = (id: AbilityId): AbilityRuntime => ({
   id,
-  ability: ABILITY_READY,
+  // A def with an initial lock (the Magic Mirror) is born mid-cooldown —
+  // the HUD wedge and the ready gate need no special case that way.
+  ability:
+    ABILITIES[id].initialCooldown !== undefined
+      ? { phase: "cooldown", activeRemaining: 0, cooldownRemaining: ABILITIES[id].initialCooldown }
+      : ABILITY_READY,
   chargesLeft: ABILITIES[id].charges,
   dirX: 0,
   dirY: 0,
@@ -148,6 +153,13 @@ export interface ArenaPlayer {
   slowLeft: number;
   /** Max-speed multiplier while slowLeft > 0 (from the slowing weapon's config). */
   slowFactor: number;
+  /** Seconds entombed in true ice (0 = free): frozen solid — no moving,
+   * aiming, swinging or casting — and IMMUNE to damage, knockback and
+   * displacement while it runs. */
+  frozenLeft: number;
+  /** Freezes suffered THIS ROUND — drives true ice's diminishing returns
+   * (each later freeze is shorter). Reset with the round, like charges. */
+  freezesTaken: number;
   /** Permanent max-speed multiplier — HOST-set only (never wire-settable):
    * the top bot difficulty tiers run 5–10% hot (bot-brains.md, Tom
    * 2026-07-20 — the one stat difficulty touches; damage/HP stay even). */
@@ -392,6 +404,8 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   beam: null,
   slowLeft: 0,
   slowFactor: 1,
+  frozenLeft: 0,
+  freezesTaken: 0,
   moveFactor: 1,
   mover: createMover(spawn.x, spawn.y, PLAYER_RADIUS),
   facing,

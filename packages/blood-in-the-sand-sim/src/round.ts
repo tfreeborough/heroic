@@ -71,6 +71,8 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.beam = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
+    p.frozenLeft = 0;
+    p.freezesTaken = 0; // true ice's diminishing returns reset with the round
     p.respawnLeft = 0; // a dummy mid-respawn is simply alive again
     p.alive = true;
   }

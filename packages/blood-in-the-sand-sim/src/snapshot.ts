@@ -3,7 +3,7 @@
  * server stringifies the result, the client's SnapshotBuffer consumes it.
  */
 import { COUNTDOWN_SECONDS, PLAYER_RADIUS, TICK_RATE, WINS_TO_TAKE_MATCH } from "./config";
-import { isDashing, reelingTargetOf } from "./abilities";
+import { isDashing, mirrorTargetOf, reelingTargetOf } from "./abilities";
 import type { ArenaEvent } from "./events";
 import type {
   ArenaClientConfig,
@@ -60,6 +60,8 @@ const toPlayerSnapshot = (p: ArenaPlayer, hidePicks: boolean): PlayerSnapshot =>
   poisonLeft: p.poison?.expiresLeft ?? 0,
   poisonStacks: p.poison?.stacks ?? 0,
   tauntLeft: p.tauntLeft,
+  frozenLeft: p.frozenLeft,
+  mirrorTargetId: mirrorTargetOf(p),
   abilities: hidePicks
     ? []
     : p.slots.map((s) => ({

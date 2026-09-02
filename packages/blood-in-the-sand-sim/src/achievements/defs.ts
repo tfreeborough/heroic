@@ -275,6 +275,24 @@ const abilityCasts = [
     { threshold: 150, title: "Eye of the Storm", description: "Cast Sandstorm 150 times." },
     { threshold: 750, title: "The Desert's Wrath", description: "Cast Sandstorm 750 times." },
   ]),
+  // Store drop 2's SIGNET spells (rows appended below the wave-1 clusters —
+  // a board regroup by category is owed with Tom's naming pass). PLACEHOLDER
+  // titles, as ever.
+  ...abilityChain("true-ice", 14, [
+    { threshold: 30, title: "Cold Snap", description: "Cast Shard of True Ice 30 times." },
+    { threshold: 150, title: "Deep Winter", description: "Cast Shard of True Ice 150 times." },
+    { threshold: 750, title: "The Heart of Winter", description: "Cast Shard of True Ice 750 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("magic-mirror", 15, [
+    { threshold: 30, title: "Trading Places", description: "Cast Magic Mirror 30 times." },
+    { threshold: 150, title: "On Reflection", description: "Cast Magic Mirror 150 times." },
+    { threshold: 750, title: "The Other Side of the Glass", description: "Cast Magic Mirror 750 times.", rewards: [{ kind: "title" }] },
+  ]),
+  ...abilityChain("elven-cloak", 16, [
+    { threshold: 30, title: "Out of Sight", description: "Cast Elven Cloak 30 times." },
+    { threshold: 150, title: "Half-Remembered", description: "Cast Elven Cloak 150 times." },
+    { threshold: 750, title: "The Unseen Blade", description: "Cast Elven Cloak 750 times.", rewards: [{ kind: "title" }] },
+  ]),
 ];
 
 const winStreaks = milestoneChain<MatchSummary>({
