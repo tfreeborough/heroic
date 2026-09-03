@@ -166,9 +166,12 @@ Roster as today (team-split, host crown, connection state), plus:
 
 ## Information rules
 
-- **Enemy picks are never visible pre-match** — no reveal, ever. In-match,
-  weapons are visible in snapshots from countdown on (you can see what they
-  swing); abilities reveal **through play** via the cast flash below.
+- **Enemy picks are never visible pre-match** — no reveal while there is a
+  match to play *(the "no reveal, ever" wording amended 2026-09-01: at
+  `matchEnd` the roomState veil drops for every viewer, feeding the honour
+  roll — bits-title-moments.md § the reveal rule)*. In-match, weapons are
+  visible in snapshots from countdown on (you can see what they swing);
+  abilities reveal **through play** via the cast flash below.
 - **The cast flash (Tom, 2026-07-15):** when any player — enemy or ally —
   casts an ability, its icon **flashes in above them and animate-fades out**:
   "they just pressed this button." This is the in-game ability iconography;

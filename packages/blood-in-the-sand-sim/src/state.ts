@@ -213,11 +213,30 @@ export const loadoutComplete = (p: ArenaPlayer): boolean =>
  * match); team is stored on the player — addPlayer assigns it random-balanced. */
 export type Seat = ArenaPlayer | null;
 
+/** The Closing Sands' live circle (docs/design/bits-sand-circle.md) — rolled
+ * mid-round by stepSafeCircle, cleared by every round reset. The CURRENT
+ * radius is derived (sandsRadius), never stored: elapsed + the config table
+ * are the whole truth, so a restored state re-derives it exactly. */
+export interface SandsState {
+  cx: number;
+  cy: number;
+  /** Radius at roll — covers the whole arena from the rolled centre. */
+  r0: number;
+  /** Seconds until the next blood tick fires on everyone outside. */
+  tickLeft: number;
+}
+
 export interface RoundState {
   phase: RoundPhase;
   /** Seconds left in the timed phases (countdown / roundEnd / matchEnd) — and,
    * while the phase is "lobby", the ARMING countdown (0 = not running). */
   timer: number;
+  /** Seconds this round has been "active" — the Closing Sands' fuse. Rounds
+   * deliberately have no other clock; countdowns and end plates don't accrue. */
+  elapsed: number;
+  /** The live circle, or null before the fuse burns down (and always null in
+   * training — the range's rounds never end). */
+  sands: SandsState | null;
   /** 1-based; 0 before the first round starts. */
   roundNumber: number;
   /** Round wins, indexed team − 1. */
@@ -351,7 +370,7 @@ export const createArenaState = (
   seed,
   rngDraws: 0,
   players: Array.from({ length: seatCount }, () => null),
-  round: { phase: "lobby", timer: 0, roundNumber: 0, wins: [0, 0], lastWinner: 0, forced: false },
+  round: { phase: "lobby", timer: 0, elapsed: 0, sands: null, roundNumber: 0, wins: [0, 0], lastWinner: 0, forced: false },
   projectiles: [],
   nextProjectileId: 0,
   deployables: [],

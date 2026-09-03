@@ -592,12 +592,13 @@ with a graceful unknown-id fallback.
   choice is device-local (AsyncStorage `bits.title`, the
   `bits.announcerPack` pattern: module-global get/set + boot load) — no
   server storage; the server only ever sees per-room claims.
-- **Render**: a second, smaller gold line under the name — lobby
-  `PlayerRow` and the in-match Skia name tag. The renderer reads
-  `PlayerSnapshot` (no cosmetics), so GameScreen passes a
-  playerId→displayTitle map derived from `roomState` (the announcer
-  kill-VO lookup pattern) into the render input. The compact roster
-  ticker stays name-only. The roomState diff key (`room.ts`
+- **Render** *(REVISED 2026-09-01, bits-title-moments.md)*: the lobby
+  `PlayerRow` keeps its second, smaller gold line under the name. The
+  in-match under-body line is GONE — Tom's verdict: long titles in the
+  fight blocked sight — replaced by the four title MOMENTS (entrance
+  roster, kill-call banner, slain-by credit, match-end roll of honour),
+  all rendered through the shared `TitleFlex` treatment. The compact
+  roster ticker stays name-only. The roomState diff key (`room.ts`
   `lastRoomStateKey`) gains the title field so a changed claim ever
   rebroadcasts.
 - **Bots (Tom, 2026-08-08): disguised ranked bots occasionally wear one.**

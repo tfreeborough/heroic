@@ -5,6 +5,7 @@
 import { COUNTDOWN_SECONDS, PLAYER_RADIUS, TICK_RATE, WINS_TO_TAKE_MATCH } from "./config";
 import { isDashing, reelingTargetOf } from "./abilities";
 import type { ArenaEvent } from "./events";
+import { sandsProgress, sandsRadius } from "./sands";
 import type {
   ArenaClientConfig,
   DeployableSnapshot,
@@ -82,6 +83,14 @@ const toRoundSnapshot = (state: ArenaState): RoundSnapshot => ({
   roundNumber: state.round.roundNumber,
   wins: [state.round.wins[0], state.round.wins[1]],
   lastWinner: state.round.lastWinner,
+  sands: state.round.sands
+    ? {
+        cx: state.round.sands.cx,
+        cy: state.round.sands.cy,
+        r: sandsRadius(state.round),
+        p: sandsProgress(state.round),
+      }
+    : null,
 });
 
 const toProjectileSnapshot = (p: ArenaProjectile): ProjectileSnapshot => ({
@@ -132,20 +141,26 @@ export const toSnapshot = (state: ArenaState, events: ArenaEvent[]): SnapshotMsg
 };
 
 /**
- * The room roster AS SEEN BY one team — live picks are team secrets, forever
- * (pvp-loadout-flow.md: no reveal, ever; in-match the cast flash is the only
- * intel). `viewerTeam` 0 is the neutral (watcher) view: no picks, flags only.
+ * The room roster AS SEEN BY one team — live picks are team secrets while
+ * there is a match to play (pvp-loadout-flow.md; in-match the cast flash is
+ * the only intel). `viewerTeam` 0 is the neutral (watcher) view: no picks,
+ * flags only. At `matchEnd` the veil drops for EVERY viewer — the match is
+ * decided, and the honour roll answers "how did they dominate that?" with
+ * the winners' kit (bits-title-moments.md § the reveal rule). roundEnd stays
+ * veiled: between rounds there is still cast-flash intel to earn.
  */
-export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): RoomStatePlayer[] =>
-  seatedPlayers(state).map((p) => ({
+export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): RoomStatePlayer[] => {
+  const reveal = state.round.phase === "matchEnd";
+  return seatedPlayers(state).map((p) => ({
     id: p.id,
     name: p.name,
     team: p.team,
     connected: p.connected,
-    weapon: p.team === viewerTeam ? p.weapon : null,
-    abilities: p.team === viewerTeam ? [...p.abilities] : null,
+    weapon: reveal || p.team === viewerTeam ? p.weapon : null,
+    abilities: reveal || p.team === viewerTeam ? [...p.abilities] : null,
     armed: loadoutComplete(p),
     bot: p.bot,
     announcer: p.announcer,
     title: p.title,
   }));
+};

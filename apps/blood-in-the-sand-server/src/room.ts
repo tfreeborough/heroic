@@ -708,6 +708,10 @@ export class Room {
         p.id, p.name, p.team, p.connected, p.weapon, p.abilities, p.title,
       ]),
       this.meta.hostId,
+      // The matchEnd kit reveal changes every viewer's VIEW without the
+      // omniscient roster changing — this bit is what broadcasts the
+      // unveiled roster (bits-title-moments.md § the reveal rule).
+      this.sim.state.round.phase === "matchEnd",
     ]);
     if (key !== this.lastRoomStateKey) {
       this.lastRoomStateKey = key;

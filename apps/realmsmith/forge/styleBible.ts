@@ -151,6 +151,7 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   countdown_tick: "a single dry pre-fight countdown tick — a taut wooden clack, tense",
   round_start: "a round beginning in the arena — a short low horn or gong swell with a dusty air",
   fight_start: "the FIGHT signal — a big brassy gong hit with a roaring crowd surge",
+  sands_close: "a deep dread war-horn blast over a rising wet churning surge, like a tide of blood starting to flood an arena — ominous and heavy, not a jump scare, mastered loud and midrange-forward so it reads on a small phone speaker",
   round_win: "a short victorious sting — a bright rising brass flourish with a crowd cheer",
   round_loss: "a short defeat sting — a low falling brass note with a disappointed crowd murmur",
   round_draw: "a neutral round-over sting — a flat gong tap with an ambiguous crowd hum",

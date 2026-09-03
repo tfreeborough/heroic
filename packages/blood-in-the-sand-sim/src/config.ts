@@ -759,9 +759,56 @@ export const LOBBY_COUNTDOWN_SECONDS = 5;
  * force-start whenever someone is unarmed. */
 export const FORCE_START_GRACE_SECONDS = 30;
 export const COUNTDOWN_SECONDS = 3;
+/** Round 1 arms slower: the entrance card (bits-title-moments.md § moment 1)
+ * introduces both sides — names + worn titles — and 3s was too short to read
+ * it (Tom, 2026-09-01). Later rounds snap back to COUNTDOWN_SECONDS pace. */
+export const ENTRANCE_COUNTDOWN_SECONDS = 5;
 export const ROUND_END_SECONDS = 2.5;
 export const MATCH_END_SECONDS = 8; // then a fresh match with the same players
 export const WINS_TO_TAKE_MATCH = 3;
+
+// ── The Closing Sands (docs/design/bits-sand-circle.md) ────────────────────
+/** Environment-damage attribution sentinel: circle ticks carry this as their
+ * `attackerId`. Stats/deeds look attackers up by id and simply find nobody;
+ * the client skips kill-streak/announcer calls for it (no "FIRST BLOOD" by
+ * the weather). Negative so it can never collide with a seat or deployable. */
+export const SANDS_ATTACKER_ID = -1;
+
+/** The shrinking safe circle — the round's honest clock (rounds otherwise
+ * have none; the bots' impatience dial fakes urgency, this supplies it).
+ * MUTABLE via configureSafeCircle: servers read SANDS_* env at boot and
+ * practice mode reads EXPO_PUBLIC_SANDS_* — a dev can set delaySeconds to 5
+ * and watch the tide come in immediately. Every consumer derives from THIS
+ * table; the client never needs it for online play (radius rides snapshots). */
+export const CLOSING_SANDS = {
+  /** Master switch (env kill switch — SANDS_ENABLED=0). */
+  enabled: true,
+  /** Active-round seconds before the circle rolls and starts closing. */
+  delaySeconds: 45,
+  /** Seconds from roll to the final radius. */
+  closeSeconds: 45,
+  /** Where the shrink stops — the ring holds here until the round ends. */
+  finalRadius: 200,
+  /** Blood tick cadence for anyone outside the ring. */
+  tickInterval: 0.5,
+  /** Damage per tick at roll → fully closed, lerped by close progress. The
+   * top end (16 dps) deliberately out-damages a Blood Font's 8/s heal —
+   * you cannot healturtle in the tide. Ambient like bleed: no i-frames, no
+   * Ironhide, no crit, no rng draw (the BleedConfig rule). */
+  damageMin: 2,
+  damageMax: 8,
+  /** Candidate centres drawn per roll (always exactly this many draws — the
+   * rng stream never forks on map luck): first whose FINAL circle sits fully
+   * on walkable sand wins, else the best clearance among them. */
+  centerDraws: 12,
+};
+
+/** Override the sands table (partial, unknown keys ignored) — boot-time env
+ * plumbing for servers and practice mode. Mutates in place so every module
+ * that imported CLOSING_SANDS sees the change. */
+export const configureSafeCircle = (overrides: Partial<typeof CLOSING_SANDS>): void => {
+  Object.assign(CLOSING_SANDS, overrides);
+};
 
 // ── Training (the dev menu's target-dummy range) ───────────────────────────
 /** Beat between a dummy's death and its replacement standing back up — long

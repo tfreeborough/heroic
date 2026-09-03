@@ -51,7 +51,7 @@ const snap = (
 ): SnapshotMsg => ({
   t: "snapshot",
   tick,
-  round: { phase: "active", timer: 0, roundNumber: 1, wins: [0, 0], lastWinner: 0 },
+  round: { phase: "active", timer: 0, roundNumber: 1, wins: [0, 0], lastWinner: 0, sands: null },
   players,
   projectiles,
   deployables: [],

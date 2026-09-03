@@ -52,6 +52,12 @@ export class KillStreaks {
    * a lone non-first kill, or a self-kill). Call exactly once per kill — on the
    * lethal `hit` event, which is the only place the attacker is known.
    */
+  /** An unattributed death (the Closing Sands' blood) — no announcement, no
+   * chain for the environment, but the VICTIM's own chain still ends. */
+  endChain(victimId: number): void {
+    this.chains.delete(victimId);
+  }
+
   registerKill(attackerId: number, victimId: number, nowMs: number): KillAnnouncement | null {
     // The victim's own chain ends when they die (continuous-chain rule). For a
     // self-kill (your own sandtrap) this also resets the attacker's chain.

@@ -24,10 +24,10 @@
 import { ARCHETYPES, deriveArchetype, focusTarget, resolveBand, type ArchetypeId } from "./botArchetypes";
 import { dashDown, decideCasts, incomingShot, rangedWeapon, windupThreat } from "./botCasts";
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, type DifficultyId } from "./botDifficulty";
-import { DASH_DISTANCE, SANDSTORM, SANDTRAP, TREMOR } from "./config";
+import { DASH_DISTANCE, PLAYER_RADIUS, SANDS_ATTACKER_ID, SANDSTORM, SANDTRAP, TREMOR } from "./config";
 import type { BotNav } from "./nav";
 import { dashClear, navDirection, openDirection } from "./nav";
-import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot } from "./protocol";
+import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot, RoundSnapshot } from "./protocol";
 
 export * from "./botArchetypes";
 export * from "./botDifficulty";
@@ -153,10 +153,18 @@ export interface BotWorld {
   players: PlayerSnapshot[];
   deployables: DeployableSnapshot[];
   projectiles: ProjectileSnapshot[];
+  /** The round block of the same snapshot — the Closing Sands rides it
+   * (bits-sand-circle.md). Optional: every real caller passes a whole
+   * SnapshotMsg, which already satisfies it structurally; hand-built test
+   * worlds may omit it. */
+  round?: RoundSnapshot;
 }
 
 /** No blood on either side for this long → the bot loses patience. */
 const STALL_TICKS = 240; // 8s at 30Hz
+/** How far inside the Closing Sands' ring the feet start leaning centre-ward
+ * (bits-sand-circle.md) — the human "edge is getting close" read. */
+const SANDS_MARGIN = 70;
 /** How long an impatience press lasts before re-evaluating. */
 const PRESS_TICKS = 150; // 5s
 /** A low-hp retreat may last this long, TOTAL, before the bot must fight
@@ -414,13 +422,22 @@ export const botThink = (
   // the micro-pause must never fire under a raised weapon.
   const threat = windupThreat(me, players);
 
+  // The Closing Sands, read off the same wire as everything else the brain
+  // knows (bits-sand-circle.md). `sandsGap` is my rim's distance PAST the
+  // safe ring (negative = safely inside); the steering term lives with the
+  // other hazard shells below.
+  const sands = world.round?.sands ?? null;
+  const sandsGap = sands === null ? -Infinity : Math.hypot(sands.cx - me.x, sands.cy - me.y) + PLAYER_RADIUS - sands.r;
+  const inBlood = sandsGap > 0;
+
   // M5 micro-pause: now and then, at EVERY tier, the feet just stop for a
   // beat — the human sizing-up-the-ground stutter. Distinct from low-tier
   // dither (longer, freezes the hands too, a mistake); this is texture.
-  // Never under a telegraph, mid-flee, or at grips.
+  // Never under a telegraph, mid-flee, at grips — or standing in the blood
+  // (nobody pauses to size up ground that is actively eating them).
   if (memory.pauseTicks > 0) {
     memory.pauseTicks -= 1;
-  } else if (threat === null && !fleeing && dist > 240 && nextRand(memory) < HUMANIZE.pauseChance) {
+  } else if (threat === null && !fleeing && !inBlood && dist > 240 && nextRand(memory) < HUMANIZE.pauseChance) {
     memory.pauseTicks = HUMANIZE.pauseMin + Math.floor(nextRand(memory) * HUMANIZE.pauseRange);
     memory.stuckTicks = 0; // deliberate stillness is not a wedge
   }
@@ -626,6 +643,14 @@ export const botThink = (
       const zd = Math.hypot(d.x - me.x, d.y - me.y) || 1;
       if (zd < radius) add({ x: (me.x - d.x) / zd, y: (me.y - d.y) / zd }, 3 * hazardScale);
     }
+  }
+  // The Closing Sands: standing in the blood is never acceptable — a
+  // dominant nav-routed pull toward the centre while outside the ring,
+  // easing to a lean inside the warning band. Deliberately NOT damped by
+  // greed: the tide's ramp out-damages any heal, so no kill is worth it.
+  if (sands !== null && sandsGap > -SANDS_MARGIN) {
+    const weight = inBlood ? 3.5 : 1.2 * ((sandsGap + SANDS_MARGIN) / SANDS_MARGIN);
+    add(navDirection(nav, SANDS_ATTACKER_ID, mePos, { x: sands.cx, y: sands.cy }), weight);
   }
 
   const mag = Math.hypot(vx, vy);

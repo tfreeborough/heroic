@@ -74,6 +74,7 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "countdown_tick", label: "Countdown tick", category: "flow" },
   { id: "round_start", label: "Round start", category: "flow" },
   { id: "fight_start", label: "FIGHT!", category: "flow" },
+  { id: "sands_close", label: "Closing Sands — the circle rolls", category: "flow" },
   { id: "round_win", label: "Round won", category: "flow" },
   { id: "round_loss", label: "Round lost", category: "flow" },
   { id: "round_draw", label: "Round draw", category: "flow" },

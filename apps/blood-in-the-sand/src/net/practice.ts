@@ -26,6 +26,7 @@ import {
   addDummy,
   addPlayer,
   ARENA_00,
+  configureSafeCircle,
   botThink,
   createBotMemory,
   createBotNav,
@@ -61,6 +62,29 @@ import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "
 import type { ShowcaseScript } from "./showcaseScripts";
 
 const BOT_NAMES = ["Crixus", "Barca", "Ashur", "Varro", "Oenomaus", "Gannicus", "Spartacus", "Agron", "Duro"];
+
+// The Closing Sands' dev dials (bits-sand-circle.md § env tuning). Practice
+// steps the sim in-process, so this is where a dev pulls the circle forward
+// (EXPO_PUBLIC_SANDS_DELAY_S=5 in .env.local → the tide rolls almost
+// immediately vs bots). Online play ignores these entirely — the radius
+// comes off the server's wire. __DEV__-gated (the store dev-tools rule):
+// a production binary runs the shipped defaults no matter what env the
+// bundle was built with.
+if (__DEV__) {
+  const num = (v: string | undefined): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  };
+  const delaySeconds = num(process.env.EXPO_PUBLIC_SANDS_DELAY_S);
+  const closeSeconds = num(process.env.EXPO_PUBLIC_SANDS_CLOSE_S);
+  const finalRadius = num(process.env.EXPO_PUBLIC_SANDS_FINAL_RADIUS);
+  configureSafeCircle({
+    ...(process.env.EXPO_PUBLIC_SANDS_ENABLED === "0" ? { enabled: false } : {}),
+    ...(delaySeconds !== undefined ? { delaySeconds } : {}),
+    ...(closeSeconds !== undefined ? { closeSeconds } : {}),
+    ...(finalRadius !== undefined ? { finalRadius } : {}),
+  });
+}
 
 /** What practice puts across the sand: live bots, or the dev menu's firing
  * range — a line of inert target dummies that respawn as they fall. */

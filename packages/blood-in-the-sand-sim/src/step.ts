@@ -69,6 +69,7 @@ import {
 } from "./abilities";
 import type { ArenaEvent } from "./events";
 import { checkRoundOver, tickRoundMachine } from "./round";
+import { stepSafeCircle } from "./sands";
 import {
   createAbilitySlots,
   IDLE_INPUT,
@@ -601,6 +602,7 @@ export const stepSim = (
     stepShells(state, players, events, dt);
     stepDeployables(state, players, events, dt);
     stepBleeds(players, events, dt);
+    stepSafeCircle(sim, players, events, dt); // the Closing Sands' blood ticks
     if (state.training) respawnDummies(sim, players, dt);
     checkRoundOver(sim, events); // stands down in training — rounds never end
   }

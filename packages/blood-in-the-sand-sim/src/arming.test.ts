@@ -1,8 +1,9 @@
 /**
  * The arming flow (pvp-loadout-flow.md): the sim starts the match ITSELF once
  * every seat is armed (5s countdown, joins/leaves cancel it), the host's
- * force-start fills stragglers, and live picks stay team secrets on the wire —
- * with no reveal, ever.
+ * force-start fills stragglers, and live picks stay team secrets on the wire
+ * while there is a match to play — the veil drops only at matchEnd, for the
+ * honour roll (bits-title-moments.md § the reveal rule).
  */
 import { describe, expect, test } from "bun:test";
 import type { ZoneFile } from "@heroic/core";
@@ -224,7 +225,7 @@ describe("team sizes (the full-room gate)", () => {
   });
 });
 
-describe("visibility (no reveal, ever)", () => {
+describe("visibility (no reveal while there is a match to play)", () => {
   test("roomState hides enemy picks and exposes only armed", () => {
     const sim = makeLobby();
     armBob(sim);
@@ -239,6 +240,24 @@ describe("visibility (no reveal, ever)", () => {
     // Watchers get the neutral view: flags only.
     const neutral = toRoomStatePlayers(sim.state, 0);
     expect(neutral.every((p) => p.weapon === null && p.abilities === null)).toBe(true);
+  });
+
+  test("the matchEnd kit reveal: every seat's picks go public — and only then", () => {
+    const sim = makeLobby();
+    armBob(sim);
+    // Between rounds there is still cast-flash intel to earn: roundEnd stays
+    // veiled for enemies and watchers alike.
+    sim.state.round.phase = "roundEnd";
+    const atRoundEnd = toRoomStatePlayers(sim.state, 1).find((p) => p.id === 1)!;
+    expect(atRoundEnd.weapon).toBeNull();
+    expect(atRoundEnd.abilities).toBeNull();
+    // The match decided, the veil drops for EVERY viewer — the honour roll's
+    // data (bits-title-moments.md § the reveal rule).
+    sim.state.round.phase = "matchEnd";
+    for (const viewer of [1, 2, 0] as const) {
+      const seen = toRoomStatePlayers(sim.state, viewer);
+      expect(seen.every((p) => p.weapon !== null && p.abilities !== null)).toBe(true);
+    }
   });
 
   test("snapshots scrub loadouts in the lobby (countdown included), carry them in-match", () => {

@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, View } from "react-native";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import type { AbilityId, WeaponId } from "@heroic/blood-in-the-sand-sim";
+import { LoadoutIcon } from "../loadout/icons";
+import { playSound } from "../audio";
+import { TitleFlex } from "./TitleFlex";
 import type { OutcomeKind } from "./roundMessages";
 
 // The premium centre banner for round- and match-end. Round outcomes get a
@@ -56,15 +60,78 @@ const LOOK: Record<OutcomeKind, Look> = {
   },
 };
 
+/** One winning-team seat on the match-end roll of honour
+ * (bits-title-moments.md § moment 4). `title` is already-resolved display
+ * text; `weapon`/`abilities` come from the matchEnd kit reveal and can be
+ * null for a beat while the unveiled roomState is in flight — the icons pop
+ * in when it lands. */
+export interface HonourRow {
+  id: number;
+  name: string;
+  title: string | null;
+  weapon: WeaponId | null;
+  abilities: AbilityId[] | null;
+}
+
 export interface RoundBannerProps {
   kind: OutcomeKind;
   title: string;
   subtitle: string;
   /** [mine, theirs] — only shown on match-end. */
   score: [number, number];
+  /** The victors, match-end only — shown to BOTH sides (the flex). */
+  honour?: HonourRow[];
 }
 
-export const RoundBanner = ({ kind, title, subtitle, score }: RoundBannerProps) => {
+/** Rows land staggered after the plate settles — a ceremony, not a table. */
+const HONOUR_DELAY_MS = 900;
+const HONOUR_STAGGER_MS = 450;
+
+const HonourRowView = ({ row, index, color }: { row: HonourRow; index: number; color: string }) => {
+  const land = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const delay = HONOUR_DELAY_MS + index * HONOUR_STAGGER_MS;
+    Animated.timing(land, {
+      toValue: 1,
+      duration: 320,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    // The deed-card stamp doubles as the row land — the honour roll is
+    // deed-flavoured by design (bits-title-moments.md § sound).
+    const stamp = setTimeout(() => playSound("deedUnlock"), delay);
+    return () => clearTimeout(stamp);
+  }, [land, index]);
+  return (
+    <Animated.View
+      style={[
+        styles.honourRow,
+        {
+          opacity: land,
+          transform: [{ translateY: land.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+        },
+      ]}
+    >
+      {/* Name and title stack — a title NEVER shares a line with the name
+          (Tom, 2026-09-01: long name + long title blew the row out). */}
+      <View style={styles.honourId}>
+        <Text style={[styles.honourName, { color }]} numberOfLines={1}>
+          {row.name}
+        </Text>
+        <TitleFlex title={row.title} size={11} style={styles.honourTitle} />
+      </View>
+      <View style={styles.honourIcons}>
+        {row.weapon ? <LoadoutIcon id={row.weapon} size={22} /> : null}
+        {(row.abilities ?? []).map((a) => (
+          <LoadoutIcon key={a} id={a} size={22} />
+        ))}
+      </View>
+    </Animated.View>
+  );
+};
+
+export const RoundBanner = ({ kind, title, subtitle, score, honour }: RoundBannerProps) => {
   const look = LOOK[kind];
   // One driver for the plate (opacity + scale + rule sweep), one delayed driver
   // for the subtitle rise, one looping driver for the match-end glow breath.
@@ -228,6 +295,24 @@ export const RoundBanner = ({ kind, title, subtitle, score }: RoundBannerProps) 
               <Animated.Text style={styles.scoreNum}>{score[1]}</Animated.Text>
             </Animated.View>
           ) : null}
+
+          {/* The roll of honour (bits-title-moments.md § moment 4): the
+              victors — name, worn title, and the kit the matchEnd reveal
+              just unveiled. Shown on the DEFEAT plate too: reading who beat
+              you, what they're called, and what they carried is the flex
+              (and the shop window). */}
+          {look.big && honour && honour.length > 0 ? (
+            <View style={styles.honourCol}>
+              {honour.map((row, i) => (
+                <HonourRowView
+                  key={row.id}
+                  row={row}
+                  index={i}
+                  color={kind === "victory" ? "#5aa9e0" : "#e07a6a"}
+                />
+              ))}
+            </View>
+          ) : null}
         </Animated.View>
       </View>
     </View>
@@ -283,4 +368,22 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   scoreDash: { fontSize: 22, color: "#6b6155" },
+  honourCol: { marginTop: 22, gap: 12, width: 340, maxWidth: "88%" },
+  honourRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  // The identity block: name over title, left-aligned; the flexed width (with
+  // minWidth 0) is what lets both lines actually shrink instead of shoving
+  // the icons off screen.
+  honourId: { flex: 1, minWidth: 0, alignItems: "flex-start" },
+  // Name in the winners' allegiance colour (your blue on victory, their red
+  // on defeat) — the same cue the bodies and the scoreboard wear.
+  honourName: {
+    fontSize: 15,
+    fontWeight: "800",
+    maxWidth: "100%",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  honourTitle: { marginTop: 1 },
+  honourIcons: { flexDirection: "row", alignItems: "center", gap: 6 },
 });

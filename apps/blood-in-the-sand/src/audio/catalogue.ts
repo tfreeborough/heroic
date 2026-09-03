@@ -49,6 +49,7 @@ export type BitsSoundEvent =
   | "countdownTick" //  a 3·2·1 pre-round digit
   | "roundStart" //     a new round arms
   | "fightStart" //     the "FIGHT" go
+  | "sandsClose" //     the Closing Sands rolled — the circle starts shrinking (bits-sand-circle.md)
   | "roundEnd" //       a round resolves              (qualifier: win|loss|draw)
   | "matchEnd" //       the match resolves            (qualifier: win|loss)
   | "startCancelled" // a bot-filled start vetoed — the veil collapses (bits-bot-backfill.md)
@@ -250,6 +251,11 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   countdownTick: { clips: ["countdown_tick_1"] },
   roundStart: { clips: ["round_start_1"] },
   fightStart: { clips: ["fight_start_1"] },
+  // Owed from the Forge — silent until sands_close_1 lands: a deep war-horn
+  // over a rising wet churn (dread, not a jump scare). Master it HOT like
+  // quake_rumble — a low sustained texture at fleet loudness vanishes on a
+  // phone speaker.
+  sandsClose: { clips: ["sands_close_1"] },
   roundEnd: {
     variants: {
       win: { clips: ["round_win_1"] },

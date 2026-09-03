@@ -7,8 +7,8 @@ import { describe, expect, test } from "bun:test";
 import type { ZoneFile } from "@heroic/core";
 import { killPlayer } from "./abilities";
 import {
-  COUNTDOWN_SECONDS,
   DUMMY_RESPAWN_SECONDS,
+  ENTRANCE_COUNTDOWN_SECONDS,
   LOBBY_COUNTDOWN_SECONDS,
   TICK_DT,
 } from "./config";
@@ -56,9 +56,9 @@ const run = (sim: ArenaSim, ticks: number) => {
   return events;
 };
 
-/** Arming countdown + fight countdown, with a couple of ticks of slack. */
+/** Arming countdown + round 1's entrance countdown, with slack ticks. */
 const runToActive = (sim: ArenaSim): void => {
-  run(sim, seconds(LOBBY_COUNTDOWN_SECONDS + COUNTDOWN_SECONDS) + 4);
+  run(sim, seconds(LOBBY_COUNTDOWN_SECONDS + ENTRANCE_COUNTDOWN_SECONDS) + 4);
   expect(sim.state.round.phase).toBe("active");
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { normalize, sub, type ZoneFile } from "@heroic/core";
-import { COUNTDOWN_SECONDS, DASH_DISTANCE, MATCH_END_SECONDS, PLAYER_STATS, TICK_DT } from "./config";
+import { DASH_DISTANCE, ENTRANCE_COUNTDOWN_SECONDS, MATCH_END_SECONDS, PLAYER_STATS, TICK_DT } from "./config";
 import type { ArenaEvent } from "./events";
 import { startMatch } from "./round";
 import {
@@ -82,7 +82,9 @@ const seek = (sim: ArenaSim, id: number, seq = 0): PlayerInput => {
   return { seq, sx: dir.x, sy: dir.y, casts: [] };
 };
 
-const COUNTDOWN_TICKS = Math.ceil(COUNTDOWN_SECONDS / TICK_DT);
+// Every advance below crosses ROUND 1's countdown, which runs the longer
+// entrance beat (bits-title-moments.md § moment 1).
+const COUNTDOWN_TICKS = Math.ceil(ENTRANCE_COUNTDOWN_SECONDS / TICK_DT);
 const MATCH_END_TICKS = Math.ceil(MATCH_END_SECONDS / TICK_DT);
 
 const ofType = <T extends ArenaEvent["type"]>(events: Stamped[], type: T) =>

@@ -259,8 +259,24 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * unchanged (`matchFound` → seat → `welcome`). Bot backfill matches go
  * through the same stage. Bump: a v29 client would sit through every
  * summons in silence and eat a lockout each time.
+ * Amended 2026-09-01 (title moments, bits-title-moments.md) — additive, NO
+ * bump: at `matchEnd` the roomState kit veil drops — `toRoomStatePlayers`
+ * fills `weapon`/`abilities` for EVERY seat, every viewer (the honour roll's
+ * data, and the store's shop window). No shape change: the fields were
+ * always nullable-per-viewer, an old client simply shows nothing new. The
+ * "no reveal, ever" rule (pvp-loadout-flow.md) is hereby amended to "no
+ * reveal while there is a match to play".
+ * v31 (2026-09-03): the CLOSING SANDS (bits-sand-circle.md) — the shrinking
+ * safe circle that gives rounds their only clock. RoundSnapshot gains
+ * `sands: {cx, cy, r, p} | null` (centre, server-computed current radius,
+ * close progress — clients never re-derive timing, so env-tuned servers
+ * stay authoritative), and snapshots may carry the additive `sandsStart`
+ * event (banner + horn). Blood ticks ride ordinary `hit` events with
+ * `bleed: true` and the SANDS_ATTACKER_ID sentinel (−1): the sands claim
+ * kills, they credit no one. Bump: a v30 client renders no circle and
+ * dies to invisible blood.
  */
-export const PROTOCOL_VERSION = 30;
+export const PROTOCOL_VERSION = 31;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -404,12 +420,24 @@ export interface PlayerSnapshot {
   lastSeq: number;
 }
 
+/** The Closing Sands on the wire (v31): centre, CURRENT safe radius (the
+ * server computes it — clients and bots never need the timing config), and
+ * close progress 0→1 (drives the ramp visuals). */
+export interface SandsSnapshot {
+  cx: number;
+  cy: number;
+  r: number;
+  p: number;
+}
+
 export interface RoundSnapshot {
   phase: RoundPhase;
   timer: number;
   roundNumber: number;
   wins: [number, number];
   lastWinner: Team | 0;
+  /** null until the circle rolls (~45s of active round). */
+  sands: SandsSnapshot | null;
 }
 
 export interface RoomStatePlayer {

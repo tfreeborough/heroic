@@ -43,6 +43,7 @@ import {
   type InterpolatedView,
   type PlayerSnapshot,
   type ProjectileSnapshot,
+  type SandsSnapshot,
   type ShellSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
 import {
@@ -334,13 +335,6 @@ const NAME_FONT = matchFont({
   fontSize: 12,
   fontWeight: "600",
 });
-const TITLE_FONT = matchFont({
-  fontFamily: FX_FONT_FAMILY,
-  fontSize: 10,
-  fontStyle: "italic",
-});
-const C_TITLE = Skia.Color("#cfa964"); // worn-title gold, under the name
-
 export interface ArenaRenderInput {
   view: InterpolatedView;
   config: ArenaClientConfig;
@@ -388,10 +382,6 @@ export interface ArenaRenderInput {
   /** Forge icon art keyed by ability — the cast flash draws from these
    *  (useAbilityIconImages; an icon still decoding just skips its flash). */
   abilityIcons: Partial<Record<AbilityId, SkImage>>;
-  /** Worn titles by player id, already RESOLVED to display text (GameScreen
-   *  joins roomState against the deed defs — snapshots stay cosmetic-free).
-   *  Absent id = bare. */
-  titles?: ReadonlyMap<number, string>;
   /** A directed camera (the Primer's scripted scenes, bits-onboarding.md):
    *  world centre + zoom, bypassing follow/fit entirely. Matches never set
    *  this — the arena camera stays the one every player shares. */
@@ -643,7 +633,6 @@ const drawPlayer = (
   friendTeam: number,
   pulses: StatusPulses,
   nowMs: number,
-  title?: string,
 ): void => {
   // Titan's Draught: the body (and every ring that hangs off r) grows with
   // the buff — derived from the slot's broadcast active window, no extra
@@ -866,6 +855,9 @@ const drawPlayer = (
   }
 
   // Name tag, small under the body — who is who (dead stay labelled, dimmer).
+  // The worn title deliberately does NOT hang here any more: long titles in
+  // the fight blocked sight, so titles fire as MOMENTS instead
+  // (bits-title-moments.md — entrance, kill call, slain-by, honour roll).
   fill.setColor(C_NAME);
   fill.setAlphaf(p.alive ? 0.7 : 0.35);
   canvas.drawText(
@@ -875,19 +867,6 @@ const drawPlayer = (
     fill,
     NAME_FONT,
   );
-  // Worn title, one line further down in gold (achievements.md § wearing
-  // titles) — dims with death like the name.
-  if (title !== undefined) {
-    fill.setColor(C_TITLE);
-    fill.setAlphaf(p.alive ? 0.65 : 0.3);
-    canvas.drawText(
-      title,
-      p.x - TITLE_FONT.getTextWidth(title) / 2,
-      p.y + r + 29,
-      fill,
-      TITLE_FONT,
-    );
-  }
   fill.setAlphaf(1);
 
   if (p.alive) {
@@ -1398,6 +1377,254 @@ const drawSandstormOverlays = (
   }
   fill.setAlphaf(1);
   stroke.setAlphaf(1);
+};
+
+// ── The Closing Sands (bits-sand-circle.md § rendering) ────────────────────
+// The perf contract, verbatim: layer 1 is one clip + one rect fill; layer 2 is
+// a fixed count of transform-placed blobs (position = closed-form function of
+// time, the sinkhole infall idiom — no particle state, nothing rebuilt per
+// frame), each culled to the viewport; layer 3 (the local vignette) lives in
+// the post-camera pass, at most one instance. No blur, no per-frame vector
+// webs, no runtime shaders.
+// Palette straight off the floor-blood ramps (wet arterial rim / oxblood /
+// near-black clot), NOT ability-zone hues — the tide must read as the same
+// substance the kills spill. V2 after the first playtest (Tom's wife,
+// 2026-09-03): v1's orbiting discs + clean circle were the Blood Font's
+// visual grammar and read as a possible HEAL. Now: no clean geometry
+// anywhere, a lapping liquid shoreline, and motion that rushes INWARD at
+// you — threat, never aura.
+const C_SANDS_TINT = Skia.Color("#470303");
+const C_SANDS_DEEP = Skia.Color("#1c0000");
+const C_SANDS_RING = Skia.Color("#c01414");
+const C_SANDS_STREAK = Skia.Color("#9e2016");
+const C_SANDS_SPRAY = Skia.Color("#d2352a");
+/** V3 dials ("a maelstrom the circle is barely holding back" — Tom,
+ * 2026-09-03): all on-device tuning knobs; the two tint fills alone remain
+ * the acceptable floor. */
+const SANDS_STREAKS = 34;
+const SANDS_EDGE_PTS = 72;
+const SANDS_FLECKS = 22;
+// V6 (Tom binned the gore-blob sprites — "look kinda crap" — and picked pure
+// liquid): the body of the tide is CURRENTS, not objects. Long curved
+// current-lines sweeping on the maelstrom's handedness (the sandstorm's
+// animated-arc idiom at tide scale) plus short bright foam breaks riding the
+// fast water off the shoreline.
+const SANDS_CURRENTS = 26;
+const SANDS_FOAM = 14;
+const C_SANDS_CURRENT = Skia.Color("#5c0808");
+
+/** The shoreline's outward displacement at ring angle `a` — the whole
+ * "barely holding it back" read lives in this shape. Base sits TIGHT to the
+ * honest radius (+3px, the held line) with fast 13-lobe chop riding it, and
+ * two counter-travelling wave trains whose CUBED crests rear up to ~+35px
+ * and slam along the barrier. Strictly ≥ ~0: the liquid never paints over
+ * safe sand. */
+const sandsWob = (a: number, t: number): number => {
+  const w1 = Math.sin(a * 3 + t * 2.6);
+  const w2 = Math.sin(a * 5 - t * 3.9 + 1.7);
+  // V4 (Tom): the v3 chop made the whole line jitter — calmer baseline, the
+  // violence lives in the rearing crests, not a vibrating circle.
+  const chop = Math.sin(a * 13 + t * 7.3) * 1.0 + Math.sin(a * 21 - t * 9.1) * 0.5;
+  return 3.4 + chop + Math.max(0, w1) ** 3 * 17 + Math.max(0, w2) ** 3 * 11;
+};
+
+const drawClosingSands = (
+  canvas: SkCanvas,
+  sands: SandsSnapshot,
+  nowMs: number,
+  viewL: number,
+  viewT: number,
+  viewR: number,
+  viewB: number,
+): void => {
+  const { cx, cy, r } = sands;
+  // Quick reject: every viewport corner safely inside the ring → the tide is
+  // entirely off-screen and all three layers cost nothing.
+  const farX = Math.max(Math.abs(viewL - cx), Math.abs(viewR - cx));
+  const farY = Math.max(Math.abs(viewT - cy), Math.abs(viewB - cy));
+  const far = Math.hypot(farX, farY);
+  if (far <= r) return;
+  // Nearest distance from the centre to the viewport (0 = centre in view) —
+  // with `far` it brackets the visible radius band, the current-arc cull.
+  const nearDist = Math.hypot(
+    Math.min(Math.max(cx, viewL), viewR) - cx,
+    Math.min(Math.max(cy, viewT), viewB) - cy,
+  );
+
+  const t = nowMs / 1000;
+
+  // The choppy shoreline: ONE closed path per frame (72 verbs — still the
+  // offscreen-arrow scale, nowhere near a crack web) doubles as the tint's
+  // clip AND the drawn barrier line, so no clean circle survives anywhere.
+  // sandsWob keeps every vertex OUTWARD of the honest damage radius: the
+  // crests rear and slam in the blood, the safe sand is never overpainted.
+  const edge = Skia.PathBuilder.Make();
+  for (let i = 0; i < SANDS_EDGE_PTS; i++) {
+    const a = (i / SANDS_EDGE_PTS) * Math.PI * 2;
+    const rr = r + sandsWob(a, t);
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (i === 0) edge.moveTo(x, y);
+    else edge.lineTo(x, y);
+  }
+  const edgePath = edge.close().detach();
+
+  // The blood itself: a wet arterial tint at the shore…
+  canvas.save();
+  canvas.clipPath(edgePath, ClipOp.Difference, true);
+  fill.setColor(C_SANDS_TINT);
+  fill.setAlphaf(0.55);
+  canvas.drawRect(Skia.XYWHRect(viewL, viewT, viewR - viewL, viewB - viewT), fill);
+  canvas.restore();
+  // …congealing to near-black fast (deeper = deadlier, at a glance).
+  canvas.save();
+  canvas.clipPath(Skia.Path.Circle(cx, cy, r + 90), ClipOp.Difference, true);
+  fill.setColor(C_SANDS_DEEP);
+  fill.setAlphaf(0.45);
+  canvas.drawRect(Skia.XYWHRect(viewL, viewT, viewR - viewL, viewB - viewT), fill);
+  canvas.restore();
+
+  // The currents (v6 — pure liquid, no floating objects): long curved
+  // current-lines sweeping the body of the tide, all one handedness, with
+  // maelstrom physics — fast water hugging the barrier, lazy in the deep —
+  // each breathing slowly in radius so no line tracks a fixed lane. The
+  // sandstorm's animated-arc idiom (one addArc path per line per frame);
+  // culled by radius band against the visible annulus.
+  stroke.setStrokeCap(StrokeCap.Round);
+  for (let i = 0; i < SANDS_CURRENTS; i++) {
+    const h1 = hash01(i * 13 + 400);
+    const h2 = hash01(i * 13 + 401);
+    const h3 = hash01(i * 13 + 402);
+    const depth = h1 * h1; // squared → most lines crowd the fast shore band
+    const rr = r + 18 + depth * 195 + Math.sin(t * 0.5 + i * 2.3) * 6;
+    if (rr < nearDist - 50 || rr > far + 50) continue;
+    const startDeg = h2 * 360 - t * (26 - depth * 18); // deg/s, one handedness
+    const sweepDeg = (28 + h3 * 52) * (1 - depth * 0.4);
+    stroke.setColor(i % 3 === 0 ? C_SANDS_STREAK : C_SANDS_CURRENT);
+    stroke.setAlphaf(0.28 + 0.22 * Math.sin(t * (0.8 + h3) + i * 1.7));
+    stroke.setStrokeWidth(2 + h2 * 3.5 + (1 - depth) * 1.5);
+    const arc = Skia.PathBuilder.Make()
+      .addArc(Skia.XYWHRect(cx - rr, cy - rr, rr * 2, rr * 2), startDeg % 360, sweepDeg)
+      .detach();
+    canvas.drawPath(arc, stroke);
+  }
+  // Foam: short bright breaks riding the fastest water just off the
+  // shoreline — the white-water read, in arterial spray tones.
+  for (let i = 0; i < SANDS_FOAM; i++) {
+    const h1 = hash01(i * 17 + 500);
+    const h2 = hash01(i * 17 + 501);
+    const rr = r + 8 + h1 * 34;
+    if (rr < nearDist - 30 || rr > far + 30) continue;
+    const startDeg = h2 * 360 - t * (30 + h1 * 16);
+    const sweepDeg = 6 + h2 * 10;
+    stroke.setColor(C_SANDS_SPRAY);
+    stroke.setAlphaf(0.3 + 0.3 * Math.sin(t * (2.2 + h1 * 2) + i * 2.9));
+    stroke.setStrokeWidth(1.6 + h1 * 1.4);
+    const arc = Skia.PathBuilder.Make()
+      .addArc(Skia.XYWHRect(cx - rr, cy - rr, rr * 2, rr * 2), startDeg % 360, sweepDeg)
+      .detach();
+    canvas.drawPath(arc, stroke);
+  }
+  stroke.setAlphaf(1);
+
+  // The boil: flecks shimmering in the shore band on fast independent
+  // blinks — closed-form off hash01, no state. The blood is never still.
+  for (let i = 0; i < SANDS_FLECKS; i++) {
+    const a = i * 2.39996 * 1.31 + Math.sin(t * 0.9 + i * 1.7) * 0.08;
+    const rr = r + 10 + hash01(i * 3 + 1) * 85;
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (x < viewL - 20 || x > viewR + 20 || y < viewT - 20 || y > viewB + 20) continue;
+    const blink = 0.5 + 0.5 * Math.sin(t * (5.5 + hash01(i * 3 + 2) * 5) + i * 2.1);
+    fill.setColor(C_SANDS_STREAK);
+    fill.setAlphaf(blink * blink * 0.5);
+    canvas.drawCircle(x, y, 2 + hash01(i * 3) * 2.5, fill);
+  }
+  fill.setAlphaf(1);
+
+  // Surge streaks — the sinkhole's infall grammar (lines streaming along a
+  // force, proven to read as "this acts on you"), pointed INWARD with a
+  // consistent tangential shear: the whole body of blood spirals AT the
+  // barrier, a maelstrom, not an aura (dominant component is always the
+  // inward rush — never a clean orbit). Closed-form phase, no particle
+  // state, culled per streak.
+  stroke.setColor(C_SANDS_STREAK);
+  stroke.setStrokeCap(StrokeCap.Round);
+  for (let i = 0; i < SANDS_STREAKS; i++) {
+    const a = i * 2.39996 + Math.sin(t * 0.7 + i) * 0.05; // golden-angle spread
+    const phase = (t * (0.6 + ((i * 7) % 5) * 0.11) + i * 0.618) % 1;
+    const head = r + 8 + 130 * (1 - phase) * (1 - phase); // decelerating rush
+    const len = 17 + 14 * (1 - phase);
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    const hx = cx + dx * head;
+    const hy = cy + dy * head;
+    if (hx < viewL - 50 || hx > viewR + 50 || hy < viewT - 50 || hy > viewB + 50) continue;
+    // Tail = outward + the maelstrom's curl (one shared handedness).
+    const tx = dx - dy * 0.55;
+    const ty = dy + dx * 0.55;
+    stroke.setAlphaf(Math.sin(Math.PI * phase) * 0.65); // born faint, dies at the shore
+    stroke.setStrokeWidth(2.5 + 1.8 * (1 - phase));
+    canvas.drawLine(hx, hy, hx + tx * len, hy + ty * len, stroke);
+  }
+
+  // Crest slams: where the primary wave train is rearing highest RIGHT NOW,
+  // spray pops off the barrier — the "it's hitting the wall" beat. Crest
+  // angles are closed-form from the train's phase (three lobes), so this is
+  // 12 tiny circles, no state.
+  for (let k = 0; k < 3; k++) {
+    const ca = (Math.PI / 2 - t * 2.6 + k * Math.PI * 2) / 3;
+    const cwob = sandsWob(ca, t);
+    if (cwob < 13) continue; // this lobe is currently slack — no slam
+    const strength = (cwob - 13) / 16;
+    const cdx = Math.cos(ca);
+    const cdy = Math.sin(ca);
+    const bx = cx + cdx * (r + cwob);
+    const by = cy + cdy * (r + cwob);
+    if (bx < viewL - 40 || bx > viewR + 40 || by < viewT - 40 || by > viewB + 40) continue;
+    fill.setColor(C_SANDS_SPRAY);
+    for (let j = 0; j < 4; j++) {
+      const sa = ca + (j - 1.5) * 0.09;
+      const sr = r + cwob + 4 + j * 6 + strength * 8;
+      fill.setAlphaf(strength * (0.7 - j * 0.13));
+      canvas.drawCircle(cx + Math.cos(sa) * sr, cy + Math.sin(sa) * sr, 1.8 + strength * 1.6, fill);
+    }
+  }
+  fill.setAlphaf(1);
+
+  // The barrier line over everything: heavy arterial red on the choppy path,
+  // pulsing on a threat beat (the bleed status ring's colour family).
+  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 1.2);
+  stroke.setColor(C_SANDS_RING);
+  stroke.setAlphaf(0.65 + 0.25 * pulse);
+  stroke.setStrokeWidth(4 + 2 * pulse);
+  canvas.drawPath(edgePath, stroke);
+  stroke.setAlphaf(1);
+};
+
+// Layer 3: the you-are-in-the-blood vignette — screen space, local player
+// only. The radial gradient is built once per screen size (the pool-gradient
+// lesson: never allocate a native shader per frame).
+const sandsVignettePaint = Skia.Paint();
+let sandsVignette: { w: number; h: number; shader: ReturnType<typeof Skia.Shader.MakeRadialGradient> } | null = null;
+const drawSandsVignette = (canvas: SkCanvas, screenW: number, screenH: number, nowMs: number): void => {
+  if (!sandsVignette || sandsVignette.w !== screenW || sandsVignette.h !== screenH) {
+    sandsVignette = {
+      w: screenW,
+      h: screenH,
+      shader: Skia.Shader.MakeRadialGradient(
+        vec(screenW / 2, screenH / 2),
+        Math.hypot(screenW, screenH) / 2,
+        [Skia.Color("rgba(107,8,8,0)"), Skia.Color("rgba(107,8,8,0)"), Skia.Color("rgba(107,8,8,0.85)")],
+        [0, 0.45, 1],
+        TileMode.Clamp,
+      ),
+    };
+  }
+  sandsVignettePaint.setShader(sandsVignette.shader);
+  // Breathe on the blood-tick cadence-ish beat — urgency, not a strobe.
+  sandsVignettePaint.setAlphaf(0.75 + 0.25 * Math.sin((nowMs / 1000) * Math.PI * 2 * 0.9));
+  canvas.drawRect(Skia.XYWHRect(0, 0, screenW, screenH), sandsVignettePaint);
 };
 
 /** One crack web, both stroke weights (primary skeleton over fine detail) —
@@ -2111,7 +2338,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         pi < byFeet.length &&
         byFeet[pi]!.y + config.playerRadius <= prop.y
       ) {
-        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs, r.titles?.get(byFeet[pi]!.id));
+        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
         pi++;
       }
       if (r.atlas) {
@@ -2136,7 +2363,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       }
     }
     for (; pi < byFeet.length; pi++)
-      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs, r.titles?.get(byFeet[pi]!.id));
+      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
 
     drawProjectiles(canvas, view.projectiles);
     drawShells(canvas, view.shells);
@@ -2145,6 +2372,20 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     drawFlyingBlood(canvas, r.blood.flying, r.nowMs);
     // The storm's swirling body sits OVER bodies and shots — it obscures.
     drawSandstormOverlays(canvas, view.deployables, r.nowMs);
+    // The Closing Sands' blood tide, over bodies too (the sandstorm rule) but
+    // under FX — damage numbers must stay readable in the blood. Bounds are
+    // the visible world rect (kick-padded), so off-screen arcs cost nothing.
+    if (view.round.sands) {
+      drawClosingSands(
+        canvas,
+        view.round.sands,
+        r.nowMs,
+        cx - vcx / zoom - 20,
+        cy - vcy / zoom - 20,
+        cx + (screenW - vcx) / zoom + 20,
+        cy + (screenH - vcy) / zoom + 20,
+      );
+    }
     drawFx(canvas, r.fx, r.abilityIcons);
 
     canvas.restore();
@@ -2167,6 +2408,19 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         padTop + ARROW_MARGIN,
         screenH - padBottom - ARROW_MARGIN,
       );
+    }
+
+    // The Closing Sands, layer 3: YOUR body is in the blood — a breathing red
+    // vignette over the glass. Local player only, so it can never scale with
+    // player count; nothing draws for spectators or safe fighters.
+    const sands = view.round.sands;
+    if (
+      sands &&
+      me &&
+      me.alive &&
+      Math.hypot(me.x - sands.cx, me.y - sands.cy) - config.playerRadius > sands.r
+    ) {
+      drawSandsVignette(canvas, screenW, screenH, r.nowMs);
     }
   });
 

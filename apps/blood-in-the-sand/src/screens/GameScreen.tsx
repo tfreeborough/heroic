@@ -43,7 +43,10 @@ import { resolveTitleText } from "../deeds/wornTitle";
 import { noteFirstOnlineWin } from "../net/account";
 import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
+import { EntranceCard } from "../game/EntranceCard";
 import { RoundBanner } from "../game/RoundBanner";
+import { SlainCredit } from "../game/SlainCredit";
+import { TitleFlex } from "../game/TitleFlex";
 import { pickOutcome, type OutcomeKind } from "../game/roundMessages";
 import { StatusPulses } from "../game/statusRings";
 import { loadLefty } from "../settings";
@@ -55,6 +58,9 @@ const DETONATE_TTL = 1150; // the sandtrap boom lingers well past a hit ping
 const FIGHT_BANNER_TTL = 900;
 /** How long a First Blood / multi-kill call stays on screen. */
 const ANNOUNCE_TTL = 1900;
+/** How long the "Slain by …" credit lingers on your own death — it should
+ *  not outstay the sting (bits-title-moments.md § moment 3). */
+const SLAIN_TTL = 3500;
 /** Beat the death-camera holds on your own corpse before cutting to an ally —
  *  a moment for the kill to sink in (Tom, 2026-07-19). */
 const SPECTATE_DELAY_MS = 2000;
@@ -116,6 +122,9 @@ const fxItems = (fx: readonly AgedFx[]): FxItem[] => {
 
 interface HudState {
   phase: RoundPhase;
+  /** Which round the countdown is arming — round 1's countdown carries the
+   *  entrance roster (bits-title-moments.md § moment 1). */
+  roundNumber: number;
   countdown: number | null;
   wins: [number, number];
   banner: string | null;
@@ -139,6 +148,7 @@ interface HudState {
 
 const INITIAL_HUD: HudState = {
   phase: "countdown",
+  roundNumber: 1,
   countdown: null,
   wins: [0, 0],
   banner: null,
@@ -241,16 +251,23 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const buttonIdsKey = useRef("");
   const [hud, setHud] = useState<HudState>(INITIAL_HUD);
   const hudKey = useRef("");
-  // Dying unmounts the controls mid-gesture, and gesture-handler never
-  // delivers the release for a detector that's gone — so a stick held at the
-  // death moment would stay latched and walk the character at next round's
-  // revive. Zero the latches whenever the controls leave the screen.
+  // The match-end plate owns the whole screen: the stick region and ability
+  // buttons render ABOVE it (they come later in the tree) and were sitting on
+  // the roll of honour (Tom, 2026-09-03) — and there is nothing left to input
+  // anyway.
+  const matchPlate =
+    hud.outcome?.kind === "victory" || hud.outcome?.kind === "defeat";
+  // Dying (or the match-end plate) unmounts the controls mid-gesture, and
+  // gesture-handler never delivers the release for a detector that's gone —
+  // so a stick held at that moment would stay latched and walk the character
+  // at the next revive. Zero the latches whenever the controls leave the
+  // screen.
   useEffect(() => {
-    if (hud.dead) {
+    if (hud.dead || matchPlate) {
       stickRef.current = STICK_ZERO;
       castRequests.current.fill(false);
     }
-  }, [hud.dead]);
+  }, [hud.dead, matchPlate]);
   // Death spectator: the ally id the camera trails once we're down. Sticky —
   // re-picked only when that ally dies or leaves; cleared while we're alive.
   const spectateId = useRef<number | null>(null);
@@ -261,10 +278,6 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const pulsesRef = useRef<StatusPulses | null>(null);
   pulsesRef.current ??= new StatusPulses();
   const pulses = pulsesRef.current;
-  // Worn titles by player id, resolved to display text (roomState is the
-  // source; snapshots stay cosmetic-free). Rebuilt only when the roomState
-  // OBJECT changes — never per frame (the GC diet).
-  const titlesRef = useRef<{ src: unknown; map: Map<number, string> }>({ src: null, map: new Map() });
   // Lefty mode (settings page): read at mount, i.e. match start.
   const [lefty, setLefty] = useState(false);
   useEffect(() => {
@@ -370,22 +383,40 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const killStreaksRef = useRef<KillStreaks | null>(null);
   killStreaksRef.current ??= new KillStreaks();
   const killStreaks = killStreaksRef.current;
-  // A kill call is two lines: a small credit line ("Ragnar gets a") over the big
-  // booming label ("DOUBLE KILL"). `who` is omitted when we can't name the killer
-  // (seat already gone from the view) — then only the label shows.
+  // A kill call is three lines: a small credit line ("Ragnar gets a") over the
+  // big booming label ("DOUBLE KILL"), and the killer's worn title beneath —
+  // the kill-call flex (bits-title-moments.md § moment 2). `who` is omitted
+  // when we can't name the killer (seat already gone from the view) — then
+  // only the label shows; a bare title just skips its line.
   const [announce, setAnnounce] = useState<{
     who: string | null;
     label: string;
+    title: string | null;
   } | null>(null);
   const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showAnnounce = (label: string, who: string | null = null): void => {
-    setAnnounce({ who, label });
+  const showAnnounce = (
+    label: string,
+    who: string | null = null,
+    title: string | null = null,
+  ): void => {
+    setAnnounce({ who, label, title });
     if (announceTimer.current) clearTimeout(announceTimer.current);
     announceTimer.current = setTimeout(() => setAnnounce(null), ANNOUNCE_TTL);
   };
+  // "Slain by …" — YOUR killer's name + title, delivered to the one player
+  // their title was just used on (bits-title-moments.md § moment 3).
+  const [slainBy, setSlainBy] = useState<{
+    name: string;
+    title: string | null;
+    /** Death timestamp — the SlainCredit's remount key, so its spring
+     *  replays on every death. */
+    at: number;
+  } | null>(null);
+  const slainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
       if (announceTimer.current) clearTimeout(announceTimer.current);
+      if (slainTimer.current) clearTimeout(slainTimer.current);
     },
     [],
   );
@@ -444,7 +475,12 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             kicksRef.current.push({ x: e.x, y: e.y, dirX: dx / len, dirY: dy / len, bornMs: now });
             // First Blood + Unreal-style kill chains (everyone hears them). Only
             // real players count — dummies never report a lethal hit anyway.
-            if (!isDeployableId(e.targetId)) {
+            // An UNATTRIBUTED kill (the Closing Sands' SANDS_ATTACKER_ID
+            // sentinel) claims no chain and announces nothing — the weather
+            // never gets FIRST BLOOD — but the victim's own chain still ends.
+            if (!isDeployableId(e.targetId) && e.attackerId < 0) {
+              killStreaks.endChain(e.targetId);
+            } else if (!isDeployableId(e.targetId)) {
               const call = killStreaks.registerKill(
                 e.attackerId,
                 e.targetId,
@@ -452,21 +488,34 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               );
               const killer = attacker?.name ?? null;
               // The KILLER's announcer pack voices the call, on every client —
-              // the pack-flex (monetisation.md). Every client resolves the same
-              // roomState row off the same event, so the room stays in unison;
-              // a missing row (seat gone) or unknown pack falls back to default.
-              const pack = asAnnouncerPack(
-                client.roomState?.players.find((p) => p.id === e.attackerId)?.announcer,
+              // the pack-flex (monetisation.md) — and their worn title rides
+              // the banner (bits-title-moments.md § moment 2). Every client
+              // resolves the same roomState row off the same event, so the
+              // room stays in unison; a missing row (seat gone) or unknown
+              // pack/title falls back to default/bare.
+              const killerRow = client.roomState?.players.find(
+                (p) => p.id === e.attackerId,
               );
+              const pack = asAnnouncerPack(killerRow?.announcer);
+              const killerTitle = resolveTitleText(killerRow?.title);
               if (call?.firstBlood) {
                 playAnnouncement("firstBlood", pack);
-                showAnnounce("FIRST BLOOD", killer && `${killer} gets`);
+                showAnnounce("FIRST BLOOD", killer && `${killer} gets`, killerTitle);
               } else if (call?.tier) {
                 playAnnouncement("multiKill", pack, call.tier);
                 showAnnounce(
                   MULTI_KILL_TEXT[call.tier],
                   killer && `${killer} gets a`,
+                  killerTitle,
                 );
+              }
+              // Slain-by credit: YOUR death names your killer, title and
+              // all — never for a suicide, never when the killer's seat is
+              // already gone (no name to credit).
+              if (e.targetId === myId && e.attackerId !== myId && killer) {
+                setSlainBy({ name: killer, title: killerTitle, at: now });
+                if (slainTimer.current) clearTimeout(slainTimer.current);
+                slainTimer.current = setTimeout(() => setSlainBy(null), SLAIN_TTL);
               }
             }
           }
@@ -658,6 +707,13 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         } else if (e.type === "fightStart") {
           fightBannerUntil.current = now + FIGHT_BANNER_TTL;
           playSound("fightStart");
+        } else if (e.type === "sandsStart") {
+          // The Closing Sands rolled (bits-sand-circle.md): every client
+          // banners it and blows the horn — the circle itself is on
+          // round.sands, this is just the moment.
+          showAnnounce("THE SANDS CLOSE IN");
+          playSound("sandsClose");
+          playStrikeHaptic("medium");
         } else if (e.type === "roundEnd") {
           playSound(
             "roundEnd",
@@ -825,15 +881,6 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             spectateDeadAt.current = null;
           }
 
-          if (titlesRef.current.src !== client.roomState) {
-            const map = new Map<number, string>();
-            for (const p of client.roomState?.players ?? []) {
-              const text = resolveTitleText(p.title);
-              if (text !== null) map.set(p.id, text);
-            }
-            titlesRef.current = { src: client.roomState, map };
-          }
-
           // Spent kicks fall off the front (birth-ordered).
           const kicks = kicksRef.current;
           while (kicks.length > 0 && now - kicks[0]!.bornMs >= KILL_KICK_MS) kicks.shift();
@@ -857,7 +904,6 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             nowMs: now,
             atlas,
             abilityIcons,
-            titles: titlesRef.current.map,
             kicks,
           });
           if (prevPic !== EMPTY_ARENA_PICTURE) {
@@ -996,6 +1042,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
         const next: HudState = {
           phase,
+          roundNumber: round?.roundNumber ?? 1,
           countdown,
           wins: round ? round.wins : [0, 0],
           banner,
@@ -1025,6 +1072,40 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
   const myTeam = client.welcome?.team ?? 1;
   const teamNames = client.welcome?.teamNames ?? ["Team 1", "Team 2"];
+
+  // Entrance roster (bits-title-moments.md § moment 1): round 1's countdown —
+  // the long ENTRANCE_COUNTDOWN_SECONDS beat — introduces both sides on the
+  // EntranceCard: names + worn titles only, NEVER kit (secrecy holds until
+  // matchEnd). Rounds 2+ keep the plain team hint at the snappy pace.
+  const roster = client.roomState?.players ?? [];
+  const toSeat = (p: (typeof roster)[number]) => ({
+    id: p.id,
+    name: p.name,
+    title: resolveTitleText(p.title),
+  });
+  const entrance =
+    hud.countdown !== null && hud.roundNumber === 1 && roster.length > 0
+      ? {
+          mine: roster.filter((p) => p.team === myTeam).map(toSeat),
+          theirs: roster.filter((p) => p.team !== myTeam).map(toSeat),
+        }
+      : null;
+  // Roll of honour (§ moment 4): the winning side's seats for the match-end
+  // plate, kit unveiled by the matchEnd reveal. The unveiled roomState can
+  // land a beat after the phase flips — rows render, icons pop in after.
+  const outcomeKind = hud.outcome?.kind;
+  const honour =
+    outcomeKind === "victory" || outcomeKind === "defeat"
+      ? roster
+          .filter((p) => p.team === (outcomeKind === "victory" ? myTeam : 3 - myTeam))
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            title: resolveTitleText(p.title),
+            weapon: p.weapon,
+            abilities: p.abilities,
+          }))
+      : undefined;
 
   return (
     <View
@@ -1071,6 +1152,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             </Text>
           ) : null}
           <Text style={styles.announceText}>{announce.label}</Text>
+          <TitleFlex title={announce.title} size={16} style={styles.announceTitle} />
         </View>
       ) : null}
 
@@ -1086,6 +1168,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             <Text style={styles.teamHintVs}>{"  vs  "}</Text>
             <Text style={styles.teamHintFoe}>{teamNames[2 - myTeam]}</Text>
           </Text>
+          {/* Round 1 only: the tale of the tape — who they are, never what
+              they carry (bits-title-moments.md § moment 1). */}
+          {entrance ? <EntranceCard mine={entrance.mine} theirs={entrance.theirs} /> : null}
         </View>
       ) : hud.outcome ? (
         <RoundBanner
@@ -1094,6 +1179,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           title={hud.outcome.title}
           subtitle={hud.outcome.subtitle}
           score={hud.outcome.score}
+          honour={honour}
         />
       ) : hud.banner ? (
         <View style={styles.centre} pointerEvents="none">
@@ -1108,8 +1194,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           (movement left, buttons right). Scheme test verdict 2026-07-12:
           FLOAT won; fixed stick and orbit pad are gone. */}
       {/* Death spectator: a corpse has no inputs — swap the controls for a chip
-          naming the ally the camera is trailing, with their live HP. */}
-      {hud.dead ? (
+          naming the ally the camera is trailing, with their live HP. The
+          match-end plate hides BOTH (controls and chip): the roll of honour
+          owns the screen and there is nothing left to input or spectate. */}
+      {matchPlate ? null : hud.dead ? (
         hud.spectate ? (
           <View
             style={[styles.spectateBar, { bottom: insets.bottom + 40 }]}
@@ -1164,6 +1252,18 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           </View>
         </View>
       )}
+
+      {/* "Slain by …" — your killer's name + title on the springing plate,
+          above the spectate chip and gone before it matters
+          (bits-title-moments.md § moment 3). */}
+      {slainBy ? (
+        <View
+          style={[styles.slainWrap, { bottom: insets.bottom + 140 }]}
+          pointerEvents="none"
+        >
+          <SlainCredit key={slainBy.at} name={slainBy.name} title={slainBy.title} />
+        </View>
+      ) : null}
 
       {onQuit ? (
         <Pressable
@@ -1227,6 +1327,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
+    // Margins bound every line (credit, label, title) so a long name or a
+    // long worn title shrinks/ellipsizes inside them instead of running off
+    // the screen edges (Tom, 2026-09-01).
+    paddingHorizontal: 28,
   },
   // The small credit line ("Ragnar gets a") — deliberately much smaller than the
   // label below so long player names never dwarf FIRST BLOOD / DOUBLE KILL.
@@ -1251,7 +1355,11 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
+  announceTitle: { marginTop: 3 },
   countdown: { fontSize: 96, fontWeight: "900", color: "#f0e8d8" },
+  // The slain-by plate's centring wrapper — lower-centre, clear of the death
+  // camera's subject and the spectate chip below.
+  slainWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   teamHint: { fontSize: 15, marginTop: 4, fontWeight: "800", letterSpacing: 0.5 },
   teamHintMine: { color: "#5aa9e0" },
   teamHintFoe: { color: "#e07a6a" },

@@ -20,6 +20,7 @@ import { ATTACK_CYCLE_READY } from "@heroic/core";
 import {
   FREE_ABILITY_IDS,
   COUNTDOWN_SECONDS,
+  ENTRANCE_COUNTDOWN_SECONDS,
   LOBBY_COUNTDOWN_SECONDS,
   LOADOUT_ABILITY_COUNT,
   MATCH_END_SECONDS,
@@ -75,8 +76,13 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.alive = true;
   }
   state.round.phase = "countdown";
-  state.round.timer = COUNTDOWN_SECONDS;
+  state.round.elapsed = 0; // the sands' fuse re-arms…
+  state.round.sands = null; // …and any live circle drains away with the round
   state.round.roundNumber += 1;
+  // Round 1 holds the entrance card (bits-title-moments.md § moment 1) —
+  // it needs the longer beat; later rounds keep the snappy pace.
+  state.round.timer =
+    state.round.roundNumber === 1 ? ENTRANCE_COUNTDOWN_SECONDS : COUNTDOWN_SECONDS;
   events.push({ type: "roundStart", roundNumber: state.round.roundNumber });
 };
 
@@ -212,6 +218,9 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
       return round.phase === "active";
     }
     case "active":
+      // The Closing Sands' fuse: the ONLY clock a round has, and it only
+      // burns while the fight is actually on (stepSafeCircle reads it).
+      round.elapsed += dt;
       return true;
     case "roundEnd": {
       round.timer -= dt;

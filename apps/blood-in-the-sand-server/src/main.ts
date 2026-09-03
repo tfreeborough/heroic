@@ -10,7 +10,7 @@
 import { mkdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { dirname, resolve } from "node:path";
-import { DEFAULT_PORT, PROTOCOL_VERSION } from "@heroic/blood-in-the-sand-sim";
+import { CLOSING_SANDS, configureSafeCircle, DEFAULT_PORT, PROTOCOL_VERSION } from "@heroic/blood-in-the-sand-sim";
 import { createDb, ensureSchema, type Db } from "@heroic/blood-in-the-sand-persistence";
 import { RoomManager } from "./manager";
 import { botBackfillConfigFromEnv } from "./botBackfill";
@@ -37,6 +37,24 @@ try {
   console.error("⚠ persistence unavailable — ranked disabled:", err);
   db = null;
 }
+// The Closing Sands' env dials (bits-sand-circle.md § env tuning): tune the
+// circle's timing for a test server, or kill it outright. Defaults ship.
+const sandsNum = (name: string): number | undefined => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : undefined;
+};
+configureSafeCircle({
+  ...(process.env.SANDS_ENABLED === "0" ? { enabled: false } : {}),
+  ...(sandsNum("SANDS_DELAY_S") !== undefined ? { delaySeconds: sandsNum("SANDS_DELAY_S")! } : {}),
+  ...(sandsNum("SANDS_CLOSE_S") !== undefined ? { closeSeconds: sandsNum("SANDS_CLOSE_S")! } : {}),
+  ...(sandsNum("SANDS_FINAL_RADIUS") !== undefined ? { finalRadius: sandsNum("SANDS_FINAL_RADIUS")! } : {}),
+});
+console.log(
+  CLOSING_SANDS.enabled
+    ? `🌪  closing sands ON — rolls at ${CLOSING_SANDS.delaySeconds}s, closes over ${CLOSING_SANDS.closeSeconds}s to r${CLOSING_SANDS.finalRadius}`
+    : "🌪  closing sands OFF (SANDS_ENABLED=0)",
+);
+
 const botCfg = botBackfillConfigFromEnv();
 if (db) {
   console.log(

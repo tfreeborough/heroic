@@ -722,3 +722,40 @@ describe("cast rules", () => {
     expect(decideCasts(me, at(200), [me], [], true)).toBe(null); // alone, enemy close
   });
 });
+
+describe("the Closing Sands steering (bits-sand-circle.md)", () => {
+  const round = (sands: { cx: number; cy: number; r: number; p: number } | null) => ({
+    phase: "active" as const,
+    timer: 0,
+    roundNumber: 1,
+    wins: [0, 0] as [number, number],
+    lastWinner: 0 as const,
+    sands,
+  });
+
+  test("a bot standing in the blood walks toward the centre, even away from its target", () => {
+    const nav = createBotNav(POCKET_ZONE);
+    // Enemy to the WEST at grips; the safe circle far EAST — the sands pull
+    // must dominate the engage vector and carry the feet toward the centre.
+    const me = snap({ x: 130, y: 560, weapon: "blade" });
+    const enemy = snap({ id: 9, team: 2, x: 70, y: 560 });
+    const world = { ...w([me, enemy]), round: round({ cx: 560, cy: 560, r: 100, p: 0.8 }) };
+    // One fresh decision (the first tick adopts the blend directly — a longer
+    // loop on this frozen world would only exercise the unstick reflex).
+    const d = botThink(createBotMemory(), me, world, nav, { archetype: "brawler" });
+    expect(d.sx).toBeGreaterThan(0.3); // east, toward the safe ring
+  });
+
+  test("safely inside the ring the sands change nothing", () => {
+    const nav = createBotNav(POCKET_ZONE);
+    const me = snap({ x: 130, y: 560, weapon: "blade" });
+    const enemy = snap({ id: 9, team: 2, x: 70, y: 560 });
+    // Circle centred ON the bot, huge — the fight is untouched by the tide.
+    const inside = { ...w([me, enemy]), round: round({ cx: 130, cy: 560, r: 500, p: 0.2 }) };
+    const plain = w([me, enemy]);
+    const a = botThink(createBotMemory(7), me, inside, nav, { archetype: "brawler" });
+    const b = botThink(createBotMemory(7), me, plain, nav, { archetype: "brawler" });
+    expect(a.sx).toBe(b.sx);
+    expect(a.sy).toBe(b.sy);
+  });
+});
