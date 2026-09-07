@@ -3,6 +3,8 @@ import { Composition } from "remotion";
 import { FPS, VERTICAL } from "./brand";
 import { CLIP_TIMING, GameplayClip } from "./GameplayClip";
 import { Spotlight, spotlightSeconds } from "./Spotlight";
+import { DevNote, FEATURE_SIZE, FeatureGraphic, SHOT_SIZE, StoreShot } from "./Store";
+import { STORE_SHOTS } from "./data/store";
 
 /**
  * Everything renders vertical 1080×1920 — the one format TikTok, Reels and
@@ -46,5 +48,9 @@ export const Root: React.FC = () => (
         durationInFrames: Math.round((props.durationSeconds + CLIP_TIMING.outro) * FPS),
       })}
     />
+    {/* Store listing stills (bun run render:store) — one frame each. */}
+    <Composition id="FeatureGraphic" component={FeatureGraphic} durationInFrames={1} fps={FPS} {...FEATURE_SIZE} />
+    <Composition id="DevNote" component={DevNote} durationInFrames={1} fps={FPS} {...SHOT_SIZE} />
+    <Composition id="StoreShot" component={StoreShot} durationInFrames={1} fps={FPS} {...SHOT_SIZE} defaultProps={STORE_SHOTS[0]!} />
   </>
 );

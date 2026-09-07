@@ -33,6 +33,8 @@ cpSync(
   join(gameAssets, "blood-in-the-sand-icon.png"),
   join(pub, "assets/app-icon.png"),
 );
+// The title-screen arena painting — the store feature graphic's backdrop.
+cpSync(join(gameAssets, "home/home.png"), join(pub, "assets/home.png"));
 
 const num = (n: number) =>
   Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");

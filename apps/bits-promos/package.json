@@ -9,6 +9,7 @@
     "render": "bun run sync && remotion render",
     "still": "bun run sync && remotion still",
     "render:roster": "bun run sync && bun scripts/render-roster.ts",
+    "render:store": "bun run sync && bun scripts/render-store.ts",
     "capture": "bun run sync && bun scripts/capture.ts",
     "capture:roster": "bun run sync && bun scripts/capture.ts --all",
     "upload": "rclone copy out gdrive:blood-in-the-sand/promos --include \"*.mp4\" --progress",

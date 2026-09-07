@@ -119,6 +119,17 @@ On a headless box, point Remotion at a Chrome/Chromium headless-shell build
 with `REMOTION_BROWSER_EXECUTABLE=/path/to/headless_shell`; locally it
 downloads its own.
 
+## Store listing stills
+
+`bun run render:store` renders the Google Play / App Store assets into
+`out/store/`: the 1024×500 feature graphic (title-screen arena + helmet)
+and one 1080×1920 phone screenshot per entry in `src/data/store.ts` — a
+caption band over a framed capture. A capture is either a clip under
+`public/clips/` with an `at` timestamp, or a PNG straight from a phone
+(drop it under `public/`), so swapping in a menu screen is one data entry.
+`--only feature,03-build` re-renders a subset. The listing prose lives in
+[docs/store-listing.md](../../docs/store-listing.md).
+
 ## Adding a new weapon/ability video when the game grows
 
 1. Ship the item in the sim + its icon in the game app (already the dev loop).
