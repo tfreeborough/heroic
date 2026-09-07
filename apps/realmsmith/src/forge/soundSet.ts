@@ -21,7 +21,7 @@ import {
   WEAPON_IDS,
   type AbilityId,
 } from "@heroic/blood-in-the-sand-sim";
-import { SOUND_SUBJECTS } from "../../forge/styleBible";
+import { SOUND_DURATIONS, SOUND_SUBJECTS } from "../../forge/styleBible";
 
 /** Display grouping in the panel (not saved anywhere — purely how rows cluster). */
 export type SoundCategory = "combat" | "ability" | "flow" | "ui";
@@ -36,6 +36,8 @@ export interface SoundSetEntry {
   subject: string;
   /** No hand-written brief yet — the panel flags it and uses the fallback. */
   missingSubject: boolean;
+  /** Suggested clip length (SOUND_DURATIONS) — prefills the duration box, editable. */
+  durationSeconds?: number;
 }
 
 /** kebab AbilityId → snake bank suffix ("mirror-guard" → "mirror_guard"). */
@@ -49,6 +51,7 @@ const entry = (id: string, label: string, category: SoundCategory): SoundSetEntr
     category,
     subject: subject ?? `the sound of "${label.toLowerCase()}"`,
     missingSubject: subject === undefined,
+    durationSeconds: SOUND_DURATIONS[id],
   };
 };
 

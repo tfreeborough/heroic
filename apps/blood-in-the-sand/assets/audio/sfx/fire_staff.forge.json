@@ -1,0 +1,25 @@
+{
+  "type": "sfx-bits",
+  "subject": "a ball of magic launched from a staff, one short rising whoosh with a soft energy hum, no impact",
+  "prompt": "a ball of magic launched from a staff, one short rising whoosh with a soft energy hum, no impact. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.6,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "fire_staff_1.mp3",
+    "fire_staff_2.mp3",
+    "fire_staff_3.mp3"
+  ],
+  "takeEngines": {
+    "fire_staff_1.mp3": "stable-audio",
+    "fire_staff_2.mp3": "stable-audio",
+    "fire_staff_3.mp3": "stable-audio"
+  },
+  "created": "2026-09-06T22:07:10.304Z",
+  "updated": "2026-09-06T22:07:10.304Z"
+}

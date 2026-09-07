@@ -16,6 +16,7 @@ import {
   TREMOR,
   type AbilityId,
   type RoundPhase,
+  type Team,
 } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
@@ -28,6 +29,8 @@ import {
   playSound,
   startCrowdAmbience,
   stopCrowdAmbience,
+  stopRoundMusic,
+  syncRoundMusic,
   unlockAudio,
   warmCombatAudio,
 } from "../audio";
@@ -38,7 +41,7 @@ import {
   recordAbilityButton,
 } from "../game/AbilityButton";
 import { useAbilityIconImages } from "../game/abilityIcons";
-import { EMPTY_ARENA_PICTURE, KILL_KICK_MS, recordArena, type FxItem, type KillKick } from "../game/render";
+import { BRAWL_TEAM_HEX, EMPTY_ARENA_PICTURE, KILL_KICK_MS, recordArena, type FxItem, type KillKick } from "../game/render";
 import { resolveTitleText } from "../deeds/wornTitle";
 import { noteFirstOnlineWin } from "../net/account";
 import { useArenaAtlas } from "../game/tilesets";
@@ -126,7 +129,15 @@ interface HudState {
    *  entrance roster (bits-title-moments.md § moment 1). */
   roundNumber: number;
   countdown: number | null;
-  wins: [number, number];
+  /** Round wins, indexed team − 1 (length = the room's teamCount). */
+  wins: number[];
+  /** Brawl (bits-brawl.md): the free-for-all presentation switch. */
+  brawl: boolean;
+  /** Brawl's scoreboard: one pip per fighter (team order) — the you/them
+   *  binary has no 6-way form, so the strip shows who still stands and who
+   *  holds round wins instead. `team` keys the fighter's identity colour
+   *  (BRAWL_TEAM_HEX). Null in classic rooms. */
+  fighters: { team: number; mine: boolean; alive: boolean; wins: number }[] | null;
   banner: string | null;
   /** The premium round-/match-end plate (win/loss/draw + Victory/Defeat), or
    *  null outside those phases. Kept separate from `banner` so plain cues
@@ -136,7 +147,12 @@ interface HudState {
     kind: OutcomeKind;
     title: string;
     subtitle: string;
-    score: [number, number];
+    /** [mine, theirs] — absent in brawl (no two-number form; the honour roll
+     *  and the winner line carry the story instead). */
+    score?: [number, number];
+    /** Who took it — the honour roll filters the roster by THIS, never by
+     *  "the other team" (brawl has five other teams). */
+    winnerTeam: Team | 0;
   } | null;
   lost: boolean;
   /** We're down this round — hide the controls and show the spectator chip. */
@@ -151,6 +167,8 @@ const INITIAL_HUD: HudState = {
   roundNumber: 1,
   countdown: null,
   wins: [0, 0],
+  brawl: false,
+  fighters: null,
   banner: null,
   outcome: null,
   lost: false,
@@ -293,9 +311,14 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   // The looping pit-crowd ambience bed — plays the whole time you're in the
   // arena (incl. spectating your own death), fades out on the way back to the
   // lobby. Silent until the crowd_ambience clip is forged.
+  // The battle score (bits-music.md) is driven per frame from the round
+  // snapshot below; it only needs the way out here.
   useEffect(() => {
     startCrowdAmbience();
-    return () => stopCrowdAmbience();
+    return () => {
+      stopCrowdAmbience();
+      stopRoundMusic();
+    };
   }, []);
 
   // --- Frame profiler (dev menu toggle, session-only). Accumulate JS-thread
@@ -891,6 +914,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             config: client.welcome.config,
             myId: client.welcome.playerId,
             spectateId: spectateId.current,
+            brawl: (client.welcome.teamCount ?? 2) > 2,
             screenW: w,
             screenH: h,
             insetTop: insets.top,
@@ -958,7 +982,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
         // HUD — cheap derive, setState only when something visible changed.
         const myTeam = client.welcome?.team ?? 1;
+        const brawl = (client.welcome?.teamCount ?? 2) > 2;
         const round = view?.round;
+        // Battle music follows the round: deal on a new round number, urgent
+        // twin when the sands are out, silence on the end plates.
+        if (round) syncRoundMusic(round);
         const phase = round?.phase ?? "countdown";
         // The whole enemy TEAM must be gone — one teammate-of-theirs dropping
         // out of a 3v3 is not "finish them".
@@ -985,14 +1013,25 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
                   : "roundLoss";
           // One key per distinct outcome (winsSum bumps every round) so the
           // flavour is rolled once and stays put for the whole hold window.
-          const winsSum = round.wins[0] + round.wins[1];
+          const winsSum = round.wins.reduce((a, w) => a + w, 0);
           const key = `${phase}:${round.lastWinner}:${winsSum}`;
           if (!outcomeRef.current || outcomeRef.current.key !== key) {
             const variant = pickOutcome(kind);
             outcomeRef.current = { key, kind, ...variant };
           }
-          const mine = myTeam === 1 ? round.wins[0] : round.wins[1];
-          const theirs = myTeam === 1 ? round.wins[1] : round.wins[0];
+          // Brawl: when someone ELSE takes it, the plate NAMES them — in a
+          // six-way "round lost" alone says nothing (bits-brawl.md).
+          const winnerName =
+            brawl && round.lastWinner !== 0 && round.lastWinner !== myTeam
+              ? client.roomState?.players.find((p) => p.team === round.lastWinner)?.name ?? null
+              : null;
+          const subtitle = winnerName
+            ? phase === "matchEnd"
+              ? `${winnerName} takes the arena.`
+              : `${winnerName} stands alone.`
+            : outcomeRef.current.subtitle;
+          const mine = round.wins[myTeam - 1] ?? 0;
+          const theirs = round.wins[myTeam === 1 ? 1 : 0] ?? 0;
           // Ranked settlement deliberately ABSENT here (bits-ranked.md §
           // ceremony, 2026-08-02): in-game the plate is title + score only;
           // the Glory/rating reveal is RankedCeremony's, back on the ranked
@@ -1001,8 +1040,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             key,
             kind,
             title: outcomeRef.current.title,
-            subtitle: outcomeRef.current.subtitle,
-            score: [mine, theirs],
+            subtitle,
+            // Brawl has no two-number score — the winner line and the honour
+            // roll carry the story instead.
+            ...(brawl ? {} : { score: [mine, theirs] as [number, number] }),
+            winnerTeam: round.lastWinner,
           };
         } else if (phase === "active" && now < fightBannerUntil.current)
           banner = "FIGHT";
@@ -1040,11 +1082,27 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             };
         }
 
+        // Brawl's remain strip: one pip per fighter in team order — who still
+        // stands, who holds a round win. Alive flips are the only churn.
+        const fighters =
+          brawl && view
+            ? [...view.players]
+                .sort((a, b) => a.team - b.team)
+                .map((p) => ({
+                  team: p.team,
+                  mine: p.team === myTeam,
+                  alive: p.alive,
+                  wins: round?.wins[p.team - 1] ?? 0,
+                }))
+            : null;
+
         const next: HudState = {
           phase,
           roundNumber: round?.roundNumber ?? 1,
           countdown,
           wins: round ? round.wins : [0, 0],
+          brawl,
+          fighters,
           banner,
           outcome,
           lost: client.status === "closed",
@@ -1071,6 +1129,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   );
 
   const myTeam = client.welcome?.team ?? 1;
+  const brawl = (client.welcome?.teamCount ?? 2) > 2;
   const teamNames = client.welcome?.teamNames ?? ["Team 1", "Team 2"];
 
   // Entrance roster (bits-title-moments.md § moment 1): round 1's countdown —
@@ -1082,6 +1141,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
     id: p.id,
     name: p.name,
     title: resolveTitleText(p.title),
+    // Brawl: the entrance card teaches each fighter's identity colour — the
+    // same one their body and scoreboard pip wear (you stay friend-blue).
+    color: brawl && p.team !== myTeam ? BRAWL_TEAM_HEX[p.team - 1] : undefined,
   });
   const entrance =
     hud.countdown !== null && hud.roundNumber === 1 && roster.length > 0
@@ -1097,7 +1159,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const honour =
     outcomeKind === "victory" || outcomeKind === "defeat"
       ? roster
-          .filter((p) => p.team === (outcomeKind === "victory" ? myTeam : 3 - myTeam))
+          // The plate's own winnerTeam, never "the other team" — brawl has
+          // five other teams (on victory it's yours, same as ever).
+          .filter((p) => p.team === hud.outcome!.winnerTeam)
           .map((p) => ({
             id: p.id,
             name: p.name,
@@ -1121,23 +1185,53 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         <Picture picture={picture} />
       </Canvas>
 
-      {/* score */}
-      <View
-        style={[styles.scoreRow, { top: insets.top + 12 }]}
-        pointerEvents="none"
-      >
-        <Text
-          style={[styles.score, myTeam === 1 ? styles.mine : styles.theirs]}
+      {/* score — classic rooms show the you/them pair; brawl has no two-number
+          form, so the REMAIN STRIP takes the slot: one pip per fighter (you
+          blue, the rest red), dimming as they fall, a gold crown-dot under a
+          pip per round win held (bits-brawl.md § presentation). */}
+      {hud.brawl ? (
+        <View
+          style={[styles.scoreRow, { top: insets.top + 12 }]}
+          pointerEvents="none"
         >
-          {hud.wins[0]}
-        </Text>
-        <Text style={styles.scoreDash}>—</Text>
-        <Text
-          style={[styles.score, myTeam === 2 ? styles.mine : styles.theirs]}
+          {(hud.fighters ?? []).map((f, i) => (
+            <View key={i} style={styles.fighterPipWrap}>
+              {/* The pip wears the fighter's identity colour — the same one
+                  their body wears (BRAWL_TEAM_HEX; you stay friend-blue), so
+                  the strip doubles as the colour legend. */}
+              <View
+                style={[
+                  styles.fighterPip,
+                  { backgroundColor: f.mine ? "#5aa9e0" : BRAWL_TEAM_HEX[f.team - 1] ?? "#e07a6a" },
+                  !f.alive && styles.fighterPipDead,
+                ]}
+              />
+              <View style={styles.fighterWinsRow}>
+                {Array.from({ length: f.wins }, (_, w) => (
+                  <View key={w} style={styles.fighterWinDot} />
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View
+          style={[styles.scoreRow, { top: insets.top + 12 }]}
+          pointerEvents="none"
         >
-          {hud.wins[1]}
-        </Text>
-      </View>
+          <Text
+            style={[styles.score, myTeam === 1 ? styles.mine : styles.theirs]}
+          >
+            {hud.wins[0]}
+          </Text>
+          <Text style={styles.scoreDash}>—</Text>
+          <Text
+            style={[styles.score, myTeam === 2 ? styles.mine : styles.theirs]}
+          >
+            {hud.wins[1]}
+          </Text>
+        </View>
+      )}
 
       {/* kill announcements (First Blood / DOUBLE KILL …) — sits below the score,
           clear of the centre countdown/banner */}
@@ -1162,12 +1256,20 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           <Text style={styles.countdown}>{hud.countdown}</Text>
           {/* The pre-round beat teaches the names AND the colours at once:
               your faction blue, theirs red — the same allegiance cue the
-              bodies wear (bits-bot-backfill.md § team identity). */}
-          <Text style={styles.teamHint}>
-            <Text style={styles.teamHintMine}>{teamNames[myTeam - 1]}</Text>
-            <Text style={styles.teamHintVs}>{"  vs  "}</Text>
-            <Text style={styles.teamHintFoe}>{teamNames[2 - myTeam]}</Text>
-          </Text>
+              bodies wear (bits-bot-backfill.md § team identity). Brawl drops
+              the X-vs-Y binary for the mode's epigraph (a motto, not a
+              headcount — it holds on partial force-starts too). */}
+          {brawl ? (
+            <Text style={styles.teamHint}>
+              <Text style={styles.teamHintVs}>SIX ENTER. ONE LEAVES.</Text>
+            </Text>
+          ) : (
+            <Text style={styles.teamHint}>
+              <Text style={styles.teamHintMine}>{teamNames[myTeam - 1]}</Text>
+              <Text style={styles.teamHintVs}>{"  vs  "}</Text>
+              <Text style={styles.teamHintFoe}>{teamNames[2 - myTeam]}</Text>
+            </Text>
+          )}
           {/* Round 1 only: the tale of the tape — who they are, never what
               they carry (bits-title-moments.md § moment 1). */}
           {entrance ? <EntranceCard mine={entrance.mine} theirs={entrance.theirs} /> : null}
@@ -1313,6 +1415,14 @@ const styles = StyleSheet.create({
   // the bodies, so the scoreboard says which number is yours at a glance.
   mine: { color: "#5aa9e0" },
   theirs: { color: "#e07a6a" },
+  // Brawl's remain strip (bits-brawl.md § presentation): the pip wears the
+  // body's allegiance colours, dims when its fighter falls, and carries a
+  // gold dot per round win held (first to 2 — one dot is match point).
+  fighterPipWrap: { alignItems: "center", gap: 3 },
+  fighterPip: { width: 13, height: 13, borderRadius: 4 },
+  fighterPipDead: { opacity: 0.22 },
+  fighterWinsRow: { flexDirection: "row", gap: 2, minHeight: 5 },
+  fighterWinDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: "#e6b95e" },
   centre: {
     position: "absolute",
     top: 0,

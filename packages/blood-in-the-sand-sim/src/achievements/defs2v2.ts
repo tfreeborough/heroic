@@ -181,7 +181,10 @@ const FEATS_2V2: BitsAchievementDef[] = [
       kind: "feat",
       // A decider = both sides took a round; the clutch flag is the FINAL
       // round's (overwritten every roundEnd).
-      test: (s, p) => wonMatch(s, p) && s.roundWins[0] > 0 && s.roundWins[1] > 0 && s.stats[p]?.lastRoundClutch === true,
+      test: (s, p) =>
+        wonMatch(s, p) &&
+        s.roundWins.filter((w) => w > 0).length >= 2 &&
+        s.stats[p]?.lastRoundClutch === true,
     },
   },
   {

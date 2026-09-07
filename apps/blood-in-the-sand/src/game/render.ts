@@ -136,6 +136,21 @@ const C_WALL_TOP = Skia.Color("#5d4c38");
 // team 2 = blue (see bodyColorFor).
 const C_FOE = Skia.Color("#d94141");
 const C_FRIEND = Skia.Color("#4d7fd9");
+/** The 6-Way Brawl's identity palette (bits-brawl.md): five red bodies are
+ * indistinguishable, so in a brawl every fighter's TEAM wears one colour for
+ * the whole match — body, scoreboard pip, lobby row, entrance card — and
+ * "hunt the violet one" becomes a plan. Indexed team − 1. Blue is excluded
+ * (you are always friend-blue to yourself); team 1 keeps the classic foe
+ * crimson. Shared with the RN screens as hex — Skia copies below. */
+export const BRAWL_TEAM_HEX: readonly string[] = [
+  "#d94141", // crimson
+  "#a05fd6", // violet
+  "#3fae6a", // emerald
+  "#e0862e", // ember
+  "#d44f9e", // rose
+  "#2fb5a8", // teal
+];
+const BRAWL_TEAM_COLORS = BRAWL_TEAM_HEX.map((c) => Skia.Color(c));
 const C_DEAD = Skia.Color("rgba(90, 84, 76, 0.55)");
 const C_FACING = Skia.Color("rgba(255, 255, 255, 0.9)");
 const C_TELEGRAPH = Skia.Color("#ff4a3d");
@@ -348,6 +363,9 @@ export interface ArenaRenderInput {
    *  a pure spectator. Chosen client-side (GameScreen) — all players stay in
    *  every snapshot, corpses included. */
   spectateId?: number | null;
+  /** A 6-Way Brawl room (bits-brawl.md): every other fighter's body wears
+   *  their team's BRAWL_TEAM_HEX colour instead of uniform foe red. */
+  brawl?: boolean;
   screenW: number;
   screenH: number;
   /** Safe-area padding: the OS notch (top) and home-indicator / system tray
@@ -619,9 +637,12 @@ const strikeRegionPath = (
 
 /** A body's disc colour: dead → grey ghost; else friend blue / foe red
  * relative to the viewer's side. `friendTeam` 0 (a seatless spectator) has no
- * allegiance, so it reads absolute — team 1 red, team 2 blue. */
-const bodyColorFor = (p: PlayerSnapshot, friendTeam: number) => {
+ * allegiance, so it reads absolute — team 1 red, team 2 blue. In a brawl
+ * every other fighter wears their team's palette colour instead of uniform
+ * red (a spectator sees all six palette colours). */
+const bodyColorFor = (p: PlayerSnapshot, friendTeam: number, brawl: boolean) => {
   if (!p.alive) return C_DEAD;
+  if (brawl && p.team !== friendTeam) return BRAWL_TEAM_COLORS[p.team - 1] ?? C_FOE;
   if (friendTeam === 0) return p.team === 1 ? C_FOE : C_FRIEND;
   return p.team === friendTeam ? C_FRIEND : C_FOE;
 };
@@ -631,6 +652,7 @@ const drawPlayer = (
   p: PlayerSnapshot,
   config: ArenaClientConfig,
   friendTeam: number,
+  brawl: boolean,
   pulses: StatusPulses,
   nowMs: number,
 ): void => {
@@ -747,7 +769,7 @@ const drawPlayer = (
   }
 
   // Body disc (grey ghost when down; else friend blue / foe red).
-  fill.setColor(bodyColorFor(p, friendTeam));
+  fill.setColor(bodyColorFor(p, friendTeam, brawl));
   canvas.drawCircle(p.x, p.y, r, fill);
 
   // Poison sickness: the BODY greens as stacks build (Tom, 2026-08-09 — a
@@ -1400,18 +1422,32 @@ const C_SANDS_STREAK = Skia.Color("#9e2016");
 const C_SANDS_SPRAY = Skia.Color("#d2352a");
 /** V3 dials ("a maelstrom the circle is barely holding back" — Tom,
  * 2026-09-03): all on-device tuning knobs; the two tint fills alone remain
- * the acceptable floor. */
-const SANDS_STREAKS = 34;
-const SANDS_EDGE_PTS = 72;
-const SANDS_FLECKS = 22;
+ * the acceptable floor. Counts trimmed in the v7 production perf pass (Tom's
+ * OnePlus 12 dropped frames in real matches). */
+const SANDS_STREAKS = 22;
+const SANDS_EDGE_PTS = 56;
+const SANDS_FLECKS = 14;
 // V6 (Tom binned the gore-blob sprites — "look kinda crap" — and picked pure
 // liquid): the body of the tide is CURRENTS, not objects. Long curved
 // current-lines sweeping on the maelstrom's handedness (the sandstorm's
 // animated-arc idiom at tide scale) plus short bright foam breaks riding the
 // fast water off the shoreline.
-const SANDS_CURRENTS = 26;
-const SANDS_FOAM = 14;
+const SANDS_CURRENTS = 16;
+const SANDS_FOAM = 9;
 const C_SANDS_CURRENT = Skia.Color("#5c0808");
+
+// V7 — the tide picture cache (production perf pass, 2026-09-03): rebuilding
+// ~40 small paths inside recordArena EVERY rendered frame was the scar-cache
+// lesson repeated, and it showed as a real frame drop on Tom's OnePlus 12.
+// The tide is animated TEXTURE, not tracked geometry, so it re-records on a
+// 25Hz beat into its own world-space SkPicture (the scarLayer idiom) and
+// recordArena replays one op per frame. Culling inside the recording pads by
+// TIDE_PAD so camera drift between rebuilds (≤ ~15px at sprint speed) never
+// pops an element at the screen edge; the shrink itself moves ~1px per beat.
+let tidePicture: SkPicture | null = null;
+let tideBuiltMs = 0;
+const TIDE_REBUILD_MS = 40;
+const TIDE_PAD = 50;
 
 /** The shoreline's outward displacement at ring angle `a` — the whole
  * "barely holding it back" read lives in this shape. Base sits TIGHT to the
@@ -1437,13 +1473,35 @@ const drawClosingSands = (
   viewR: number,
   viewB: number,
 ): void => {
+  // Quick reject per frame (cheap): every viewport corner safely inside the
+  // ring → the tide is entirely off-screen and nothing records or replays.
+  const farX = Math.max(Math.abs(viewL - sands.cx), Math.abs(viewR - sands.cx));
+  const farY = Math.max(Math.abs(viewT - sands.cy), Math.abs(viewB - sands.cy));
+  if (Math.hypot(farX, farY) <= sands.r) return;
+  if (!tidePicture || nowMs - tideBuiltMs > TIDE_REBUILD_MS) {
+    tideBuiltMs = nowMs;
+    tidePicture = createPicture((c) =>
+      recordTide(c, sands, nowMs, viewL - TIDE_PAD, viewT - TIDE_PAD, viewR + TIDE_PAD, viewB + TIDE_PAD),
+    );
+  }
+  canvas.drawPicture(tidePicture);
+};
+
+/** The tide itself, recorded in WORLD space on the cache's beat — never call
+ * per frame (that was the v7 frame drop). */
+const recordTide = (
+  canvas: SkCanvas,
+  sands: SandsSnapshot,
+  nowMs: number,
+  viewL: number,
+  viewT: number,
+  viewR: number,
+  viewB: number,
+): void => {
   const { cx, cy, r } = sands;
-  // Quick reject: every viewport corner safely inside the ring → the tide is
-  // entirely off-screen and all three layers cost nothing.
   const farX = Math.max(Math.abs(viewL - cx), Math.abs(viewR - cx));
   const farY = Math.max(Math.abs(viewT - cy), Math.abs(viewB - cy));
   const far = Math.hypot(farX, farY);
-  if (far <= r) return;
   // Nearest distance from the centre to the viewport (0 = centre in view) —
   // with `far` it brackets the visible radius band, the current-arc cull.
   const nearDist = Math.hypot(
@@ -2338,7 +2396,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         pi < byFeet.length &&
         byFeet[pi]!.y + config.playerRadius <= prop.y
       ) {
-        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
+        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.brawl === true, r.pulses, r.nowMs);
         pi++;
       }
       if (r.atlas) {
@@ -2363,7 +2421,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       }
     }
     for (; pi < byFeet.length; pi++)
-      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.pulses, r.nowMs);
+      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.brawl === true, r.pulses, r.nowMs);
 
     drawProjectiles(canvas, view.projectiles);
     drawShells(canvas, view.shells);

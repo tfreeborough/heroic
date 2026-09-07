@@ -14,7 +14,7 @@ Last decided: 2026-07-14
 > gained a **pixel-grid snap** step (`forge/images.ts`) that bakes every asset onto a true
 > per-family pixel grid. All existing BITS image assets are due for regeneration.
 
-Built: `apps/realmsmith/forge/` (Vite plugin: `/forge/status|expand|generate|save`, style bible,
+Built: `apps/realmsmith/forge/` (Vite plugin: `/forge/status|generate|save`, style bible,
 ElevenLabs + OpenAI calls, ffmpeg-static audio + sharp image processing) + the Forge panel
 (`src/forge/ForgePanel.tsx`, toolbar toggle). Keys live in `apps/realmsmith/.env.local` (see
 `.env.example`).
@@ -218,10 +218,10 @@ faster than iterating prompts one at a time; rejected candidates cost cents.
 
 The panel's **prompt box is the control surface**: whatever is in it goes to the provider verbatim,
 and it is refilled with what was actually sent, so iterating means editing text, not guessing. Blank
-box → the style-bible template seeds it from the sentence; the **Expand** button has an LLM
-(`/forge/expand`, OpenAI) rewrite the sentence into proper SFX prompt-craft — concrete sources and
-textures, an explicit sonic shape, positive phrasing. A prompt-influence slider controls how
-literally ElevenLabs follows the text.
+box → the style-bible template seeds it from the sentence. (An LLM **Expand** button once
+rewrote the sentence into ElevenLabs prompt-craft; retired 2026-09-06 with the local Stable Audio
+engine — see § Stable Audio.) On ElevenLabs a prompt-influence slider controls how literally it
+follows the text; hidden on the local engine.
 
 ### The sidecar
 
@@ -240,6 +240,12 @@ literally ElevenLabs follows the text.
 ```
 
 "Open asset → tweak subject → regenerate" reads this file; consistency debugging reads the diffs.
+Sidecars are provenance only: the games never read them and Metro never bundles them (only
+`require()`d files ship). The panel's **STALE** tick (deeds since 08-25, sounds since 2026-09-06)
+diffs a sidecar's `subject` against the live brief — after a brief rewrite that IS the regenerate
+list. Never clear a bank by deleting its mp3: the app manifest `require()`s it and the bundle
+breaks; save overwrites `<id>_1.mp3` + the sidecar in place. Sound sidecars record the engine that
+made the takes (`provider: "stable-audio-3"` / `"elevenlabs-sfx"`).
 
 ## Layering
 
@@ -270,6 +276,96 @@ already binds to localhost.
    reference-image loop.
 3. **Portraits & UI art** — replace/extend the hand-made class portraits, creature portraits for new
    roster entries.
+
+## Stable Audio (local sound engine, 2026-09-06)
+
+ElevenLabs SFX never earned Tom's trust on quality, so the Forge grew a second
+sound engine: **Stable Audio 3 Small-SFX run locally** — 433M params, CPU
+inference on the M3 Pro, open weights under the Stability AI Community License
+(free for commercial use under $1M/yr revenue; trained on licensed AudioSparx +
+Freesound). Unlimited takes at zero marginal cost, so audition instead of
+rationing.
+
+- **Where it lives:** a sibling checkout `~/Documents/GitHub/stable-audio-3`
+  (`uv sync` done; `uv` at `~/.local/bin/uv`). `forge/stableAudio.ts` spawns
+  its CLI once per generation with the prompt repeated N times, so the model
+  loads once and writes `take_0..N-1.wav` (44.1kHz stereo WAV; the save path's
+  ffmpeg sniffs the container). `--steps 8 --cfg-scale 1.0`, the model card's
+  defaults; `TrackType: SFX.` prepended server-side (the prompting guide's
+  AudioSparx tag), briefs stay provider-neutral. Duration: the panel's value,
+  else 4s (the model needs a number; ElevenLabs picked its own).
+- **Switching:** `FORGE_SFX_PROVIDER` in `apps/realmsmith/.env.local`:
+  `stable-audio`, `elevenlabs` (default), or **`both`** (Tom's pick 2026-09-06:
+  the local model is better on some sounds, ElevenLabs on others, so `both`
+  fans the SAME prompt and duration out to each and returns 3 + 3 takes tagged
+  `local` / `11L` in the panel — the better engine is a per-take pick, not a
+  config choice; a bank can mix, the sidecar records `takeEngines` per file and
+  `provider: "mixed"`; if one engine fails the other's takes still come back
+  with a note in the prompt box; the prompt-influence slider stays, ElevenLabs
+  side only). Status reports `keys.stableAudio` + what's missing; the
+  panel's warnbox lists it and the generate button stays gated until every
+  piece is present — checkout, venv, uv, **weights**.
+- **Weights are gated.** One-time, by Tom: log in at huggingface.co, accept
+  the licence on `stabilityai/stable-audio-3-small-sfx`, make a *read* token,
+  paste it as `HF_TOKEN` in `.env.local`. The first generation downloads
+  ~1GB into `~/.cache/huggingface`; the ready light needs the cache OR a
+  token (a cache-only gate blocked the very generation that fills it — fixed
+  same day). Done on Tom's Mac 2026-09-06: a 3-take × 3s bank = ~18s on CPU
+  including the model load.
+  Overrides: `STABLE_AUDIO_DIR`, `UV_BIN`, `STABLE_AUDIO_DEVICE` (cpu default;
+  `mps` worth a try).
+- **Prompting differs from ElevenLabs — the briefs were rewritten for it
+  (2026-09-06).** The model was trained on library metadata, so it wants the
+  source, the action, and the production character ("a low ram's horn blown
+  once, a short rough note that swells and cuts off, distant, echoing off
+  stone") and a short duration. Tom's test of round_start (gong / horn / gate)
+  found all three good and one hard rule: **one sound per brief** — "followed
+  by" / "then" is ignored, a sequence comes out as its first half. So every
+  non-ability brief in `SOUND_SUBJECTS` (42 of 61) is now a single concrete
+  sound; compound moments lost their second half or will become their own
+  bank. Ability briefs (19) are untouched pending their own pass — designed
+  sounds are where the model is weakest. `SOUND_DURATIONS` gives each bank a
+  suggested length; the panel prefills the duration box from it on pick
+  (editable). The LLM **Expand** step was REMOVED the same day (panel button,
+  `/forge/expand`, the OpenAI chat call, the expander system prompt): the brief
+  IS the prompt, and the expander's ElevenLabs-tuned prose only padded it. The
+  prompt-influence slider is hidden on this engine too (ElevenLabs-only knob).
+  hit_blade note: "blade
+  slash into flesh" read as metal-on-object; the model wants the *material*
+  named — "knife stabbing into raw meat", "no metal ring".
+- **Upgrades if wanted:** a resident Python sidecar (skip the per-generation
+  model load), the repo's `optimized/mlx` build (Metal GPU, several× faster),
+  LoRA fine-tuning on our kept takes for house style, inpainting/continuation
+  for variations of a take we like.
+
+## Sound banks (2026-09-06)
+
+Adding a take used to mean: save in the Forge, paste the `require()` line into
+`manifest.ts`, then add the clip name to the catalogue's list — and remember how
+many takes the bank already had. Tom called it out as the time sink it was. Now:
+
+- **The manifest is generated.** `apps/blood-in-the-sand/src/audio/sfxManifest.generated.ts`
+  holds one `require()` per `<bank>_<n>.mp3` in `assets/audio/sfx/`, rewritten
+  by the Forge after every save and remove (`forge/sfxManifest.ts`; manual sync
+  `bun run sfx:manifest` in apps/realmsmith after moving files by hand).
+  `manifest.ts` spreads it in next to the announcer packs. Stray non-numbered
+  mp3s are listed in a header comment rather than silently skipped.
+- **The catalogue derives banks.** `catalogue.ts` has `bank("hit_blade")` →
+  every `hit_blade_<n>` key in take order; 63 entries switched from explicit
+  lists. An unforged bank is `[]` and core's scheduler returns null for it
+  (silent, no warning). Announcer lines stay explicit — they're per-pack
+  folders, not banks. (One fix fell out: `signetPurchase` had been pointing at
+  the `signet_exchange` bank though `signet_purchase_1` existed.)
+- **The panel shows the bank.** Picking a sound chip loads
+  `GET /forge/bank?type&id`: every take on disk with a player, a count, and a
+  Remove button (`POST /forge/bank/remove` → file deleted, sidecar `files`
+  trimmed, manifest regenerated; numbering is NOT compacted — stable names keep
+  git history and sidecars honest, and the catalogue reads whatever exists).
+  Save appends `<id>_<next>` as before and the list refreshes. The
+  "paste these lines" box is gone for SFX (still there for images).
+- **Workflow now:** pick chip → (edit brief/duration) → Generate → tick keeps →
+  Save. Reload the app. That's it. The done-tick and STALE tick read the same
+  folder + sidecars.
 
 ## Open questions
 

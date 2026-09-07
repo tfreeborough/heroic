@@ -14,8 +14,13 @@ export interface ForgeTypeInfo {
 
 export interface ForgeStatus {
   types: ForgeTypeInfo[];
-  /** Which provider keys the dev server found — the panel warns on the missing ones. */
-  keys: { elevenlabs: boolean; openai: boolean };
+  /** Which provider keys the dev server found — the panel warns on the missing ones.
+   * `stableAudio` = the LOCAL Stable Audio 3 checkout + weights are in place. */
+  keys: { elevenlabs: boolean; openai: boolean; stableAudio: boolean; stableAudioWeights: boolean };
+  /** Which SFX engine `generate` will use (FORGE_SFX_PROVIDER, default
+   * elevenlabs), and — when it's Stable Audio and not ready — what's missing. */
+  sfxProvider: SfxProvider;
+  sfxProviderMissing: string[];
   /** PNGs already in the icon destination folder. The panel derives done-ness
    * by matching these against the set it builds from the SIM's own tables
    * (src/forge/iconSet.ts) — the server has no icon list of its own. */
@@ -42,20 +47,14 @@ export interface ForgeStatus {
    * as STALE — re-forge candidates stay visible without regenerating the
    * rest of the set. Absent when the sidecar is missing or unreadable. */
   deedForged: Record<string, string>;
+  /** Sound bank id → the brief its mp3s were forged FROM (same sidecar diff as
+   * deedForged). With the 2026-09-06 brief rewrite every ElevenLabs-era bank
+   * shows STALE — the regenerate list, no clearing-out needed: save overwrites
+   * `<id>_1.mp3` + the sidecar in place. */
+  sfxForged: Record<string, string>;
   /** PNGs already in the home-backdrop destination folder — done-ticks for
    * the home set (the checked-in HOME_KEYS/HOME_SUBJECTS list). */
   homeFiles: string[];
-}
-
-export interface ExpandRequest {
-  type: string;
-  /** The user's rough sentence; an LLM turns it into a crafted provider prompt. */
-  subject: string;
-  durationSeconds?: number;
-}
-
-export interface ExpandResponse {
-  prompt: string;
 }
 
 export interface GenerateRequest {
@@ -64,7 +63,7 @@ export interface GenerateRequest {
   subject: string;
   /**
    * Send this text verbatim instead of templating the subject — the panel's
-   * editable prompt box (hand-written or LLM-expanded).
+   * editable prompt box (hand-written).
    */
   prompt?: string;
   /** SFX clip length in seconds (0.5–30); omit to let the provider decide. */
@@ -73,10 +72,18 @@ export interface GenerateRequest {
   promptInfluence?: number;
 }
 
+/** Which engine(s) `generate` runs: "both" fans the same prompt + duration out
+ * to the local model AND ElevenLabs and returns every take tagged, so the
+ * better engine per sound is a per-take pick, not a config choice. */
+export type SfxProvider = "elevenlabs" | "stable-audio" | "both";
+export type SfxEngine = "stable-audio" | "elevenlabs";
+
 export interface Candidate {
   id: number;
   mime: string;
   b64: string;
+  /** SFX: the engine that made this take (shown as a tag; recorded per file). */
+  engine?: SfxEngine;
   /** Image flows only: the candidate as the SAVE pipeline would ship it
    * (grid-snapped, quantized) — the panel previews this so what you judge is
    * what saves; `b64` stays the raw generation and is what save receives. */
@@ -102,14 +109,42 @@ export interface SaveRequest {
   promptInfluence?: number;
   /** b64 payloads of the kept candidates. */
   takes: string[];
+  /** SFX: the engine per kept take, parallel to `takes` — recorded in the sidecar. */
+  engines?: (SfxEngine | undefined)[];
 }
 
 export interface SaveResponse {
   files: string[];
   /** Repo-relative path of the bank's sidecar JSON. */
   sidecar: string;
-  /** Ready-to-paste `manifest.ts` lines for the saved files. */
+  /** Ready-to-paste manifest lines — images only now; SFX banks are wired by
+   * the generated manifest (`manifest`) and need no paste. */
   manifestLines: string[];
+  /** SFX: repo-relative path of the regenerated manifest, when one was written. */
+  manifest?: string;
+}
+
+/** One take already on disk in a sound bank. */
+export interface BankTake {
+  file: string;
+  /** Take number (the `_<n>`). */
+  n: number;
+  bytes: number;
+  mime: string;
+  b64: string;
+}
+
+/** GET /forge/bank?type=sfx-bits&id=<bank> */
+export interface BankResponse {
+  id: string;
+  takes: BankTake[];
+}
+
+/** POST /forge/bank/remove — delete one take; the manifest + sidecar follow. */
+export interface BankRemoveRequest {
+  type: string;
+  id: string;
+  file: string;
 }
 
 export interface ForgeError {

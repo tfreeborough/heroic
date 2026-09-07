@@ -117,7 +117,9 @@ icons (`LoadoutIcon`, the Forge pixel-art set — never tinted). Rows land
 staggered (~500ms apart) so it reads as a ceremony, not a table. Bots
 appear like anyone else. *(Layout rule from Tom's on-device pass,
 2026-09-01: a title NEVER shares a line with the name — the row is an
-identity block (name over title, left-aligned, flexed with minWidth 0)
+identity block (name centre-stacked over title — the EntranceCard seat
+treatment verbatim, so start and end of match read the same; flexed with
+minWidth 0)
 beside the icons, so long name + long title shrink instead of shoving
 the icons off screen. TitleFlex itself carries `maxWidth: "100%"` for the
 same reason — unbounded, `adjustsFontSizeToFit` never engages — and the

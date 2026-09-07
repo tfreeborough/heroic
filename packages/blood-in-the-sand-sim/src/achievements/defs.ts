@@ -413,11 +413,12 @@ const FEATS: BitsAchievementDef[] = [
     pos: { x: -265, y: -130 },
     trigger: {
       kind: "feat",
-      // A decider = both sides took a round; the Wave-2 HP sample is the
-      // FINAL round's close (null = dead when it ended).
+      // A decider = more than one side took a round; the Wave-2 HP sample is
+      // the FINAL round's close (null = dead when it ended).
       test: (s, p) => {
         const frac = s.stats[p]?.lastRoundHpFrac;
-        return wonMatch(s, p) && s.roundWins[0] > 0 && s.roundWins[1] > 0 && frac !== null && frac !== undefined && frac < 0.1;
+        const contested = s.roundWins.filter((w) => w > 0).length >= 2;
+        return wonMatch(s, p) && contested && frac !== null && frac !== undefined && frac < 0.1;
       },
     },
   },
@@ -459,10 +460,14 @@ const FEATS: BitsAchievementDef[] = [
     pos: { x: -265, y: -245 },
     trigger: {
       kind: "feat",
-      // The OTHER side's round tally is zero (wins index = team - 1).
+      // No OTHER side took a round (wins index = team - 1; N-team-safe).
       test: (s, p) => {
         const team = summaryTeamOf(s, p);
-        return team !== null && wonMatch(s, p) && s.roundWins[team === 1 ? 1 : 0] === 0;
+        return (
+          team !== null &&
+          wonMatch(s, p) &&
+          s.roundWins.every((w, i) => i === team - 1 || w === 0)
+        );
       },
     },
   },

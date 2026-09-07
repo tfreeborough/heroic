@@ -8,8 +8,8 @@
  * material lists in a FIXED suffix fight any subject they don't match (a nest
  * of skittering spiders is not punchy), and negations ("no ambience") are
  * ignored or inverted by audio models. So the fixed template carries tone
- * only, and per-subject shape/texture language comes from the LLM expander
- * below (or the user's own editing — the panel's prompt box sends verbatim).
+ * only, and per-subject shape/texture language lives in each brief (or the
+ * user's own editing — the panel's prompt box sends verbatim).
  *
  * Types: `sfx` (ElevenLabs, Enter the Gauntlet) and `icon-bits` (OpenAI
  * gpt-image-1, Blood in the Sand's weapon/ability icons — the icon pass).
@@ -26,7 +26,7 @@ export interface SfxSpec {
   id: "sfx" | "sfx-bits";
   label: string;
   provider: "elevenlabs-sfx";
-  /** The game's sound tone, carried by the template and the LLM expander.
+  /** The game's sound tone, carried by the template.
    * OPTIONAL since 2026-08-10 (Tom): the BITS type dropped it — a ~30-word
    * brand clause was drowning the ~25-word subject in every generation
    * ("sun-baked and dusty" pulled wind textures into knife nicks, and
@@ -99,37 +99,43 @@ export const SFX_BITS: SfxSpec = {
  * on its own, flagged until its brief is written here; the flow/UI banks are a
  * static list there. Briefs are sound-design copy, not game data — concrete
  * source + texture + shape, positive phrasing (the model ignores negations); the
- * SFX_BITS identity colours tone. These seed the panel's prompt box; the LLM
- * "Expand" step and hand-editing refine from there. Bank ids match the game's
+ * SFX_BITS identity colours tone. These seed the panel's prompt box and go out
+ * verbatim; hand-editing refines from there. Bank ids match the game's
  * catalogue clip bases (apps/blood-in-the-sand/src/audio/catalogue.ts).
  */
+// Register (rewritten 2026-09-06 for Stable Audio 3, asset-forge.md § Stable
+// Audio): ONE sound per brief — the model ignores "followed by"/"then", so a
+// sequence comes out as its first half. Source, action, production ("a low
+// ram's horn blown once, a short rough note that swells and cuts off,
+// distant, echoing off stone"); concrete over evocative; no tone adjectives.
+// Ability briefs kept in the old register pending their own pass.
 export const SOUND_SUBJECTS: Record<string, string> = {
   // ── Combat ────────────────────────────────────────────────────────────────
-  hit_generic: "a short, meaty melee impact — a weapon connecting with a body, dull thud with a wet edge",
-  hit_blade: "a fast blade slash biting into flesh — a sharp shnk with a wet cut and a spatter tail",
-  hit_bow: "an arrow thudding hard into a body — a deep meaty thwack with a short flesh impact, no bowstring",
-  hit_staff: "a magic orb bursting on a body — a dry arcane crackle-thump with a brief low pressure whump",
-  hit_hammer: "a massive warhammer slam into a body — a huge blunt crunch with a bassy shockwave",
-  hit_trident: "a trident thrust punching into flesh — a sharp wet pierce, shorter and pointier than a slash, with a quick withdraw",
-  hit_fang: "a small dagger's quick shallow stab into flesh — a thin fast wet nick, light and short, the quietest strike in the arena, with the faintest venomous hiss on the tail",
-  hit_scorpion: "a small crossbow bolt punching into a body — a short hard thock with a brief wet edge, snappier and smaller than an arrow strike, tight with no tail",
-  fire_scorpion: "a repeating crossbow looses one bolt — a dry mechanical clack and a short sharp bolt whoosh, tight and quick with no tail (the game plays it three times in fast succession, so keep it to a single clack, no burst)",
-  fire_bombard: "a hand-mortar launching a shell — a deep hollow THOOMP with a short smoky huff and a faint rising whistle tail, no explosion (the landing boom is its own sound)",
+  hit_generic: "a blunt weapon striking a human body, one dull heavy thud with a soft wet edge, close-miked, dead room",
+  hit_blade: "a sharp knife stabbing into raw meat, one fast wet puncture with a squelch, no metal ring, close-miked, dead room",
+  hit_bow: "an arrow striking a body at speed, one deep meaty thwack, close-miked, dead room",
+  hit_staff: "a ball of energy bursting against a body, one dry crackling pop with a low pressure thump, close-miked",
+  hit_hammer: "a huge warhammer smashing into a body, one massive blunt crunch with a deep bass thump, close-miked",
+  hit_trident: "a spear tip punching into raw meat, one sharp wet stab, short and pointed, close-miked, dead room",
+  hit_fang: "a small dagger nicking flesh, one thin quick wet cut, very light and short, close-miked",
+  hit_scorpion: "a small crossbow bolt striking a body, one short hard thock with a wet edge, tight, no tail, close-miked",
+  fire_scorpion: "a crossbow firing one bolt, one dry mechanical clack with a short sharp whoosh, tight, no tail, close-miked",
+  fire_bombard: "a hand mortar firing a shell, one deep hollow thoomp with a smoky huff, no explosion, close-miked",
   cast_sinkhole: "the ground collapsing into a spiralling sink of sand — a deep grinding pour of grain sliding inward, swelling over a second then settling to a low hungry churn",
   cast_tar_pit: "thick tar glugging out onto sand — a viscous heavy pour with fat sticky bubbles popping and a wet spatter tail, oozing not splashing",
   // "bassy" cut from this brief (2026-08-14): sub-heavy takes vanish on
   // phone speakers — the growth must live in MIDRANGE grit (creak, pop,
   // crack) that a small driver can actually reproduce.
   cast_titans_draught: "a deep greedy gulp from a horn then a bodily SWELL told through gritty midrange texture — leather creaking hard, joints cracking and popping as a body grows a size, ending on a heavy planted stomp with a dry sandy slap",
-  hit_bombard: "a blast concussion thumping a body — a short bassy bodily whump with a grit spray edge, no fireball roar (it plays under a separate explosion boom)",
-  fire_bow: "loosing an arrow from a bow — a taut bowstring release SNAP and a quick arrow whoosh, dry and punchy, no impact",
-  fire_staff: "casting a magic orb from a staff — a short arcane whoosh-swell with a soft energy hum as it launches, no impact",
-  player_hurt: "a single grunt of pain from a gladiator taking a blow — short, breathy, no words",
-  death: "a gladiator's final choked gasp collapsing into the sand — a short wet fall, no scream",
-  crowd_cheer: "a bloodthirsty arena crowd erupting at a kill — a short sharp roar and cheer that swells then falls, rowdy and dry, shouts and claps mixed, no music (forge ~6 varied takes for a randomised bank)",
-  crowd_jeer: "an arena crowd's disappointed groan when a fighter they favour falls — a low collective 'ooohh' and dismayed grumble that sinks, deflated, dry and rowdy, no cheering and no music (forge a few varied takes for a randomised bank)",
-  crowd_ambience: "a constant low arena-crowd ambience bed — a distant restless gladiator-pit crowd murmuring, shifting chatter and shuffles and the odd muffled shout, no distinct cheers or words, no music, EVEN and steady so it loops seamlessly under the action (forge ONE long take, 30s+ if the tool allows — it becomes the crossfade-looped background bed)",
-  blood_squelch: "a bare foot stepping through a fresh pool of blood on sand — one short wet squelch with a sticky peel as the foot lifts, subtle, no splash",
+  hit_bombard: "a blast wave hitting a body, one short bassy whump with a spray of grit, close-miked",
+  fire_bow: "a longbow loosing an arrow, one taut string snap with a quick whoosh, dry, no impact, close-miked",
+  fire_staff: "a ball of magic launched from a staff, one short rising whoosh with a soft energy hum, no impact",
+  player_hurt: "a man grunting in pain from a heavy blow, one short breathy grunt, no words, close-miked",
+  death: "a man's final choked gasp as he collapses onto sand, short and wet, no scream, close-miked",
+  crowd_cheer: "a large crowd in an open stone arena erupting into a roar with shouts and claps, swelling then falling, recorded from the centre of the arena",
+  crowd_jeer: "a large crowd in an open stone arena groaning in disappointment, a low collective ooh that sinks into grumbling, recorded from the centre of the arena",
+  crowd_ambience: "a distant restless crowd murmuring in an open stone arena, steady chatter and shuffling with no distinct words or cheers, even and constant, recorded from the arena floor",
+  blood_squelch: "a bare foot stepping into a pool of thick blood on sand, one short wet squelch with a sticky peel, subtle, close-miked",
   // ── Abilities ─────────────────────────────────────────────────────────────
   cast_generic: "a short ability activation whoosh — dry, physical, a quick surge of intent",
   cast_sandtrap: "burying and arming a spiked powder charge in sand — a muffled shuffle then a metal click-latch",
@@ -148,52 +154,106 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   harpoon_whip: "a barbed chain snapping taut across the arena — a fast metallic whip-crack and rattle",
   heal_tick: "a small warm healing pulse — a soft chime with a brief liquid shimmer, gentle",
   // ── Match flow ────────────────────────────────────────────────────────────
-  countdown_tick: "a single dry pre-fight countdown tick — a taut wooden clack, tense",
-  round_start: "a round beginning in the arena — a short low horn or gong swell with a dusty air",
-  fight_start: "the FIGHT signal — a big brassy gong hit with a roaring crowd surge",
-  sands_close: "a deep dread war-horn blast over a rising wet churning surge, like a tide of blood starting to flood an arena — ominous and heavy, not a jump scare, mastered loud and midrange-forward so it reads on a small phone speaker",
-  round_win: "a short victorious sting — a bright rising brass flourish with a crowd cheer",
-  round_loss: "a short defeat sting — a low falling brass note with a disappointed crowd murmur",
-  round_draw: "a neutral round-over sting — a flat gong tap with an ambiguous crowd hum",
-  match_win: "a triumphant match-won fanfare — a full brass flourish and a roaring victorious crowd",
-  match_loss: "a somber match-lost motif — a low mournful horn fading under a dying crowd",
+  countdown_tick: "a wooden clapper striking once, a single dry taut clack, close-miked, dead room",
+  round_start: "a low ram's horn blown once, a short rough breathy note that swells and cuts off, distant, echoing off the stone walls of an open-air arena",
+  fight_start: "a huge bronze gong struck hard once, a bright crashing hit with a long shimmering decay, recorded in a wide open stone arena",
+  sands_close: "a deep war horn blown long and hard, one low rough sustained blast, ominous, loud and midrange-forward, distant across a stone arena",
+  // The round/match-end stings double as the battle music's BUTTON
+  // (docs/design/bits-music.md): the score cuts hard the instant they land,
+  // so each is one struck hit with a low male choir tail that resolves the
+  // cut. Choir in unison / open fifths only — the songs are in every key.
+  round_win: "a deep bronze gong struck once with a low male choir swelling underneath into one bright held open chord, resolved, long reverb tail",
+  round_loss: "a deep muffled bass drum struck once with a low male choir sinking onto one dark held note and fading, heavy, long tail",
+  round_draw: "a flat gong tapped once, a dull short tone with little decay, distant in a stone arena",
+  match_win: "a great bronze gong struck once with a full low male choir swelling into a bright sustained open chord, vast, very long reverb tail",
+  match_loss: "a slow single bass drum hit under a low male choir holding one dark note and sinking into silence, a dirge",
   // ── Ranked ────────────────────────────────────────────────────────────────
-  queue_match_found:
-    "a ranked match-found summons — one sharp metallic gong clang with a taut rising snap, urgent and commanding, short",
-  rank_up:
-    "a rank promotion fanfare — a bright rising brass flourish over a ringing struck-shield tone, proud and earned, about two seconds",
-  rank_down:
-    "a soft rank demotion beat — one low muted drum thud with a short falling breath of air, quiet, brief and gentle",
-  glory_earned:
-    "a low wordless male choir hum that swells warm and reverent then fades — a legend growing, mythic and human, " +
-    "no words and no melody, about a second and a half",
-  deed_unlock:
-    "an achievement unlock stamp — a heavy wax-seal thunk onto parchment with a short bright metallic shimmer tail, " +
-    "triumphant but compact, under a second",
-  signet_exchange:
-    "a seal-press STRIKE at the end of a held charge — one deep heavy stamp-slam with a bright metal ring and a " +
-    "soft molten-wax hiss in the tail, weightier and punchier than a document stamp, final, about 0.8 seconds, " +
-    "no coins",
-  // (Rejigged 2026-08-15 — the first brief asked for "a wax seal cracking",
-  // which has no real-world audio anchor and generated mush. Concrete
-  // sources only: things that actually crack on tape.)
-  signet_unlock:
-    "a thick disc of hard brittle wax snapping clean in half — one sharp dry CRACK like ceramic breaking, a few " +
-    "small crumbs scattering, then a single short bright bell ding, close-mic, punchy, about one second, " +
-    "no voices, no music",
-  signet_purchase:
-    "a small stack of stiff parchment documents dropped onto a wooden counter — two or three quick heavy paper " +
-    "thumps landing in a pile, a leather strap cinching, then one warm low bell tone settling it, about one " +
-    "second, prosperous but understated, no coins, no voices",
-  reflect:
-    "a magical parry — a bright glassy metallic TING as a mirror shield turns a projectile around, with a quick " +
-    "whip of departure as the shot leaves the other way, sharp attack, under half a second",
+  queue_match_found: "a metal gong struck sharply once, one clang with a fast rising snap, short, close-miked",
+  rank_up: "a struck bronze shield ringing under a short bright horn flourish, proud, about two seconds",
+  rank_down: "a low muted drum struck once, one soft thud with a short falling breath of air, quiet",
+  glory_earned: "a low wordless male choir hum swelling warm and reverent then fading, no words, no melody",
+  deed_unlock: "a heavy wax seal stamped onto parchment, one thunk with a short bright metallic shimmer",
+  signet_exchange: "a heavy seal press slamming down once, a deep stamp with a bright metal ring and a soft hiss of hot wax",
+  signet_unlock: "a thick disc of brittle wax snapping in half, one sharp dry crack like ceramic breaking, close-miked",
+  signet_purchase: "a small stack of stiff parchment dropped onto a wooden counter, a few quick heavy paper thumps, close-miked",
+  reflect: "a projectile ricocheting off a mirror shield, one bright glassy metallic ting with a fast whip away, sharp, very short",
   // ── UI ────────────────────────────────────────────────────────────────────
-  ui_tap: "a soft dry UI tap — a quick muted wooden or leather tick, understated",
-  ui_confirm: "a confident UI confirm — a firm metallic clack-thunk with a short bright ring, committing",
-  ui_back: "a soft UI back/cancel — a low muted wooden knock, a step backwards",
-  ui_error: "a short UI error buzz — a dull dead thunk, a rejected action, not harsh",
-  title_gust: "a brief dry desert wind gust sweeping through a stone arena — a rising sandy hiss with grit ticking off stone, tailing away, no voices",
+  ui_tap: "a fingertip tapping the cover of a leather-bound book, one quick muted tick, close-miked, no reverb",
+  ui_confirm: "a heavy iron latch dropping into a stone slot, one clean short clunk, close-miked, no reverb",
+  ui_back: "a knuckle knocking once on a thick wooden door, one low muted knock, close-miked",
+  ui_error: "a heavy wooden bar refusing to move, one dull dead thunk, short, close-miked, no reverb",
+  title_gust: "a dry desert wind gusting through a stone arena, a rising sandy hiss with grit ticking off stone, tailing away",
+};
+
+/**
+ * Suggested clip length per bank (seconds) — the panel prefills its duration
+ * box from this on bank pick (still editable). Stable Audio needs a number
+ * (ElevenLabs picked its own), and the prompting guide's SFX rule is "set a
+ * short duration": one-shots ≤1s, swells 2–4s, stings 4–6s, the ambience bed
+ * the panel's 30s cap.
+ */
+export const SOUND_DURATIONS: Record<string, number> = {
+  hit_generic: 1,
+  hit_blade: 1,
+  hit_bow: 1,
+  hit_staff: 1,
+  hit_hammer: 1,
+  hit_trident: 1,
+  hit_fang: 0.5,
+  hit_scorpion: 0.5,
+  fire_scorpion: 0.5,
+  fire_bombard: 1,
+  cast_sinkhole: 2,
+  cast_tar_pit: 2,
+  cast_titans_draught: 2.5,
+  hit_bombard: 1,
+  fire_bow: 1,
+  fire_staff: 1,
+  player_hurt: 1,
+  death: 1.5,
+  crowd_cheer: 3,
+  crowd_jeer: 3,
+  crowd_ambience: 30,
+  blood_squelch: 0.5,
+  cast_generic: 1,
+  cast_sandtrap: 1.5,
+  cast_tremor: 1.5,
+  cast_warding_shout: 1.5,
+  quake_rumble: 4,
+  cast_harpoon: 1.5,
+  cast_dash: 1,
+  cast_mirror_guard: 1,
+  cast_ironhide: 1.5,
+  cast_straw_man: 1,
+  cast_war_drums: 2,
+  cast_blood_font: 1.5,
+  cast_sandstorm: 2,
+  detonate_sandtrap: 1.5,
+  harpoon_whip: 1,
+  heal_tick: 0.5,
+  countdown_tick: 0.5,
+  round_start: 3,
+  fight_start: 3,
+  sands_close: 3,
+  round_win: 4,
+  round_loss: 4,
+  round_draw: 2,
+  match_win: 6,
+  match_loss: 6,
+  queue_match_found: 1,
+  rank_up: 2,
+  rank_down: 1,
+  glory_earned: 1.5,
+  deed_unlock: 1,
+  signet_exchange: 1,
+  signet_unlock: 1,
+  signet_purchase: 1,
+  reflect: 0.5,
+  ui_tap: 0.5,
+  ui_confirm: 0.5,
+  ui_back: 0.5,
+  ui_error: 0.5,
+  title_gust: 3,
 };
 
 // ── Blood in the Sand icons ────────────────────────────────────────────────
@@ -1053,30 +1113,3 @@ export const DEED: DeedSpec = {
     "vignette; every pixel outside the subject is transparent. No text, no letters, no " +
     "numerals — the artwork carries no writing or tier marks of any kind.",
 };
-
-/**
- * The prompt expander: an LLM rewrites the user's rough sentence into a
- * provider-shaped SFX prompt — concrete sources/textures, an explicit sonic
- * shape, positive phrasing. This is where per-subject craft lives, so the
- * fixed template above can stay minimal.
- */
-export const EXPANDER_MODEL = "gpt-5-mini";
-
-/** The expander system prompt, parameterised by the game's sound identity so
- * the same prompt-craft serves both games' SFX types (plugin passes the
- * spec's identity; absent — the BITS type since 2026-08-10 — the identity
- * rule is simply omitted and the subject stands alone). */
-export const expanderSystem = (soundIdentity?: string): string =>
-  "You write prompts for ElevenLabs' sound-effects model. The user gives a rough description of a " +
-  "game sound; you reply with ONE refined prompt and nothing else — no quotes, no preamble.\n" +
-  "Rules:\n" +
-  "- Describe the sound itself, concretely: the sources (creatures, materials, surfaces), the " +
-  "actions, and the sonic texture (e.g. chitinous skittering, wet crunch, hollow thud, metallic ring).\n" +
-  "- Give it a shape: how it starts, peaks, and ends, and roughly how long " +
-  '("a short dry burst", "a two-second swell that dies quickly").\n' +
-  "- Say what should be heard, never what should not — the model ignores negations.\n" +
-  "- Audio vocabulary works: impact, whoosh, layered, close-mic'd, dry, one-shot.\n" +
-  (soundIdentity !== undefined
-    ? `- The sound is for ${soundIdentity}. Let that colour material and tone choices only where it fits the subject.\n`
-    : "") +
-  "- At most 40 words. It is a single sound effect, not music and not speech.";

@@ -43,8 +43,10 @@ const sandsNum = (name: string): number | undefined => {
   const v = Number(process.env[name]);
   return Number.isFinite(v) && v > 0 ? v : undefined;
 };
+const sandsFlag = (process.env.SANDS_ENABLED ?? "").trim().toLowerCase();
 configureSafeCircle({
-  ...(process.env.SANDS_ENABLED === "0" ? { enabled: false } : {}),
+  // Same off-values as RANKED_BOT_BACKFILL — one boolean dialect server-wide.
+  ...(["0", "off", "false"].includes(sandsFlag) ? { enabled: false } : {}),
   ...(sandsNum("SANDS_DELAY_S") !== undefined ? { delaySeconds: sandsNum("SANDS_DELAY_S")! } : {}),
   ...(sandsNum("SANDS_CLOSE_S") !== undefined ? { closeSeconds: sandsNum("SANDS_CLOSE_S")! } : {}),
   ...(sandsNum("SANDS_FINAL_RADIUS") !== undefined ? { finalRadius: sandsNum("SANDS_FINAL_RADIUS")! } : {}),

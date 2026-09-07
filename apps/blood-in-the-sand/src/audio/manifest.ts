@@ -1,5 +1,6 @@
 import type { AudioManifest } from "@heroic/engine";
 import { ANNOUNCER_MANIFEST } from "./announcer";
+import { SFX_MANIFEST } from "./sfxManifest.generated";
 
 /**
  * Clip name → bundled audio file. The SFX catalogue (`catalogue.ts`) names
@@ -7,116 +8,23 @@ import { ANNOUNCER_MANIFEST } from "./announcer";
  * uses with no entry here warns once and stays silent, so the catalogue is safe
  * to author ahead of the files.
  *
- * To add a sound: forge it in Realmsmith (Asset Forge → "Sound (Blood in the
- * Sand)"), which drops `<name>.mp3` into `assets/audio/sfx/` and hands back the
- * exact line to paste here. The line's *name* must match a clip in `catalogue.ts`
- * (the Forge's bank names mirror the catalogue's, so they line up by construction).
+ * The SFX banks are NOT listed by hand any more (2026-09-06): every
+ * `<bank>_<n>.mp3` in `assets/audio/sfx/` is in `sfxManifest.generated.ts`,
+ * rewritten by the Realmsmith Forge on each save/remove (or `bun run
+ * sfx:manifest` in apps/realmsmith after moving files by hand), and the
+ * catalogue derives each bank's clip list from those keys. Adding a take is
+ * generate → keep → save in the Forge; nothing to paste, nothing to count.
  *
- * `require()` a file that doesn't exist and the bundler errors — so lines only
- * appear here once their mp3 is on disk.
- *
- * The booming announcer voice (`announce_*`) is NOT here: it's a swappable,
- * sellable PACK, so it lives in `announcer.ts` (its own `announcer/<pack>/`
- * folders) and is spread in below as EVERY pack's clips under pack-namespaced
- * names — playSound remaps the catalogue's stable names to the active pack.
+ * The booming announcer voice (`announce_*`) is NOT in that folder: it's a
+ * swappable, sellable PACK, so it lives in `announcer.ts` (its own
+ * `announcer/<pack>/` folders) and is spread in below as EVERY pack's clips
+ * under pack-namespaced names — playSound remaps the catalogue's stable names
+ * to the active pack.
  */
 export const AUDIO_MANIFEST: AudioManifest = {
-    hit_blade_1: require("../../assets/audio/sfx/hit_blade_1.mp3"),
-    fire_bow_1: require("../../assets/audio/sfx/fire_bow_1.mp3"),
-    hit_bow_1: require("../../assets/audio/sfx/hit_bow_1.mp3"),
-    fire_staff_1: require("../../assets/audio/sfx/fire_staff_1.mp3"),
-    hit_staff_1: require("../../assets/audio/sfx/hit_staff_1.mp3"),
-    hit_hammer_1: require("../../assets/audio/sfx/hit_hammer_1.mp3"),
-    hit_trident_1: require("../../assets/audio/sfx/hit_trident_1.mp3"),
-
-    hit_fang_1: require("../../assets/audio/sfx/hit_fang_1.mp3"),
-    hit_fang_2: require("../../assets/audio/sfx/hit_fang_2.mp3"),
-    hit_fang_3: require("../../assets/audio/sfx/hit_fang_3.mp3"),
-
-    fire_scorpion_1: require("../../assets/audio/sfx/fire_scorpion_1.mp3"),
-    hit_scorpion_1: require("../../assets/audio/sfx/hit_scorpion_1.mp3"),
-
-    fire_bombard_1: require("../../assets/audio/sfx/fire_bombard_1.mp3"),
-    hit_bombard_1: require("../../assets/audio/sfx/hit_bombard_1.mp3"),
-
-    hit_generic_1: require("../../assets/audio/sfx/hit_generic_1.mp3"),
-    player_hurt_1: require("../../assets/audio/sfx/player_hurt_1.mp3"),
-    death_1: require("../../assets/audio/sfx/death_1.mp3"),
-    blood_squelch_1: require("../../assets/audio/sfx/blood_squelch_1.mp3"),
-
-    cast_sandtrap_1: require("../../assets/audio/sfx/cast_sandtrap_1.mp3"),
-    cast_tremor_1: require("../../assets/audio/sfx/cast_tremor_1.mp3"),
-    cast_harpoon_1: require("../../assets/audio/sfx/cast_harpoon_1.mp3"),
-    cast_dash_1: require("../../assets/audio/sfx/cast_dash_1.mp3"),
-    cast_mirror_guard_1: require("../../assets/audio/sfx/cast_mirror_guard_1.mp3"),
-    cast_ironhide_1: require("../../assets/audio/sfx/cast_ironhide_1.mp3"),
-    cast_straw_man_1: require("../../assets/audio/sfx/cast_straw_man_1.mp3"),
-    cast_warding_shout_1: require("../../assets/audio/sfx/cast_warding_shout_1.mp3"),
-    cast_war_drums_1: require("../../assets/audio/sfx/cast_war_drums_1.mp3"),
-    cast_blood_font_1: require("../../assets/audio/sfx/cast_blood_font_1.mp3"),
-    cast_sandstorm_1: require("../../assets/audio/sfx/cast_sandstorm_1.mp3"),
-    detonate_sandtrap_1: require("../../assets/audio/sfx/detonate_sandtrap_1.mp3"),
-    cast_generic_1: require("../../assets/audio/sfx/cast_generic_1.mp3"),
-    harpoon_whip_1: require("../../assets/audio/sfx/harpoon_whip_1.mp3"),
-    heal_tick_1: require("../../assets/audio/sfx/heal_tick_1.mp3"),
-    quake_rumble_1: require("../../assets/audio/sfx/quake_rumble_1.mp3"),
-    reflect_1: require("../../assets/audio/sfx/reflect_1.mp3"),
-    cast_sinkhole_1: require("../../assets/audio/sfx/cast_sinkhole_1.mp3"),
-    cast_tar_pit_1: require("../../assets/audio/sfx/cast_tar_pit_1.mp3"),
-    cast_tar_pit_2: require("../../assets/audio/sfx/cast_tar_pit_2.mp3"),
-    cast_tar_pit_3: require("../../assets/audio/sfx/cast_tar_pit_3.mp3"),
-
-    cast_titans_draught_1: require("../../assets/audio/sfx/cast_titans_draught_1.mp3"),
-    cast_titans_draught_2: require("../../assets/audio/sfx/cast_titans_draught_2.mp3"),
-    cast_titans_draught_3: require("../../assets/audio/sfx/cast_titans_draught_3.mp3"),
-
-    countdown_tick_1: require("../../assets/audio/sfx/countdown_tick_1.mp3"),
-    round_start_1: require("../../assets/audio/sfx/round_start_1.mp3"),
-    fight_start_1: require("../../assets/audio/sfx/fight_start_1.mp3"),
-    round_win_1: require("../../assets/audio/sfx/round_win_1.mp3"),
-    round_loss_1: require("../../assets/audio/sfx/round_loss_1.mp3"),
-    round_draw_1: require("../../assets/audio/sfx/round_draw_1.mp3"),
-    match_win_1: require("../../assets/audio/sfx/match_win_1.mp3"),
-    match_loss_1: require("../../assets/audio/sfx/match_loss_1.mp3"),
-
-    ui_tap_1: require("../../assets/audio/sfx/ui_tap_1.mp3"),
-    ui_confirm_1: require("../../assets/audio/sfx/ui_confirm_1.mp3"),
-    ui_back_1: require("../../assets/audio/sfx/ui_back_1.mp3"),
-    ui_error_1: require("../../assets/audio/sfx/ui_error_1.mp3"),
-
-    title_gust_1: require("../../assets/audio/sfx/title_gust_1.mp3"),
-
-    crowd_cheer_1: require("../../assets/audio/sfx/crowd_cheer_1.mp3"),
-    crowd_cheer_2: require("../../assets/audio/sfx/crowd_cheer_2.mp3"),
-    crowd_cheer_3: require("../../assets/audio/sfx/crowd_cheer_3.mp3"),
-    crowd_cheer_4: require("../../assets/audio/sfx/crowd_cheer_4.mp3"),
-    crowd_cheer_5: require("../../assets/audio/sfx/crowd_cheer_5.mp3"),
-    crowd_cheer_6: require("../../assets/audio/sfx/crowd_cheer_6.mp3"),
-    crowd_cheer_7: require("../../assets/audio/sfx/crowd_cheer_7.mp3"),
-    crowd_cheer_8: require("../../assets/audio/sfx/crowd_cheer_8.mp3"),
-
-    // For when you get dunk'd on!
-    crowd_jeer_1: require("../../assets/audio/sfx/crowd_jeer_1.mp3"),
-    crowd_jeer_2: require("../../assets/audio/sfx/crowd_jeer_2.mp3"),
-    crowd_jeer_3: require("../../assets/audio/sfx/crowd_jeer_3.mp3"),
-    crowd_jeer_4: require("../../assets/audio/sfx/crowd_jeer_4.mp3"),
-
-    crowd_ambience_1: require("../../assets/audio/sfx/crowd_ambience_1.mp3"),
-
-    //Play Page
-    mode_reveal_1: require("../../assets/audio/sfx/mode_reveal_1.mp3"),
-    queue_match_found_1: require("../../assets/audio/sfx/queue_match_found_1.mp3"),
-    rank_up_1: require("../../assets/audio/sfx/rank_up_1.mp3"),
-    rank_down_1: require("../../assets/audio/sfx/rank_down_1.mp3"),
-    glory_earned_1: require("../../assets/audio/sfx/glory_earned_1.mp3"),
-
-    // Achievements
-    deed_unlock_1: require("../../assets/audio/sfx/deed_unlock_1.mp3"),
-
-    // Store
-    signet_exchange_1: require("../../assets/audio/sfx/signet_exchange_1.mp3"),
-    signet_unlock_1: require("../../assets/audio/sfx/signet_unlock_1.mp3"),
-    signet_purchase_1: require("../../assets/audio/sfx/signet_purchase_1.mp3"),
+    // Every `<bank>_<n>.mp3` in assets/audio/sfx — GENERATED by the Realmsmith
+    // Forge on each save/remove (sfxManifest.generated.ts); never hand-edit.
+    ...SFX_MANIFEST,
 
     // ALL announcer packs (announcer.ts) — `<pack>:announce_first_blood_1`, …
     ...ANNOUNCER_MANIFEST,

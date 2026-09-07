@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "A dry and dusty wind blows through an empty stone arena",
-  "prompt": "A dry and dusty wind blows through an empty stone arena",
+  "subject": "a dry desert wind gusting through a stone arena, a rising sandy hiss with grit ticking off stone, tailing away",
+  "prompt": "a gentle and light dry wind settling in an arena",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 8,
-    "promptInfluence": 0.55,
+    "durationSeconds": 6,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "title_gust_1.mp3"
+    "title_gust_1.mp3",
+    "title_gust_2.mp3",
+    "title_gust_3.mp3"
   ],
+  "takeEngines": {
+    "title_gust_2.mp3": "elevenlabs",
+    "title_gust_1.mp3": "elevenlabs",
+    "title_gust_3.mp3": "elevenlabs"
+  },
   "created": "2026-07-18T21:52:51.610Z",
-  "updated": "2026-07-18T21:52:51.610Z"
+  "updated": "2026-09-07T20:54:58.494Z"
 }

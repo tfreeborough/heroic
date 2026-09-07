@@ -1,19 +1,18 @@
 {
   "type": "sfx-bits",
-  "subject": "casting a magic orb from a staff — a short arcane whoosh-swell with a soft energy hum as it launches, no impact",
-  "prompt": "magical impact on flesh, slight crackle",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a ball of magic energy bursting against a body",
+  "prompt": "a ball of magic energy bursting against a body. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 0.8,
-    "promptInfluence": 0.85,
+    "durationSeconds": 1,
+    "promptInfluence": null,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "hit_staff_1.mp3",
-    "hit_staff_1.mp3"
+    "hit_staff_2.mp3"
   ],
   "created": "2026-07-16T13:33:25.318Z",
-  "updated": "2026-07-16T22:40:52.880Z"
+  "updated": "2026-09-06T21:51:39.066Z"
 }

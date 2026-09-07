@@ -128,6 +128,17 @@ just off the shoreline. The sandstorm's animated-arc idiom: one addArc path
 per line per frame, culled by radius band against the visible annulus.
 Lesson recorded: in this game's top-down flat-shaded look, "stuff floating in
 the blood" reads as clip-art — liquid must be drawn as FLOW, not objects.*
+
+*V7 — production perf pass (Tom's OnePlus 12 dropped frames in real matches,
+2026-09-03): rebuilding ~40 small paths inside recordArena every rendered
+frame was the scar-cache lesson repeated. The tide now re-records on a 25Hz
+beat (`TIDE_REBUILD_MS` 40) into its own cached world-space SkPicture — the
+scarLayer idiom — and recordArena replays ONE op per frame; culls inside the
+recording pad by `TIDE_PAD` 50 so camera drift between rebuilds never pops an
+edge element. Counts also trimmed: currents 26→16, streaks 34→22, flecks
+22→14, foam 14→9, shoreline verts 72→56. The tide is animated texture, not
+tracked geometry — 25Hz reads identically. Rule going forward: nothing in the
+tide may build paths per rendered frame.*
 3. **In the blood (local, bounded).** When the LOCAL player stands outside the
    ring: a red radial-gradient vignette in the post-camera screen-space pass.
    At most one instance, ever.
@@ -146,8 +157,9 @@ noise next to `stepDeployables`.
 `configureSafeCircle(overrides)` mutates the `CLOSING_SANDS` table:
 
 - **Server** (Render env / local shell): `SANDS_DELAY_S`, `SANDS_CLOSE_S`,
-  `SANDS_FINAL_RADIUS`, `SANDS_ENABLED=0` (kill switch). Read once at boot in
-  `main.ts`, logged.
+  `SANDS_FINAL_RADIUS`, and the `SANDS_ENABLED` kill switch — off on `0`,
+  `off`, or `false` (case-insensitive; the `RANKED_BOT_BACKFILL` dialect),
+  anything else (or unset) is on. Read once at boot in `main.ts`, logged.
 - **Client (practice mode runs the sim in-process — there is no server to
   configure offline)**: `EXPO_PUBLIC_SANDS_DELAY_S`, `EXPO_PUBLIC_SANDS_CLOSE_S`,
   `EXPO_PUBLIC_SANDS_FINAL_RADIUS`, `EXPO_PUBLIC_SANDS_ENABLED=0` — set them in

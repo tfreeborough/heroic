@@ -14,6 +14,10 @@ export interface EntranceSeat {
   name: string;
   /** Already-resolved display text — null = bare, the title line just skips. */
   title: string | null;
+  /** Brawl only (bits-brawl.md): this fighter's identity colour — the same
+   * one their body and scoreboard pip wear. Absent = the classic foe red /
+   * friend blue. */
+  color?: string;
 }
 
 export interface EntranceCardProps {
@@ -46,7 +50,10 @@ const SeatView = ({ seat, foe, index }: { seat: EntranceSeat; foe: boolean; inde
         },
       ]}
     >
-      <Text style={[styles.name, foe ? styles.foe : styles.friend]} numberOfLines={1}>
+      <Text
+        style={[styles.name, foe ? styles.foe : styles.friend, seat.color != null && { color: seat.color }]}
+        numberOfLines={1}
+      >
         {seat.name}
       </Text>
       <TitleFlex title={seat.title} size={11} />

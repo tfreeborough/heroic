@@ -25,6 +25,17 @@ export const saveLefty = (on: boolean): void => {
   void AsyncStorage.setItem(KEY_LEFTY, on ? "1" : "0");
 };
 
+/** Battle music (bits-music.md) — on by default; some players won't want a
+ * score under the fight. Read lazily by the music module, pushed live by the
+ * settings row (a song fades out mid-round if you flip it there). */
+const KEY_MUSIC = "bits.music";
+
+export const loadMusicEnabled = async (): Promise<boolean> => (await AsyncStorage.getItem(KEY_MUSIC)) !== "0";
+
+export const saveMusicEnabled = (on: boolean): void => {
+  void AsyncStorage.setItem(KEY_MUSIC, on ? "1" : "0");
+};
+
 /** The Primer (bits-onboarding.md) — the first PLAY routes through the
  * five-chapter rules walkthrough until a door or SKIP retires it. Only a
  * decision writes the flag: a crash mid-Primer replays it. Settings' HOW TO

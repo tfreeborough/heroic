@@ -7,7 +7,8 @@ import { AccountSheet } from "../components/AccountSheet";
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { CLERK_PUBLISHABLE_KEY, accountUnlink } from "../net/account";
 import { ensureIdentity, useWalletInfo } from "../net/api";
-import { loadLefty, saveLefty } from "../settings";
+import { loadLefty, loadMusicEnabled, saveLefty, saveMusicEnabled } from "../settings";
+import { setMusicEnabled } from "../audio";
 import { SUPPORT_EMAIL, openCommunity, openSupportEmail } from "../support";
 import { runningVersion } from "../updates";
 
@@ -42,6 +43,16 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename, onPrime
   const toggleLefty = (on: boolean): void => {
     setLefty(on);
     saveLefty(on);
+  };
+
+  const [music, setMusic] = useState(true);
+  useEffect(() => {
+    void loadMusicEnabled().then(setMusic);
+  }, []);
+  const toggleMusic = (on: boolean): void => {
+    setMusic(on);
+    saveMusicEnabled(on);
+    setMusicEnabled(on);
   };
 
   // An emptied field reverts rather than erasing the name (which would
@@ -87,6 +98,19 @@ export const SettingsScreen = ({ onBack, onArmory, playerName, onRename, onPrime
         <Switch
           value={lefty}
           onValueChange={toggleLefty}
+          trackColor={{ false: "#3a332a", true: "#8c2f2f" }}
+          thumbColor="#f0e8d8"
+        />
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>Battle music</Text>
+          <Text style={styles.rowHint}>a score rises under each round; crowd and steel stay either way</Text>
+        </View>
+        <Switch
+          value={music}
+          onValueChange={toggleMusic}
           trackColor={{ false: "#3a332a", true: "#8c2f2f" }}
           thumbColor="#f0e8d8"
         />

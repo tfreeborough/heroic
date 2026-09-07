@@ -23,12 +23,17 @@ import {
   LOADOUT_ABILITY_COUNT,
   PLAYER_RADIUS,
   PLAYER_STATS,
+  WINS_TO_TAKE_MATCH,
+  WINS_TO_TAKE_MATCH_BRAWL,
   type AbilityId,
   type WeaponId,
 } from "./config";
 import { pickTeamNames } from "./teamNames";
 
-export type Team = 1 | 2;
+/** 1-based team index. Classic rooms use 1|2; Brawl (bits-brawl.md) seats six
+ * teams of one. Every gameplay check is RELATIONAL (`p.team !== me.team`) —
+ * nothing may branch on a specific team number. */
+export type Team = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** One player's input for one tick — the entire per-tick network payload. */
 export interface PlayerInput {
@@ -239,8 +244,8 @@ export interface RoundState {
   sands: SandsState | null;
   /** 1-based; 0 before the first round starts. */
   roundNumber: number;
-  /** Round wins, indexed team − 1. */
-  wins: [number, number];
+  /** Round wins, indexed team − 1 (length = teamCount). */
+  wins: number[];
   /** 0 until a round has been won (also the draw sentinel). */
   lastWinner: Team | 0;
   /** The host's force-start override: lets the arming gate pass with empty
@@ -327,11 +332,16 @@ export interface ArenaShell {
 
 export interface ArenaState {
   tick: number;
-  /** The two sides' faction names, indexed team − 1 (teamNames.ts). Assigned
-   * at creation from the seed and never touched again — a room wears the same
-   * two names from open to close, rematches included. Pure presentation: the
-   * name is the absolute identity, colour is the relative allegiance cue. */
-  teamNames: [string, string];
+  /** How many teams this room seats: 2 for every classic mode, 6 for Brawl
+   * (bits-brawl.md). Seats = teamCount × teamSize; fixed for the room's life. */
+  teamCount: number;
+  /** The sides' faction names, indexed team − 1 (teamNames.ts, length =
+   * teamCount). Assigned at creation from the seed and never touched again —
+   * a room wears the same names from open to close, rematches included. Pure
+   * presentation: the name is the absolute identity, colour is the relative
+   * allegiance cue. (Brawl assigns them too — indexing must never break — but
+   * its UI leads with player names: your name is your banner there.) */
+  teamNames: string[];
   /** Training mode (the dev menu's target-dummy range): rounds never end —
    * checkRoundOver stands down and dead dummies respawn in place instead. */
   training: boolean;
@@ -362,15 +372,17 @@ export const createArenaState = (
   seatCount: number,
   training = false,
   practice = false,
+  teamCount = 2,
 ): ArenaState => ({
   tick: 0,
-  teamNames: pickTeamNames(seed),
+  teamCount,
+  teamNames: pickTeamNames(seed, teamCount),
   training,
   practice,
   seed,
   rngDraws: 0,
   players: Array.from({ length: seatCount }, () => null),
-  round: { phase: "lobby", timer: 0, elapsed: 0, sands: null, roundNumber: 0, wins: [0, 0], lastWinner: 0, forced: false },
+  round: { phase: "lobby", timer: 0, elapsed: 0, sands: null, roundNumber: 0, wins: Array.from({ length: teamCount }, () => 0), lastWinner: 0, forced: false },
   projectiles: [],
   nextProjectileId: 0,
   deployables: [],
@@ -382,18 +394,20 @@ export const createArenaState = (
 export const seatedPlayers = (state: ArenaState): ArenaPlayer[] =>
   state.players.filter((p): p is ArenaPlayer => p !== null);
 
-/** Seated head-count per team, indexed team − 1. */
-export const teamCounts = (state: ArenaState): [number, number] => {
-  const counts: [number, number] = [0, 0];
-  for (const p of seatedPlayers(state)) {
-    if (p.team === 1) counts[0] += 1;
-    else counts[1] += 1;
-  }
+/** Seated head-count per team, indexed team − 1 (length = teamCount). */
+export const teamCounts = (state: ArenaState): number[] => {
+  const counts = Array.from({ length: state.teamCount }, () => 0);
+  for (const p of seatedPlayers(state)) counts[p.team - 1]! += 1;
   return counts;
 };
 
-/** Players per side (seats are always 2×N by construction). */
-export const teamSizeOf = (state: ArenaState): number => state.players.length / 2;
+/** Players per side (seats are always teamCount×N by construction). */
+export const teamSizeOf = (state: ArenaState): number => state.players.length / state.teamCount;
+
+/** The match threshold for this room's shape: Brawl resolves at 2, classic
+ * modes at 3 (bits-brawl.md — six contenders spread wins out). */
+export const winsToTakeOf = (state: ArenaState): number =>
+  state.teamCount > 2 ? WINS_TO_TAKE_MATCH_BRAWL : WINS_TO_TAKE_MATCH;
 
 export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, facing: number): ArenaPlayer => ({
   id,

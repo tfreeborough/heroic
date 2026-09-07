@@ -51,7 +51,7 @@ describe("arena-00", () => {
       expect(segmentClear(a, b, zone.occluders)).toBe(false);
     }
     // A hair's-width segment at a spawn (proven off-collision above): clear.
-    const s = zone.spawns[0];
+    const s = zone.spawns[0]!;
     expect(segmentClear(s, { x: s.x + 1, y: s.y }, zone.occluders)).toBe(true);
   });
 

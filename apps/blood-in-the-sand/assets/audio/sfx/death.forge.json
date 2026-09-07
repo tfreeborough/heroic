@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "a low deep funeral bell",
-  "prompt": "low, cavernous bronze bell struck by heavy mallet, thick metallic impact with long dusty resonance; start: slow heavy strike, peak: booming mid-low harmonic clatter, decay: gritty sand-laden tail folding into muted subterranean rumble, three- to five-second sustained toll.",
+  "subject": "a man's final choked gasp as he collapses onto sand, short and wet, no scream, close-miked",
+  "prompt": "a man's final choked gasp as he collapses onto sand, short and wet, no scream, close-miked. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": null,
-    "promptInfluence": 0.3,
+    "durationSeconds": 2,
+    "promptInfluence": 0.6,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "death_1.mp3"
+    "death_2.mp3",
+    "death_3.mp3",
+    "death_4.mp3"
   ],
+  "takeEngines": {
+    "death_2.mp3": "elevenlabs",
+    "death_3.mp3": "elevenlabs",
+    "death_4.mp3": "elevenlabs"
+  },
   "created": "2026-07-16T13:36:25.500Z",
-  "updated": "2026-07-16T13:36:25.500Z"
+  "updated": "2026-09-06T22:30:35.714Z"
 }

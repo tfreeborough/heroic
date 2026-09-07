@@ -33,6 +33,11 @@ export const PLAYER_RADIUS = 18;
 /** Host-picked at room creation: 1v1 / 2v2 / 3v3 / 4v4 → 2×N seats. */
 export type TeamSize = 1 | 2 | 3 | 4;
 export const MAX_TEAM_SIZE = 4;
+/** Melee (docs/design/bits-brawl.md): the free-for-all shape — six teams of
+ * one, last one standing. Six because a square arena seats six symmetrically
+ * (hex ring) where five never sits right, and 6 players is inside every
+ * existing capacity assumption (a 4v4 room already holds 8). */
+export const BRAWL_TEAM_COUNT = 6;
 /** Gap between teammate spawn slots in the formation line — > 2×radius so
  * nobody starts overlapped (stepCrowd would shove them apart, ugly). */
 export const SPAWN_SPACING = PLAYER_RADIUS * 2.5;
@@ -766,6 +771,10 @@ export const ENTRANCE_COUNTDOWN_SECONDS = 5;
 export const ROUND_END_SECONDS = 2.5;
 export const MATCH_END_SECONDS = 8; // then a fresh match with the same players
 export const WINS_TO_TAKE_MATCH = 3;
+/** Melee resolves faster: six contenders spread wins out — first-to-3 could
+ * run 13 rounds worst case; first-to-2 tops out at 7 and typically lands 2–4
+ * (bits-brawl.md § ratified decisions). */
+export const WINS_TO_TAKE_MATCH_BRAWL = 2;
 
 // ── The Closing Sands (docs/design/bits-sand-circle.md) ────────────────────
 /** Environment-damage attribution sentinel: circle ticks carry this as their

@@ -283,6 +283,18 @@ buffers, native-engine playback, per-play cost ≈ nothing) — music decks
 would stay on expo-audio. Native dep + dev-client rebuilds; needs Tom's
 buy-in.
 
+## Volume tiers (2026-09-07)
+
+Every clip is loudness-normalised to the same LUFS at forge time, so the
+catalogue's per-event `volume` is the ONLY relative level — and Tom's on-device
+verdict was that UI and ceremony sounds sat as loud as a sword hit. Four tiers
+now (comment atop `SOUND_CATALOGUE`): **1.0** gameplay information (strikes,
+hits taken, casts, the sands horn, the round/match stingers); **~0.8**
+secondary info (releases, FIGHT, match-found, rank up); **~0.6** colour (crowd,
+heals, countdown, ceremony plates, store stamps); **~0.4** furniture (UI taps,
+title gust, mode reveal, footstep squelch). Retune by ear on device; the
+announcer is a paid flex and stays at 1.0.
+
 ## Forge authoring path
 
 `sfx-bits` is its own asset type (symmetry with `icon-bits` being separate from
@@ -294,7 +306,9 @@ loudness-normalize, sidecars) but with:
 - destination `apps/blood-in-the-sand/assets/audio/sfx`;
 - a **done-tick sound manifest** in the panel — grouped combat / ability / flow /
   UI, "N of M done", pick a bank → its brief seeds the prompt box → generate 3 →
-  audition → keep → save. Save hands back the exact `src/audio/manifest.ts` line.
+  audition → keep → save. Save regenerates `src/audio/sfxManifest.generated.ts`
+  and the catalogue derives banks from it (asset-forge.md § Sound banks,
+  2026-09-06) — no manifest line to paste, no catalogue edit.
 
 ## Out of scope (v1)
 

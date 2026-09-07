@@ -275,8 +275,19 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * `bleed: true` and the SANDS_ATTACKER_ID sentinel (−1): the sands claim
  * kills, they credit no one. Bump: a v30 client renders no circle and
  * dies to invisible blood.
+ * v32 (2026-09-03): BRAWL (bits-brawl.md) — the free-for-all: six teams of
+ * one, last one standing, first to 2 rounds. Room shape generalises from
+ * "teamSize → 2×N seats" to (teamCount, teamSize): `createRoom` gains
+ * `brawl?: true` (shape (6,1); `teamSize` ignored), `welcome` gains
+ * `teamCount` and its `teamNames` widens to string[teamCount], and
+ * `RoundSnapshot.wins` widens to number[teamCount] — all JSON-identical to
+ * v31 in classic rooms (2-length arrays), so the shapes only differ inside
+ * a Brawl room. `switchTeam` is ignored there (every other team is full);
+ * `RoomListing` gains `brawl` so the directory can badge the mode. Bump: a
+ * v31 client seated in a Brawl room would render a two-team scoreboard over
+ * a six-way fight and misread the lobby entirely.
  */
-export const PROTOCOL_VERSION = 31;
+export const PROTOCOL_VERSION = 32;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -297,8 +308,9 @@ export type RankedBracket = keyof typeof RANKED_BRACKETS;
 // ── client → server ────────────────────────────────────────────────────────
 export type ClientMsg =
   /** `teamSize` 1–4 (the host's 1v1/2v2/3v3/4v4 pick) → 2×N seats; absent or
-   * off-menu falls back to 1v1 (sanitizeTeamSize). */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; announcer?: string; title?: string }
+   * off-menu falls back to 1v1 (sanitizeTeamSize). `brawl` (v32) makes the
+   * room a free-for-all instead — shape (6 teams × 1), `teamSize` ignored. */
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string }
   /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
    * secret the last `welcome` for this room carried. Present and matching a
    * disconnected seat, that exact seat is reclaimed — name, team, body.
@@ -434,7 +446,8 @@ export interface RoundSnapshot {
   phase: RoundPhase;
   timer: number;
   roundNumber: number;
-  wins: [number, number];
+  /** Round wins, indexed team − 1 (length = the room's teamCount). */
+  wins: number[];
   lastWinner: Team | 0;
   /** null until the circle rolls (~45s of active round). */
   sands: SandsSnapshot | null;
@@ -520,6 +533,8 @@ export interface RoomListing {
   capacity: number;
   locked: boolean;
   phase: "lobby" | "in-match";
+  /** v32: a free-for-all room (6 seats reads ambiguous next to 3v3 without it). */
+  brawl: boolean;
 }
 
 export interface SnapshotMsg {
@@ -540,13 +555,17 @@ export type ServerMsg =
       v: number;
       playerId: number;
       team: Team;
-      /** Players per side — the client renders capacity (2×N) and empty-seat
-       * rows from this. Per-room, like zoneId, so NOT in ArenaClientConfig. */
+      /** Players per side — with teamCount the client renders capacity
+       * (teamCount×N) and empty-seat rows. Per-room, like zoneId, so NOT in
+       * ArenaClientConfig. */
       teamSize: number;
-      /** The two sides' faction names, [team 1, team 2] — fixed for the room's
-       * life (teamNames.ts). Both clients get the same array; each renders its
-       * own side blue and the other red. */
-      teamNames: [string, string];
+      /** How many teams (v32): 2 in every classic room, 6 in Brawl — the
+       * client's mode switch (teamCount > 2 = free-for-all presentation). */
+      teamCount: number;
+      /** The sides' faction names, indexed team − 1, length teamCount — fixed
+       * for the room's life (teamNames.ts). Every client gets the same array;
+       * each renders its own side blue and the rest red. */
+      teamNames: string[];
       roomCode: string;
       roomName: string;
       hostId: number;

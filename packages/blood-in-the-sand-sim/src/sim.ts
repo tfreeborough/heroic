@@ -49,8 +49,8 @@ export interface ArenaZone {
   collision: Aabb[];
   /** LOS occluders: the edges of sight-blocking walls only. */
   occluders: VisionSegment[];
-  /** Team spawn points, indexed team − 1. */
-  spawns: [Vec2, Vec2];
+  /** Team spawn points, indexed team − 1 (length = the room's teamCount). */
+  spawns: Vec2[];
 }
 
 export interface ArenaSim {
@@ -76,11 +76,17 @@ export const restoreRng = (seed: number, draws: number): Rng => {
   return rng;
 };
 
-export const deriveArenaZone = (file: ZoneFile): ArenaZone => {
+export const deriveArenaZone = (file: ZoneFile, teamCount = 2): ArenaZone => {
   const zone = loadZone(file);
-  const spawnOf = (team: Team): Vec2 => {
-    const obj = zone.objects.find((o) => o.kind === "playerSpawn" && Number(o.props.team) === team);
-    if (!obj) throw new Error(`zone ${zone.id}: no playerSpawn with props.team = ${team}`);
+  // Two authored anchor SETS share the map (bits-brawl.md § spawns): the
+  // classic diagonal pair, and Brawl's hex ring tagged `props.brawl` with its
+  // own team numbering 1..6. A room reads exactly one set.
+  const brawl = teamCount > 2;
+  const spawnOf = (team: number): Vec2 => {
+    const obj = zone.objects.find(
+      (o) => o.kind === "playerSpawn" && Number(o.props.team) === team && Boolean(o.props.brawl) === brawl,
+    );
+    if (!obj) throw new Error(`zone ${zone.id}: no ${brawl ? "brawl " : ""}playerSpawn with props.team = ${team}`);
     return { x: obj.x, y: obj.y };
   };
   return {
@@ -90,7 +96,7 @@ export const deriveArenaZone = (file: ZoneFile): ArenaZone => {
     // Sight-blockers: drawn walls plus occluding prop footprints (solid rocks —
     // hidden collision whose sprite is the visual; docs/design/tilesets.md).
     occluders: [...zone.walls, ...zone.propOccluders].flatMap((w) => rectEdges(w.x, w.y, w.w, w.h)),
-    spawns: [spawnOf(1), spawnOf(2)],
+    spawns: Array.from({ length: teamCount }, (_, i) => spawnOf(i + 1)),
   };
 };
 
@@ -100,9 +106,10 @@ export const createSim = (
   teamSize: number = 1,
   training = false,
   practice = false,
+  teamCount = 2,
 ): ArenaSim => {
-  const zone = deriveArenaZone(zoneFile);
-  const state = createArenaState(seed, teamSize * 2, training, practice);
+  const zone = deriveArenaZone(zoneFile, teamCount);
+  const state = createArenaState(seed, teamSize * teamCount, training, practice, teamCount);
   return {
     state,
     zone,
@@ -150,10 +157,19 @@ export const addPlayer = (sim: ArenaSim, name: string, forcedTeam?: Team): Arena
   if (sim.state.round.phase !== "lobby") return null;
   const id = sim.state.players.indexOf(null);
   if (id === -1) return null;
-  const [n1, n2] = teamCounts(sim.state);
-  const team: Team = forcedTeam ?? (n1 < n2 ? 1 : n2 < n1 ? 2 : sim.rng.next() < 0.5 ? 1 : 2);
+  const counts = teamCounts(sim.state);
+  const [n1, n2] = counts;
+  // Brawl pins team = seat (bits-brawl.md): teams of one have nothing to
+  // balance, join order is irrelevant, and — unlike the classic coin flip —
+  // no rng draw is consumed, so the 2-team path stays byte-identical to
+  // its historical seed/replay behaviour.
+  const team: Team =
+    forcedTeam ??
+    (sim.state.teamCount > 2
+      ? ((id + 1) as Team)
+      : n1! < n2! ? 1 : n2! < n1! ? 2 : sim.rng.next() < 0.5 ? 1 : 2);
   // Lobby slot = "next on my side"; resetForRound re-derives slots by id order.
-  const spawn = spawnSlotPos(sim, team, team === 1 ? n1 : n2);
+  const spawn = spawnSlotPos(sim, team, counts[team - 1]!);
   const player = createPlayer(id, name, team, spawn, spawnFacing(sim, spawn));
   sim.state.players[id] = player;
   // A join cancels a running arming countdown — the newcomer needs to arm
@@ -209,9 +225,12 @@ export const addBot = (sim: ArenaSim, name: string, forcedTeam?: Team): ArenaPla
 export const switchTeam = (sim: ArenaSim, id: number): boolean => {
   const player = sim.state.players[id];
   if (!player || sim.state.round.phase !== "lobby") return false;
+  // Brawl: every OTHER team is full by construction (teams of one) — the whole
+  // concept is meaningless there, same as in ranked rooms (bits-brawl.md).
+  if (sim.state.teamCount > 2) return false;
   const other: Team = player.team === 1 ? 2 : 1;
-  const [n1, n2] = teamCounts(sim.state);
-  const otherCount = other === 1 ? n1 : n2;
+  const counts = teamCounts(sim.state);
+  const otherCount = counts[other - 1]!;
   if (otherCount >= teamSizeOf(sim.state)) return false;
   player.team = other;
   const spawn = spawnSlotPos(sim, other, otherCount);

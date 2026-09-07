@@ -1,18 +1,29 @@
 {
   "type": "sfx-bits",
-  "subject": "a round beginning in the arena — a short low horn or gong swell with a dusty air",
-  "prompt": "Close-mic'd low bronze horn/gong swell with dusty air: a sun-baked metallic rumble rising from a tight whisper to a weighty, gritty peak at 0.6s, then a dusty, sand-laden decay into a 1s hollow thud.",
+  "subject": "a low ram's horn blown once, a short rough breathy note that swells and cuts off, distant, echoing off the stone walls of an open-air arena",
+  "prompt": "a low ram's horn blown once, a short rough breathy note that swells and cuts off, distant, echoing off the stone walls of an open-air arena. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": null,
-    "promptInfluence": 0.3,
+    "durationSeconds": 3,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "round_start_1.mp3"
+    "round_start_1.mp3",
+    "round_start_2.mp3",
+    "round_start_3.mp3",
+    "round_start_4.mp3",
+    "round_start_5.mp3"
   ],
+  "takeEngines": {
+    "round_start_1.mp3": "elevenlabs",
+    "round_start_2.mp3": "elevenlabs",
+    "round_start_3.mp3": "elevenlabs",
+    "round_start_4.mp3": "elevenlabs",
+    "round_start_5.mp3": "elevenlabs"
+  },
   "created": "2026-07-16T13:56:56.584Z",
-  "updated": "2026-07-16T13:56:56.584Z"
+  "updated": "2026-09-07T20:32:38.047Z"
 }

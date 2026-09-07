@@ -2068,6 +2068,66 @@
       }
     },
     {
+      "id": "spawn-m1",
+      "kind": "playerSpawn",
+      "x": 358,
+      "y": 490,
+      "props": {
+        "team": 1,
+        "brawl": true
+      }
+    },
+    {
+      "id": "spawn-m2",
+      "kind": "playerSpawn",
+      "x": 847,
+      "y": 262,
+      "props": {
+        "team": 2,
+        "brawl": true
+      }
+    },
+    {
+      "id": "spawn-m3",
+      "kind": "playerSpawn",
+      "x": 1289,
+      "y": 572,
+      "props": {
+        "team": 3,
+        "brawl": true
+      }
+    },
+    {
+      "id": "spawn-m4",
+      "kind": "playerSpawn",
+      "x": 1242,
+      "y": 1110,
+      "props": {
+        "team": 4,
+        "brawl": true
+      }
+    },
+    {
+      "id": "spawn-m5",
+      "kind": "playerSpawn",
+      "x": 753,
+      "y": 1338,
+      "props": {
+        "team": 5,
+        "brawl": true
+      }
+    },
+    {
+      "id": "spawn-m6",
+      "kind": "playerSpawn",
+      "x": 311,
+      "y": 1028,
+      "props": {
+        "team": 6,
+        "brawl": true
+      }
+    },
+    {
       "id": "prop-3",
       "kind": "prop",
       "x": 450,

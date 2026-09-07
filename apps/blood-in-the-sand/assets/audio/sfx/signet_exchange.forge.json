@@ -1,18 +1,23 @@
 {
   "type": "sfx-bits",
-  "subject": "a seal-press STRIKE at the end of a held charge — one deep heavy stamp-slam with a bright metal ring and a soft molten-wax hiss in the tail, weightier and punchier than a document stamp, final, about 0.8 seconds, no coins",
-  "prompt": "a seal-press STRIKE at the end of a held charge — one deep heavy stamp-slam with a bright metal ring and a soft molten-wax hiss in the tail, weightier and punchier than a document stamp, final, about 0.8 seconds, no coins. A single one-shot sound effect, not music.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a heavy seal press slamming down once, a deep stamp with a bright metal ring and a soft hiss of hot wax",
+  "prompt": "a heavy seal press slamming down once, a deep stamp with a bright metal ring and a soft hiss of hot wax. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 3,
-    "promptInfluence": 0.85,
+    "durationSeconds": 2,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "signet_exchange_1.mp3"
+    "signet_exchange_1.mp3",
+    "signet_exchange_2.mp3"
   ],
+  "takeEngines": {
+    "signet_exchange_1.mp3": "stable-audio",
+    "signet_exchange_2.mp3": "stable-audio"
+  },
   "created": "2026-08-15T20:31:39.043Z",
-  "updated": "2026-08-15T20:31:39.043Z"
+  "updated": "2026-09-07T20:44:49.793Z"
 }

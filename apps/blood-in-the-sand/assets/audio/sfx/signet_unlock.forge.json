@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "A short mournful and somber tune on an ancient flute",
-  "prompt": "A short mournful and somber tune on an ancient flute. A single one-shot sound effect, not music.",
+  "subject": "a thick disc of brittle wax snapping in half, one sharp dry crack like ceramic breaking, close-miked",
+  "prompt": "a thick disc of brittle wax snapping in half, one sharp dry crack like ceramic breaking, close-miked. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 3,
-    "promptInfluence": 0.85,
+    "durationSeconds": 1,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "signet_unlock_1.mp3"
+    "signet_unlock_1.mp3",
+    "signet_unlock_2.mp3",
+    "signet_unlock_3.mp3"
   ],
+  "takeEngines": {
+    "signet_unlock_1.mp3": "elevenlabs",
+    "signet_unlock_2.mp3": "elevenlabs",
+    "signet_unlock_3.mp3": "elevenlabs"
+  },
   "created": "2026-08-15T20:34:06.228Z",
-  "updated": "2026-08-15T20:34:06.228Z"
+  "updated": "2026-09-07T20:45:32.221Z"
 }

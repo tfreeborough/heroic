@@ -1,19 +1,22 @@
 {
   "type": "sfx-bits",
-  "subject": "a confident UI confirm — a firm metallic clack-thunk with a short bright ring, committing",
-  "prompt": "Close-mic'd metallic clack-thunk of sun-baked iron meeting brushed bronze, short bright ring layered with dusty impact tail; starts sharp, peaks at 0.15s, quick 0.45s decay into gritty sand-scrape — total ~0.6s, weighty, resolute.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a heavy iron latch dropping into a stone slot, one clean short clunk, close-miked, no reverb",
+  "prompt": "a heavy iron latch dropping into a stone slot, one clean short clunk, close-miked, no reverb. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 0.6,
-    "promptInfluence": 0.3,
+    "durationSeconds": 1,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "ui_confirm_1.mp3",
-    "ui_confirm_2.mp3"
+    "ui_confirm_2.mp3",
+    "ui_confirm_1.mp3"
   ],
+  "takeEngines": {
+    "ui_confirm_1.mp3": "stable-audio"
+  },
   "created": "2026-07-16T21:12:41.985Z",
-  "updated": "2026-07-16T21:55:29.522Z"
+  "updated": "2026-09-07T20:48:06.623Z"
 }

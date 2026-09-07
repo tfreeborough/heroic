@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "a bare foot stepping through a fresh pool of blood on sand — one short wet squelch with a sticky peel as the foot lifts, subtle, no splash",
-  "prompt": "a bare foot stepping through a fresh pool of blood on sand — one short wet squelch with a sticky peel as the foot lifts, subtle, no splash. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "subject": "a bare foot stepping into a pool of thick blood on sand, one short wet squelch with a sticky peel, subtle, close-miked",
+  "prompt": "a bare foot stepping into a pool of thick blood on sand, one short wet squelch with a sticky peel, subtle, close-miked. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 0.5,
-    "promptInfluence": 0.3,
+    "durationSeconds": 1,
+    "promptInfluence": 0.5,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "blood_squelch_1.mp3"
+    "blood_squelch_1.mp3",
+    "blood_squelch_2.mp3",
+    "blood_squelch_3.mp3"
   ],
+  "takeEngines": {
+    "blood_squelch_1.mp3": "elevenlabs",
+    "blood_squelch_2.mp3": "elevenlabs",
+    "blood_squelch_3.mp3": "elevenlabs"
+  },
   "created": "2026-07-31T08:30:06.769Z",
-  "updated": "2026-07-31T08:30:06.769Z"
+  "updated": "2026-09-07T20:26:09.970Z"
 }

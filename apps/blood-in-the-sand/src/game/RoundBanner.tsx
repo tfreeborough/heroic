@@ -77,8 +77,9 @@ export interface RoundBannerProps {
   kind: OutcomeKind;
   title: string;
   subtitle: string;
-  /** [mine, theirs] — only shown on match-end. */
-  score: [number, number];
+  /** [mine, theirs] — only shown on match-end. Absent in brawl: a six-way
+   * match has no two-number form (the subtitle names the winner instead). */
+  score?: [number, number];
   /** The victors, match-end only — shown to BOTH sides (the flex). */
   honour?: HonourRow[];
 }
@@ -281,7 +282,7 @@ export const RoundBanner = ({ kind, title, subtitle, score, honour }: RoundBanne
             {subtitle}
           </Animated.Text>
 
-          {look.big ? (
+          {look.big && score ? (
             <Animated.View
               style={[
                 styles.scoreRow,
@@ -370,15 +371,17 @@ const styles = StyleSheet.create({
   scoreDash: { fontSize: 22, color: "#6b6155" },
   honourCol: { marginTop: 22, gap: 12, width: 340, maxWidth: "88%" },
   honourRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  // The identity block: name over title, left-aligned; the flexed width (with
-  // minWidth 0) is what lets both lines actually shrink instead of shoving
-  // the icons off screen.
-  honourId: { flex: 1, minWidth: 0, alignItems: "flex-start" },
+  // The identity block: name CENTRE-STACKED over its title — the exact
+  // EntranceCard seat treatment, so start and end of match read the same
+  // (Tom, 2026-09-03). The flexed width (with minWidth 0) is what lets both
+  // lines actually shrink instead of shoving the icons off screen.
+  honourId: { flex: 1, minWidth: 0, alignItems: "center" },
   // Name in the winners' allegiance colour (your blue on victory, their red
   // on defeat) — the same cue the bodies and the scoreboard wear.
   honourName: {
     fontSize: 15,
     fontWeight: "800",
+    letterSpacing: 0.5,
     maxWidth: "100%",
     textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 1 },

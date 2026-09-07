@@ -1,18 +1,21 @@
 {
   "type": "sfx-bits",
-  "subject": "a soft UI back/cancel — a low muted wooden knock, a step backwards",
-  "prompt": "Close-mic'd low wooden knock: dull sun-baked palm strike on aged oak, muted grainy impact, immediate soft hollow tap followed by a brief dusty scrape and tiny backward footstep thud; short, weighted one-shot, ~0.6 seconds, grounded, sand-dry.",
+  "subject": "a knuckle knocking once on a thick wooden door, one low muted knock, close-miked",
+  "prompt": "a knuckle knocking once on a thick wooden door, one low muted knock, close-miked. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
     "durationSeconds": 1,
-    "promptInfluence": 0.3,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "ui_back_1.mp3"
+    "ui_back_2.mp3"
   ],
+  "takeEngines": {
+    "ui_back_2.mp3": "elevenlabs"
+  },
   "created": "2026-07-16T21:13:27.632Z",
-  "updated": "2026-07-16T21:13:27.632Z"
+  "updated": "2026-09-07T20:48:39.544Z"
 }

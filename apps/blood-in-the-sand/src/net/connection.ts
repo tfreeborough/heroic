@@ -71,11 +71,15 @@ let lastSeat: { code: string; seatToken: string } | null = null;
 export interface WelcomeInfo {
   playerId: number;
   team: Team;
-  /** Players per side — capacity (2×N) and empty-seat rows derive from this. */
+  /** Players per side — capacity (teamCount×N) and empty-seat rows derive
+   * from this. */
   teamSize: number;
-  /** The two sides' faction names, [team 1, team 2] — your side renders blue,
-   * the other red (bits-bot-backfill.md § team identity). */
-  teamNames: [string, string];
+  /** How many teams: 2 in classic rooms, 6 in Brawl (bits-brawl.md) — the
+   * presentation switch (teamCount > 2 = free-for-all). */
+  teamCount: number;
+  /** The sides' faction names, indexed team − 1 — your side renders blue,
+   * the rest red (bits-bot-backfill.md § team identity). */
+  teamNames: string[];
   roomCode: string;
   roomName: string;
   hostId: number;
@@ -303,6 +307,7 @@ export class ArenaClient {
           playerId: msg.playerId,
           team: msg.team,
           teamSize: msg.teamSize,
+          teamCount: msg.teamCount,
           teamNames: msg.teamNames,
           roomCode: msg.roomCode,
           roomName: msg.roomName,
@@ -535,7 +540,7 @@ export class ArenaClient {
     this.send({ t: "queueInfo" });
   }
 
-  createRoom(playerName: string, roomName: string, pass: string, teamSize: number): void {
+  createRoom(playerName: string, roomName: string, pass: string, teamSize: number, brawl = false): void {
     this.lastError = null;
     this.queued = false; // entering the skirmish flow leaves the queue server-side
     this.send({
@@ -544,6 +549,8 @@ export class ArenaClient {
       playerName,
       roomName,
       teamSize,
+      // Brawl (v32): the free-for-all shape — the server ignores teamSize.
+      ...(brawl ? { brawl: true } : {}),
       // The cosmetics are claimed at seat time (like the name) — read here
       // rather than passed in, so every screen's create/join carries them.
       announcer: getActiveAnnouncer(),

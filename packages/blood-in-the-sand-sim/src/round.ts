@@ -26,7 +26,6 @@ import {
   MATCH_END_SECONDS,
   ROUND_END_SECONDS,
   FREE_WEAPON_IDS,
-  WINS_TO_TAKE_MATCH,
 } from "./config";
 import type { ArenaEvent } from "./events";
 import {
@@ -37,7 +36,7 @@ import {
   teamSlotOf,
   type ArenaSim,
 } from "./sim";
-import { createAbilitySlots, loadoutComplete, seatedPlayers, type Team } from "./state";
+import { createAbilitySlots, loadoutComplete, seatedPlayers, winsToTakeOf, type Team } from "./state";
 
 /** Respawn everyone at their team spawn with a clean slate and start the countdown. */
 export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
@@ -94,7 +93,7 @@ export const canStartMatch = (sim: ArenaSim): boolean =>
 
 /** Fresh scoreboard + everyone to spawns + countdown. */
 const beginMatch = (sim: ArenaSim, events: ArenaEvent[]): void => {
-  sim.state.round.wins = [0, 0];
+  sim.state.round.wins = Array.from({ length: sim.state.teamCount }, () => 0);
   sim.state.round.roundNumber = 0;
   sim.state.round.lastWinner = 0;
   sim.state.round.forced = false; // the override did its job — spent
@@ -133,7 +132,7 @@ export const forceStartMatch = (sim: ArenaSim): boolean => {
   const seated = seatedPlayers(sim.state);
   if (sim.state.round.phase !== "lobby" || seated.length < 2) return false;
   if (!seated.every((p) => p.connected)) return false;
-  if (!seated.some((p) => p.team === 1) || !seated.some((p) => p.team === 2)) return false;
+  if (new Set(seated.map((p) => p.team)).size < 2) return false;
   if (armingComplete(sim)) return false; // nothing to do — it's already counting
   for (const p of seated) {
     if (p.weapon === null) {
@@ -225,11 +224,13 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
     case "roundEnd": {
       round.timer -= dt;
       if (round.timer <= 0) {
-        const best = Math.max(round.wins[0], round.wins[1]);
-        if (best >= WINS_TO_TAKE_MATCH) {
+        const best = Math.max(...round.wins);
+        if (best >= winsToTakeOf(sim.state)) {
+          // Argmax is unambiguous: only one team can reach the threshold
+          // first — rounds score at most one win each.
           round.phase = "matchEnd";
           round.timer = MATCH_END_SECONDS;
-          events.push({ type: "matchEnd", winnerTeam: (round.wins[0] > round.wins[1] ? 1 : 2) as Team });
+          events.push({ type: "matchEnd", winnerTeam: (round.wins.indexOf(best) + 1) as Team });
         } else {
           resetForRound(sim, events);
         }
@@ -264,7 +265,9 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
   }
 };
 
-/** After combat: if a team has been wiped, close the round and score it. */
+/** After combat: when at most one team still has a living member, close the
+ * round and score it — which for Brawl's six teams of one IS last-one-standing
+ * (bits-brawl.md). */
 export const checkRoundOver = (sim: ArenaSim, events: ArenaEvent[]): void => {
   const round = sim.state.round;
   if (round.phase !== "active") return;
@@ -272,22 +275,21 @@ export const checkRoundOver = (sim: ArenaSim, events: ArenaEvent[]): void => {
   // a wiped dummy line is respawnDummies' business, never a round win.
   if (sim.state.training) return;
   const seated = seatedPlayers(sim.state);
-  const alive1 = seated.some((p) => p.team === 1 && p.alive);
-  const alive2 = seated.some((p) => p.team === 2 && p.alive);
-  if (alive1 && alive2) return;
+  const aliveTeams = new Set<Team>();
+  for (const p of seated) if (p.alive) aliveTeams.add(p.team);
+  if (aliveTeams.size >= 2) return;
 
-  // Both wiped on the same tick can't happen 1v1 (a dead player never swings),
-  // but guard it for the 5v5 future: nobody scores, the round replays.
-  const winner: Team | 0 = alive1 ? 1 : alive2 ? 2 : 0;
-  if (winner === 1) round.wins[0] += 1;
-  else if (winner === 2) round.wins[1] += 1;
+  // Everyone wiped on the same tick (mutual kills, the sands claiming the
+  // last two at once): nobody scores, the round replays.
+  const winner: Team | 0 = aliveTeams.size === 1 ? [...aliveTeams][0]! : 0;
+  if (winner !== 0) round.wins[winner - 1]! += 1;
   round.lastWinner = winner;
   round.phase = "roundEnd";
   round.timer = ROUND_END_SECONDS;
   events.push({
     type: "roundEnd",
     winnerTeam: winner,
-    wins: [round.wins[0], round.wins[1]],
+    wins: [...round.wins],
     standing: seated
       .filter((p) => p.alive)
       .map((p) => ({ id: p.id, hpFrac: p.combatant.hp / p.combatant.stats.maxHp })),

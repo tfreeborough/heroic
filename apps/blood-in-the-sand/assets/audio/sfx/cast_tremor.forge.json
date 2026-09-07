@@ -1,19 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "a loud and deep slam into the dry cracked earth from a giant soldiers boot",
-  "prompt": "a loud and deep slam into the dry cracked earth from a giant soldiers boot. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a heavy stomp splitting the ground open — a sharp rock-crack transient over a deep bassy boom, short and punchy",
+  "prompt": "a heavy stomp splitting the ground open — a sharp rock-crack transient over a deep bassy boom, short and punchy. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 1,
-    "promptInfluence": 0.8,
+    "durationSeconds": 2,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
     "cast_tremor_1.mp3",
-    "cast_tremor_2.mp3"
+    "cast_tremor_2.mp3",
+    "cast_tremor_2.mp3",
+    "cast_tremor_3.mp3"
   ],
+  "takeEngines": {
+    "cast_tremor_2.mp3": "stable-audio",
+    "cast_tremor_3.mp3": "stable-audio"
+  },
   "created": "2026-07-16T13:37:42.943Z",
-  "updated": "2026-07-17T22:03:35.123Z"
+  "updated": "2026-09-07T20:27:37.464Z"
 }

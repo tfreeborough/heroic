@@ -41,17 +41,29 @@ describe("pickTeamNames", () => {
     for (let seed = 0; seed < 500; seed++) {
       const [a, b] = pickTeamNames(seed);
       expect(a).not.toBe(b);
-      expect(TEAM_NAMES).toContain(a);
-      expect(TEAM_NAMES).toContain(b);
+      expect(TEAM_NAMES).toContain(a!);
+      expect(TEAM_NAMES).toContain(b!);
+    }
+  });
+
+  test("brawl's six are all distinct, in-pool, and extend the classic pair", () => {
+    for (let seed = 0; seed < 500; seed++) {
+      const six = pickTeamNames(seed, 6);
+      expect(six).toHaveLength(6);
+      expect(new Set(six).size).toBe(6);
+      for (const n of six) expect(TEAM_NAMES).toContain(n);
+      // The same room seed names teams 1 and 2 identically in either shape.
+      expect(six.slice(0, 2)).toEqual(pickTeamNames(seed));
     }
   });
 
   test("deterministic: same seed → same pairing", () => {
     expect(pickTeamNames(12345)).toEqual(pickTeamNames(12345));
+    expect(pickTeamNames(12345, 6)).toEqual(pickTeamNames(12345, 6));
     // Negative/huge seeds (Date.now()>>>0 can be anything) still land in-range.
     expect(pickTeamNames(-7)).toEqual(pickTeamNames(-7));
     const [a, b] = pickTeamNames(4_294_967_295);
-    expect(TEAM_NAMES).toContain(a);
+    expect(TEAM_NAMES).toContain(a!);
     expect(a).not.toBe(b);
   });
 

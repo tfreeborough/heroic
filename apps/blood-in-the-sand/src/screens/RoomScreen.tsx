@@ -48,6 +48,7 @@ import {
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import type { LobbyClient } from "../net/connection";
+import { BRAWL_TEAM_HEX } from "../game/render";
 import { playStrikeHaptic } from "../game/haptics";
 import { playSound, unlockAudio, warmCombatAudio } from "../audio";
 import { LoadoutIcon, type IconId } from "../loadout/icons";
@@ -428,7 +429,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
 
   const players = client.roomState?.players ?? [];
   const myTeam = welcome.team;
-  const capacity = welcome.teamSize * 2;
+  const capacity = welcome.teamSize * welcome.teamCount;
   const me = players.find((p) => p.id === welcome.playerId);
   const meArmed = me?.armed ?? allComplete(picks);
 
@@ -464,7 +465,13 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
             only ✕ on screen, so the two never sit stacked. */}
         <View style={styles.tickerRow}>
           <View style={styles.tickerFill}>
-            <RosterTicker players={players} myId={welcome.playerId} myTeam={myTeam} capacity={capacity} />
+            <RosterTicker
+              players={players}
+              myId={welcome.playerId}
+              myTeam={myTeam}
+              capacity={capacity}
+              brawl={welcome.teamCount > 2}
+            />
           </View>
           {wizard === null ? <LeaveX onPress={askLeave} /> : null}
         </View>
@@ -615,11 +622,14 @@ const RosterTicker = ({
   myId,
   myTeam,
   capacity,
+  brawl,
 }: {
   players: RoomStatePlayer[];
   myId: number;
   myTeam: number;
   capacity: number;
+  /** Brawl: enemy names tint in their identity colour (BRAWL_TEAM_HEX). */
+  brawl?: boolean;
 }) => {
   const ordered = [...players].sort((a, b) => (a.team === myTeam ? 0 : 1) - (b.team === myTeam ? 0 : 1));
   return (
@@ -635,7 +645,15 @@ const RosterTicker = ({
           ]}
         >
           <View style={[styles.tickerDot, p.armed && styles.tickerDotArmed]} />
-          <Text style={[styles.tickerName, (p.armed || p.id === myId) && styles.tickerNameLit]}>
+          <Text
+            style={[
+              styles.tickerName,
+              (p.armed || p.id === myId) && styles.tickerNameLit,
+              // Identity colour outranks the lit tint — armed still reads
+              // from the dot and the chip border.
+              brawl && p.team !== myTeam ? { color: BRAWL_TEAM_HEX[p.team - 1] } : null,
+            ]}
+          >
             {p.name.toUpperCase()}
             {p.connected ? "" : " ⌁"}
           </Text>
@@ -1101,6 +1119,8 @@ interface LobbyViewProps {
 const LobbyView = (props: LobbyViewProps) => {
   const { client, players, myId, myTeam, capacity, picks, ranked, roomName, roomCode } = props;
   const teamNames = client.welcome?.teamNames ?? ["Team 1", "Team 2"];
+  /** Brawl (bits-brawl.md): six teams of one — one roster, no sides. */
+  const brawl = (client.welcome?.teamCount ?? 2) > 2;
   // Short screens (iPhone SE) can't fit a 4v4 roster at full size — tighten
   // everything and collapse the open-seat padding into single rows.
   const compact = useWindowDimensions().height < COMPACT_LOBBY_HEIGHT;
@@ -1132,7 +1152,7 @@ const LobbyView = (props: LobbyViewProps) => {
   // join assignment seats the next joiner opposite you either way. The
   // control only means something once there's someone to be across from.
   const switchSide =
-    !ranked && client.switchTeam && players.length > 1 && theirs.length < teamCap
+    !ranked && !brawl && client.switchTeam && players.length > 1 && theirs.length < teamCap
       ? () => {
           playSound("uiTap");
           client.switchTeam?.();
@@ -1140,10 +1160,15 @@ const LobbyView = (props: LobbyViewProps) => {
       : undefined;
   // The server owns a ranked room — nobody wears a crown.
   const crownId = ranked ? null : client.hostId;
+  // Brawl's tally has no you–them pair: name the last fighter standing instead.
   const lastMatch =
-    props.lastWinner !== 0
-      ? `last match: ${props.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...props.wins)}–${Math.min(...props.wins)}`
-      : null;
+    props.lastWinner === 0
+      ? null
+      : brawl
+        ? props.lastWinner === myTeam
+          ? "last match: you took it"
+          : `last match: ${players.find((p) => p.team === props.lastWinner)?.name ?? "another"} took it`
+        : `last match: ${props.lastWinner === myTeam ? "you won" : "you lost"} ${Math.max(...props.wins)}–${Math.min(...props.wins)}`;
 
   return (
     <View style={styles.lobby}>
@@ -1159,19 +1184,44 @@ const LobbyView = (props: LobbyViewProps) => {
         )}
       </View>
 
-      {/* Faction names are the absolute identity; colour is the allegiance
-          cue — your side always blue, the enemy always red, matching the
-          match (bits-bot-backfill.md § team identity). */}
-      <TeamHeader label={teamNames[myTeam - 1]} color={C_FRIEND} you compact={compact} />
-      {mine.map((p) => (
-        <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={crownId} own compact={compact} />
-      ))}
-      <OpenSeats count={teamCap - mine.length} compact={compact} />
-      <TeamHeader label={teamNames[2 - myTeam]} color={C_FOE} compact={compact} />
-      {theirs.map((p) => (
-        <PlayerRow key={p.id} p={p} isMe={false} hostId={crownId} own={false} compact={compact} />
-      ))}
-      <OpenSeats count={teamCap - theirs.length} compact={compact} onSwitch={switchSide} />
+      {brawl ? (
+        <>
+          {/* Brawl (bits-brawl.md): one roster, no sides — you lead in friend
+              blue, every other fighter reads foe red. No SWITCH SIDE: every
+              other team is full by construction (the sim refuses it too). */}
+          <TeamHeader label="SIX ENTER · ONE LEAVES" color={C_FOE} compact={compact} />
+          {[...mine, ...theirs].map((p) => (
+            <PlayerRow
+              key={p.id}
+              p={p}
+              isMe={p.id === myId}
+              hostId={crownId}
+              own={p.team === myTeam}
+              compact={compact}
+              // The colour legend: each fighter's dot is the colour their
+              // body wears in the match (you are always friend-blue).
+              swatch={p.team === myTeam ? C_FRIEND : BRAWL_TEAM_HEX[p.team - 1]}
+            />
+          ))}
+          <OpenSeats count={emptySeats} compact={compact} />
+        </>
+      ) : (
+        <>
+          {/* Faction names are the absolute identity; colour is the allegiance
+              cue — your side always blue, the enemy always red, matching the
+              match (bits-bot-backfill.md § team identity). */}
+          <TeamHeader label={teamNames[myTeam - 1]} color={C_FRIEND} you compact={compact} />
+          {mine.map((p) => (
+            <PlayerRow key={p.id} p={p} isMe={p.id === myId} hostId={crownId} own compact={compact} />
+          ))}
+          <OpenSeats count={teamCap - mine.length} compact={compact} />
+          <TeamHeader label={teamNames[2 - myTeam]} color={C_FOE} compact={compact} />
+          {theirs.map((p) => (
+            <PlayerRow key={p.id} p={p} isMe={false} hostId={crownId} own={false} compact={compact} />
+          ))}
+          <OpenSeats count={teamCap - theirs.length} compact={compact} onSwitch={switchSide} />
+        </>
+      )}
 
       <TeamHeader label="YOUR ARSENAL" color={C_MUTED} compact={compact} />
       <SocketStrip
@@ -1269,17 +1319,22 @@ const PlayerRow = ({
   hostId,
   own,
   compact,
+  swatch,
 }: {
   p: RoomStatePlayer;
   isMe: boolean;
   hostId: number | null;
   own: boolean;
   compact?: boolean;
+  /** Brawl only (bits-brawl.md): the fighter's identity colour, shown as a
+   * dot before the name — the same colour their body wears in the match. */
+  swatch?: string;
 }) => {
   // Resolved from OUR defs — an unknown claim renders bare, never raw text.
   const wornTitle = resolveTitleText(p.title);
   return (
   <View style={[styles.playerRow, compact && tight.playerRow, !p.connected && styles.playerGone]}>
+    {swatch ? <View style={[styles.playerSwatch, { backgroundColor: swatch }]} /> : null}
     <View style={styles.playerIdentity}>
       <Text style={[styles.playerName, compact && tight.playerName]}>
         {p.id === hostId ? "♛ " : ""}
@@ -1613,6 +1668,8 @@ const styles = StyleSheet.create({
   },
   teamRule: { flex: 1, height: 1, backgroundColor: "#2e2820" },
   playerRow: { flexDirection: "row", alignItems: "center", paddingVertical: 6 },
+  /** Brawl identity dot (PlayerRow `swatch`) — colour supplied inline. */
+  playerSwatch: { width: 10, height: 10, borderRadius: 3, marginRight: 8 },
   playerGone: { opacity: 0.45 },
   playerIdentity: { flexShrink: 1 },
   playerName: { color: C_BONE, fontSize: 13.5, fontWeight: "700", flexShrink: 1 },

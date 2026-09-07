@@ -89,7 +89,8 @@ export interface MatchSummary {
   bracket: string | null;
   teamSize: number;
   winnerTeam: Team;
-  roundWins: [number, number];
+  /** Indexed team − 1 (length = the room's teamCount; 2 everywhere ranked). */
+  roundWins: number[];
   /** Each round's winner in play order (0 = a double-wipe draw) — comeback
    * feats read the opening entries. */
   roundWinners: (Team | 0)[];
@@ -149,7 +150,7 @@ const freshScratch = (ids: Iterable<number>): RoundScratch => ({
 export class MatchStatsAccumulator {
   private readonly stats = new Map<number, PlayerMatchStats>();
   private readonly teams = new Map<number, Team>();
-  private roundWins: [number, number] = [0, 0];
+  private roundWins: number[] = [0, 0];
   private readonly roundWinners: (Team | 0)[] = [];
 
   /** Seats are fixed for a room's life — seed them up front so hit targets

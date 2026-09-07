@@ -2,7 +2,7 @@
  * State → wire. Pure projections from ArenaState to the protocol shapes; the
  * server stringifies the result, the client's SnapshotBuffer consumes it.
  */
-import { COUNTDOWN_SECONDS, PLAYER_RADIUS, TICK_RATE, WINS_TO_TAKE_MATCH } from "./config";
+import { COUNTDOWN_SECONDS, PLAYER_RADIUS, TICK_RATE } from "./config";
 import { isDashing, reelingTargetOf } from "./abilities";
 import type { ArenaEvent } from "./events";
 import { sandsProgress, sandsRadius } from "./sands";
@@ -19,6 +19,7 @@ import type {
 import {
   loadoutComplete,
   seatedPlayers,
+  winsToTakeOf,
   type ArenaPlayer,
   type ArenaProjectile,
   type ArenaShell,
@@ -27,10 +28,11 @@ import {
   type Team,
 } from "./state";
 
-export const makeClientConfig = (): ArenaClientConfig => ({
+export const makeClientConfig = (state: ArenaState): ArenaClientConfig => ({
   tickRate: TICK_RATE,
   playerRadius: PLAYER_RADIUS,
-  winsToTake: WINS_TO_TAKE_MATCH,
+  // Per-room since v32: Brawl resolves at 2, classic at 3 (bits-brawl.md).
+  winsToTake: winsToTakeOf(state),
   countdownSeconds: COUNTDOWN_SECONDS,
 });
 
@@ -81,7 +83,7 @@ const toRoundSnapshot = (state: ArenaState): RoundSnapshot => ({
   phase: state.round.phase,
   timer: state.round.timer,
   roundNumber: state.round.roundNumber,
-  wins: [state.round.wins[0], state.round.wins[1]],
+  wins: [...state.round.wins],
   lastWinner: state.round.lastWinner,
   sands: state.round.sands
     ? {

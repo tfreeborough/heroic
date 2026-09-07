@@ -1,18 +1,23 @@
 {
   "type": "sfx-bits",
-  "subject": "a trident thrust punching into flesh — a sharp wet pierce, shorter and pointier than a slash, with a quick withdraw",
-  "prompt": "Close-mic'd trident thrust into sun-baked flesh: brittle wood shaft impact, wet stabbing puncture, immediate hollow squelch and bone-skim crunch, quick metallic scrape on withdrawal; sharp attack peak ~0.2s, rapid 0.6s decay, gritty sandy dust sibilance.",
+  "subject": "a spear tip punching into raw meat, one sharp wet stab, short and pointed, close-miked, dead room",
+  "prompt": "a spear tip punching into raw meat, one sharp wet stab, short and pointed, close-miked, dead room. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 1,
-    "promptInfluence": 0.3,
+    "durationSeconds": 2,
+    "promptInfluence": 0.6,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "hit_trident_1.mp3"
+    "hit_trident_1.mp3",
+    "hit_trident_2.mp3"
   ],
+  "takeEngines": {
+    "hit_trident_1.mp3": "elevenlabs",
+    "hit_trident_2.mp3": "elevenlabs"
+  },
   "created": "2026-08-09T09:49:22.778Z",
-  "updated": "2026-08-09T09:49:22.778Z"
+  "updated": "2026-09-06T22:01:27.783Z"
 }

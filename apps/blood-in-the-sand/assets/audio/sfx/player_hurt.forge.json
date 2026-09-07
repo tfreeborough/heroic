@@ -1,19 +1,26 @@
 {
   "type": "sfx-bits",
-  "subject": "a single grunt of pain from a gladiator taking a blow — short, breathy, no words",
-  "prompt": "Close-mic'd guttural grunt of a desert gladiator taking a heavy blow: strained breath, throat rasp, wet exhale, tight chest snap. Starts immediate, peaks at 0.2s with raw pain, decays into dusty, ragged breath by 0.6s — visceral, grounded, weighty.",
+  "subject": "a man grunting in pain from a heavy blow, one short breathy grunt, no words, close-miked",
+  "prompt": "a man grunting in pain from a heavy blow, one short breathy grunt, no words, close-miked. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 0.6,
-    "promptInfluence": 0.3,
+    "durationSeconds": 1,
+    "promptInfluence": 0.6,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "player_hurt_1.mp3",
-    "player_hurt_2.mp3"
+    "player_hurt_2.mp3",
+    "player_hurt_2.mp3",
+    "player_hurt_3.mp3",
+    "player_hurt_4.mp3"
   ],
+  "takeEngines": {
+    "player_hurt_2.mp3": "elevenlabs",
+    "player_hurt_3.mp3": "elevenlabs",
+    "player_hurt_4.mp3": "elevenlabs"
+  },
   "created": "2026-07-16T13:35:36.856Z",
-  "updated": "2026-07-16T21:53:42.290Z"
+  "updated": "2026-09-06T22:27:58.678Z"
 }

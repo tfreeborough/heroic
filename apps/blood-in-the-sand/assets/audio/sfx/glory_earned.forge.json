@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "a low wordless male choir hum that swells warm and reverent then fades — a legend growing, mythic and human, no words and no melody, about a second and a half, slow beating drums in the background",
-  "prompt": "a low wordless male choir hum that swells warm and reverent then fades — a legend growing, mythic and human, no words and no melody, about a second and a half, slow beating drums in the background. A single one-shot sound effect for a brutal gladiator arena in a scorched desert — visceral and physical, sun-baked and dusty, weighty and grounded, blood-and-sand, never cartoonish or synthetic.",
+  "subject": "a low wordless male choir hum swelling warm and reverent then fading, no words, no melody",
+  "prompt": "a low wordless male choir hum swelling warm and reverent then fading, no words, no melody. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 6,
-    "promptInfluence": 0.3,
+    "durationSeconds": 4,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "glory_earned_1.mp3"
+    "glory_earned_2.mp3",
+    "glory_earned_3.mp3",
+    "glory_earned_4.mp3"
   ],
+  "takeEngines": {
+    "glory_earned_2.mp3": "elevenlabs",
+    "glory_earned_3.mp3": "elevenlabs",
+    "glory_earned_4.mp3": "elevenlabs"
+  },
   "created": "2026-08-03T07:59:45.581Z",
-  "updated": "2026-08-03T07:59:45.581Z"
+  "updated": "2026-09-07T20:42:30.389Z"
 }

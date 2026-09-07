@@ -50,7 +50,7 @@ describe("random-balanced team assignment", () => {
       for (let i = 0; i < 8; i++) {
         addPlayer(sim, `p${i}`);
         const [n1, n2] = teamCounts(sim.state);
-        expect(Math.abs(n1 - n2)).toBeLessThanOrEqual(1);
+        expect(Math.abs(n1! - n2!)).toBeLessThanOrEqual(1);
       }
     }
   });

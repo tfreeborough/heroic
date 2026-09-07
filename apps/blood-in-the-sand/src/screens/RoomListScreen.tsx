@@ -45,6 +45,9 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
   const [roomName, setRoomName] = useState("");
   const [createPass, setCreatePass] = useState("");
   const [teamSize, setTeamSize] = useState(1);
+  /** The 6-Way Brawl (bits-brawl.md) is a room SHAPE, not a mode of its own:
+   * the fifth chip on the create sheet's size row. */
+  const [brawl, setBrawl] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joinPass, setJoinPass] = useState("");
 
@@ -103,10 +106,11 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
 
   const create = (): void => {
     playSound("uiConfirm");
-    client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize);
+    client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize, brawl);
   };
 
   // Mid-match rooms aren't joinable in any useful way — don't show them.
+  // Brawl rooms list beside team rooms — the row's tag says which is which.
   const openRooms = client.rooms.filter((r) => r.phase === "lobby");
 
   const sheetError = client.lastError ? <Text style={styles.error}>{client.lastError}</Text> : null;
@@ -119,6 +123,7 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
           {item.name}
         </Text>
         <Text style={styles.roomMeta}>
+          {item.brawl ? <Text style={styles.brawlTag}>6-WAY BRAWL · </Text> : null}
           {item.code} · {item.players}/{item.capacity} gladiators
         </Text>
       </View>
@@ -187,17 +192,28 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
             autoCorrect={false}
             maxLength={16}
           />
+          {/* The shape row: four team sizes plus the 6-Way Brawl — a fifth
+              shape, not a mode (six teams of one, last one standing). */}
           <View style={styles.sizeRow}>
             {[1, 2, 3, 4].map((n) => (
               <Pressable
                 key={n}
-                onPress={() => setTeamSize(n)}
-                style={[styles.sizeOption, teamSize === n && styles.sizeOptionOn]}
+                onPress={() => {
+                  setTeamSize(n);
+                  setBrawl(false);
+                }}
+                style={[styles.sizeOption, !brawl && teamSize === n && styles.sizeOptionOn]}
               >
-                <Text style={[styles.sizeText, teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
+                <Text style={[styles.sizeText, !brawl && teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
               </Pressable>
             ))}
+            <Pressable onPress={() => setBrawl(true)} style={[styles.sizeOption, brawl && styles.sizeOptionOn]}>
+              <Text style={[styles.sizeText, brawl && styles.sizeTextOn]}>BRAWL</Text>
+            </Pressable>
           </View>
+          {brawl ? (
+            <Text style={styles.brawlShapeHint}>the 6-way brawl: six enter, one leaves — every seat its own side</Text>
+          ) : null}
           {sheetError}
           <Pressable onPress={create} style={styles.sheetButton}>
             <Text style={styles.sheetButtonText}>CREATE</Text>
@@ -311,6 +327,8 @@ const styles = StyleSheet.create({
   roomText: { gap: 3 },
   roomName: { color: "#f0e8d8", fontSize: 16, fontWeight: "700" },
   roomMeta: { color: "#8a7f70", fontSize: 12 },
+  /** The row tag naming a free-for-all room — foe-red so it pops off the meta line. */
+  brawlTag: { color: "#e07a6a", fontWeight: "800", letterSpacing: 0.5 },
   joinHint: { color: "#d99a41", fontWeight: "800", fontSize: 13 },
   bottomBar: { paddingTop: 12 },
   glow: {
@@ -371,9 +389,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  sizeRow: { flexDirection: "row", gap: 8 },
+  // Five shape chips don't fit one modal-width line — wrap into rows of ~3
+  // (the PracticeScreen tierGrid idiom): 30% basis seats three per row, and
+  // the stragglers grow to split the next line evenly.
+  sizeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  /** The one-liner under the row when BRAWL is the picked shape. */
+  brawlShapeHint: { color: "#8a7f70", fontSize: 12, fontStyle: "italic", textAlign: "center", paddingVertical: 4 },
   sizeOption: {
-    flex: 1,
+    flexBasis: "30%",
+    flexGrow: 1,
     backgroundColor: "#221e19",
     borderColor: "#3a332a",
     borderWidth: 1,

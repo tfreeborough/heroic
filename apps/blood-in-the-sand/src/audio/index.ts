@@ -16,6 +16,7 @@ import { Asset } from "expo-asset";
 import { createAudioDirector, type AudioDirector } from "@heroic/engine";
 import { createSoundScheduler, type SoundConfig, type SoundScheduler } from "@heroic/core";
 import { AUDIO_MANIFEST } from "./manifest";
+import { musicSources, setMusicMuted } from "./music";
 import { SOUND_CATALOGUE, type BitsSoundEvent } from "./catalogue";
 import {
   announcerPackClips,
@@ -27,6 +28,7 @@ import {
 
 export type { BitsSoundEvent } from "./catalogue";
 export { ANNOUNCER_PACK_IDS, asAnnouncerPack, getActiveAnnouncer, type AnnouncerPackId } from "./announcer";
+export { syncRoundMusic, stopRoundMusic, setMusicEnabled } from "./music";
 
 /** Cap on SIMULTANEOUS one-shots (the Web Audio engine mixes them all; this
  * is a spam guard, not a residency budget — warmed clips stay decoded
@@ -54,7 +56,11 @@ const preloadClips = (): void => {
   if (preloadStarted) return;
   preloadStarted = true;
   // Bundled `require()` sources are module numbers — the shape Asset.loadAsync wants.
-  const sources = Object.values(AUDIO_MANIFEST).filter((s): s is number => typeof s === "number");
+  // The battle-music pairs ride the same warm: 2MB each, so the first round's
+  // calm bed never streams cold off Metro under the countdown.
+  const sources = [...Object.values(AUDIO_MANIFEST), ...musicSources()].filter(
+    (s): s is number => typeof s === "number",
+  );
   Asset.loadAsync(sources).catch(() => {
     preloadStarted = false; // let a later call retry if the warm failed
   });
@@ -189,6 +195,7 @@ export const unlockAudio = (): void => {
 export const setAudioMuted = (on: boolean): void => {
   muted = on;
   director?.setMuted(on);
+  setMusicMuted(on);
 };
 
 /**
@@ -201,7 +208,7 @@ export const setAudioMuted = (on: boolean): void => {
  * `crowd_ambience` clip is forged (crossfadeTo warns once, then nothing plays).
  */
 const AMBIENCE_BED = "crowd_ambience_1";
-const AMBIENCE_VOLUME = 0.28; // under combat SFX; tune on device
+const AMBIENCE_VOLUME = 0.18; // under combat SFX and the 0.55 battle score; tune on device
 const AMBIENCE_FADE_MS = 900;
 let ambienceTimer: ReturnType<typeof setInterval> | null = null;
 let musicLevel = 0; // our own mirror of the music-bus level (no getter on the director)

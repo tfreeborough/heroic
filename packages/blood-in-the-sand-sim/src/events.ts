@@ -60,5 +60,5 @@ export type ArenaEvent =
   | { type: "sandsStart"; cx: number; cy: number }
   /** `standing` (Wave 2): the survivors' HP fractions at the close — feats
    * like "win the decider under 10%" sample it; dead players are absent. */
-  | { type: "roundEnd"; winnerTeam: Team | 0; wins: [number, number]; standing: { id: number; hpFrac: number }[] }
+  | { type: "roundEnd"; winnerTeam: Team | 0; wins: number[]; standing: { id: number; hpFrac: number }[] }
   | { type: "matchEnd"; winnerTeam: Team };

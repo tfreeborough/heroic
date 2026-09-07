@@ -91,7 +91,7 @@ const DEFAULT_HOLD = 2.2;
 export class ScenarioRunner {
   readonly sim: ArenaSim;
   readonly buffer = new SnapshotBuffer(TICK_RATE);
-  readonly config: ArenaClientConfig = makeClientConfig();
+  readonly config: ArenaClientConfig;
   /** Seat ids — you are always 0, the foe 1. */
   readonly youId: number;
   readonly foeId: number;
@@ -104,6 +104,7 @@ export class ScenarioRunner {
     // A real match sim: no training dummies, no practice charge lift — the
     // charge pips the Arm chapter shows are the match's own budget.
     this.sim = createSim(ARENA_00, SEED, 1, false, false);
+    this.config = makeClientConfig(this.sim.state);
     const you = addPlayer(this.sim, "You", 1)!;
     const foe = addPlayer(this.sim, "Crixus", 2)!;
     this.youId = you.id;

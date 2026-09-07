@@ -94,17 +94,30 @@ export const TEAM_NAMES: readonly string[] = [
 ];
 
 /**
- * The two distinct faction names for a room, derived purely from its seed —
+ * `count` distinct faction names for a room, derived purely from its seed —
  * no draw on the gameplay RNG stream (team-name choice must never perturb
- * spawn coin-flips), and fully reproducible: same seed → same pairing, so a
- * replay/restore rebuilds the identical names. `[team 1, team 2]`.
+ * spawn coin-flips), and fully reproducible: same seed → same names, so a
+ * replay/restore rebuilds them identically. `[team 1, …, team count]`.
+ * The first two picks match the historical 2-team pairing exactly; further
+ * teams (Brawl's six) walk on from there with a seed-derived stride, skipping
+ * anything already taken.
  */
-export const pickTeamNames = (seed: number): [string, string] => {
+export const pickTeamNames = (seed: number, count = 2): string[] => {
   const n = TEAM_NAMES.length;
-  const s = ((seed % n) + n) % n; // normalise negatives
-  const a = s;
+  const a = ((seed % n) + n) % n; // normalise negatives
   // A second index off an independent slice of the seed, nudged clear of `a`.
-  let b = (Math.floor(seed / n) + 1) % n;
+  let b = ((Math.floor(seed / n) % n) + n + 1) % n;
   if (b === a) b = (b + 1) % n;
-  return [TEAM_NAMES[a]!, TEAM_NAMES[b]!];
+  const picked = [a, b];
+  // Stride ≥ 1 off a MIXED seed (not a plain high-bits slice: small seeds
+  // would all stride 1, and adjacent list entries read as lazy) — with the
+  // used-skip any stride yields distinct picks.
+  const h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+  const stride = (h % (n - 1)) + 1;
+  while (picked.length < Math.min(count, n)) {
+    let next = (picked[picked.length - 1]! + stride) % n;
+    while (picked.includes(next)) next = (next + 1) % n;
+    picked.push(next);
+  }
+  return picked.slice(0, count).map((i) => TEAM_NAMES[i]!);
 };

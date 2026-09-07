@@ -1,18 +1,21 @@
 {
   "type": "sfx-bits",
-  "subject": "a single dry pre-fight countdown tick — a taut wooden clack, tense",
-  "prompt": "Close-mic'd wooden clack: a taut sun-baked plank struck with leather-wrapped mallet, sharp dry attack, brief resonant hollow twang, a tense heartbeat-like double click building then a faint dusty decay — about two seconds, weighty and grounded.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a wooden clapper striking once, a single dry taut clack, close-miked, dead room",
+  "prompt": "a wooden clapper striking once, a single dry taut clack, close-miked, dead room. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
     "durationSeconds": 1,
-    "promptInfluence": 0.3,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "countdown_tick_1.mp3"
+    "countdown_tick_2.mp3"
   ],
+  "takeEngines": {
+    "countdown_tick_2.mp3": "stable-audio"
+  },
   "created": "2026-07-16T13:56:19.977Z",
-  "updated": "2026-07-16T13:56:19.977Z"
+  "updated": "2026-09-07T20:30:39.799Z"
 }

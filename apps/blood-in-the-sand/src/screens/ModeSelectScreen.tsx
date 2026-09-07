@@ -19,7 +19,9 @@ import { DISPLAY_FONT } from "../typography";
 
 export interface ModeSelectScreenProps {
   onBack: () => void;
-  /** Skirmish → the existing online flow (name gate → room list → wizard). */
+  /** Skirmish → the existing online flow (name gate → room list → wizard).
+   * The 6-Way Brawl lives INSIDE this flow (bits-brawl.md): a room shape on
+   * the create sheet, not a mode of its own. */
   onSkirmish: () => void;
   /** Ranked → the ranked home (bits-ranked.md): standing + queue. */
   onRanked: () => void;

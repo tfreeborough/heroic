@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "the FIGHT signal — a big brassy gong hit with a roaring crowd surge",
-  "prompt": "Close-mic'd heavy bronze gong strike: fat metallic impact, low booming fundamental, long gritty rind; immediately followed by a rising, sand-dry crowd roar swell that peaks quickly then gritty reverb tails off over three seconds.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a huge bronze gong struck hard once, a bright crashing hit with a long shimmering decay, recorded in a wide open stone arena",
+  "prompt": "a huge bronze gong struck hard once, a bright crashing hit with a long shimmering decay, recorded in a wide open stone arena. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 4,
-    "promptInfluence": 0.3,
+    "durationSeconds": 3,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "fight_start_1.mp3"
+    "fight_start_1.mp3",
+    "fight_start_2.mp3",
+    "fight_start_3.mp3"
   ],
+  "takeEngines": {
+    "fight_start_1.mp3": "stable-audio",
+    "fight_start_2.mp3": "stable-audio",
+    "fight_start_3.mp3": "stable-audio"
+  },
   "created": "2026-07-16T13:58:06.636Z",
-  "updated": "2026-07-16T13:58:06.636Z"
+  "updated": "2026-09-07T20:33:21.879Z"
 }

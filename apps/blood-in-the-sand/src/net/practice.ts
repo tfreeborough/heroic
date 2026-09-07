@@ -37,6 +37,7 @@ import {
   forceStartMatch,
   LOADOUT_ABILITY_COUNT,
   makeClientConfig,
+  BRAWL_TEAM_COUNT,
   setPlayerAbilities,
   setPlayerWeapon,
   SnapshotBuffer,
@@ -78,8 +79,10 @@ if (__DEV__) {
   const delaySeconds = num(process.env.EXPO_PUBLIC_SANDS_DELAY_S);
   const closeSeconds = num(process.env.EXPO_PUBLIC_SANDS_CLOSE_S);
   const finalRadius = num(process.env.EXPO_PUBLIC_SANDS_FINAL_RADIUS);
+  const flag = (process.env.EXPO_PUBLIC_SANDS_ENABLED ?? "").trim().toLowerCase();
   configureSafeCircle({
-    ...(process.env.EXPO_PUBLIC_SANDS_ENABLED === "0" ? { enabled: false } : {}),
+    // Same off-values as the server's SANDS_ENABLED — one boolean dialect.
+    ...(["0", "off", "false"].includes(flag) ? { enabled: false } : {}),
     ...(delaySeconds !== undefined ? { delaySeconds } : {}),
     ...(closeSeconds !== undefined ? { closeSeconds } : {}),
     ...(finalRadius !== undefined ? { finalRadius } : {}),
@@ -181,14 +184,23 @@ export class PracticeClient implements LobbyClient {
     mode: PracticeMode = "bot",
     difficulty: DifficultyId = DEFAULT_DIFFICULTY,
     showcase: ShowcaseScript | null = null,
+    brawl = false,
   ) {
     this.mode = mode;
     this.showcase = showcase;
     if (showcase) teamSize = showcase.teamSize;
+    if (brawl) teamSize = 1; // the free-for-all shape is fixed: six teams of one
     // Practice needn't be replayable — wall-clock seeding is fine here. The
     // practice flag lifts the per-round charge budget (cooldown-only casts).
     // A showcase seeds FIXED so a take is re-shootable identically.
-    this.sim = createSim(ARENA_00, showcase ? 7 : Date.now() >>> 0, teamSize, mode === "dummies", true);
+    this.sim = createSim(
+      ARENA_00,
+      showcase ? 7 : Date.now() >>> 0,
+      teamSize,
+      mode === "dummies",
+      true,
+      brawl ? BRAWL_TEAM_COUNT : 2,
+    );
     this.nav = createBotNav(this.sim.zone);
 
     // The human takes seat 0. In bot mode, bots fill every other seat, BOTH
@@ -220,12 +232,13 @@ export class PracticeClient implements LobbyClient {
         });
       }
     } else if (mode === "dummies") {
-      for (let i = 0; i < teamSize * 2 - 1; i++) {
+      for (let i = 0; i < this.sim.state.players.length - 1; i++) {
         addDummy(this.sim, DUMMY_NAMES[i % DUMMY_NAMES.length]!);
       }
     } else {
+      // Every seat but yours — in brawl that's five bots, five separate teams.
       const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
-      for (let i = 0; i < teamSize * 2 - 1; i++) {
+      for (let i = 0; i < this.sim.state.players.length - 1; i++) {
         const bot = addPlayer(this.sim, names[i % names.length]!)!;
         this.bots.set(bot.id, {
           memory: createBotMemory((Math.random() * 0x7fffffff) | 0),
@@ -241,6 +254,7 @@ export class PracticeClient implements LobbyClient {
       playerId: me.id,
       team: me.team,
       teamSize,
+      teamCount: this.sim.state.teamCount,
       teamNames: this.sim.state.teamNames,
       roomCode: "BOT",
       roomName:
@@ -248,12 +262,14 @@ export class PracticeClient implements LobbyClient {
           ? "showcase"
           : mode === "dummies"
           ? "target practice"
-          : teamSize === 1
-            ? `practice vs ${this.sim.state.players[1]!.name}`
-            : `practice ${teamSize}v${teamSize}`,
+          : brawl
+            ? "practice brawl"
+            : teamSize === 1
+              ? `practice vs ${this.sim.state.players[1]!.name}`
+              : `practice ${teamSize}v${teamSize}`,
       hostId: 0,
       zoneId: ARENA_00.id,
-      config: makeClientConfig(),
+      config: makeClientConfig(this.sim.state),
     };
     this.refreshRoomState();
 

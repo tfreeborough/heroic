@@ -1,18 +1,21 @@
 {
   "type": "sfx-bits",
-  "subject": "a blast concussion thumping a body — a short bassy bodily whump with a grit spray edge, no fireball roar (it plays under a separate explosion boom)",
-  "prompt": "a blast concussion thumping a body — a short bassy bodily whump with a grit spray edge, no fireball roar (it plays under a separate explosion boom). A single one-shot sound effect, not music.",
+  "subject": "a blast wave hitting a body, one short bassy whump with a spray of grit, close-miked",
+  "prompt": "a blast wave hitting a body, one short bassy whump with a spray of grit, close-miked. A single one-shot sound effect, not music.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 3,
-    "promptInfluence": 0.8,
+    "durationSeconds": 2,
+    "promptInfluence": 0.6,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "hit_bombard_1.mp3"
+    "hit_bombard_2.mp3"
   ],
+  "takeEngines": {
+    "hit_bombard_2.mp3": "elevenlabs"
+  },
   "created": "2026-08-10T15:44:37.845Z",
-  "updated": "2026-08-10T15:44:37.845Z"
+  "updated": "2026-09-06T22:06:20.092Z"
 }

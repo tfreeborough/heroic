@@ -23,6 +23,7 @@ import {
   LOADOUT_ABILITY_COUNT,
   MatchStatsAccumulator,
   MAX_ROOMS,
+  BRAWL_TEAM_COUNT,
   PROTOCOL_VERSION,
   RANKED_BRACKETS,
   TICK_DT,
@@ -350,7 +351,10 @@ export class RoomManager {
     }
     const playerName = sanitizeName(msg.playerName);
     const code = generateRoomCode(new Set(this.rooms.keys()), Math.random);
-    const teamSize = sanitizeTeamSize(msg.teamSize);
+    // Brawl (bits-brawl.md, v32): the free-for-all shape — six teams of one;
+    // the host's teamSize pick doesn't apply and is ignored.
+    const brawl = msg.brawl === true;
+    const teamSize = brawl ? 1 : sanitizeTeamSize(msg.teamSize);
     const room = new Room(
       this.server!,
       {
@@ -362,11 +366,12 @@ export class RoomManager {
       Date.now() >>> 0,
       teamSize,
       performance.now(),
+      brawl ? BRAWL_TEAM_COUNT : 2,
     );
     this.rooms.set(code, room);
     room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), null, performance.now());
     console.log(
-      `⚔ room ${code} "${room.meta.name}" (${teamSize}v${teamSize}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
+      `⚔ room ${code} "${room.meta.name}" (${brawl ? "brawl" : `${teamSize}v${teamSize}`}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
     );
   }
 
@@ -1025,7 +1030,7 @@ export class RoomManager {
     const summary = stats.summary({
       ranked: true,
       bracket: ctx.bracket,
-      teamSize: room.sim.state.players.length / 2,
+      teamSize: room.sim.state.players.length / room.sim.state.teamCount,
       winnerTeam,
       players: seated.map((p) => ({ id: p.id, team: p.team, weapon: p.weapon, bot: p.bot === true })),
     });

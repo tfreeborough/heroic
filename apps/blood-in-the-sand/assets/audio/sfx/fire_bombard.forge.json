@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "A small cannon firing, no explosion",
-  "prompt": "A small cannon firing, no explosion. A single one-shot sound effect, not music.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a hand mortar firing a shell, one deep hollow thoomp with a smoky huff, no explosion, close-miked",
+  "prompt": "a hand mortar firing a shell, one deep hollow thoomp with a smoky huff, no explosion, close-miked. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
     "durationSeconds": 2,
-    "promptInfluence": 0.8,
+    "promptInfluence": 0.6,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "fire_bombard_1.mp3"
+    "fire_bombard_1.mp3",
+    "fire_bombard_2.mp3",
+    "fire_bombard_3.mp3"
   ],
+  "takeEngines": {
+    "fire_bombard_1.mp3": "stable-audio",
+    "fire_bombard_2.mp3": "stable-audio",
+    "fire_bombard_3.mp3": "stable-audio"
+  },
   "created": "2026-08-10T15:43:47.112Z",
-  "updated": "2026-08-10T15:43:47.112Z"
+  "updated": "2026-09-06T22:09:28.664Z"
 }

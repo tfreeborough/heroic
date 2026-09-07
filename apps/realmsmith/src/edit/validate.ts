@@ -33,14 +33,31 @@ export const validateZone = (file: ZoneFile): Issue[] => {
   const spawns = file.objects.filter((o) => o.kind === "playerSpawn");
   if (spawns.length === 0) {
     issues.push({ level: "error", message: "No player spawn placed." });
-  } else if (spawns.length > 1) {
-    const extra = spawns[1]!;
-    issues.push({
-      level: "warn",
-      message: `${spawns.length} player spawns — only the first is used.`,
-      focus: { x: extra.x, y: extra.y },
-      select: { type: "object", id: extra.id },
-    });
+  } else {
+    // Team-tagged spawn SETS are legitimate (Blood in the Sand): the classic
+    // pair carries props.team 1/2, and Brawl's ring carries props.team 1..6
+    // with props.brawl (bits-brawl.md). The stale "only the first is used"
+    // warning now fires only for genuinely untagged duplicates; a tagged set
+    // instead checks that no (team, brawl) slot is claimed twice.
+    const seen = new Map<string, (typeof spawns)[number]>();
+    for (const s of spawns) {
+      const team = Number(s.props?.team);
+      const key = Number.isFinite(team) && team > 0 ? `${Boolean(s.props?.brawl)}:${team}` : "untagged";
+      const prior = seen.get(key);
+      if (!prior) {
+        seen.set(key, s);
+        continue;
+      }
+      issues.push({
+        level: "warn",
+        message:
+          key === "untagged"
+            ? `${spawns.length} player spawns — tag each with props.team (and props.brawl for a brawl set), or only the first is used.`
+            : `Two player spawns claim ${Boolean(s.props?.brawl) ? "brawl " : ""}team ${team}.`,
+        focus: { x: s.x, y: s.y },
+        select: { type: "object", id: s.id },
+      });
+    }
   }
 
   for (const o of file.objects) {

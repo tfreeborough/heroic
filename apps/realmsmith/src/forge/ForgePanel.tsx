@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   Candidate,
-  ExpandResponse,
   ForgeError,
   ForgeStatus,
   GenerateResponse,
+  BankResponse,
   SaveResponse,
 } from "../../forge/protocol";
 import { BADGE, DEED, HOME, ICON, MODE, SPRITE } from "../../forge/styleBible";
@@ -68,6 +68,13 @@ const post = async <T,>(url: string, body: unknown): Promise<T> => {
   return data;
 };
 
+const get = async <T,>(url: string): Promise<T> => {
+  const res = await fetch(url);
+  const data = (await res.json()) as T & Partial<ForgeError>;
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
+};
+
 const CATEGORY_ORDER = ["weapon", "offensive", "defensive", "support", "currency"] as const;
 const SOUND_CATEGORY_ORDER: readonly SoundCategory[] = ["combat", "ability", "flow", "ui"];
 
@@ -91,10 +98,16 @@ export const ForgePanel = ({ onClose }: Props) => {
   const [name, setName] = useState("");
   const [nameEdited, setNameEdited] = useState(false);
 
-  const [busy, setBusy] = useState<"expand" | "generate" | "save" | null>(null);
+  const [busy, setBusy] = useState<"generate" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [takes, setTakes] = useState<Take[]>([]);
   const [saved, setSaved] = useState<SaveResponse | null>(null);
+  // The picked sound bank as it stands on disk (GET /forge/bank): audition,
+  // count, remove. Refetched after every save/remove.
+  const [bank, setBank] = useState<BankResponse | null>(null);
+  const [bankBusy, setBankBusy] = useState<string | null>(null);
+  // Quick filter over the sound set (61 banks — finding one by eye got slow).
+  const [soundFilter, setSoundFilter] = useState("");
   const [copied, setCopied] = useState(false);
 
   const loadStatus = useCallback(() => {
@@ -163,6 +176,15 @@ export const ForgePanel = ({ onClose }: Props) => {
   const soundDone = (id: string): boolean =>
     (status?.sfxFiles ?? []).some((f) => new RegExp(`^${id}_\\d+\\.mp3$`).test(f));
   const soundDoneCount = sounds.filter((e) => soundDone(e.id)).length;
+  // STALE = forged, but the brief has been rewritten since (the sidecar keeps
+  // what the mp3 was made from). After the 2026-09-06 Stable Audio rewrite this
+  // is the regenerate list — save overwrites the bank in place.
+  const soundForgedFrom = (id: string): string | undefined => status?.sfxForged?.[id];
+  const soundStale = (e: SoundSetEntry): boolean => {
+    const forged = soundForgedFrom(e.id);
+    return soundDone(e.id) && !e.missingSubject && forged !== undefined && forged.trim() !== e.subject.trim();
+  };
+  const soundStaleCount = sounds.filter(soundStale).length;
 
   const baseName = isIcon
     ? (iconId ?? "")
@@ -180,7 +202,14 @@ export const ForgePanel = ({ onClose }: Props) => {
                 ? name
                 : slug(subject);
   const kept = takes.filter((t) => t.keep);
-  const sfxReady = status?.keys.elevenlabs === true;
+  const provider = status?.sfxProvider ?? "elevenlabs";
+  const localSfx = provider !== "elevenlabs"; // the local engine is in play
+  const sfxReady =
+    provider === "stable-audio"
+      ? status?.keys.stableAudio === true
+      : provider === "both"
+        ? status?.keys.stableAudio === true || status?.keys.elevenlabs === true
+        : status?.keys.elevenlabs === true;
   const openaiReady = status?.keys.openai === true;
   const generateReady = isImage ? openaiReady : sfxReady;
   const durationSeconds = duration ? Number(duration) : undefined;
@@ -198,6 +227,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     setSubject("");
     setIconId(null);
     setSoundId(null);
+    setBank(null);
     setSpriteId(null);
     setModeId(null);
     setBadgeId(null);
@@ -252,24 +282,39 @@ export const ForgePanel = ({ onClose }: Props) => {
     setName(entry.id);
     setNameEdited(true);
     resetWork();
+    // The bank's suggested length (SOUND_DURATIONS) — a starting point, edit freely.
+    setDuration(entry.durationSeconds === undefined ? "" : String(entry.durationSeconds));
+    void loadBank(entry.id);
   };
 
-  const expand = useCallback(async () => {
-    setBusy("expand");
-    setError(null);
-    try {
-      const data = await post<ExpandResponse>("/forge/expand", {
-        type,
-        subject: subject.trim(),
-        durationSeconds,
-      });
-      setPrompt(data.prompt);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  }, [subject, durationSeconds]);
+  const loadBank = useCallback(
+    async (id: string) => {
+      try {
+        setBank(await get<BankResponse>(`/forge/bank?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`));
+      } catch (e) {
+        setBank(null);
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [type],
+  );
+
+  const removeTake = useCallback(
+    async (file: string) => {
+      if (!soundId) return;
+      setBankBusy(file);
+      setError(null);
+      try {
+        setBank(await post<BankResponse>("/forge/bank/remove", { type, id: soundId, file }));
+        loadStatus(); // done-ticks follow the folder
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBankBusy(null);
+      }
+    },
+    [type, soundId, loadStatus],
+  );
 
   const generate = useCallback(async () => {
     setBusy("generate");
@@ -320,8 +365,10 @@ export const ForgePanel = ({ onClose }: Props) => {
         prompt: prompt.trim(),
         ...(isImage ? {} : { durationSeconds, promptInfluence: influence }),
         takes: kept.map((t) => t.b64),
+        ...(isImage ? {} : { engines: kept.map((t) => t.engine) }),
       });
       setSaved(data);
+      if (soundId) void loadBank(soundId);
       // Un-keep what was just saved; leftover SFX takes can still join the bank
       // later (the server continues numbering from disk).
       setTakes((ts) => ts.map((t) => ({ ...t, keep: false })));
@@ -331,7 +378,7 @@ export const ForgePanel = ({ onClose }: Props) => {
     } finally {
       setBusy(null);
     }
-  }, [type, isImage, isBits, baseName, subject, prompt, durationSeconds, influence, kept, loadStatus]);
+  }, [type, isImage, isBits, baseName, subject, prompt, durationSeconds, influence, kept, loadStatus, soundId, loadBank]);
 
   const copyLines = useCallback(() => {
     if (!saved) return;
@@ -355,10 +402,27 @@ export const ForgePanel = ({ onClose }: Props) => {
       </div>
 
       {statusError && <div className="errbox">{statusError}</div>}
-      {status && !sfxReady && !isImage && (
+      {status && !sfxReady && !isImage && !localSfx && (
         <div className="warnbox">
           No ElevenLabs key. Copy <code>apps/realmsmith/.env.example</code> to{" "}
           <code>.env.local</code>, add <code>ELEVENLABS_API_KEY</code>, and restart the dev server.
+        </div>
+      )}
+      {status && !sfxReady && !isImage && localSfx && (
+        <div className="warnbox">
+          Sound engine isn't ready — missing: {status.sfxProviderMissing.join("; ")}. See
+          docs/design/asset-forge.md § Stable Audio.
+        </div>
+      )}
+      {status && sfxReady && !isImage && localSfx && (
+        <div className="hint">
+          {provider === "both"
+            ? "Sound engines: Stable Audio 3 (local) AND ElevenLabs, same prompt and duration — every take is tagged, keep whichever wins."
+            : "Sound engine: Stable Audio 3 Small-SFX, running locally (no API cost). The bank briefs are written in its register — generate them as-is."}
+          {provider === "both" && status.sfxProviderMissing.length > 0
+            ? ` (${status.sfxProviderMissing.join("; ")} — that engine will be skipped)`
+            : ""}
+          {!status.keys.stableAudioWeights && " First generation downloads ~1GB of weights — give it a few minutes."}
         </div>
       )}
       {status && !openaiReady && isImage && (
@@ -368,6 +432,8 @@ export const ForgePanel = ({ onClose }: Props) => {
         </div>
       )}
 
+      <div className="forge-body">
+      <aside className="forge-set">
       <label>
         Asset type
         <select value={type} onChange={(e) => switchType(e.target.value as ForgeType)}>
@@ -383,21 +449,40 @@ export const ForgePanel = ({ onClose }: Props) => {
         <div className="icon-manifest">
           <div className="icon-manifest-head">
             The sounds — {soundDoneCount} of {sounds.length} done
+            {soundStaleCount > 0 ? `, ${soundStaleCount} stale (brief rewritten since forged — ↻)` : ""}
           </div>
+          <input
+            type="search"
+            className="set-filter"
+            value={soundFilter}
+            onChange={(e) => setSoundFilter(e.target.value)}
+            placeholder="filter sounds…"
+          />
           {SOUND_CATEGORY_ORDER.map((cat) => (
             <div key={cat} className="icon-cat-row">
               <span className={`icon-cat sound-cat-${cat}`}>{cat}</span>
               <div className="icon-chips">
                 {sounds
-                  .filter((e) => e.category === cat)
+                  .filter(
+                    (e) =>
+                      e.category === cat &&
+                      (soundFilter.trim() === "" ||
+                        `${e.label} ${e.id}`.toLowerCase().includes(soundFilter.trim().toLowerCase())),
+                  )
                   .map((e) => (
                     <button
                       key={e.id}
-                      className={`icon-chip${e.id === soundId ? " active" : ""}${soundDone(e.id) ? " done" : ""}`}
+                      className={`icon-chip${e.id === soundId ? " active" : ""}${soundDone(e.id) ? " done" : ""}${soundStale(e) ? " stale" : ""}`}
                       onClick={() => pickSound(e)}
-                      title={e.missingSubject ? "no sound brief yet — add one to SOUND_SUBJECTS in forge/styleBible.ts" : e.subject}
+                      title={
+                        e.missingSubject
+                          ? "no sound brief yet — add one to SOUND_SUBJECTS in forge/styleBible.ts"
+                          : soundStale(e)
+                            ? `STALE — forged from: "${soundForgedFrom(e.id)}"\n\nnow: ${e.subject}`
+                            : e.subject
+                      }
                     >
-                      {soundDone(e.id) ? "✓ " : ""}
+                      {soundStale(e) ? "↻ " : soundDone(e.id) ? "✓ " : ""}
                       {e.label}
                       {e.missingSubject ? " ⚠" : ""}
                     </button>
@@ -570,6 +655,8 @@ export const ForgePanel = ({ onClose }: Props) => {
         </div>
       )}
 
+      </aside>
+      <section className="forge-work">
       <label>
         {isIcon
           ? "Icon subject (from the manifest — edit freely)"
@@ -610,20 +697,6 @@ export const ForgePanel = ({ onClose }: Props) => {
         />
       </label>
 
-      {!isImage && (
-        <button
-          onClick={expand}
-          disabled={busy !== null || !subject.trim() || !openaiReady}
-          title={
-            openaiReady
-              ? "An LLM rewrites the sentence into proper SFX prompt-craft (sources, textures, shape)"
-              : "Needs OPENAI_API_KEY in apps/realmsmith/.env.local"
-          }
-        >
-          {busy === "expand" ? "Expanding…" : "✨ Expand into a crafted prompt"}
-        </button>
-      )}
-
       <label>
         Prompt (sent verbatim; blank = built from the {isImage ? "subject + style bible" : "sentence"})
         <textarea
@@ -640,8 +713,9 @@ export const ForgePanel = ({ onClose }: Props) => {
 
       {!isImage && (
         <>
+          {provider !== "stable-audio" && (
           <label>
-            Prompt influence: {influence.toFixed(2)} — higher follows the text more literally
+            Prompt influence: {influence.toFixed(2)} — higher follows the text more literally{provider === "both" ? " (ElevenLabs only)" : ""}
             <input
               type="range"
               min={0}
@@ -651,6 +725,7 @@ export const ForgePanel = ({ onClose }: Props) => {
               onChange={(e) => setInfluence(Number(e.target.value))}
             />
           </label>
+          )}
 
           <label>
             Duration (seconds, blank = auto)
@@ -678,8 +753,33 @@ export const ForgePanel = ({ onClose }: Props) => {
             : "Generating… (a few seconds per take)"
           : isImage
             ? "Generate 2 candidates"
-            : "Generate 3 takes"}
+            : provider === "both"
+              ? "Generate 3 + 3 takes (local + ElevenLabs)"
+              : "Generate 3 takes"}
       </button>
+
+      {isBits && soundId && bank && bank.id === soundId && (
+        <div className="bank">
+          <div className="icon-manifest-head">
+            In the bank — {bank.takes.length} take{bank.takes.length === 1 ? "" : "s"} on disk
+            {bank.takes.length > 1 ? " (one plays at random per event)" : ""}
+          </div>
+          {bank.takes.length === 0 && <div className="hint">Nothing saved yet — generate, keep, save.</div>}
+          {bank.takes.map((t) => (
+            <div key={t.file} className="candidate keep">
+              <code>{t.file}</code>
+              <audio controls preload="metadata" src={`data:${t.mime};base64,${t.b64}`} />
+              <button
+                onClick={() => void removeTake(t.file)}
+                disabled={busy !== null || bankBusy !== null}
+                title="Delete this take from the bank (file, sidecar entry, manifest)"
+              >
+                {bankBusy === t.file ? "Removing…" : "Remove"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {takes.length > 0 && !isImage && (
         <>
@@ -696,6 +796,11 @@ export const ForgePanel = ({ onClose }: Props) => {
                     )
                   }
                 />
+                {t.engine && (
+                  <span className={`engine-tag engine-${t.engine}`} title={t.engine === "stable-audio" ? "Stable Audio 3, local" : "ElevenLabs"}>
+                    {t.engine === "stable-audio" ? "local" : "11L"}
+                  </span>
+                )}
                 <audio controls preload="metadata" src={`data:${t.mime};base64,${t.b64}`} />
               </div>
             ))}
@@ -844,15 +949,21 @@ export const ForgePanel = ({ onClose }: Props) => {
                       : isHome
                         ? "Paste into HOME_ART in src/screens/homeArt.ts (replaces null):"
                         : isBits
-                      ? "Paste into src/audio/manifest.ts:"
-                      : "Paste into src/game/audio/manifest.ts:"}
+                          ? `Wired: ${saved.manifest ?? "manifest"} regenerated — the bank is live on next app reload.`
+                          : "Paste into src/game/audio/manifest.ts:"}
           </div>
-          <pre>{saved.manifestLines.join("\n")}</pre>
-          <button onClick={copyLines}>{copied ? "Copied ✓" : "Copy manifest lines"}</button>
+          {!(isBits && saved.manifest) && (
+            <>
+              <pre>{saved.manifestLines.join("\n")}</pre>
+              <button onClick={copyLines}>{copied ? "Copied ✓" : "Copy manifest lines"}</button>
+            </>
+          )}
         </div>
       )}
 
       {error && <div className="errbox">{error}</div>}
+      </section>
+      </div>
     </div>
   );
 };

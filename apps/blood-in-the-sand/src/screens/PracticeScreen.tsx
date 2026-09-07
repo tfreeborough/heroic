@@ -33,7 +33,14 @@ export interface PracticeScreenProps {
   onBack: () => void;
   /** The header purse → the Armory. */
   onArmory: () => void;
-  onStart: (playerName: string, teamSize: number, difficulty: DifficultyId, opponent: PracticeMode) => void;
+  onStart: (
+    playerName: string,
+    teamSize: number,
+    difficulty: DifficultyId,
+    opponent: PracticeMode,
+    /** Brawl (bits-brawl.md): six teams of one — teamSize is ignored. */
+    brawl: boolean,
+  ) => void;
 }
 
 /**
@@ -51,6 +58,8 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
   const [name, setName] = useState("gladiator");
   const [opponent, setOpponent] = useState<PracticeMode>("bot");
   const [teamSize, setTeamSize] = useState(1);
+  /** Brawl = the sixth size chip: six teams of one, last one standing. */
+  const [brawl, setBrawl] = useState(false);
   const [difficulty, setDifficulty] = useState<DifficultyId>("skilled");
 
   useEffect(() => {
@@ -90,13 +99,25 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
             {[1, 2, 3, 4].map((n) => (
               <Pressable
                 key={n}
-                onPress={() => setTeamSize(n)}
-                style={[styles.sizeOption, teamSize === n && styles.sizeOptionOn]}
+                onPress={() => {
+                  setTeamSize(n);
+                  setBrawl(false);
+                }}
+                style={[styles.sizeOption, !brawl && teamSize === n && styles.sizeOptionOn]}
               >
-                <Text style={[styles.sizeText, teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
+                <Text style={[styles.sizeText, !brawl && teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
               </Pressable>
             ))}
+            <Pressable
+              onPress={() => setBrawl(true)}
+              style={[styles.sizeOption, brawl && styles.sizeOptionOn]}
+            >
+              <Text style={[styles.sizeText, brawl && styles.sizeTextOn]}>BRAWL</Text>
+            </Pressable>
           </View>
+          {brawl ? (
+            <Text style={styles.tierHint}>six enter, every bot for itself — last one standing</Text>
+          ) : null}
 
           <Text style={styles.sectionLabel}>BOT SKILL</Text>
           <View style={styles.tierGrid}>
@@ -116,7 +137,10 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
         </>
       )}
 
-      <Pressable onPress={() => onStart(name, teamSize, difficulty, opponent)} style={styles.play}>
+      <Pressable
+        onPress={() => onStart(name, teamSize, difficulty, opponent, opponent === "bot" && brawl)}
+        style={styles.play}
+      >
         <Text style={styles.playText}>{opponent === "bot" ? "ARM YOURSELF" : "ENTER THE RANGE"}</Text>
       </Pressable>
       <Text style={styles.playingAs}>{`playing as ${name}`}</Text>

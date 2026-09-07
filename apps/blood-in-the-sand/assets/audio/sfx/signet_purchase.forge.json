@@ -1,18 +1,25 @@
 {
   "type": "sfx-bits",
-  "subject": "a small stack of stiff parchment documents dropped onto a wooden counter — two or three quick heavy paper thumps landing in a pile, a leather strap cinching, then one warm low bell tone settling it, about one second, prosperous but understated, no coins, no voices",
-  "prompt": "Three stiff parchment pages slap together onto a worn wooden counter: two quick heavy paper thumps, a third softer settling, leather strap cinch over stack, then a warm low bell tone ringing and decaying — ~1s total, close-mic'd, dry, intimate.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "subject": "a small stack of stiff parchment dropped onto a wooden counter, a few quick heavy paper thumps, close-miked",
+  "prompt": "a small stack of stiff parchment dropped onto a wooden counter, a few quick heavy paper thumps, close-miked. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 3,
-    "promptInfluence": 0.85,
+    "durationSeconds": 2,
+    "promptInfluence": 0.65,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "signet_purchase_1.mp3"
+    "signet_purchase_1.mp3",
+    "signet_purchase_2.mp3",
+    "signet_purchase_3.mp3"
   ],
+  "takeEngines": {
+    "signet_purchase_1.mp3": "stable-audio",
+    "signet_purchase_2.mp3": "stable-audio",
+    "signet_purchase_3.mp3": "stable-audio"
+  },
   "created": "2026-08-15T20:30:39.656Z",
-  "updated": "2026-08-15T20:30:39.656Z"
+  "updated": "2026-09-07T20:46:47.571Z"
 }

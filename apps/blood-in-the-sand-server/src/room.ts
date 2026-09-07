@@ -190,10 +190,10 @@ export class Room {
   private eventBuffer: ArenaEvent[] = [];
   private lastRoomStateKey = "";
 
-  constructor(server: Server<ClientData>, meta: RoomMeta, seed: number, teamSize: number, nowMs: number) {
+  constructor(server: Server<ClientData>, meta: RoomMeta, seed: number, teamSize: number, nowMs: number, teamCount = 2) {
     this.server = server;
     this.meta = meta;
-    this.sim = createSim(ARENA_00, seed, teamSize);
+    this.sim = createSim(ARENA_00, seed, teamSize, false, false, teamCount);
     this.nav = createBotNav(this.sim.zone);
     this.createdAtMs = nowMs;
     this.emptySinceMs = nowMs; // occupied the moment the creator is seated
@@ -225,6 +225,7 @@ export class Room {
       capacity: this.sim.state.players.length,
       locked: this.meta.passcode !== null,
       phase: this.sim.state.round.phase === "lobby" ? "lobby" : "in-match",
+      brawl: this.sim.state.teamCount > 2,
     };
   }
 
@@ -318,13 +319,14 @@ export class Room {
       v: PROTOCOL_VERSION,
       playerId,
       team: player.team,
-      teamSize: this.sim.state.players.length / 2,
+      teamSize: this.sim.state.players.length / this.sim.state.teamCount,
+      teamCount: this.sim.state.teamCount,
       teamNames: this.sim.state.teamNames,
       roomCode: this.meta.code,
       roomName: this.meta.name,
       hostId: this.meta.hostId,
       zoneId: this.sim.zone.id,
-      config: makeClientConfig(),
+      config: makeClientConfig(this.sim.state),
       seatToken: this.seatTokens.get(playerId)!,
     });
     this.syncRoomState(nowMs);
