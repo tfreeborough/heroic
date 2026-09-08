@@ -10,6 +10,30 @@ import { DEV_NOTE, FEATURE, type StoreShotSpec } from "./data/store";
 export const FEATURE_SIZE = { width: 1024, height: 500 } as const;
 /** Phone screenshots: 9:16, within Google's 320–3840px bounds. */
 export const SHOT_SIZE = { width: 1080, height: 1920 } as const;
+/** App Store Connect's 6.5" iPhone slot (the one it demands): 1284×2778
+ * or 1242×2688 only. Same card, a taller frame under the caption band. */
+export const APPLE_SHOT_SIZE = { width: 1284, height: 2778 } as const;
+
+/**
+ * The screenshot layouts are authored at 1080 wide. Any composition size
+ * renders the same logical card scaled to its width, with the extra height
+ * (Apple's 9:19.5) going to the phone frame / the gaps. Wrap the card in
+ * `<Scaled>` and lay out against `useCanvas()`'s logical width/height.
+ */
+const LOGICAL_W = SHOT_SIZE.width;
+const useCanvas = () => {
+  const { width, height } = useVideoConfig();
+  const scale = width / LOGICAL_W;
+  return { scale, w: LOGICAL_W, h: height / scale };
+};
+const Scaled: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { scale, w, h } = useCanvas();
+  return (
+    <div style={{ position: "absolute", left: 0, top: 0, width: w, height: h, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+      {children}
+    </div>
+  );
+};
 
 /**
  * 1024×500: the title-screen arena painting cropped to its wall-and-sand
@@ -106,13 +130,15 @@ export const FeatureGraphic: React.FC = () => (
  */
 export const StoreShot: React.FC<StoreShotSpec> = ({ headline, line, src, at = 0, cropTop = 0, cropBottom = 0 }) => {
   const { fps } = useVideoConfig();
+  const { w, h } = useCanvas();
   const keep = Math.max(0.2, 1 - cropTop - cropBottom);
   // Source captures are ~9:19.7 phones; after the chrome crop the kept
-  // band is ~0.506 wide-to-tall. Fit the frame to the room under the band.
+  // band is ~0.506 wide-to-tall. Fit the frame to the room under the band,
+  // never wider than the card with a margin either side.
   const bandH = 400;
   const pad = 70;
-  const frameH = SHOT_SIZE.height - bandH - pad;
-  const frameW = Math.round(frameH * (874 / 1920) / keep);
+  const frameW = Math.min(Math.round((h - bandH - pad) * (874 / 1920) / keep), w - 2 * pad);
+  const frameH = Math.round((frameW * keep) / (874 / 1920));
   const shared: React.CSSProperties = {
     position: "absolute",
     left: 0,
@@ -124,83 +150,93 @@ export const StoreShot: React.FC<StoreShotSpec> = ({ headline, line, src, at = 0
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
       <Backdrop glow={0.55} />
-      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: bandH, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "0 70px", textAlign: "center" }}>
-        <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 92, lineHeight: 1.02, color: palette.bone, whiteSpace: "pre-line", textShadow: "0 6px 0 rgba(40,20,8,0.9), 0 14px 30px rgba(0,0,0,0.6)" }}>
-          {headline.toUpperCase()}
+      <Scaled>
+        <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: bandH, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "0 70px", textAlign: "center" }}>
+          <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 92, lineHeight: 1.02, color: palette.bone, whiteSpace: "pre-line", textShadow: "0 6px 0 rgba(40,20,8,0.9), 0 14px 30px rgba(0,0,0,0.6)" }}>
+            {headline.toUpperCase()}
+          </div>
+          <div style={{ width: 110, height: 5, background: palette.crimson, margin: "22px 0 18px" }} />
+          <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 40, lineHeight: 1.25, color: palette.sand, maxWidth: 900 }}>{line}</div>
         </div>
-        <div style={{ width: 110, height: 5, background: palette.crimson, margin: "22px 0 18px" }} />
-        <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 40, lineHeight: 1.25, color: palette.sand, maxWidth: 900 }}>{line}</div>
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          left: (SHOT_SIZE.width - frameW) / 2,
-          top: bandH,
-          width: frameW,
-          height: frameH,
-          overflow: "hidden",
-          borderRadius: 40,
-          border: `3px solid rgba(220,185,111,0.55)`,
-          boxShadow: "0 40px 90px rgba(0,0,0,0.65), 0 0 0 10px rgba(20,10,4,0.6)",
-          background: palette.umber,
-        }}
-      >
-        {src.endsWith(".mp4") ? (
-          <OffthreadVideo src={staticFile(src)} startFrom={Math.round(at * fps)} muted style={shared} />
-        ) : (
-          <Img src={staticFile(src)} style={shared} />
-        )}
-      </div>
+        <div
+          style={{
+            position: "absolute",
+            left: (w - frameW) / 2,
+            top: bandH + Math.max(0, (h - bandH - pad - frameH) / 2),
+            width: frameW,
+            height: frameH,
+            overflow: "hidden",
+            borderRadius: 40,
+            border: `3px solid rgba(220,185,111,0.55)`,
+            boxShadow: "0 40px 90px rgba(0,0,0,0.65), 0 0 0 10px rgba(20,10,4,0.6)",
+            background: palette.umber,
+          }}
+        >
+          {src.endsWith(".mp4") ? (
+            <OffthreadVideo src={staticFile(src)} startFrom={Math.round(at * fps)} muted style={shared} />
+          ) : (
+            <Img src={staticFile(src)} style={shared} />
+          )}
+        </div>
+      </Scaled>
     </AbsoluteFill>
   );
 };
 
 /** 1080×1920: the closing screenshot — the helmet, then a note from Tom. */
-export const DevNote: React.FC = () => (
-  <AbsoluteFill style={{ backgroundColor: palette.night }}>
-    <Backdrop glow={0.7} />
-    <Img
-      src={staticFile("assets/app-icon.png")}
-      style={{
-        position: "absolute",
-        left: (SHOT_SIZE.width - 520) / 2,
-        top: 90,
-        width: 520,
-        height: 520,
-        imageRendering: "pixelated",
-        WebkitMaskImage: "radial-gradient(circle at 50% 52%, black 40%, transparent 68%)",
-        maskImage: "radial-gradient(circle at 50% 52%, black 40%, transparent 68%)",
-      }}
-    />
-    <div
-      style={{
-        position: "absolute",
-        left: 70,
-        right: 70,
-        top: 640,
-        background: palette.ink,
-        borderLeft: `8px solid ${palette.crimson}`,
-        padding: "54px 60px 58px 54px",
-        boxShadow: "0 30px 80px rgba(0,0,0,0.55)",
-      }}
-    >
-      <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 66, color: palette.bone, lineHeight: 1.05, marginBottom: 34 }}>
-        {DEV_NOTE.heading}
-      </div>
-      {DEV_NOTE.paragraphs.map((t) => (
-        <div key={t} style={{ fontFamily: SANS, fontWeight: 500, fontSize: 42, lineHeight: 1.38, color: palette.bone, marginBottom: 30 }}>
-          {t}
+export const DevNote: React.FC = () => {
+  const { w, h } = useCanvas();
+  // Authored for 1920 tall; a taller canvas splits the spare height above
+  // the helmet and below the card so the footer never floats off alone.
+  const shift = Math.max(0, (h - SHOT_SIZE.height) / 2);
+  return (
+    <AbsoluteFill style={{ backgroundColor: palette.night }}>
+      <Backdrop glow={0.7} />
+      <Scaled>
+        <Img
+          src={staticFile("assets/app-icon.png")}
+          style={{
+            position: "absolute",
+            left: (w - 520) / 2,
+            top: 90 + shift,
+            width: 520,
+            height: 520,
+            imageRendering: "pixelated",
+            WebkitMaskImage: "radial-gradient(circle at 50% 52%, black 40%, transparent 68%)",
+            maskImage: "radial-gradient(circle at 50% 52%, black 40%, transparent 68%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: 70,
+            right: 70,
+            top: 640 + shift,
+            background: palette.ink,
+            borderLeft: `8px solid ${palette.crimson}`,
+            padding: "54px 60px 58px 54px",
+            boxShadow: "0 30px 80px rgba(0,0,0,0.55)",
+          }}
+        >
+          <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 66, color: palette.bone, lineHeight: 1.05, marginBottom: 34 }}>
+            {DEV_NOTE.heading}
+          </div>
+          {DEV_NOTE.paragraphs.map((t) => (
+            <div key={t} style={{ fontFamily: SANS, fontWeight: 500, fontSize: 42, lineHeight: 1.38, color: palette.bone, marginBottom: 30 }}>
+              {t}
+            </div>
+          ))}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 18, marginTop: 14 }}>
+            <span style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 52, color: palette.sand }}>— {DEV_NOTE.signoff}</span>
+          </div>
         </div>
-      ))}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 18, marginTop: 14 }}>
-        <span style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 52, color: palette.sand }}>— {DEV_NOTE.signoff}</span>
-      </div>
-    </div>
-    <div style={{ position: "absolute", left: 0, right: 0, bottom: 92, textAlign: "center" }}>
-      <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 40, letterSpacing: 6, color: palette.sand }}>{DEV_NOTE.studio.toUpperCase()}</div>
-      <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 32, color: palette.steel, marginTop: 14, letterSpacing: 1 }}>
-        {DEV_NOTE.handle}
-      </div>
-    </div>
-  </AbsoluteFill>
-);
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 92, textAlign: "center" }}>
+          <div style={{ fontFamily: CINZEL, fontWeight: 700, fontSize: 40, letterSpacing: 6, color: palette.sand }}>{DEV_NOTE.studio.toUpperCase()}</div>
+          <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 32, color: palette.steel, marginTop: 14, letterSpacing: 1 }}>
+            {DEV_NOTE.handle}
+          </div>
+        </div>
+      </Scaled>
+    </AbsoluteFill>
+  );
+};

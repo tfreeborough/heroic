@@ -1,11 +1,14 @@
 # Blood in the Sand — store listing copy
 
-Status: **drafted 2026-09-07** for the Google Play closed-testing listing;
-the same text serves the App Store (its subtitle = the short description,
-trimmed to 30 chars: "Quick, bloody 1v1 duels"). Assets render from
-`apps/bits-promos` (`bun run render:store` → `out/store/`): the 1024×500
-feature graphic + six 1080×1920 gameplay screenshots defined in
-`src/data/store.ts`, plus a seventh "note from the dev" card (`DEV_NOTE`). Keep the pitch here and in that file in step.
+Status: **drafted 2026-09-07** for the Google Play closed-testing listing
+(submitted for review 2026-09-08); the App Store fields below added
+2026-09-08. Assets render from `apps/bits-promos` (`bun run render:store`
+→ `out/store/`): the 1024×500 feature graphic + six 1080×1920 gameplay
+screenshots defined in `src/data/store.ts`, plus a seventh "note from the
+dev" card (`DEV_NOTE`). `bun run render:store -- --apple` renders the same
+seven cards at 1284×2778 into `out/store/apple/` for App Store Connect's
+6.5" iPhone slot (it only accepts 1242×2688 / 1284×2778, either way up).
+Keep the pitch here and in that file in step.
 
 ## App name (30 max)
 
@@ -36,6 +39,42 @@ It's free. There's a shop with some extra weapons, abilities and announcer voice
 A game like this only works if there are people to fight, so if you like it, tell someone. There's a Discord where I run match nights and post patch notes: discord.gg/8FHgBmaSnT
 
 Made in the evenings by one person. Bugs and strong opinions about balance are both welcome.
+
+## App Store Connect fields
+
+Same description as above (Apple's field is also 4000). The rest:
+
+**Subtitle** (30 max, 25 used)
+
+Short, bloody arena duels
+
+**Promotional text** (170 max, 163 used — editable any time without a new build)
+
+One life a round, no aiming, every attack telegraphed. A duel game about timing, made by one person in the evenings. Free, with a Discord where I run match nights.
+
+**Keywords** (100 max, 98 used; comma-separated, no spaces, never repeat the app name)
+
+arena,duel,pvp,multiplayer,gladiator,fighting,1v1,2v2,online,ranked,pixel,brawl,sword,melee,battle
+
+**URLs**
+
+- Support: https://free-the-borough.com/support/
+- Marketing: https://free-the-borough.com/
+- Privacy policy (App Privacy section): https://free-the-borough.com/privacy/
+
+**Other**
+
+- Copyright: 2026 Free the Borough Games
+- Primary category Games, secondary Action; subcategory Action.
+- Age rating: answer the questionnaire with cartoon/fantasy violence
+  (frequent, the blood is the point) — expect 12+.
+- Screenshots: `out/store/apple/01`–`07`, same order as Play. Only the 6.5"
+  slot is required; Apple scales it for the other iPhones. No iPad set
+  (the app is iPhone-only).
+- App Review notes: multiplayer needs a second player — tell them practice
+  vs bots works offline with no account, and that the store is reachable
+  from the purse on any menu screen. Include a sandbox Apple ID if they ask
+  to test a Signet pack.
 
 ## Notes for the Play Console form
 
