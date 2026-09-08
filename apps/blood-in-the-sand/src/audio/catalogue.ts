@@ -164,7 +164,9 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
  *        the sands horn, the round/match stingers (the music's button)
  *   ~0.8 secondary info — releases, FIGHT, match-found, rank up
  *   ~0.6 colour — crowd, heals, countdown, ceremony plates, store stamps
- *   ~0.4 furniture — UI taps, title gust, mode reveal, footstep squelch
+ *   ~0.4 furniture — title gust, footstep squelch
+ *   ~0.2 menu furniture — UI taps, mode reveal (2026-09-08: halved, they were
+ *        shouting over the menus; a tap should be felt more than heard)
  */
 export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // ── Combat ──────────────────────────────────────────────────────────────
@@ -325,15 +327,15 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   signetPurchase: { clips: bank("signet_purchase"), volume: 0.65 },
 
   // ── UI ──────────────────────────────────────────────────────────────────
-  uiTap: { clips: bank("ui_tap"), volume: 0.4 },
-  uiConfirm: { clips: bank("ui_confirm"), volume: 0.55 },
-  uiBack: { clips: bank("ui_back"), volume: 0.4 },
-  uiError: { clips: bank("ui_error"), volume: 0.5 },
+  uiTap: { clips: bank("ui_tap"), volume: 0.2 },
+  uiConfirm: { clips: bank("ui_confirm"), volume: 0.3 },
+  uiBack: { clips: bank("ui_back"), volume: 0.2 },
+  uiError: { clips: bank("ui_error"), volume: 0.3 },
   // A low drum hit with air — one per mode card as it settles, a four-beat
   // roll down the stack (~95–230ms between beats). No throttle so a slow
   // frame can never eat a beat; slight pitch drift keeps the roll from
   // sounding machine-stamped. Quiet: it plays four times per screen entry.
-  modeReveal: { clips: bank("mode_reveal"), volume: 0.3, throttleMs: 0, pitchVariance: 0.04 },
+  modeReveal: { clips: bank("mode_reveal"), volume: 0.2, throttleMs: 0, pitchVariance: 0.04 },
   // The title screen's dust squall (HomeScreen's DustStorm) — quiet ambience,
   // not a stinger. Note the first gust after a cold launch can land before any
   // tap has unlocked audio; it stays silent and the next one sounds.

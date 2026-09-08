@@ -29,7 +29,7 @@ export const SFX_MANIFEST: Record<string, number> = {
   cast_tremor_3: require("../../assets/audio/sfx/cast_tremor_3.mp3"),
   cast_war_drums_1: require("../../assets/audio/sfx/cast_war_drums_1.mp3"),
   cast_warding_shout_1: require("../../assets/audio/sfx/cast_warding_shout_1.mp3"),
-  countdown_tick_2: require("../../assets/audio/sfx/countdown_tick_2.mp3"),
+  countdown_tick_4: require("../../assets/audio/sfx/countdown_tick_4.mp3"),
   crowd_ambience_1: require("../../assets/audio/sfx/crowd_ambience_1.mp3"),
   crowd_ambience_2: require("../../assets/audio/sfx/crowd_ambience_2.mp3"),
   crowd_ambience_3: require("../../assets/audio/sfx/crowd_ambience_3.mp3"),
