@@ -164,9 +164,11 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
  *        the sands horn, the round/match stingers (the music's button)
  *   ~0.8 secondary info — releases, FIGHT, match-found, rank up
  *   ~0.6 colour — crowd, heals, countdown, ceremony plates, store stamps
- *   ~0.4 furniture — title gust, footstep squelch
+ *   ~0.4 furniture — footstep squelch
  *   ~0.2 menu furniture — UI taps, mode reveal (2026-09-08: halved, they were
  *        shouting over the menus; a tap should be felt more than heard)
+ *   ~0.1 ambience — title gust (barely there; it loops under the whole title
+ *        screen, so anything louder becomes a noise floor)
  */
 export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // ── Combat ──────────────────────────────────────────────────────────────
@@ -339,5 +341,5 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // The title screen's dust squall (HomeScreen's DustStorm) — quiet ambience,
   // not a stinger. Note the first gust after a cold launch can land before any
   // tap has unlocked audio; it stays silent and the next one sounds.
-  titleGust: { clips: bank("title_gust"), volume: 0.3 },
+  titleGust: { clips: bank("title_gust"), volume: 0.1 },
 };

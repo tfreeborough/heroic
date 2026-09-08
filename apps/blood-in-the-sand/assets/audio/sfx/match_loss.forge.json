@@ -1,18 +1,21 @@
 {
   "type": "sfx-bits",
-  "subject": "a somber match-lost motif — a low mournful horn fading under a dying crowd",
-  "prompt": "An short Arabian song to signify a great defeat, mournful, sad, drums, flute, sitar, no voice",
+  "subject": "a slow single bass drum hit under a low male choir holding one dark note and sinking into silence, a dirge",
+  "prompt": "a great bronze gong struck once and swelling into a low sad sustained open chord, vast, very long reverb tail.",
   "provider": "elevenlabs-sfx",
   "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 5,
-    "promptInfluence": 0.3,
+    "durationSeconds": 6,
+    "promptInfluence": 0.4,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "match_loss_1.mp3"
+    "match_loss_2.mp3"
   ],
+  "takeEngines": {
+    "match_loss_2.mp3": "elevenlabs"
+  },
   "created": "2026-07-16T21:11:19.745Z",
-  "updated": "2026-07-16T21:11:19.745Z"
+  "updated": "2026-09-08T08:59:24.564Z"
 }

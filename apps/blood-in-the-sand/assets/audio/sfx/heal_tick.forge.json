@@ -1,18 +1,27 @@
 {
   "type": "sfx-bits",
   "subject": "a small warm healing pulse — a soft chime with a brief liquid shimmer, gentle",
-  "prompt": "Close, warm metallic chime like sun-warmed bronze tapped; a soft liquid shimmer ripples through, faint wet-sand grain and breathy air; rises gently to a brief luminous peak at 1s, then decays into dry dusty echo.",
-  "provider": "elevenlabs-sfx",
-  "model": "eleven_text_to_sound_v2",
+  "prompt": "a small soft warm healing throb, gentle. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
   "params": {
-    "durationSeconds": 2,
-    "promptInfluence": 0.3,
+    "durationSeconds": 1,
+    "promptInfluence": 0.7,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
   "files": [
-    "heal_tick_1.mp3"
+    "heal_tick_2.mp3",
+    "heal_tick_3.mp3",
+    "heal_tick_4.mp3",
+    "heal_tick_5.mp3"
   ],
+  "takeEngines": {
+    "heal_tick_2.mp3": "stable-audio",
+    "heal_tick_3.mp3": "stable-audio",
+    "heal_tick_4.mp3": "stable-audio",
+    "heal_tick_5.mp3": "stable-audio"
+  },
   "created": "2026-07-16T13:55:07.744Z",
-  "updated": "2026-07-16T13:55:07.744Z"
+  "updated": "2026-09-08T08:54:01.074Z"
 }
