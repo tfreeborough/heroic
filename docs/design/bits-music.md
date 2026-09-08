@@ -17,10 +17,17 @@ first to three round wins.
   lands over the duck (a softer button than the old hard cut).
 - **A breath, then in.** The match's first fight opens with 4s of crowd and
   steel, then the song creeps in over 3s. After that the score is simply on.
-- **Songs chain.** When one runs out the next from the match's shuffled deck
-  starts from its top (its quiet opening is the breath). A five-round match
-  hears two or three songs; no song repeats within a match.
-- **Match end fades out** (1.5s); the next match deals a fresh deck.
+- **Songs chain.** When one runs out the next starts from its top (its quiet
+  opening is the breath). A five-round match hears two or three songs.
+- **No song hogs the arena (2026-09-08).** Every pick is uniform over the
+  pool minus the last 12 songs played, and that recent list persists across
+  matches and launches — so a song sits out at least a dozen plays before it
+  returns, and the rotation spaces itself. (The v3 per-match shuffled deck
+  only stopped repeats inside a match; across an evening some songs came
+  round far more than others.)
+- **Match end fades out** (1.5s).
+- **Practice is silent.** A bot scrimmage isn't the arena; the score would
+  cheapen the tracks. The crowd bed and SFX still play.
 - **The sands alignment is gone.** Wherever the song is when the tide rolls
   is where it is — the horn carries the moment. (A rejoin with the tide out
   still brings the score in at once.)
@@ -287,9 +294,15 @@ originals stashed at `~/Documents/GitHub/heroic-audio-originals/music/`.
   roundEnd → `DUCK_LEVEL` 0.35, matchEnd / lobby → out (1.5s) and stays out
   until a fresh round 1. Snapshot-driven rather than event-driven so a
   mid-match rejoin behaves.
-- Deal: Fisher–Yates shuffle (local `Math.random`, never the sim rng) per
-  match; `deckIdx` advances on song end, wrapping if the match outlasts the
-  pool. `stopRoundMusic` on GameScreen unmount fades out and forgets the deck.
+- Pick: `pickSong` (`@heroic/core` `audio/songRotation`, pure + tested) —
+  uniform over the pool minus the last `RECENT_SONGS` (12) played, oldest
+  plays released first if a pool is too small to hold all 12 out. The recent
+  list is persisted (`bits.musicRecent`, `settings.ts`) and restored on the
+  first sync; `nextSong` records every play. Local `Math.random`, never the
+  sim rng. `stopRoundMusic` on GameScreen unmount fades out and forgets the
+  match (the recent list survives).
+- GameScreen skips `syncRoundMusic` for a `PracticeClient` — practice is
+  silent.
 - The pre-match asset warm (`preloadClips`) includes every music source.
 
 ## Open

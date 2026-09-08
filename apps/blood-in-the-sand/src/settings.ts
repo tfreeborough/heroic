@@ -36,6 +36,26 @@ export const saveMusicEnabled = (on: boolean): void => {
   void AsyncStorage.setItem(KEY_MUSIC, on ? "1" : "0");
 };
 
+/** The last few songs the score has played, oldest first (bits-music.md:
+ * held out of the next pick so the rotation spaces itself). Persisted so the
+ * spacing holds across app launches, not just across matches in one sitting. */
+const KEY_RECENT_SONGS = "bits.musicRecent";
+
+export const loadRecentSongs = async (): Promise<string[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(KEY_RECENT_SONGS);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveRecentSongs = (songs: readonly string[]): void => {
+  void AsyncStorage.setItem(KEY_RECENT_SONGS, JSON.stringify(songs));
+};
+
 /** The Primer (bits-onboarding.md) — the first PLAY routes through the
  * five-chapter rules walkthrough until a door or SKIP retires it. Only a
  * decision writes the flag: a crash mid-Primer replays it. Settings' HOW TO

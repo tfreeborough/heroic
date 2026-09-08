@@ -50,5 +50,6 @@ export * from "./zone/view";
 export * from "./zone/theme";
 export * from "./zone/depth";
 export * from "./audio/musicState";
+export * from "./audio/songRotation";
 export * from "./audio/sound";
 export * from "./rng";
