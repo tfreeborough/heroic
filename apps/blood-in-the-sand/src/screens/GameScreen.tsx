@@ -984,9 +984,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         const myTeam = client.welcome?.team ?? 1;
         const brawl = (client.welcome?.teamCount ?? 2) > 2;
         const round = view?.round;
-        // Battle music follows the round: deal on a new round number, urgent
-        // twin when the sands are out, silence on the end plates.
-        if (round) syncRoundMusic(round);
+        // Battle music follows the round: enters after the first fight's
+        // breath, ducks under the plates, out at match end. Practice never
+        // hears it — a bot scrimmage isn't the arena (bits-music.md); the
+        // crowd bed and SFX still play.
+        if (round && !client.practice) syncRoundMusic(round);
         const phase = round?.phase ?? "countdown";
         // The whole enemy TEAM must be gone — one teammate-of-theirs dropping
         // out of a 3v3 is not "finish them".

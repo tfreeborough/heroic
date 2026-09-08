@@ -4,11 +4,21 @@
  * The score belongs to the MATCH, not the round. The first fight opens with a
  * few seconds of crowd and steel, then a song creeps in and keeps playing
  * through every round: DUCKED under the end plate and the next countdown,
- * back up at FIGHT. When a song runs out the next one from the match's
- * shuffled deck starts (its quiet opening is the breath). Match end fades
- * the score out; the next match deals afresh. (v2 dealt one song per round
- * and cut it on every plate — rounds are too short for a song to ever get
- * into its swing.)
+ * back up at FIGHT. When a song runs out the next one starts (its quiet
+ * opening is the breath). Match end fades the score out. (v2 dealt one song
+ * per round and cut it on every plate — rounds are too short for a song to
+ * ever get into its swing.)
+ *
+ * Which song: every pick is uniform over the pool minus the last
+ * `RECENT_SONGS` played (`@heroic/core`'s `pickSong`), and the recent list
+ * persists across matches AND launches (`bits.musicRecent`). The v3
+ * per-match shuffled deck only stopped repeats inside a match; across an
+ * evening some songs came round far more often than others. Now a song sits
+ * out at least a dozen plays before it returns.
+ *
+ * Practice never hears the score — GameScreen doesn't call syncRoundMusic
+ * for a PracticeClient (a bot scrimmage isn't the arena; the crowd bed and
+ * SFX still play).
  *
  * Own expo-audio player rather than the AudioDirector's decks — those carry
  * the looping crowd-ambience bed, and the score fades independently under it.
@@ -22,7 +32,8 @@
  */
 import { createAudioPlayer, type AudioPlayer, type AudioSource } from "expo-audio";
 import type { RoundPhase } from "@heroic/blood-in-the-sand-sim";
-import { loadMusicEnabled } from "../settings";
+import { noteSongPlayed, pickSong } from "@heroic/core";
+import { loadMusicEnabled, loadRecentSongs, saveRecentSongs } from "../settings";
 
 /** Song → bundled track: every `<song>.mp3` in assets/audio/music, via the
  * generated manifest (`bun run sfx:manifest` in apps/realmsmith after dropping
@@ -71,9 +82,13 @@ let muted = false;
 let enabled = true;
 let settingLoaded = false;
 
-/** The match's shuffled pool and where we are in it. */
-let deck: string[] = [];
-let deckIdx = 0;
+/** A match is underway (state below is live); false until the first sync
+ * of a match and again after stopRoundMusic. */
+let dealt = false;
+/** The last few songs played, oldest first — held out of the next pick.
+ * Restored from storage on the first sync; every play writes it back. */
+let recent: string[] = [];
+let recentLoaded = false;
 /** Highest round number seen this match — a smaller one means a NEW match. */
 let lastRound = 0;
 /** Wall-clock ms the first fight went active (for the entry delay), or null. */
@@ -133,14 +148,14 @@ const fadeTo = (target: number, ms: number): void => {
   fadeTimer ??= setInterval(tickFade, FADE_TICK_MS);
 };
 
-/** Fisher–Yates on a copy. Local Math.random: music never touches sim rng. */
-const shuffle = (pool: readonly string[]): string[] => {
-  const out = [...pool];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
+/** Choose the next song — anything in the pool but the recent list — and
+ * record it as played. Local Math.random: music never touches sim rng. */
+const nextSong = (): string | null => {
+  const song = pickSong(Object.keys(MUSIC_MANIFEST), recent);
+  if (song === null) return null;
+  recent = noteSongPlayed(recent, song);
+  saveRecentSongs(recent);
+  return song;
 };
 
 /** Load `song` from its top and play (silently — the caller sets the fade). */
@@ -157,21 +172,20 @@ const cue = (song: string): boolean => {
   return true;
 };
 
-/** A fresh match: new deck, nothing playing. */
+/** A fresh match: nothing playing yet. */
 const resetMatch = (): void => {
-  deck = shuffle(Object.keys(MUSIC_MANIFEST));
-  deckIdx = 0;
+  dealt = true;
   activeSince = null;
   entered = false;
   matchOver = false;
   level = 0;
 };
 
-/** Bring the deck's current song in from its top with the slow entry fade. */
+/** Bring the next song in from its top with the slow entry fade. */
 const enter = (): void => {
-  if (entered || !enabled || deck.length === 0) return;
-  const song = deck[deckIdx % deck.length]!;
-  if (!cue(song)) return;
+  if (entered || !enabled) return;
+  const song = nextSong();
+  if (song === null || !cue(song)) return;
   entered = true;
   level = 1;
   fadeTo(level, ENTRY_FADE_MS);
@@ -179,12 +193,13 @@ const enter = (): void => {
 
 /** The song ran out mid-match: the next one, from its top, at the current level. */
 const onSongEnded = (): void => {
-  if (!entered || deck.length === 0) return;
-  deckIdx = (deckIdx + 1) % deck.length;
+  if (!entered) return;
+  const song = nextSong();
+  if (song === null) return;
   const v = ensure();
   v.gain = 0;
   applyVolume();
-  if (cue(deck[deckIdx]!)) fadeTo(level, NEXT_SONG_FADE_MS);
+  if (cue(song)) fadeTo(level, NEXT_SONG_FADE_MS);
 };
 
 const setLevel = (next: number, ms: number): void => {
@@ -204,7 +219,7 @@ const silence = (ms: number): void => {
 /**
  * Keep the score in step with the round — call per frame with the round
  * snapshot (cheap: a few comparisons when nothing changed).
- * - round number drops (a new match) → new deck, silent;
+ * - round number drops (a new match) → silent, ready to enter afresh;
  * - MUSIC_ENTRY_S of the first fight, or the sands already out (rejoin) →
  *   enter; thereafter the song runs across rounds;
  * - active → full level; countdown / roundEnd → ducked; matchEnd / lobby → out.
@@ -218,8 +233,16 @@ export const syncRoundMusic = (round: {
     settingLoaded = true;
     void loadMusicEnabled().then(setMusicEnabled);
   }
+  if (!recentLoaded) {
+    recentLoaded = true;
+    void loadRecentSongs().then((stored) => {
+      // Anything played before the load landed is newer than what was stored.
+      for (const song of recent) stored = noteSongPlayed(stored, song);
+      recent = stored;
+    });
+  }
   if (round.phase === "countdown" || round.phase === "active") {
-    if (round.roundNumber < lastRound || deck.length === 0 || matchOver) {
+    if (round.roundNumber < lastRound || !dealt || matchOver) {
       silence(MATCH_END_FADE_MS);
       resetMatch();
     }
@@ -244,7 +267,7 @@ export const syncRoundMusic = (round: {
 /** Leaving the arena (GameScreen unmount): fade out, forget the match. */
 export const stopRoundMusic = (): void => {
   silence(LEAVE_FADE_MS);
-  deck = [];
+  dealt = false;
   lastRound = 0;
   matchOver = false;
 };
