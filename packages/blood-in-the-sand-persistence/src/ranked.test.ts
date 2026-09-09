@@ -90,6 +90,21 @@ describe("recordRankedMatch", () => {
     expect(JSON.parse(String(rows.rows[0]!["winner_loadout"]))).toEqual({ weapon: "sword" });
     expect(rows.rows[0]!["loser_loadout"]).toBeNull();
   });
+
+  test("a seat's median rtt lands on its player row; unknown stays null (bits-regions.md § Stage 1)", async () => {
+    await recordRankedMatch(db, {
+      matchId: "m1",
+      season: 1,
+      bracket: "1v1",
+      winners: [{ subjectId: alice, rttMs: 42 }],
+      losers: [{ subjectId: bob }],
+    });
+    const rows = await db.execute("SELECT subject_id, rtt_ms FROM ranked_match_players ORDER BY team");
+    expect(rows.rows.map((r) => [r["subject_id"], r["rtt_ms"]])).toEqual([
+      [alice, 42],
+      [bob, null],
+    ]);
+  });
 });
 
 describe("bot subjects (recordRankedMatch with botRating)", () => {

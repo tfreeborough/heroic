@@ -132,7 +132,7 @@ event) — add the credited id as a separate field rather than overwriting.
 |---|---|
 | Slot | ability, 1 charge per round, no cooldown |
 | Cast | if no circle is live: the Blood Tide rises NOW at a fresh random centre (same `rollSands` path, same fairness draws). Nothing else. |
-| Guards | not castable while a circle is live; not castable before **10 s** of fight time (decided 2026-09-09) so a round never opens with the horn — long enough for an exchange or two, short enough that the slot still buys ~35 s of tempo |
+| Guards | not castable while a circle is live; not castable before **7 s** of fight time (decided 2026-09-09 at 10 s, trimmed to 7 s the same day) so a round never opens with the horn — long enough for an exchange or two, short enough that the slot still buys ~35 s of tempo. SHOWN, not hidden (Tom, same day): the slot opens each round in a real 7 s cooldown seeded at fightStart (`lockTideCallers`; config cooldown = the lock so the ring reads full→empty), and any roll — the fuse's or a call — spends every held charge so the button reads SPENT once a tide is in |
 | Tell | fires the normal `cast` event → enemies learn you hold it the moment you use it (cast-flash intel rule). No cast bank: the HORN is the cast sound (Tom, 2026-09-09), and the banner reads **"<name> called forth / THE BLOOD TIDE / <worn title>"** in the kill-call grammar — `sandsStart.callerId` carries who. |
 | Gate | `DEED_ABILITIES = { "call-the-tide" }`; entitlement `ability:call-the-tide`; hidden everywhere until owned; bots never draft it |
 | Symmetry | affects all bodies equally — in 2v2 a coordination tool for the ready team, a liability for the other |
@@ -150,7 +150,7 @@ faster but start at the caster's position (telegraphed, punishable).
 
 ## Decided 2026-09-09
 
-- Call the Tide minimum cast time: **10 s** of fight time.
+- Call the Tide minimum cast time: **7 s** of fight time (10 s at first, trimmed the same day).
 - Quicksand bar: **10 s** per round, from Tom's own play rather than a data
   pull. Still worth a one-line server log of `roundEnd` fight durations when
   building — a free sanity check against the first-win-audit rule (a deed
@@ -178,8 +178,8 @@ faster but start at the caster's position (telegraphed, punishable).
   let-the-tide-decide, quicksand, the-last-grain, undertow, dry-feet,
   taken-by-the-tide, watching-the-sand-fall, tidecaller. Tests pin: jokes
   never requisites, two titles, first tideless win pops nothing.
-- **Call the Tide**: `call-the-tide` (offensive, 1 charge, cooldown 30 —
-  moot); `CALL_THE_TIDE.minFightSeconds` = 10; `tideCallable` gate at press
+- **Call the Tide**: `call-the-tide` (offensive, 1 charge, cooldown = the
+  lock); `CALL_THE_TIDE.minFightSeconds` = 7; `tideCallable` gate at press
   time (harpoon rule: gated press = nothing, charge kept); `summonSands`
   sets `round.elapsed` to the delay and rolls via the shared `rollSands`,
   so radius/progress start from zero. `DEED_ABILITIES` = {call-the-tide};

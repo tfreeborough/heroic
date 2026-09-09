@@ -52,6 +52,13 @@ describe("recordFeedback", () => {
     expect(row!.contactEmail).toBeNull();
     expect(row!.playerName).toBeNull();
     expect(row!.platform).toBeNull();
+    expect(row!.rttMs).toBeNull();
+  });
+
+  test("the reporter's ping rides the row, rounded to whole ms (bits-regions.md § Stage 1)", async () => {
+    await recordFeedback(db, { playerId: player, kind: "bug", message: "laggy", rttMs: 183.6 });
+    const [row] = await listFeedback(db);
+    expect(row!.rttMs).toBe(184);
   });
 
   test("clips oversized text instead of refusing it", async () => {

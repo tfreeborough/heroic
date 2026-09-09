@@ -73,7 +73,30 @@ export interface ClientData {
   /** The token-verified persistence player id — set by the first successful
    * queueJoin on this socket, null until then (skirmish never needs it). */
   accountId: string | null;
+  /** Round-trip samples (ms) from the server's own WebSocket-level pings
+   * (bits-regions.md § Stage 1): the manager pings every seated socket on
+   * the heartbeat beat with its clock in the payload, the client's socket
+   * stack pongs it back untouched (RFC 6455 — no app code on the phone),
+   * and the difference lands here. Newest last, capped at RTT_SAMPLES; the
+   * median goes into ranked_match_players.rtt_ms at settle. Server-measured
+   * on purpose: the one latency number a player can't self-report. */
+  rtt: number[];
 }
+
+/** How many server-side rtt samples a socket keeps — at one per heartbeat
+ * sweep (5s) that is ~5 minutes, about a match. */
+export const RTT_SAMPLES = 64;
+
+/** The median of a socket's rtt samples, whole ms; null with no samples (a
+ * bot seat has no socket, a human's first pong may not have landed). */
+export const medianRttOf = (ws: Socket | undefined): number | null => {
+  const samples = ws?.data.rtt;
+  if (!samples || samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  const median = sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  return Math.round(median);
+};
 
 export type Socket = ServerWebSocket<ClientData>;
 
@@ -603,6 +626,11 @@ export class Room {
    * ranked match's innocent party through this. */
   socketOf(playerId: number): Socket | undefined {
     return this.seats.get(playerId);
+  }
+
+  /** Every seated socket — the manager's latency probe walks these. */
+  seatedSockets(): IterableIterator<Socket> {
+    return this.seats.values();
   }
 
   /** Seat ids still short of a full loadout — the arm-deadline's dodgers. */

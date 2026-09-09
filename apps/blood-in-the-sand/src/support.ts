@@ -8,6 +8,7 @@
 import { Alert, Linking, Platform } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { storedIdentity } from "./net/api";
+import { lastMeasuredRtt } from "./net/connection";
 import { runningVersion } from "./updates";
 
 export const SUPPORT_EMAIL = "freetheborough.games@gmail.com";
@@ -19,6 +20,9 @@ export interface DeviceContext {
   /** The Settings footer's two lines (runningVersion()). */
   appBinary: string;
   appBundle: string;
+  /** Last measured ping to the game server, ms (bits-regions.md § Stage 1);
+   * null when this session never got a pong (offline, never connected). */
+  rttMs: number | null;
 }
 
 /** What the device is running — attached to every report, listed under the
@@ -30,6 +34,7 @@ export const deviceContext = (): DeviceContext => {
     osVersion: String(Platform.Version),
     appBinary: version.binary,
     appBundle: version.bundle,
+    rttMs: lastMeasuredRtt(),
   };
 };
 
@@ -44,6 +49,7 @@ export const contextLines = (playerName: string, playerId: string | null): strin
     `${ctx.platform} ${ctx.osVersion}`,
     ctx.appBinary,
     ctx.appBundle,
+    ...(ctx.rttMs !== null ? [`ping: ${ctx.rttMs}ms`] : []),
     ...(playerName ? [`gladiator: ${playerName}`] : []),
     `player: ${playerId ?? "none yet"}`,
   ];

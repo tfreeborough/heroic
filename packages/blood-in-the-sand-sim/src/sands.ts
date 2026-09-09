@@ -77,6 +77,28 @@ const rollCentre = (sim: ArenaSim): { cx: number; cy: number } => {
   return best;
 };
 
+/** fightStart: every Call the Tide slot opens the round IN COOLDOWN for
+ * minFightSeconds — the button's ring shows the lock instead of a dead
+ * press (the lifecycle ticks from here, and tideCallable still guards the
+ * press for env-tuned servers). */
+export const lockTideCallers = (players: readonly ArenaPlayer[]): void => {
+  for (const p of players) {
+    for (const slot of p.slots) {
+      if (slot.id !== "call-the-tide") continue;
+      slot.ability = { phase: "cooldown", activeRemaining: 0, cooldownRemaining: CALL_THE_TIDE.minFightSeconds };
+    }
+  }
+};
+
+/** A tide is in: nobody's horn can blow again this round — spend every
+ * Call the Tide charge so the button reads SPENT rather than pressable
+ * (the round reset replenishes it). */
+const spendTideCallers = (players: readonly ArenaPlayer[]): void => {
+  for (const p of players) {
+    for (const slot of p.slots) if (slot.id === "call-the-tide") slot.chargesLeft = 0;
+  }
+};
+
 /** Can Call the Tide fire right now? The gate the ability slot reads at
  * press time (a gated press neither fires nor burns the charge). */
 export const tideCallable = (sim: ArenaSim): boolean => {
@@ -113,6 +135,7 @@ const rollSands = (
       Math.hypot(sim.zone.size.x - cx, sim.zone.size.y - cy),
     ) + PLAYER_RADIUS;
   round.sands = { cx, cy, r0, tickLeft: CLOSING_SANDS.tickInterval };
+  spendTideCallers(players);
   events.push({ type: "sandsStart", cx, cy, inside, ...(callerId !== undefined ? { callerId } : {}) });
 };
 

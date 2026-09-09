@@ -70,12 +70,14 @@ const manager = new RoomManager(db, botCfg);
 const server = Bun.serve<ClientData, never>({
   port,
   fetch(req, srv) {
-    if (srv.upgrade(req, { data: { roomCode: null, playerId: null, accountId: null } })) return;
+    if (srv.upgrade(req, { data: { roomCode: null, playerId: null, accountId: null, rtt: [] } })) return;
     return new Response(`Blood in the Sand server — protocol v${PROTOCOL_VERSION}, ${manager.roomCount()} room(s) open. Connect with the app.`);
   },
   websocket: {
     message: (ws, raw) => manager.message(ws, raw),
     close: (ws) => manager.close(ws),
+    // The latency probe's echo (bits-regions.md § Stage 1).
+    pong: (ws, data) => manager.pong(ws, data),
   },
 });
 

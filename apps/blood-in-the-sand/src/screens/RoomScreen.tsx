@@ -34,6 +34,7 @@ import {
 } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PingPill } from "../components/PingPill";
 import * as Clipboard from "expo-clipboard";
 import { Canvas, Path, Skia } from "@shopify/react-native-skia";
 import {
@@ -1183,14 +1184,20 @@ const LobbyView = (props: LobbyViewProps) => {
     <View style={styles.lobby}>
       <View style={[styles.lobbyHead, compact && tight.lobbyHead]}>
         <Text style={[styles.roomName, compact && tight.roomName]}>{roomName}</Text>
-        {ranked ? (
-          // Nothing to share — ranked rooms are unlisted and unjoinable.
-          <Text style={styles.roomCode}>SEASON I</Text>
-        ) : (
-          <Pressable onPress={copyCode} hitSlop={10}>
-            <Text style={styles.roomCode}>{codeCopied ? "COPIED ✓" : roomCode}</Text>
-          </Pressable>
-        )}
+        <View style={styles.lobbyHeadRight}>
+          {/* The ping pill (bits-regions.md § Stage 1): the last calm moment
+              before the fight, so distance is a fact the player saw, not a
+              bug they felt. Practice has no wire — it renders nothing. */}
+          <PingPill rtt={client.rttMs} />
+          {ranked ? (
+            // Nothing to share — ranked rooms are unlisted and unjoinable.
+            <Text style={styles.roomCode}>SEASON I</Text>
+          ) : (
+            <Pressable onPress={copyCode} hitSlop={10}>
+              <Text style={styles.roomCode}>{codeCopied ? "COPIED ✓" : roomCode}</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {brawl ? (
@@ -1657,7 +1664,8 @@ const styles = StyleSheet.create({
   ribButtons: { alignSelf: "stretch", gap: 10, marginTop: 26 },
 
   lobby: { flex: 1, paddingHorizontal: 22, paddingTop: 12 },
-  lobbyHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 6 },
+  lobbyHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6 },
+  lobbyHeadRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   roomName: { color: C_BONE, fontSize: 22, fontWeight: "900", letterSpacing: 1 },
   roomCode: { color: C_GOLD, fontSize: 10, fontWeight: "900", letterSpacing: 2.5 },
   teamHead: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 4 },

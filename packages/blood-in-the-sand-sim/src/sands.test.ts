@@ -304,10 +304,14 @@ describe("Call the Tide", () => {
     return sim;
   };
 
-  test("too early in the round the press is nothing — no cast, charge kept", () => {
+  test("too early in the round the press is nothing — no cast, charge kept — and the lock SHOWS as a cooldown", () => {
     configureSafeCircle({ delaySeconds: 60 }); // the fuse is far away
     const sim = armed();
     run(sim, 5.2); // countdown over, fight ~0.2s old
+    const slot = sim.state.players[0]!.slots[0]!;
+    expect(slot.ability.phase).toBe("cooldown");
+    expect(slot.ability.cooldownRemaining).toBeGreaterThan(CALL_THE_TIDE.minFightSeconds - 0.5);
+    expect(slot.ability.cooldownRemaining).toBeLessThanOrEqual(CALL_THE_TIDE.minFightSeconds);
     const events = runWith(sim, 0.5, pressing(0, 0));
     expect(events.some((e) => e.type === "cast")).toBe(false);
     expect(events.some((e) => e.type === "sandsStart")).toBe(false);
@@ -335,6 +339,16 @@ describe("Call the Tide", () => {
     // A second press while the tide is in: nothing.
     const again = runWith(sim, 0.2, pressing(0, 0));
     expect(again.some((e) => e.type === "cast")).toBe(false);
+  });
+
+  test("the fuse's own roll spends the unused charge — the button reads spent, not pressable", () => {
+    configureSafeCircle({ delaySeconds: 0.5, closeSeconds: 1, finalRadius: 60 });
+    const sim = armed();
+    run(sim, 5.2);
+    expect(sim.state.players[0]!.slots[0]!.chargesLeft).toBe(1);
+    run(sim, 0.5); // past the fuse
+    expect(sim.state.round.sands).not.toBeNull();
+    expect(sim.state.players[0]!.slots[0]!.chargesLeft).toBe(0);
   });
 
   test("never in the range", () => {

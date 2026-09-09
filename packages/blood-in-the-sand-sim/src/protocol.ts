@@ -353,8 +353,12 @@ export type ClientMsg =
   | { t: "switchTeam" }
   /** Liveness heartbeat — the quiet lobby's "still here" (a match already
    * streams input). Any inbound message counts as alive; this is the one a
-   * seated-but-idle client sends on its own timer (HEARTBEAT_INTERVAL_MS). */
-  | { t: "ping" }
+   * seated-but-idle client sends on its own timer (HEARTBEAT_INTERVAL_MS).
+   * `at` (bits-regions.md § Stage 1, 2026-09-09): the client's own clock at
+   * send; when present the server echoes it back in a `pong`, and the round
+   * trip is the client's ping readout. Optional so a v33 server/client pair
+   * without it stays wire-compatible — no protocol bump. */
+  | { t: "ping"; at?: number }
   | { t: "input"; seq: number; sx: number; sy: number; casts: boolean[] }
   /** Enter the ranked queue (bits-ranked.md). `token` is the persistence
    * bearer secret — verified server-side against the shared DB; a bad token
@@ -611,6 +615,10 @@ export type ServerMsg =
   /** Per-bracket queue populations; `waitedSec` present only on YOUR queued
    * brackets. Sent on queueInfo, on queue entry, and every matcher beat. */
   | { t: "queueStatus"; brackets: { bracket: string; size: number; waitedSec?: number }[] }
+  /** The answer to a `ping` that carried `at` — the same value straight
+   * back, so the client measures its own round trip on its own clock
+   * (bits-regions.md § Stage 1). Never sent for a bare `ping`. */
+  | { t: "pong"; at: number }
   /** You left the queue (queueLeave, or a lockout bounced your join). */
   | { t: "queueLeft" }
   /** The summons (v30): a pairing landed and needs your yes within

@@ -562,6 +562,12 @@ app.post("/feedback", async (c) => {
     osVersion: text("osVersion", FEEDBACK_STAMP_MAX),
     appBinary: text("appBinary", FEEDBACK_STAMP_MAX),
     appBundle: text("appBundle", FEEDBACK_STAMP_MAX),
+    // The reporter's last measured ping (bits-regions.md § Stage 1) —
+    // a bounded non-negative number or nothing.
+    rttMs:
+      typeof body.rttMs === "number" && Number.isFinite(body.rttMs) && body.rttMs >= 0
+        ? Math.round(Math.min(body.rttMs, 60_000))
+        : null,
   });
   return c.json({ ok: true, id });
 });

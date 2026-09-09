@@ -25,6 +25,7 @@ import {
   vec,
 } from "@shopify/react-native-skia";
 import { playSound, unlockAudio } from "../audio";
+import { PingPill } from "../components/PingPill";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { formatWait, useSmoothWait } from "../components/QueueContext";
 import { badgeFor } from "../components/rankBadges";
@@ -272,8 +273,16 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
     <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
       {/* The purse is a door to the Armory, queued or not — the summons
           finds the player there too. No queue pill here: the SEARCHING
-          line on the card already says it. */}
-      <ScreenHeader style={styles.header} onBack={back} onPurse={onArmory} queuePill={false} />
+          line on the card already says it. The middle carries the PING
+          instead (bits-regions.md § Stage 1) — the one number that tells a
+          player before they queue what kind of fight the wire will give. */}
+      <ScreenHeader
+        style={styles.header}
+        onBack={back}
+        onPurse={onArmory}
+        queuePill={false}
+        middle={<PingPill rtt={client.rttMs} />}
+      />
 
       {/* Your standing. During PLACEMENTS (first 10 matches — and the safe
           default while /ranked/me loads) rank and rating stay hidden: the

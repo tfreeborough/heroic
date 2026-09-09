@@ -63,7 +63,7 @@ import {
   type Db,
   type RankedMatchResult,
 } from "@heroic/blood-in-the-sand-persistence";
-import { Room, type ClientData, type RankedSeatAccount, type Socket } from "./room";
+import { medianRttOf, Room, RTT_SAMPLES, type ClientData, type RankedSeatAccount, type Socket } from "./room";
 import {
   ACCEPT_WINDOW_MS,
   ARM_DEADLINE_MS,
@@ -146,6 +146,7 @@ export class RoomManager {
     setInterval(() => this.tick(), 1000 / TICK_RATE);
     setInterval(() => this.sweep(), SWEEP_MS);
     setInterval(() => this.heartbeat(), HEARTBEAT_SWEEP_MS);
+    setInterval(() => this.probeLatency(), HEARTBEAT_SWEEP_MS);
     setInterval(() => this.rankedBeat(), MATCHER_INTERVAL_MS);
   }
 
@@ -243,7 +244,11 @@ export class RoomManager {
         return;
       }
       case "ping":
-        return; // liveness only — the seat was already stamped above
+        // Liveness (the seat was already stamped above) — and, when the
+        // client stamped its clock on it, the echo it measures its ping by
+        // (bits-regions.md § Stage 1). A bare ping gets no reply.
+        if (typeof msg.at === "number" && Number.isFinite(msg.at)) this.send(ws, { t: "pong", at: msg.at });
+        return;
       case "input": {
         const id = ws.data.playerId;
         if (id !== null) this.roomOf(ws)?.input(id, msg);
@@ -342,6 +347,30 @@ export class RoomManager {
     const now = performance.now();
     for (const room of this.rooms.values()) room.sweepStale(now, HEARTBEAT_TIMEOUT_MS);
     this.reconcileHosts(now);
+  }
+
+  /** WebSocket-level ping to every seated socket, the server's clock as the
+   * payload; `pong()` below turns the echo into an rtt sample on the
+   * socket (ClientData.rtt). Protocol-level frames, so no client code is
+   * involved and a player can't fake the number. */
+  private probeLatency(): void {
+    const stamp = String(performance.now());
+    for (const room of this.rooms.values()) {
+      for (const ws of room.seatedSockets()) {
+        if (ws.readyState === WebSocket.OPEN) ws.ping(stamp);
+      }
+    }
+  }
+
+  /** The pong to probeLatency's ping — the payload is our own send stamp. */
+  pong(ws: Socket, data: string | Buffer): void {
+    const at = Number(String(data));
+    if (!Number.isFinite(at)) return;
+    const rtt = performance.now() - at;
+    if (rtt < 0 || rtt > 60_000) return;
+    const samples = ws.data.rtt;
+    samples.push(rtt);
+    if (samples.length > RTT_SAMPLES) samples.splice(0, samples.length - RTT_SAMPLES);
   }
 
   private roomOf(ws: Socket): Room | undefined {
@@ -1006,6 +1035,9 @@ export class RoomManager {
         return {
           subjectId: account.accountId,
           loadout: loadoutOf(p),
+          // The seat's median server-measured rtt (bits-regions.md § Stage 1)
+          // — the "who is playing from where" record. A bot has no socket.
+          rttMs: account.bot ? null : medianRttOf(room.socketOf(p.id)),
           ...(account.bot ? { botRating: account.rating } : {}),
         };
       };

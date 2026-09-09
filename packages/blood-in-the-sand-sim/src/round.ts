@@ -28,6 +28,7 @@ import {
   FREE_WEAPON_IDS,
 } from "./config";
 import type { ArenaEvent } from "./events";
+import { lockTideCallers } from "./sands";
 import {
   setPlayerAbilities,
   setPlayerWeapon,
@@ -215,6 +216,7 @@ export const tickRoundMachine = (sim: ArenaSim, dt: number, events: ArenaEvent[]
       if (round.timer <= 0) {
         round.phase = "active";
         round.timer = 0;
+        lockTideCallers(seatedPlayers(sim.state)); // Call the Tide's opening lock, shown as a cooldown
         events.push({ type: "fightStart" });
       }
       return round.phase === "active";

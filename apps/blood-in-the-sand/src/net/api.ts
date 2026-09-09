@@ -493,6 +493,8 @@ export interface FeedbackReport {
   osVersion: string;
   appBinary: string;
   appBundle: string;
+  /** Last measured ping to the game server, ms, or null (support.ts). */
+  rttMs: number | null;
 }
 
 /** `sent` = the row exists server-side; `rejected` = the server refused the

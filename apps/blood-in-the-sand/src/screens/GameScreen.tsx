@@ -46,6 +46,7 @@ import { resolveTitleText } from "../deeds/wornTitle";
 import { noteFirstOnlineWin } from "../net/account";
 import { useArenaAtlas } from "../game/tilesets";
 import { FloatingStick } from "../game/FloatingStick";
+import { PingPill } from "../components/PingPill";
 import { EntranceCard } from "../game/EntranceCard";
 import { RoundBanner } from "../game/RoundBanner";
 import { SlainCredit } from "../game/SlainCredit";
@@ -346,6 +347,17 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
     lastFrame: -1,
   });
   const [perfText, setPerfText] = useState("");
+  // The in-match ping (bits-regions.md § Stage 1, in-match addendum): the
+  // live input round trip, sampled 2×/sec into state — the pill's whole
+  // cost is one median of 30 numbers and a re-render when it moves.
+  // Online only: practice has no liveRttMs and the pill stays null.
+  const [liveRtt, setLiveRtt] = useState<number | null>(null);
+  useEffect(() => {
+    const read = client.liveRttMs?.bind(client);
+    if (!read) return;
+    const id = setInterval(() => setLiveRtt(read()), 500);
+    return () => clearInterval(id);
+  }, [client]);
   useEffect(() => {
     if (!perfOn) {
       setPerfText("");
@@ -1394,6 +1406,13 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         </View>
       ) : null}
 
+      {/* Live ping, top-right (Tom, 2026-09-09) — quiet, so a spike gets a
+          name without the pill ever competing with the score. Gone with the
+          match-end plate, which owns the whole screen. */}
+      {hud.phase !== "matchEnd" ? (
+        <PingPill rtt={liveRtt} quiet style={[styles.pingPill, { top: insets.top + 14 }]} />
+      ) : null}
+
       {onQuit ? (
         <Pressable
           onPress={onQuit}
@@ -1538,6 +1557,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     fontVariant: ["tabular-nums"],
   },
+  pingPill: { position: "absolute", right: 18 },
   quitChip: {
     position: "absolute",
     top: 54,

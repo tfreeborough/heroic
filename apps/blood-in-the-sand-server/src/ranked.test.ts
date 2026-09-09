@@ -125,7 +125,7 @@ const makeSocket = (): FakeSocket => {
   const sent: { t: string; [k: string]: unknown }[] = [];
   const state = { readyState: 1 };
   const ws = {
-    data: { roomCode: null, playerId: null, accountId: null } satisfies ClientData,
+    data: { roomCode: null, playerId: null, accountId: null, rtt: [] } satisfies ClientData,
     get readyState() {
       return state.readyState;
     },

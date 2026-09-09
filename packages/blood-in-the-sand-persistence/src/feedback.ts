@@ -28,6 +28,9 @@ export interface FeedbackInput {
   /** The two lines the Settings footer shows (runningVersion()). */
   appBinary?: string | null;
   appBundle?: string | null;
+  /** The reporter's last measured ping to the game server, whole ms
+   * (bits-regions.md § Stage 1); null when the app had none to give. */
+  rttMs?: number | null;
 }
 
 export interface FeedbackRecord {
@@ -41,6 +44,7 @@ export interface FeedbackRecord {
   osVersion: string | null;
   appBinary: string | null;
   appBundle: string | null;
+  rttMs: number | null;
   /** Unix seconds. */
   createdAt: number;
 }
@@ -58,8 +62,8 @@ export const recordFeedback = async (db: Db, input: FeedbackInput): Promise<numb
   if (!FEEDBACK_KINDS.includes(input.kind)) throw new Error(`unknown feedback kind: ${input.kind}`);
   const result = await db.execute({
     sql: `INSERT INTO feedback
-            (player_id, kind, message, contact_email, player_name, platform, os_version, app_binary, app_bundle)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (player_id, kind, message, contact_email, player_name, platform, os_version, app_binary, app_bundle, rtt_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       input.playerId,
       input.kind,
@@ -70,6 +74,7 @@ export const recordFeedback = async (db: Db, input: FeedbackInput): Promise<numb
       clip(input.osVersion, FEEDBACK_STAMP_MAX),
       clip(input.appBinary, FEEDBACK_STAMP_MAX),
       clip(input.appBundle, FEEDBACK_STAMP_MAX),
+      typeof input.rttMs === "number" && Number.isFinite(input.rttMs) ? Math.round(input.rttMs) : null,
     ],
   });
   return Number(result.lastInsertRowid);
@@ -87,7 +92,7 @@ export const listFeedback = async (
   const before = opts.before !== undefined && Number.isFinite(opts.before) ? Math.trunc(opts.before) : null;
   const result = await db.execute({
     sql: `SELECT id, player_id, kind, message, contact_email, player_name, platform, os_version,
-                 app_binary, app_bundle, created_at
+                 app_binary, app_bundle, rtt_ms, created_at
             FROM feedback
            WHERE (? IS NULL OR id < ?)
            ORDER BY id DESC
@@ -105,6 +110,7 @@ export const listFeedback = async (
     osVersion: row["os_version"] === null ? null : String(row["os_version"]),
     appBinary: row["app_binary"] === null ? null : String(row["app_binary"]),
     appBundle: row["app_bundle"] === null ? null : String(row["app_bundle"]),
+    rttMs: row["rtt_ms"] === null || row["rtt_ms"] === undefined ? null : Number(row["rtt_ms"]),
     createdAt: Number(row["created_at"]),
   }));
 };

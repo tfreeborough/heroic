@@ -54,9 +54,11 @@ happen) the failure line offers the mail app instead of a dead SEND.
   validated beyond length — a typo'd address is the player's to own.
 - **Context, attached silently** and listed under the form so nobody is
   surprised: platform + OS version, the store binary + OTA bundle identity
-  (`runningVersion()` — the same two lines the Settings footer shows), and
-  the gladiator name, and the **anonymous player id** (shown in the list;
-  the server stamps it from the bearer token, so it can't be forged).
+  (`runningVersion()` — the same two lines the Settings footer shows), the
+  last measured **ping** to the game server (`ping: 42ms`, since 2026-09-09
+  — bits-regions.md § Stage 1; absent if the session never connected), the
+  gladiator name, and the **anonymous player id** (shown in the list; the
+  server stamps it from the bearer token, so it can't be forged).
 
 Send = `POST /feedback` with the device identity. Success shows a thanks
 plate with SEND ANOTHER; failure keeps the draft in place and offers the
@@ -69,7 +71,7 @@ never hits it, a script does.
 
 ```
 id, player_id → players, kind, message, contact_email, player_name,
-platform, os_version, app_binary, app_bundle, created_at
+platform, os_version, app_binary, app_bundle, rtt_ms, created_at
 ```
 
 Reading it: `GET /admin/feedback?after=<id>&limit=<n>` with

@@ -629,6 +629,21 @@ export const TITANS_DRAUGHT = {
   damageFactor: 1.35,
 };
 
+/** Call the Tide (bits-sands-deeds.md — the DEED-gated spell, earned only
+ * by Tidecaller, never sold): the Blood Tide rises NOW. Nothing else — no
+ * damage, no body, the same fair centre roll as the fuse would make. The
+ * slot is the cost; the tempo is the product. Guards (the harpoon rule: a
+ * gated press neither fires nor burns the charge): never while a tide is
+ * live, never before minFightSeconds of fight time (a round must never
+ * open with the horn — decided 2026-09-09, 10 s then trimmed to 7 s the
+ * same day), never in the range. */
+export const CALL_THE_TIDE = {
+  /** The slot is seeded into a cooldown of exactly this at fightStart, so
+   * the button's ring SHOWS the lock (Tom, 2026-09-09) — and the config
+   * cooldown equals it so the ring reads full → empty. */
+  minFightSeconds: 7, // 10 → 7, Tom 2026-09-09
+};
+
 /** Tar Pit (bits-store-arms.md launch shelf item 5, SIGNET — REDESIGNED at
  * build, Tom 2026-08-10: a trail you PAINT, not another placed circle):
  * while the cast's active window runs, the caster releases tar blobs
@@ -723,9 +738,16 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     activeDuration: TITANS_DRAUGHT.duration,
     charges: 2,
   },
-  // ONE call per round — you own the clock once. Cooldown is moot (a
-  // second circle can't exist) but the lifecycle wants a number.
-  "call-the-tide": { name: "Call the Tide", category: "offensive", cooldown: 30, activeDuration: 0, charges: 1 },
+  // ONE call per round — you own the clock once. The cooldown IS the
+  // opening lock (seeded at fightStart, sands.ts lockTideCallers); after
+  // the cast it's moot — a second circle can't exist.
+  "call-the-tide": {
+    name: "Call the Tide",
+    category: "offensive",
+    cooldown: CALL_THE_TIDE.minFightSeconds,
+    activeDuration: 0,
+    charges: 1,
+  },
 };
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
@@ -786,16 +808,6 @@ export const WINS_TO_TAKE_MATCH_BRAWL = 2;
  * the client skips kill-streak/announcer calls for it (no "FIRST BLOOD" by
  * the weather). Negative so it can never collide with a seat or deployable. */
 export const SANDS_ATTACKER_ID = -1;
-/** Call the Tide (bits-sands-deeds.md — the DEED-gated spell, earned only
- * by Tidecaller, never sold): the Blood Tide rises NOW. Nothing else — no
- * damage, no body, the same fair centre roll as the fuse would make. The
- * slot is the cost; the tempo is the product. Guards (the harpoon rule: a
- * gated press neither fires nor burns the charge): never while a tide is
- * live, never before minFightSeconds of fight time (a round must never
- * open with the horn — decided 2026-09-09), never in the range. */
-export const CALL_THE_TIDE = {
-  minFightSeconds: 10,
-};
 
 /** Seconds after a displacement in which the victim crossing the shoreline
  * still credits the shover (bits-sands-deeds.md: Undertow). Knockback

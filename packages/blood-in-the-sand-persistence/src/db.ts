@@ -212,6 +212,13 @@ const applySchema = async (db: Db): Promise<void> => {
   // signal). Readers treat peak_rating 0 as "no recorded peak" and fall back
   // to the live rating, so old rows need no backfill.
   await addColumnIfMissing(db, "ranked_ratings", "peak_rating INTEGER NOT NULL DEFAULT 0");
+  // Latency records (bits-regions.md § Stage 1, 2026-09-09): the seat's
+  // median server-measured round trip per ranked match, and the reporter's
+  // last measured ping on a feedback row. NULL = unknown (bots, pre-column
+  // rows, a probe that never answered). Analytics only — nothing reads
+  // them on a hot path.
+  await addColumnIfMissing(db, "ranked_match_players", "rtt_ms INTEGER");
+  await addColumnIfMissing(db, "feedback", "rtt_ms INTEGER");
   // One player per Clerk account (bits-accounts.md) — partial so the unlinked
   // majority (NULL) never collide. Outside the batch: players predates it.
   await db.execute(

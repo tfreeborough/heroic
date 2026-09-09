@@ -32,6 +32,26 @@ export type ConnectionStatus = "connecting" | "open" | "closed" | "rejected";
 /** Unacked input sends kept for RTT stamping (readNetStats) — ~4s at 30Hz. */
 const SENT_WINDOW = 128;
 
+/** Pong samples the ping readout is the median of — a handful, so one
+ * hiccup can't paint the pill red and one lucky frame can't paint it green. */
+const RTT_WINDOW = 5;
+/** Input round trips the IN-MATCH readout is the median of: one per tick,
+ * so 30 ≈ the last second. A spike has to hold for ~half a second to move
+ * the number — a single late packet is the interp delay's job to hide, and
+ * flashing red for it would teach players to blame the wire for every whiff. */
+const LIVE_RTT_WINDOW = 30;
+/** The entry burst: pings this many times, this far apart, the moment the
+ * socket opens, so the pill has a number seconds before the heartbeat's
+ * first 5s tick would give it one. */
+const RTT_PROBE_COUNT = 3;
+const RTT_PROBE_GAP_MS = 250;
+
+/** The most recent measured round trip on ANY client this process has run
+ * (ms), or null before the first pong. Module-level so the feedback form
+ * (support.ts) can stamp a report without holding a client. */
+let lastRttMs: number | null = null;
+export const lastMeasuredRtt = (): number | null => lastRttMs;
+
 /**
  * Baked in at build time (Expo inlines EXPO_PUBLIC_*). Convention: the
  * committed `.env` carries the Render hostname (drives builds); the
@@ -181,6 +201,17 @@ export interface GameClient {
    * OPTIONAL — a networked client only; practice has no wire (null/absent =
    * no `net` line). */
   readNetStats?(): NetStats | null;
+  /** The ping readout (bits-regions.md § Stage 1): median round trip of the
+   * last few ping/pong pairs, ms. OPTIONAL — a networked client only, and
+   * null until the first pong; the PingPill hides on both. */
+  readonly rttMs?: number | null;
+  /** The IN-MATCH ping (Tom, 2026-09-09: "help players identify a spike"):
+   * median INPUT round trip over the last ~second, from the snapshots'
+   * lastSeq echo — a live 30Hz signal where the heartbeat pong is a 5s one.
+   * Reads ~a half tick above the lobby ping (it includes the server's tick
+   * wait), which is the honest number for how the fight actually feels.
+   * OPTIONAL like rttMs; null before the first echo (lobby, spectating). */
+  liveRttMs?(): number | null;
 }
 
 /**
@@ -297,6 +328,10 @@ export class ArenaClient {
   onChange: (() => void) | null = null;
   /** Fired with each snapshot's freshly-drained events (drive FX/audio). */
   onEvents: ((events: ArenaEvent[]) => void) | null = null;
+  /** The ping readout — see GameClient.rttMs. onChange fires when it moves. */
+  rttMs: number | null = null;
+  private readonly rttSamples: number[] = [];
+  private probeTimers: ReturnType<typeof setTimeout>[] = [];
 
   private readonly ws: WebSocket;
   private seq = 0;
@@ -309,6 +344,10 @@ export class ArenaClient {
   private ackedSeq = -1;
   private lastSnapAt = -1;
   private readonly net = { rttSum: 0, rttMax: 0, rttN: 0, gapSum: 0, gapMax: 0, gapN: 0, snaps: 0 };
+  /** Ring of the last LIVE_RTT_WINDOW input round trips (liveRttMs). */
+  private readonly liveRtts = new Float64Array(LIVE_RTT_WINDOW);
+  private liveRttCount = 0;
+  private readonly liveSorted = new Float64Array(LIVE_RTT_WINDOW);
   /** Heartbeat so the server can tell a quiet-but-alive lobby seat from a ghost
    * (force-quit / lost network with no close frame). Runs only while open. */
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -318,7 +357,8 @@ export class ArenaClient {
     this.ws.onopen = () => {
       this.status = "open";
       this.listRooms();
-      this.pingTimer ??= setInterval(() => this.send({ t: "ping" }), HEARTBEAT_INTERVAL_MS);
+      this.pingTimer ??= setInterval(() => this.send({ t: "ping", at: performance.now() }), HEARTBEAT_INTERVAL_MS);
+      this.probeLatency();
       this.onChange?.();
     };
     this.ws.onmessage = (e) => {
@@ -369,6 +409,7 @@ export class ArenaClient {
         this.phase = "lobby";
         this.lastError = null;
         this.buffer.reset(); // a new room's tick counter starts over
+        this.liveRttCount = 0; // …and the in-match ping readout starts blank
         this.onChange?.();
         return;
       case "roomState": {
@@ -411,6 +452,20 @@ export class ArenaClient {
         this.listRooms();
         this.onChange?.();
         return;
+      case "pong": {
+        const rtt = performance.now() - msg.at;
+        if (!Number.isFinite(rtt) || rtt < 0) return;
+        this.rttSamples.push(rtt);
+        if (this.rttSamples.length > RTT_WINDOW) this.rttSamples.shift();
+        const sorted = [...this.rttSamples].sort((a, b) => a - b);
+        const next = Math.round(sorted[sorted.length >> 1]!);
+        lastRttMs = next;
+        if (next !== this.rttMs) {
+          this.rttMs = next;
+          this.onChange?.();
+        }
+        return;
+      }
       case "snapshot": {
         const now = performance.now();
         this.noteSnapshot(msg, now);
@@ -741,12 +796,27 @@ export class ArenaClient {
       n.rttSum += rtt;
       n.rttN += 1;
       if (rtt > n.rttMax) n.rttMax = rtt;
+      this.liveRtts[this.liveRttCount++ % LIVE_RTT_WINDOW] = rtt;
     }
     // Everything at or below the echoed seq is answered (or superseded).
     for (const seq of this.sentAt.keys()) {
       if (seq > lastSeq) break;
       this.sentAt.delete(seq);
     }
+  }
+
+  liveRttMs(): number | null {
+    const n = Math.min(this.liveRttCount, LIVE_RTT_WINDOW);
+    if (n === 0) return null;
+    // Insertion sort into the scratch buffer — 30 entries, called at 2Hz.
+    const sorted = this.liveSorted;
+    for (let i = 0; i < n; i++) {
+      const v = this.liveRtts[i]!;
+      let j = i - 1;
+      for (; j >= 0 && sorted[j]! > v; j--) sorted[j + 1] = sorted[j]!;
+      sorted[j + 1] = v;
+    }
+    return Math.round(sorted[n >> 1]!);
   }
 
   readNetStats(): NetStats | null {
@@ -772,6 +842,18 @@ export class ArenaClient {
     if (this.pingTimer !== null) {
       clearInterval(this.pingTimer);
       this.pingTimer = null;
+    }
+    for (const t of this.probeTimers) clearTimeout(t);
+    this.probeTimers = [];
+  }
+
+  /** A short burst of stamped pings so the readout fills fast — on open, and
+   * for any screen that wants a fresh number on entry (RankedScreen). */
+  probeLatency(): void {
+    for (const t of this.probeTimers) clearTimeout(t);
+    this.probeTimers = [];
+    for (let i = 0; i < RTT_PROBE_COUNT; i++) {
+      this.probeTimers.push(setTimeout(() => this.send({ t: "ping", at: performance.now() }), i * RTT_PROBE_GAP_MS));
     }
   }
 

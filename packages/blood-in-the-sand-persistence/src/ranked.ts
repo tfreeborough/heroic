@@ -78,6 +78,11 @@ export interface RankedSubjectInput {
   subjectId: string;
   /** Serialized as JSON into the history rows (the pick-rate analytics tap). */
   loadout?: unknown;
+  /** The seat's median server-measured round trip over the match, whole ms
+   * (bits-regions.md § Stage 1) — the "who is playing from where" record
+   * that gates a second region. null/absent = unknown (a bot seat, or no
+   * probe answered). History only; nothing settles on it. */
+  rttMs?: number | null;
   /** Present = a disguised backfill bot (bits-ranked-bots.md): its advertised
    * rating, frozen at room creation. The subject then lands ONLY in the
    * history tables — no ranked_ratings or glory_ledger row (no ladder
@@ -206,11 +211,12 @@ const playerInsert = (
   before: number,
   after: number,
   loadout: unknown,
+  rttMs: number | null | undefined,
 ) => ({
   sql: `INSERT OR IGNORE INTO ranked_match_players
-          (match_id, subject_id, team, won, rating_before, rating_after, loadout)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  args: [matchId, subjectId, team, won ? 1 : 0, before, after, loadoutJson(loadout)],
+          (match_id, subject_id, team, won, rating_before, rating_after, loadout, rtt_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  args: [matchId, subjectId, team, won ? 1 : 0, before, after, loadoutJson(loadout), rttMs ?? null],
 });
 
 /** One member's post-match numbers against the enemy team's mean. */
@@ -295,10 +301,10 @@ export const recordRankedMatch = async (db: Db, input: RankedMatchInput): Promis
         teamMean(losers.map((m) => m.after)),
       ),
       ...winners.map((m, i) =>
-        playerInsert(input.matchId, m.prior.subjectId, 1, true, m.prior.rating, m.after, input.winners[i]!.loadout),
+        playerInsert(input.matchId, m.prior.subjectId, 1, true, m.prior.rating, m.after, input.winners[i]!.loadout, input.winners[i]!.rttMs),
       ),
       ...losers.map((m, i) =>
-        playerInsert(input.matchId, m.prior.subjectId, 2, false, m.prior.rating, m.after, input.losers[i]!.loadout),
+        playerInsert(input.matchId, m.prior.subjectId, 2, false, m.prior.rating, m.after, input.losers[i]!.loadout, input.losers[i]!.rttMs),
       ),
       ...winners.filter((_, i) => human(i, input.winners)).map((m) => gloryInsert(input.matchId, m.prior.subjectId, winnerPay)),
       ...losers.filter((_, i) => human(i, input.losers)).map((m) => gloryInsert(input.matchId, m.prior.subjectId, loserPay)),

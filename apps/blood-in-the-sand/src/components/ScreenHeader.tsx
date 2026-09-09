@@ -63,14 +63,20 @@ export interface ScreenHeaderProps {
   style?: StyleProp<ViewStyle>;
   /** The queued pill between chevron and purse (default on). */
   queuePill?: boolean;
+  /** One more thing for the middle slot, beside the queue pill when both
+   * show — today the ping pill on RankedScreen (bits-regions.md § Stage 1). */
+  middle?: ReactNode;
 }
 
-export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style, queuePill = true }: ScreenHeaderProps) => (
+export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style, queuePill = true, middle }: ScreenHeaderProps) => (
   <View style={[styles.bar, style]}>
     <Pressable onPress={onBack} hitSlop={12} style={styles.back}>
       <Text style={styles.backText}>‹</Text>
     </Pressable>
-    <View style={styles.middle}>{queuePill ? <QueuePill /> : null}</View>
+    <View style={styles.middle}>
+      {queuePill ? <QueuePill /> : null}
+      {middle}
+    </View>
     {wallet === undefined ? (
       <LivePurse onPress={onPurse} onLinked={onLinked} />
     ) : (
@@ -175,7 +181,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   back: { width: 44, paddingVertical: 2 },
-  middle: { flex: 1, alignItems: "center" },
+  middle: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   backText: { color: "#8a7f70", fontSize: 26, fontWeight: "800", lineHeight: 28 },
 
   purseRow: { flexDirection: "row", alignItems: "center", gap: 8 },
