@@ -3,6 +3,7 @@ import {
   achievementCounters,
   achievementUnlocks,
   applyMatchAchievements,
+  companionsOf,
   entitlementsOf,
   gloryEarned,
 } from "./achievements";
@@ -110,5 +111,26 @@ describe("gloryEarned", () => {
     await recordGlory(db, { playerId, amount: -60, source: "store:sku1", idempotencyKey: "k3" });
     expect(await gloryBalance(db, playerId)).toBe(80);
     expect(await gloryEarned(db, playerId)).toBe(140);
+  });
+});
+
+describe("skirmish companions (bits-skirmish-deeds.md)", () => {
+  test("companions accumulate per other account inside the guarded apply — a retry never double-counts", async () => {
+    const other = (await registerPlayer(db)).playerId;
+    const input = {
+      matchId: "s1",
+      playerId,
+      counters: { "skirmish:matches": 1 },
+      unlocks: [],
+      companions: [{ otherId: other, with: 1, against: 0 }],
+    };
+    expect(await applyMatchAchievements(db, input)).toBe(true);
+    expect(await applyMatchAchievements(db, input)).toBe(false);
+    expect(await companionsOf(db, playerId)).toEqual([{ otherId: other, withCount: 1, againstCount: 0 }]);
+    // Next match, across the sand this time.
+    await applyMatchAchievements(db, { ...input, matchId: "s2", companions: [{ otherId: other, with: 0, against: 1 }] });
+    expect(await companionsOf(db, playerId)).toEqual([{ otherId: other, withCount: 1, againstCount: 1 }]);
+    // Rows are one-directional: the other player's view is written by THEIR apply.
+    expect(await companionsOf(db, other)).toEqual([]);
   });
 });

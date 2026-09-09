@@ -2,10 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { evaluate, streakUpdates } from "@heroic/achievements";
 import { ABILITY_IDS, WEAPON_IDS } from "../config";
 import type { ArenaEvent } from "../events";
-import { COUNTERS, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
+import { COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
 import { ACHIEVEMENT_BOARDS, ACHIEVEMENT_DEFS, RANKED_BOARD } from "./defs";
 import { ACHIEVEMENT_DEFS_2V2, RANKED_2V2_BOARD, TITLE_ONLY_2V2 } from "./defs2v2";
-import { MatchStatsAccumulator, type MatchSummary } from "./summary";
+import { ACHIEVEMENT_DEFS_SKIRMISH, SKIRMISH_BOARD, SKIRMISH_TITLE_IDS } from "./defsSkirmish";
+import { MatchStatsAccumulator, type MatchSummary, type MatchSummaryPlayer } from "./summary";
 
 /** The Wave-3 partnership stats at rest — every one is zero in a 1v1. */
 const WAVE3_ZERO = {
@@ -18,6 +19,33 @@ const WAVE3_ZERO = {
   concertKills: 0,
   fastestKillSec: null,
   alliedHealing: 0,
+};
+
+/** The Blood Tide stats at rest — a two-round match the tide never rose in
+ * (no fightStart clocked → longestRoundSec stays null). */
+const TIDE_ZERO = {
+  tideRounds: 0,
+  roundsPlayed: 2,
+  tideTicks: 0,
+  tideDeaths: 0,
+  tideKills: 0,
+  baptisms: 0,
+  waistDeepWins: 0,
+  tideDecidedWins: 0,
+  lastGrainWins: 0,
+  undertows: 0,
+  eyeOfStorm: 0,
+  longestRoundSec: null,
+};
+
+/** The skirmish round stats at rest for a 1v1 WINNER (the loser is the
+ * runner-up of every round they lose — see the loser's expectation). */
+const SKIRMISH_ZERO = {
+  bestRoundKills: 0,
+  roundsWonWithoutKilling: 0,
+  untouchedRoundWins: 0,
+  runnerUpRounds: 0,
+  matchPointKills: 0,
 };
 
 /** A synthetic ranked 1v1: seat 0 (team 1, blade) beats seat 1 (team 2, bow). */
@@ -78,6 +106,10 @@ describe("MatchStatsAccumulator", () => {
       roundsWon: 2,
       lastRoundHpFrac: 0.88,
       ...WAVE3_ZERO,
+      ...TIDE_ZERO,
+      ...SKIRMISH_ZERO,
+      bestRoundKills: 1,
+      untouchedRoundWins: 1, // round 1: bob never landed a hit
     });
   });
 
@@ -95,6 +127,9 @@ describe("MatchStatsAccumulator", () => {
       roundsWon: 0,
       lastRoundHpFrac: null, // dead when the decider closed
       ...WAVE3_ZERO,
+      ...TIDE_ZERO,
+      ...SKIRMISH_ZERO,
+      runnerUpRounds: 2, // in a 1v1 the loser is second-to-last standing every round
     });
   });
 
@@ -236,15 +271,20 @@ describe("Wave-1 defs", () => {
     }
   });
 
-  test("every def lives on a ranked board and the boards gate on ranked", () => {
-    expect(ACHIEVEMENT_DEFS.every((d) => d.board === RANKED_BOARD || d.board === RANKED_2V2_BOARD)).toBe(true);
+  test("the boards are sealed — a skirmish match never fires a ranked deed, a ranked match never fires a skirmish one", () => {
+    const ranked = new Set([RANKED_BOARD, RANKED_2V2_BOARD]);
+    expect(ACHIEVEMENT_DEFS.every((d) => ranked.has(d.board) || d.board === SKIRMISH_BOARD)).toBe(true);
     expect(ACHIEVEMENT_DEFS_2V2.every((d) => d.board === RANKED_2V2_BOARD)).toBe(true);
-    // Deeds are RANKED-ONLY (decided 2026-08-08; a skirmish-counting pass
-    // was built and reverted the same day): a non-ranked summary awards
-    // NOTHING — sound because non-ranked applies don't exist, so no counter
-    // crossing can ever be consumed behind this gate. If that changes,
-    // milestones must be exempted from `accepts` (see evaluate()).
-    const skirmish = { ...play1v1(), ranked: false };
+    expect(ACHIEVEMENT_DEFS_SKIRMISH.every((d) => d.board === SKIRMISH_BOARD)).toBe(true);
+    // A skirmish 1v1 between two humans: only skirmish-board deeds may fire.
+    const skirmish: MatchSummary = {
+      ...play1v1(),
+      ranked: false,
+      players: [
+        { id: 0, team: 1, weapon: "blade", bot: false },
+        { id: 1, team: 2, weapon: "bow", bot: false },
+      ],
+    };
     const fired = evaluate({
       defs: ACHIEVEMENT_DEFS,
       boards: ACHIEVEMENT_BOARDS,
@@ -254,7 +294,19 @@ describe("Wave-1 defs", () => {
       after: counterDeltas(skirmish, 0),
       unlocked: new Set(),
     });
-    expect(fired).toHaveLength(0);
+    expect(fired.length).toBeGreaterThan(0);
+    expect(fired.every((d) => d.board === SKIRMISH_BOARD)).toBe(true);
+    // …and a ranked match fires nothing on the skirmish board.
+    const rankedFired = evaluate({
+      defs: ACHIEVEMENT_DEFS,
+      boards: ACHIEVEMENT_BOARDS,
+      summary: play1v1(),
+      playerKey: 0,
+      before: {},
+      after: counterDeltas(play1v1(), 0),
+      unlocked: new Set(),
+    });
+    expect(rankedFired.some((d) => d.board === SKIRMISH_BOARD)).toBe(false);
   });
 
   test("a first ranked win pops the right deeds", () => {
@@ -604,5 +656,380 @@ describe("Wave-3 partnership stats", () => {
     for (const def of ACHIEVEMENT_DEFS_2V2) {
       if (def.trigger.kind === "milestone") expect(soloDeltas[def.trigger.counter]).toBeUndefined();
     }
+  });
+});
+
+// ── The Blood Tide (bits-sands-deeds.md, 2026-09-09) ───────────────────────
+import { TICK_RATE } from "../config";
+import { TIDECALLER, TIDE_JOKE_IDS } from "./defs";
+import { UNDERTOW_WINDOW_SEC, WAIST_DEEP_TICKS } from "./summary";
+
+const SANDS = -1;
+const tideTick = (targetId: number, lethal = false): ArenaEvent => ({
+  type: "hit", attackerId: SANDS, targetId, damage: 4, crit: false, lethal, bleed: true, x: 0, y: 0,
+});
+const blow = (
+  attackerId: number,
+  targetId: number,
+  lethal: boolean,
+  tide?: { attackerOut: boolean; victimOut: boolean; p: number },
+): ArenaEvent => ({ type: "hit", attackerId, targetId, damage: 30, crit: false, lethal, x: 0, y: 0, tide });
+
+/** A 1v1 where seat 0 wins; the tide rises in every round. Each round is
+ * a scripted shape so every closer can be pinned. */
+const playTide = (): MatchSummary => {
+  const acc = new MatchStatsAccumulator([
+    { id: 0, team: 1 },
+    { id: 1, team: 2 },
+  ]);
+  const t = (sec: number) => Math.round(sec * TICK_RATE);
+  // Round 1 — Baptism: alice takes some ticks, kills bob from the blood
+  // after the horn, past full close (The Last Grain too).
+  acc.ingest([{ type: "roundStart", roundNumber: 1 }, { type: "fightStart" }], t(0));
+  acc.ingest([{ type: "sandsStart", cx: 0, cy: 0, inside: [0] }], t(2));
+  acc.ingest([tideTick(0), tideTick(0), tideTick(0)], t(3));
+  acc.ingest([blow(0, 1, true, { attackerOut: true, victimOut: false, p: 1 }), { type: "death", playerId: 1 }], t(4));
+  acc.ingest([{ type: "roundEnd", winnerTeam: 1, wins: [1, 0], standing: [{ id: 0, hpFrac: 0.5 }] }], t(4));
+  // Round 2 — Let the Tide Decide: alice never bleeds, bob drowns.
+  acc.ingest([{ type: "roundStart", roundNumber: 2 }, { type: "fightStart" }], t(10));
+  acc.ingest([{ type: "sandsStart", cx: 0, cy: 0, inside: [] }], t(12));
+  acc.ingest([tideTick(1), tideTick(1, true), { type: "death", playerId: 1 }], t(15));
+  acc.ingest([{ type: "roundEnd", winnerTeam: 1, wins: [2, 0], standing: [{ id: 0, hpFrac: 1 }] }], t(15));
+  // Round 3 — Waist Deep + Undertow: alice wades 20 ticks, shoves bob into
+  // the blood, and he dies there 2 s later to her blade (in the round after
+  // the horn: a tide kill for the chain).
+  acc.ingest([{ type: "roundStart", roundNumber: 3 }, { type: "fightStart" }], t(20));
+  acc.ingest([{ type: "sandsStart", cx: 0, cy: 0, inside: [] }], t(22));
+  acc.ingest(Array.from({ length: WAIST_DEEP_TICKS }, () => tideTick(0)), t(24));
+  acc.ingest([{ type: "sandsShove", byId: 0, victimId: 1 }], t(25));
+  acc.ingest([blow(0, 1, true, { attackerOut: false, victimOut: true, p: 0.4 }), { type: "death", playerId: 1 }], t(27));
+  acc.ingest([{ type: "roundEnd", winnerTeam: 1, wins: [3, 0], standing: [{ id: 0, hpFrac: 0.2 }] }], t(27));
+  acc.ingest([{ type: "matchEnd", winnerTeam: 1 }], t(27));
+  return acc.summary({
+    ranked: true,
+    bracket: "1v1",
+    teamSize: 1,
+    winnerTeam: 1,
+    players: [
+      { id: 0, team: 1, weapon: "blade", bot: false },
+      { id: 1, team: 2, weapon: "bow", bot: true },
+    ],
+  });
+};
+
+describe("the Blood Tide stats", () => {
+  const s = playTide();
+
+  test("the accumulator reads every tide signal", () => {
+    const a = s.stats[0]!;
+    const b = s.stats[1]!;
+    expect(a.tideRounds).toBe(3);
+    expect(a.roundsPlayed).toBe(3);
+    expect(a.tideTicks).toBe(3 + WAIST_DEEP_TICKS);
+    expect(a.tideKills).toBe(2);
+    expect(a.kills).toBe(2);
+    expect(a.baptisms).toBe(1);
+    expect(a.lastGrainWins).toBe(1);
+    expect(a.tideDecidedWins).toBe(1);
+    expect(a.waistDeepWins).toBe(1);
+    expect(a.undertows).toBe(1);
+    expect(a.eyeOfStorm).toBe(1);
+    expect(a.longestRoundSec).toBe(7);
+    expect(b.tideDeaths).toBe(1);
+    expect(b.tideTicks).toBe(2);
+    expect(b.deaths).toBe(3);
+    // The tide's blows are nobody's damage dealt; they are the victim's
+    // damage taken.
+    expect(a.damageDealt).toBe(60);
+    expect(b.damageTaken).toBe(60 + 8);
+  });
+
+  test("the tide's counters move — and stay at rest in a tideless match", () => {
+    const d = counterDeltas(s, 0);
+    expect(d[COUNTERS.sandsRounds]).toBe(3);
+    expect(d[COUNTERS.sandsKills]).toBe(2);
+    const quiet = counterDeltas(play1v1(), 0);
+    expect(quiet[COUNTERS.sandsRounds]).toBeUndefined();
+    expect(quiet[COUNTERS.sandsKills]).toBeUndefined();
+  });
+
+  test("the skill feats fire on their exact shapes — and never off a tideless first win", () => {
+    const fired = (summary: MatchSummary, p: number) =>
+      evaluate({
+        defs: ACHIEVEMENT_DEFS,
+        boards: ACHIEVEMENT_BOARDS,
+        summary,
+        playerKey: p,
+        before: {},
+        after: counterDeltas(summary, p),
+        unlocked: new Set(),
+      }).map((d) => d.id);
+    const alice = fired(s, 0);
+    for (const id of ["the-horn-sounds", "baptism", "the-last-grain", "let-the-tide-decide", "waist-deep", "undertow", "dry-feet"]) {
+      expect(alice).toContain(id);
+    }
+    expect(alice).toContain("quicksand"); // 4 s / 5 s / 7 s — every round inside ten
+    expect(alice).not.toContain("taken-by-the-tide");
+    expect(alice).not.toContain("tidecaller"); // the chain top is far off
+    const bob = fired(s, 1);
+    expect(bob).toEqual(["sworn-to-the-sand", "the-horn-sounds"]); // the board root + the chapter root, nothing else
+    // The tideless first win (play1v1) pops nothing from the chapter.
+    const quiet = fired(play1v1(), 0);
+    expect(quiet.some((id) => id.startsWith("tide") || ["baptism", "waist-deep", "quicksand", "dry-feet"].includes(id))).toBe(false);
+  });
+
+  test("Quicksand needs a clocked fight under ten seconds in EVERY round", () => {
+    const quick = playTide(); // rounds ran 4 s / 5 s / 7 s
+    expect(quick.stats[0]!.longestRoundSec).toBe(7);
+    const q = ACHIEVEMENT_DEFS.find((d) => d.id === "quicksand")!;
+    expect(q.trigger.kind).toBe("feat");
+    if (q.trigger.kind !== "feat") return;
+    expect(q.trigger.test(quick, 0)).toBe(true);
+    expect(q.trigger.test(quick, 1)).toBe(false); // the loser never
+    // No fightStart ever clocked → null → never pops (the clockless caller).
+    expect(q.trigger.test(play1v1(), 0)).toBe(false);
+  });
+
+  test("Undertow's window: a body shoved in who dies later than the window is nobody's", () => {
+    const acc = new MatchStatsAccumulator([
+      { id: 0, team: 1 },
+      { id: 1, team: 2 },
+    ]);
+    const t = (sec: number) => Math.round(sec * TICK_RATE);
+    acc.ingest([{ type: "roundStart", roundNumber: 1 }, { type: "fightStart" }, { type: "sandsStart", cx: 0, cy: 0, inside: [] }], t(0));
+    acc.ingest([{ type: "sandsShove", byId: 0, victimId: 1 }], t(1));
+    acc.ingest([tideTick(1, true), { type: "death", playerId: 1 }], t(1 + UNDERTOW_WINDOW_SEC + 1));
+    acc.ingest([{ type: "roundEnd", winnerTeam: 1, wins: [1, 0], standing: [{ id: 0, hpFrac: 1 }] }], t(7));
+    const s2 = acc.summary({ ranked: true, bracket: "1v1", teamSize: 1, winnerTeam: 1, players: [{ id: 0, team: 1, weapon: "blade", bot: false }, { id: 1, team: 2, weapon: "bow", bot: true }] });
+    expect(s2.stats[0]!.undertows).toBe(0);
+    expect(s2.stats[0]!.tideDecidedWins).toBe(1); // still the tide's kill, and alice stayed dry
+  });
+
+  test("Tidecaller: every skill feat + the chain top, never a joke; pays the title and the spell — and the jokes pay titles or nothing", () => {
+    expect(TIDECALLER.trigger.kind).toBe("capstone");
+    if (TIDECALLER.trigger.kind !== "capstone") return;
+    const req = new Set(TIDECALLER.trigger.requires);
+    for (const id of ["baptism", "waist-deep", "let-the-tide-decide", "quicksand", "the-last-grain", "undertow", "tide-kills-250"]) {
+      expect(req.has(id)).toBe(true);
+    }
+    for (const joke of TIDE_JOKE_IDS) expect(req.has(joke)).toBe(false);
+    expect(TIDECALLER.rewards).toEqual([{ kind: "title" }, { kind: "entitlement", itemId: "ability:call-the-tide" }]);
+    for (const joke of TIDE_JOKE_IDS) {
+      const def = ACHIEVEMENT_DEFS.find((d) => d.id === joke)!;
+      expect((def.rewards ?? []).every((r) => r.kind === "title")).toBe(true);
+    }
+    // Two titles in the whole chapter (Tom, 2026-09-09).
+    const chapter = ACHIEVEMENT_DEFS.filter((d) => d.id.startsWith("tide") || req.has(d.id) || TIDE_JOKE_IDS.includes(d.id) || d.id === "the-horn-sounds");
+    const titled = chapter.filter((d) => (d.rewards ?? []).some((r) => r.kind === "title")).map((d) => d.id);
+    expect(titled.sort()).toEqual(["dry-feet", "tidecaller"]);
+  });
+});
+
+// ── The skirmish board (bits-skirmish-deeds.md, 2026-09-09) ────────────────
+
+const human = (id: number, team: number, weapon: MatchSummaryPlayer["weapon"] = "blade", abilities?: string[]): MatchSummaryPlayer => ({
+  id,
+  team: team as MatchSummaryPlayer["team"],
+  weapon,
+  bot: false,
+  ...(abilities ? { abilities: abilities as MatchSummaryPlayer["abilities"] } : {}),
+});
+
+const fireFor = (summary: MatchSummary, seat: number, before: Record<string, number> = {}): string[] => {
+  const after = { ...before };
+  for (const [k, v] of Object.entries(counterDeltas(summary, seat))) after[k] = (after[k] ?? 0) + v;
+  return evaluate({
+    defs: ACHIEVEMENT_DEFS,
+    boards: ACHIEVEMENT_BOARDS,
+    summary,
+    playerKey: seat,
+    before,
+    after,
+    unlocked: new Set(),
+  }).map((d) => d.id);
+};
+
+/** A scripted 6-way brawl (first to 2), six humans, seat 0 takes it 2–1:
+ * round 1 seat 0 kills all five (seat 5 last); round 2 seat 2 kills seat 0
+ * (who sat on match point), the tide takes everyone but seat 1 (seat 5
+ * last again); round 3 seat 0 sweeps again, seat 5 last again. */
+const playBrawl = (): MatchSummary => {
+  const ids = [0, 1, 2, 3, 4, 5];
+  const acc = new MatchStatsAccumulator(ids.map((id) => ({ id, team: (id + 1) as MatchSummaryPlayer["team"] })), { winsToTake: 2 });
+  const sweep = (killer: number, order: number[]): ArenaEvent[] =>
+    order.flatMap((v) => kill(killer, v));
+  const tideKill = (v: number): ArenaEvent[] => [
+    { type: "hit", attackerId: -1, targetId: v, damage: 100, crit: false, lethal: true, bleed: true, x: 0, y: 0 },
+    { type: "death", playerId: v },
+  ];
+  const wins = (...w: number[]): number[] => w;
+  acc.ingest([
+    { type: "roundStart", roundNumber: 1 },
+    { type: "fightStart" },
+    ...sweep(0, [1, 2, 3, 4, 5]),
+    { type: "roundEnd", winnerTeam: 1, wins: wins(1, 0, 0, 0, 0, 0), standing: [{ id: 0, hpFrac: 1 }] },
+    { type: "roundStart", roundNumber: 2 },
+    { type: "fightStart" },
+    ...kill(2, 0),
+    ...tideKill(2),
+    ...tideKill(3),
+    ...tideKill(4),
+    ...tideKill(5),
+    { type: "roundEnd", winnerTeam: 2, wins: wins(1, 1, 0, 0, 0, 0), standing: [{ id: 1, hpFrac: 1 }] },
+    { type: "roundStart", roundNumber: 3 },
+    { type: "fightStart" },
+    ...sweep(0, [1, 2, 3, 4, 5]),
+    { type: "roundEnd", winnerTeam: 1, wins: wins(2, 1, 0, 0, 0, 0), standing: [{ id: 0, hpFrac: 0.5 }] },
+    { type: "matchEnd", winnerTeam: 1 },
+  ], 10);
+  return acc.summary({
+    ranked: false,
+    bracket: null,
+    teamSize: 1,
+    teamCount: 6,
+    winnerTeam: 1,
+    players: ids.map((id) => human(id, id + 1)),
+  });
+};
+
+/** A team-shaped skirmish summary with no events — the loadout and room
+ * predicates only read the players and the room block. Team 1 wins. */
+const teamSummary = (
+  players: MatchSummaryPlayer[],
+  room: MatchSummary["room"] = null,
+  roundWinners: MatchSummary["roundWinners"] = [1, 1, 1],
+): MatchSummary => {
+  const acc = new MatchStatsAccumulator(players.map((p) => ({ id: p.id, team: p.team })));
+  acc.ingest([{ type: "roundEnd", winnerTeam: 1, wins: [3, 0], standing: [] }]);
+  const teamSize = players.length / 2;
+  return { ...acc.summary({ ranked: false, bracket: null, teamSize, winnerTeam: 1, players, room }), roundWinners };
+};
+
+describe("the skirmish board", () => {
+  test("humans must face humans — a lone human versus bots earns nothing, two humans earn Well Met", () => {
+    const vsBot: MatchSummary = { ...play1v1(), ranked: false }; // seat 1 is a bot in play1v1
+    expect(fireFor(vsBot, 0)).toEqual([]);
+    const vsHuman: MatchSummary = { ...vsBot, players: [human(0, 1), human(1, 2, "bow")] };
+    expect(fireFor(vsHuman, 0)).toContain("well-met");
+    // Two humans on ONE side against bots is practice with extra steps.
+    const sameSide = teamSummary([human(0, 1), human(1, 1), { id: 2, team: 2, weapon: "bow", bot: true }, { id: 3, team: 2, weapon: "bow", bot: true }]);
+    expect(fireFor(sameSide, 0)).toEqual([]);
+  });
+
+  test("the counter namespace — skirmish deltas never touch a ranked counter and vice versa", () => {
+    const rankedDeltas = counterDeltas(play1v1(), 0);
+    expect(Object.keys(rankedDeltas).some((k) => k.startsWith(SKIRMISH_COUNTER_PREFIX))).toBe(false);
+    const skirmishDeltas = counterDeltas({ ...play1v1(), ranked: false }, 0);
+    expect(Object.keys(skirmishDeltas).length).toBeGreaterThan(0);
+    expect(Object.keys(skirmishDeltas).every((k) => k.startsWith(SKIRMISH_COUNTER_PREFIX))).toBe(true);
+    const brawlDeltas = counterDeltas(playBrawl(), 0);
+    expect(brawlDeltas[COUNTERS.skirmishBrawlMatches]).toBe(1);
+    // Every milestone reads a counter only ITS board's summaries can move.
+    for (const def of ACHIEVEMENT_DEFS) {
+      if (def.trigger.kind !== "milestone") continue;
+      const skirmishCounter = def.trigger.counter.startsWith(SKIRMISH_COUNTER_PREFIX);
+      expect(skirmishCounter).toBe(def.board === SKIRMISH_BOARD);
+    }
+  });
+
+  test("the board pays nothing material — one title, no Glory, no items", () => {
+    for (const def of ACHIEVEMENT_DEFS_SKIRMISH) {
+      const rewards = def.rewards ?? [];
+      if (SKIRMISH_TITLE_IDS.has(def.id)) {
+        expect(rewards.length).toBeGreaterThan(0);
+        for (const r of rewards) expect(r.kind).toBe("title");
+      } else {
+        expect(rewards).toEqual([]);
+      }
+    }
+  });
+
+  test("the brawl: clean house, the vulture, untouchable, not today, always the bridesmaid", () => {
+    const s = playBrawl();
+    expect(s.stats[0]!.bestRoundKills).toBe(5);
+    expect(s.stats[0]!.roundsWon).toBe(2);
+    expect(s.stats[1]!.roundsWonWithoutKilling).toBe(1);
+    expect(s.stats[1]!.untouchedRoundWins).toBe(1);
+    expect(s.stats[2]!.matchPointKills).toBe(1);
+    expect(s.stats[5]!.runnerUpRounds).toBe(3);
+    const winner = fireFor(s, 0);
+    expect(winner).toEqual(expect.arrayContaining(["well-met", "six-enter", "one-leaves", "six-strangers", "clean-house"]));
+    expect(winner).not.toContain("the-vulture");
+    expect(winner).toContain("untouchable"); // rounds 1 and 3: nobody laid a hand on seat 0
+    const survivor = fireFor(s, 1);
+    expect(survivor).toEqual(expect.arrayContaining(["the-vulture", "untouchable"]));
+    expect(survivor).not.toContain("one-leaves");
+    expect(fireFor(s, 2)).toContain("not-today");
+    expect(fireFor(s, 0)).not.toContain("not-today");
+    const bridesmaid = fireFor(s, 5);
+    expect(bridesmaid).toContain("always-the-bridesmaid");
+    expect(fireFor(s, 4)).not.toContain("always-the-bridesmaid");
+    expect(winner).not.toContain("nobody-wins");
+  });
+
+  test("party tricks: doppelganger needs eight people on one weapon; uniform and the full set read your side", () => {
+    const eight = (weapons: MatchSummaryPlayer["weapon"][]) =>
+      weapons.map((w, i) => human(i, i < 4 ? 1 : 2, w));
+    const allBlade = teamSummary(eight(["blade", "blade", "blade", "blade", "blade", "blade", "blade", "blade"]));
+    expect(fireFor(allBlade, 0)).toEqual(expect.arrayContaining(["doppelganger", "full-house", "uniform"]));
+    const loser = fireFor(allBlade, 7);
+    expect(loser).toContain("doppelganger"); // fires for all eight, win or lose
+    expect(loser).toContain("full-house");
+    expect(loser).not.toContain("uniform");
+    const oneBot = teamSummary([...eight(Array(7).fill("blade")), { id: 7, team: 2, weapon: "blade", bot: true }]);
+    expect(fireFor(oneBot, 0)).not.toContain("doppelganger");
+    expect(fireFor(oneBot, 0)).not.toContain("full-house");
+    const fullSet = teamSummary(eight(["blade", "bow", "staff", "hammer", "blade", "blade", "blade", "bow"]));
+    expect(fireFor(fullSet, 0)).toContain("the-full-set");
+    expect(fireFor(fullSet, 0)).not.toContain("uniform");
+    expect(fireFor(fullSet, 4)).not.toContain("the-full-set"); // losers don't, and their side isn't four-different anyway
+  });
+
+  test("party tricks: mirror mirror, the gentlemen's agreement, nobody wins", () => {
+    const mirror = teamSummary([human(0, 1, "bow", ["dash", "blood-font", "sandtrap"]), human(1, 2, "bow", ["sandtrap", "dash", "blood-font"])]);
+    expect(fireFor(mirror, 0)).toContain("mirror-mirror");
+    expect(fireFor(mirror, 1)).toContain("mirror-mirror");
+    const notMirror = teamSummary([human(0, 1, "bow", ["dash", "blood-font", "sandtrap"]), human(1, 2, "bow", ["dash", "blood-font", "harpoon"])]);
+    expect(fireFor(notMirror, 0)).not.toContain("mirror-mirror");
+    // Four fighters, nobody cast: the agreement. One cast anywhere breaks it.
+    const quiet = teamSummary([human(0, 1), human(1, 1), human(2, 2), human(3, 2)]);
+    expect(fireFor(quiet, 0)).toContain("gentlemens-agreement");
+    const acc = new MatchStatsAccumulator([0, 1, 2, 3].map((id) => ({ id, team: (id < 2 ? 1 : 2) as MatchSummaryPlayer["team"] })));
+    acc.ingest([{ type: "cast", playerId: 3, ability: "dash" }, { type: "roundEnd", winnerTeam: 1, wins: [3, 0], standing: [] }]);
+    const loud = acc.summary({ ranked: false, bracket: null, teamSize: 2, winnerTeam: 1, players: [human(0, 1), human(1, 1), human(2, 2), human(3, 2)] });
+    expect(fireFor(loud, 0)).not.toContain("gentlemens-agreement");
+    // A drawn round in the record is Nobody Wins for everyone who was there.
+    const draw = teamSummary([human(0, 1), human(1, 2, "bow")], null, [0, 1, 1, 1]);
+    expect(fireFor(draw, 1)).toContain("nobody-wins");
+    expect(fireFor(quiet, 0)).not.toContain("nobody-wins");
+  });
+
+  test("good company: the room block drives the friends deeds", () => {
+    const room = { locked: true, hostSeat: 0, matchIndex: 3, grudgeSeats: [0], bothSidesSeats: [1] };
+    const s = teamSummary([human(0, 1), human(1, 1), human(2, 2, "bow"), human(3, 2, "bow")], room);
+    const host = fireFor(s, 0);
+    expect(host).toEqual(expect.arrayContaining(["behind-closed-doors", "grudge-match", "one-more", "open-house"]));
+    expect(host).not.toContain("both-sides-now");
+    const mate = fireFor(s, 1);
+    expect(mate).toContain("both-sides-now");
+    expect(mate).not.toContain("grudge-match");
+    expect(mate).not.toContain("open-house");
+    // Losers: no closed doors, no grudge; One More is for everyone present.
+    const loser = fireFor(s, 2);
+    expect(loser).toContain("one-more");
+    expect(loser).not.toContain("behind-closed-doors");
+    // The Regulars chain crosses on the adapter-written companion counter.
+    const regular = fireFor(s, 0, { [COUNTERS.skirmishCompanionBest]: 4 });
+    expect(regular).not.toContain("regulars-5");
+    const after = evaluate({
+      defs: ACHIEVEMENT_DEFS,
+      boards: ACHIEVEMENT_BOARDS,
+      summary: s,
+      playerKey: 0,
+      before: { [COUNTERS.skirmishCompanionBest]: 4 },
+      after: { [COUNTERS.skirmishCompanionBest]: 5, [COUNTERS.skirmishMatches]: 1 },
+      unlocked: new Set(["well-met"]),
+    }).map((d) => d.id);
+    expect(after).toContain("regulars-5");
   });
 });

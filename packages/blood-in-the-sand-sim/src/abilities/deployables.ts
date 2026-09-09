@@ -20,7 +20,7 @@ import {
 import type { ArenaEvent } from "../events";
 import type { ArenaPlayer, ArenaState, Deployable, DeployableKind } from "../state";
 import { dashInvulnerable } from "./dash";
-import { applyFixedHit, applyImpulse, killPlayer } from "./damage";
+import { applyFixedHit, applyImpulse, killPlayer, markShoved } from "./damage";
 import { ironhideActive } from "./statuses";
 
 /** Place a deployable at the caster's feet (or `at`, for thrown kinds —
@@ -138,7 +138,7 @@ const detonate = (
     } else {
       let away = normalize(sub(p.mover.pos, mine.pos));
       if (away.x === 0 && away.y === 0) away = { x: 1, y: 0 };
-      applyImpulse(p, away.x, away.y, SANDTRAP.knockback);
+      applyImpulse(p, away.x, away.y, SANDTRAP.knockback, mine.ownerId);
     }
   }
 };
@@ -246,6 +246,7 @@ export const stepDeployables = (
         const drag = Math.min(speed * dt, gap - 1); // never crosses the centre
         p.mover.pos.x += ((d.pos.x - p.mover.pos.x) / gap) * drag;
         p.mover.pos.y += ((d.pos.y - p.mover.pos.y) / gap) * drag;
+        markShoved(p, d.ownerId);
       }
     } else if (d.kind === "tar" && !spent) {
       // A tar blob: grows radiusMin → radiusMax over growSeconds, then

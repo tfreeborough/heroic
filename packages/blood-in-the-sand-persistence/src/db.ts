@@ -193,6 +193,17 @@ const applySchema = async (db: Db): Promise<void> => {
         app_bundle TEXT,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       )`,
+      // Who shared a skirmish room with whom (bits-skirmish-deeds.md): the
+      // Regulars chain and Both Sides Now read it. Account ids only, no
+      // names; written from each player's own perspective inside their
+      // idempotent per-match apply (so a retry never double-counts).
+      `CREATE TABLE IF NOT EXISTS skirmish_companions (
+        player_id TEXT NOT NULL,
+        other_id TEXT NOT NULL,
+        with_count INTEGER NOT NULL DEFAULT 0,
+        against_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (player_id, other_id)
+      )`,
     ],
     "write",
   );

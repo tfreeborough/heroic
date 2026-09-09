@@ -24,6 +24,10 @@ export type ArenaEvent =
       poison?: true;
       x: number;
       y: number;
+      /** Stamped on every real (non-sands) hit while the Blood Tide is live
+       * (bits-sands-deeds.md): who stood in the blood at the blow, and the
+       * close progress. Deed signals only — the client ignores it. */
+      tide?: { attackerOut: boolean; victimOut: boolean; p: number };
     }
   | { type: "death"; playerId: number }
   /** A ranged weapon loosed a projectile — the release sound (bow twang / staff
@@ -54,10 +58,25 @@ export type ArenaEvent =
   | { type: "roundStart"; roundNumber: number }
   | { type: "fightStart" }
   /** The Closing Sands rolled (bits-sand-circle.md): the safe circle exists
-   * and has started shrinking — every client banners THE SANDS CLOSE IN and
+   * and has started shrinking — every client banners THE BLOOD TIDE RISES and
    * plays the horn. Additive like `reflect` (old clients skip unknowns); the
    * circle itself rides RoundSnapshot.sands, this is just the moment. */
-  | { type: "sandsStart"; cx: number; cy: number }
+  | {
+      type: "sandsStart";
+      cx: number;
+      cy: number;
+      /** Players whose body already sits inside the FINAL ring at the roll
+       * (Dry Feet, bits-sands-deeds.md). Old clients ignore it. */
+      inside: number[];
+      /** Present when a player CALLED the tide (Call the Tide) rather than
+       * the fuse burning down — the banner names them. */
+      callerId?: number;
+    }
+  /** A displacement (harpoon reel, sinkhole drag, warding shout / sandtrap
+   * knockback) carried `victimId` from safe sand OUT into the Blood Tide
+   * within SANDS_SHOVE_WINDOW of the shove (bits-sands-deeds.md: Undertow).
+   * Deed signal only. */
+  | { type: "sandsShove"; byId: number; victimId: number }
   /** `standing` (Wave 2): the survivors' HP fractions at the close — feats
    * like "win the decider under 10%" sample it; dead players are absent. */
   | { type: "roundEnd"; winnerTeam: Team | 0; wins: number[]; standing: { id: number; hpFrac: number }[] }

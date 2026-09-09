@@ -323,6 +323,37 @@ export const devResetPurchases = async (identity: Identity): Promise<boolean> =>
   }
 };
 
+/** Dev-only (STORE_DEV_TOOLS=1): grant one deed with its rewards, as a
+ * settle would (bits-dev-menu.md § deeds). Unknown id / prod API → false. */
+export const devGrantDeed = async (identity: Identity, id: string): Promise<boolean> => {
+  if (!API_URL) return false;
+  try {
+    const res = await apiFetch("/dev/grant-deed", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
+/** Dev-only (STORE_DEV_TOOLS=1): forget every deed, counter, and
+ * deed-granted entitlement. Purchases survive. */
+export const devResetDeeds = async (identity: Identity): Promise<boolean> => {
+  if (!API_URL) return false;
+  try {
+    const res = await apiFetch("/dev/reset-deeds", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Overwrite the stored identity — the account-adoption write
  * (bits-accounts.md): link/restore handed us the account's player + a fresh

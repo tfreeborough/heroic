@@ -7,7 +7,7 @@
  * clients read the circle off RoundSnapshot.sands.
  */
 import { distance, type Aabb, type Vec2 } from "@heroic/core";
-import { CLOSING_SANDS, PLAYER_RADIUS, SANDS_ATTACKER_ID } from "./config";
+import { CALL_THE_TIDE, CLOSING_SANDS, PLAYER_RADIUS, SANDS_ATTACKER_ID } from "./config";
 import type { ArenaEvent } from "./events";
 import { killPlayer } from "./abilities/damage";
 import type { ArenaPlayer, RoundState } from "./state";
@@ -77,6 +77,60 @@ const rollCentre = (sim: ArenaSim): { cx: number; cy: number } => {
   return best;
 };
 
+/** Can Call the Tide fire right now? The gate the ability slot reads at
+ * press time (a gated press neither fires nor burns the charge). */
+export const tideCallable = (sim: ArenaSim): boolean => {
+  const { round } = sim.state;
+  if (!CLOSING_SANDS.enabled || sim.state.training) return false;
+  if (round.phase !== "active" || round.sands !== null) return false;
+  return round.elapsed >= CALL_THE_TIDE.minFightSeconds;
+};
+
+/** Roll the circle at its moment (the fuse) or on demand (Call the Tide):
+ * the same fair centre, the same opening radius, the same horn. */
+const rollSands = (
+  sim: ArenaSim,
+  players: readonly ArenaPlayer[],
+  events: ArenaEvent[],
+  callerId?: number,
+): void => {
+  const { round } = sim.state;
+  const { cx, cy } = rollCentre(sim);
+  // Who already stands inside the FINAL ring (Dry Feet) — and everyone
+  // starts inside the opening ring, so the edge detector resets.
+  const inside: number[] = [];
+  for (const p of players) {
+    p.sandsOutside = false;
+    if (p.alive && !outsideSands(p.mover.pos, cx, cy, CLOSING_SANDS.finalRadius)) inside.push(p.id);
+  }
+  // Everyone starts inside: the opening radius reaches the farthest arena
+  // corner from the rolled centre, plus a body.
+  const r0 =
+    Math.max(
+      Math.hypot(cx, cy),
+      Math.hypot(sim.zone.size.x - cx, cy),
+      Math.hypot(cx, sim.zone.size.y - cy),
+      Math.hypot(sim.zone.size.x - cx, sim.zone.size.y - cy),
+    ) + PLAYER_RADIUS;
+  round.sands = { cx, cy, r0, tickLeft: CLOSING_SANDS.tickInterval };
+  events.push({ type: "sandsStart", cx, cy, inside, ...(callerId !== undefined ? { callerId } : {}) });
+};
+
+/** Call the Tide's effect: the fuse is spent NOW. `round.elapsed` jumps to
+ * the delay so the derived radius/progress (sandsRadius, sandsProgress —
+ * both read elapsed − delay) start from zero exactly as a natural roll
+ * would; the close then runs its normal closeSeconds. */
+export const summonSands = (
+  sim: ArenaSim,
+  caller: ArenaPlayer,
+  players: readonly ArenaPlayer[],
+  events: ArenaEvent[],
+): void => {
+  if (!tideCallable(sim)) return;
+  sim.state.round.elapsed = Math.max(sim.state.round.elapsed, CLOSING_SANDS.delaySeconds);
+  rollSands(sim, players, events, caller.id);
+};
+
 /**
  * Advance the sands one tick (called from stepSim's active block): burn the
  * fuse down, roll the circle at its moment, then pour ramping blood ticks on
@@ -90,6 +144,17 @@ export const stepSafeCircle = (
   events: ArenaEvent[],
   dt: number,
 ): void => {
+  // The shove-credit window burns down every tick, circle or no circle —
+  // a stale shove must never survive to the roll.
+  for (const p of players) {
+    if (p.shoveLeft > 0) {
+      p.shoveLeft -= dt;
+      if (p.shoveLeft <= 0) {
+        p.shoveLeft = 0;
+        p.shovedBy = null;
+      }
+    }
+  }
   if (!CLOSING_SANDS.enabled) return;
   const { round } = sim.state;
   // The range's rounds never end (checkRoundOver stands down) — a circle
@@ -97,24 +162,41 @@ export const stepSafeCircle = (
   if (sim.state.training || round.phase !== "active") return;
   if (round.elapsed < CLOSING_SANDS.delaySeconds) return;
 
-  if (round.sands === null) {
-    const { cx, cy } = rollCentre(sim);
-    // Everyone starts inside: the opening radius reaches the farthest arena
-    // corner from the rolled centre, plus a body.
-    const r0 =
-      Math.max(
-        Math.hypot(cx, cy),
-        Math.hypot(sim.zone.size.x - cx, cy),
-        Math.hypot(cx, sim.zone.size.y - cy),
-        Math.hypot(sim.zone.size.x - cx, sim.zone.size.y - cy),
-      ) + PLAYER_RADIUS;
-    round.sands = { cx, cy, r0, tickLeft: CLOSING_SANDS.tickInterval };
-    events.push({ type: "sandsStart", cx, cy });
-  }
+  if (round.sands === null) rollSands(sim, players, events);
 
-  const sands = round.sands;
+  const sands = round.sands!;
   const r = sandsRadius(round);
   const p = sandsProgress(round);
+
+  // The shoreline edge detector: a body that was inside last tick and is
+  // outside now, within a shove's window, was PUT there (Undertow).
+  for (const player of players) {
+    if (!player.alive) continue;
+    const out = outsideSands(player.mover.pos, sands.cx, sands.cy, r);
+    if (out && !player.sandsOutside && player.shovedBy !== null && player.shoveLeft > 0) {
+      events.push({ type: "sandsShove", byId: player.shovedBy, victimId: player.id });
+      player.shovedBy = null;
+      player.shoveLeft = 0;
+    }
+    player.sandsOutside = out;
+  }
+
+  // Stamp this tick's real hits with who stood in the blood (Baptism, The
+  // Last Grain). Hit x/y is the victim's spot; the attacker's body is read
+  // live — same tick, close enough.
+  const byId = new Map<number, ArenaPlayer>();
+  for (const player of players) byId.set(player.id, player);
+  for (const e of events) {
+    if (e.type !== "hit" || e.attackerId === SANDS_ATTACKER_ID) continue;
+    const attacker = byId.get(e.attackerId);
+    const victim = byId.get(e.targetId);
+    if (!attacker || !victim) continue;
+    e.tide = {
+      attackerOut: outsideSands(attacker.mover.pos, sands.cx, sands.cy, r),
+      victimOut: outsideSands(victim.mover.pos, sands.cx, sands.cy, r),
+      p,
+    };
+  }
   const damage = Math.round(CLOSING_SANDS.damageMin + (CLOSING_SANDS.damageMax - CLOSING_SANDS.damageMin) * p);
   sands.tickLeft -= dt;
   while (sands.tickLeft <= 0) {

@@ -26,8 +26,26 @@ A toggle (`PERF OVERLAY ◉/○`) that turns on a small green readout in matches
 practice):
 
 ```
-JS 58fps  sim 4.2ms (1.1×)  rec 3.1ms
+JS 58fps  frame 16.8/31ms  busy 7.4ms
+sim 4.2ms (1.1×)  rec 3.1ms  gc 2×/1.3ms  alloc 4.1MB/s
+net rtt 48/110ms  snap 33.4/71ms 30/s
 ```
+
+The third line appears ONLINE only (practice has no wire), added 2026-09-09
+to split "the phone is slow" from "the wire is slow" — the iOS-only movement
+lag Tom felt in skirmish but not practice:
+
+- **net rtt** — the INPUT round trip, avg/max ms: `sendInput` → the server
+  ticks it → the snapshot echoing our `lastSeq` (PlayerSnapshot) lands. So it
+  includes up to one server tick (33ms) but not the 66ms interp delay or the
+  render. `—` means no echo arrived in the window (not seated, or nothing
+  applied). Healthy on LAN: 40–80ms. Half a second here with a clean top
+  line is the network or the native socket stack, not the game.
+- **snap** — snapshot inter-arrival gap avg/max ms, then delivered rate. A
+  clean 30Hz feed reads `33/40ms 30/s`. A normal average with a fat max
+  means arrivals are BUNCHING (a stalled socket read, TCP hiccups): the
+  renderer freezes on the newest snapshot then jumps, which the thumb feels
+  as lag even when rtt looks fine.
 
 - **JS fps** — rAF frames per second on the JS thread (raster/GPU cost lives
   on the UI thread; use RN's Perf Monitor for that half).
@@ -94,6 +112,30 @@ trigger can be re-tested.
 re-tested end to end. Deed grants survive. Hits `POST /dev/reset-purchases`,
 which only exists when the API runs with `STORE_DEV_TOOLS=1` — inert against
 production.
+
+## Tool 7 — grant deed / reset deeds *(2026-09-09)*
+
+Two rows, dev API only (`STORE_DEV_TOOLS=1`, which already refuses to run
+against a remote Turso — so these can never touch production; against prod
+the tap is a silent no-op).
+
+- **GRANT DEED ▸** opens a filterable list of every deed on every board,
+  grouped by chapter. One tap → `POST /dev/grant-deed { id }` records the
+  unlock exactly as a ranked settle would, through the same
+  `applyMatchAchievements` writer: the unlock row, the Glory (idempotency-
+  keyed, so a re-grant never pays twice), every entitlement (secrets AND
+  the `title:<id>` row), and — for a milestone — its counter raised to the
+  threshold so the codex bar reads full. The entitlement cache refreshes on
+  the spot (the War Table shows the item), and the next visit to the Deeds
+  screen replays the ceremony for whatever was granted (the missed-ceremony
+  diff). Built for the Blood Tide chapter (bits-sands-deeds.md): granting
+  `tidecaller` hands you Call the Tide.
+- **RESET DEEDS** → `POST /dev/reset-deeds`: forgets every unlock, counter
+  and achievement-granted entitlement, and clears this device's celebrated
+  set so re-granted deeds replay. Purchases and the Glory ledger survive.
+
+Requisites are NOT granted with a capstone (a granted Tidecaller sits over
+six silhouettes) — grant them too if the codex view matters for the test.
 
 ## Retired rows *(2026-08-25)*
 

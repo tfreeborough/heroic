@@ -48,6 +48,7 @@ import {
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import type { LobbyClient } from "../net/connection";
+import { DeedReplayOverlay } from "./DeedCards";
 import { BRAWL_TEAM_HEX } from "../game/render";
 import { playStrikeHaptic } from "../game/haptics";
 import { playSound, unlockAudio, warmCombatAudio } from "../audio";
@@ -610,6 +611,14 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
         <View pointerEvents="none" style={[styles.notice, { top: insets.top + 8 }]}>
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
+      ) : null}
+
+      {/* The lobby deed beat (bits-skirmish-deeds.md): a skirmish match's
+          unlocks arrive at matchEnd and play here as cards on the return —
+          the same reveal the ranked ceremony and the Chronicle replay use.
+          Anything missed still replays in the Chronicle on entry. */}
+      {!ranked && client.skirmishDeeds && client.skirmishDeeds.length > 0 ? (
+        <DeedReplayOverlay deeds={client.skirmishDeeds} onDone={() => client.clearSkirmishDeeds?.()} />
       ) : null}
     </View>
   );

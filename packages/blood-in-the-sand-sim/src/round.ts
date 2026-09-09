@@ -73,6 +73,9 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.slowFactor = 1;
     p.respawnLeft = 0; // a dummy mid-respawn is simply alive again
     p.alive = true;
+    p.shovedBy = null; // a last-second shove never carries into the next round
+    p.shoveLeft = 0;
+    p.sandsOutside = false;
   }
   state.round.phase = "countdown";
   state.round.elapsed = 0; // the sands' fuse re-arms…

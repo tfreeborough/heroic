@@ -14,6 +14,7 @@ import {
   WEAPONS,
 } from "./config";
 import {
+  DEED_ABILITIES,
   DEED_WEAPONS,
   GATED_ABILITIES,
   GATED_WEAPONS,
@@ -59,6 +60,15 @@ describe("gated items", () => {
         (d.rewards ?? []).some((r) => r.kind === "entitlement" && r.itemId === weaponEntitlement(w)),
       );
       expect(payers.length).toBe(1); // orphaned = unearnable; doubled = confusing
+    }
+  });
+
+  test("every deed ability is paid out by exactly one deed", () => {
+    for (const a of DEED_ABILITIES) {
+      const payers = ACHIEVEMENT_DEFS.filter((d) =>
+        (d.rewards ?? []).some((r) => r.kind === "entitlement" && r.itemId === abilityEntitlement(a)),
+      );
+      expect(payers.length).toBe(1);
     }
   });
 

@@ -160,7 +160,7 @@ const resolveArcStrike = (
     if (away.x === 0 && away.y === 0) {
       away = { x: Math.cos(p.lockedFacing), y: Math.sin(p.lockedFacing) };
     }
-    applyImpulse(defender, away.x, away.y, knockback);
+    applyImpulse(defender, away.x, away.y, knockback, p.id);
 
     events.push({
       type: "hit",
@@ -695,7 +695,7 @@ const stepProjectiles = (
 
       const rolled = resolvePlayerHit(owner, defender, sim.rng);
       const impulse = projectileKnockback(shot, weapon.attack.knockback ?? 0);
-      applyImpulse(defender, impulse.x, impulse.y, 1);
+      applyImpulse(defender, impulse.x, impulse.y, 1, owner.id);
       events.push({
         type: "hit",
         attackerId: shot.ownerId,
@@ -810,7 +810,7 @@ const stepShells = (
       } else {
         let away = normalize(sub(p.mover.pos, s.target));
         if (away.x === 0 && away.y === 0) away = { x: 1, y: 0 };
-        applyImpulse(p, away.x, away.y, s.knockback);
+        applyImpulse(p, away.x, away.y, s.knockback, s.ownerId);
       }
     }
   }

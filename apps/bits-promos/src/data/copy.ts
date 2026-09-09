@@ -47,5 +47,6 @@ export const TAGLINES: Record<string, string> = {
   sinkhole: "One throw a round. It warps the whole fight.",
   "tar-pit": "The ground you leave behind wins fights.",
   "titans-draught": "Drink. Grow. Crush.",
+  "call-the-tide": "You own the clock now.",
 };
 export const DEFAULT_TAGLINE = "Pick it in the lobby. Prove it in the sand.";

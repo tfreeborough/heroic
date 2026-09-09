@@ -23,6 +23,7 @@ import {
   STRAW_MAN,
   TAR_PIT,
   TITANS_DRAUGHT,
+  CALL_THE_TIDE,
   TREMOR,
   WAR_DRUMS,
   WARDING_SHOUT,
@@ -351,6 +352,16 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
       { label: "LAYS FOR", value: `${TAR_PIT.laySeconds}s of running` },
       { label: "SLOW", value: `${Math.round((1 - TAR_PIT.slowFactor) * 100)}%` },
       { label: "LINGERS", value: "all round" },
+    ],
+  },
+  "call-the-tide": {
+    hint: "the Blood Tide rises now — for everyone",
+    quote: "I do not wait for the horn. The horn waits for me.",
+    desc: "Sound the horn yourself: the Blood Tide rises the moment you call it, at a spot of the sand's choosing, and starts closing on everyone — your enemies, your friends, you. No damage, no shield, just the clock. Can't be called before the fight has run ten seconds, nor while a tide is already in. Earned, never sold: only a Tidecaller carries it.",
+    chips: [
+      { label: "EARLIEST", value: `${CALL_THE_TIDE.minFightSeconds}s into the round` },
+      { label: "EFFECT", value: "the tide rises now" },
+      { label: "SPARES", value: "no one" },
     ],
   },
   sinkhole: {

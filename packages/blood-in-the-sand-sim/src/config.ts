@@ -481,7 +481,8 @@ export type AbilityId =
   | "sandstorm"
   | "sinkhole"
   | "tar-pit"
-  | "titans-draught";
+  | "titans-draught"
+  | "call-the-tide";
 
 export interface AbilityDef extends AbilityConfig {
   name: string;
@@ -722,6 +723,9 @@ export const ABILITIES: Record<AbilityId, AbilityDef> = {
     activeDuration: TITANS_DRAUGHT.duration,
     charges: 2,
   },
+  // ONE call per round — you own the clock once. Cooldown is moot (a
+  // second circle can't exist) but the lifecycle wants a number.
+  "call-the-tide": { name: "Call the Tide", category: "offensive", cooldown: 30, activeDuration: 0, charges: 1 },
 };
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
@@ -731,7 +735,7 @@ export const ABILITY_IDS = Object.keys(ABILITIES) as AbilityId[];
  * list lives here (config can't import items.ts — that's a runtime cycle);
  * items.test.ts holds the two files consistent. */
 export const FREE_ABILITY_IDS: readonly AbilityId[] = ABILITY_IDS.filter(
-  (id) => id !== "sinkhole" && id !== "tar-pit" && id !== "titans-draught",
+  (id) => id !== "sinkhole" && id !== "tar-pit" && id !== "titans-draught" && id !== "call-the-tide",
 );
 
 /** Abilities per loadout; pick order = button order in the match. Two, not
@@ -782,6 +786,21 @@ export const WINS_TO_TAKE_MATCH_BRAWL = 2;
  * the client skips kill-streak/announcer calls for it (no "FIRST BLOOD" by
  * the weather). Negative so it can never collide with a seat or deployable. */
 export const SANDS_ATTACKER_ID = -1;
+/** Call the Tide (bits-sands-deeds.md — the DEED-gated spell, earned only
+ * by Tidecaller, never sold): the Blood Tide rises NOW. Nothing else — no
+ * damage, no body, the same fair centre roll as the fuse would make. The
+ * slot is the cost; the tempo is the product. Guards (the harpoon rule: a
+ * gated press neither fires nor burns the charge): never while a tide is
+ * live, never before minFightSeconds of fight time (a round must never
+ * open with the horn — decided 2026-09-09), never in the range. */
+export const CALL_THE_TIDE = {
+  minFightSeconds: 10,
+};
+
+/** Seconds after a displacement in which the victim crossing the shoreline
+ * still credits the shover (bits-sands-deeds.md: Undertow). Knockback
+ * decays over several ticks, so the window outlives the impulse. */
+export const SANDS_SHOVE_WINDOW = 1;
 
 /** The shrinking safe circle — the round's honest clock (rounds otherwise
  * have none; the bots' impatience dial fakes urgency, this supplies it).

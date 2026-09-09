@@ -29,6 +29,9 @@ import { grantFromDeedUnlocks } from "../deeds/entitlements";
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "rejected";
 
+/** Unacked input sends kept for RTT stamping (readNetStats) — ~4s at 30Hz. */
+const SENT_WINDOW = 128;
+
 /**
  * Baked in at build time (Expo inlines EXPO_PUBLIC_*). Convention: the
  * committed `.env` carries the Render hostname (drives builds); the
@@ -174,6 +177,32 @@ export interface GameClient {
   readonly practice?: boolean;
   /** `casts` indexed by ability slot (= pick = button order). */
   sendInput(sx: number, sy: number, casts: boolean[]): void;
+  /** Dev perf overlay: drain the wire timings gathered since the last read.
+   * OPTIONAL — a networked client only; practice has no wire (null/absent =
+   * no `net` line). */
+  readNetStats?(): NetStats | null;
+}
+
+/**
+ * Wire timings for the dev perf overlay (bits-dev-menu.md § Tool 1), all ms,
+ * accumulated between reads. `rtt` is the INPUT round trip: sendInput → the
+ * server ticks it → the snapshot echoing our `lastSeq` lands (so it includes
+ * up to one server tick, but NOT the interp delay or a render). `gap` is the
+ * time between consecutive snapshot arrivals — 33 is a clean 30Hz feed;
+ * a big max with a normal average means arrivals are BUNCHING (a stall in
+ * the socket stack or the network), which the renderer rides out as freeze +
+ * jump, felt as lag.
+ */
+export interface NetStats {
+  rttAvg: number;
+  rttMax: number;
+  /** Input round trips measured in the window (0 = no echo seen — e.g. not
+   * seated, or the server never applied one of our inputs). */
+  rttN: number;
+  gapAvg: number;
+  gapMax: number;
+  /** Snapshots that arrived in the window. */
+  snaps: number;
 }
 
 /** A transient lobby toast (host handoff), with the wall-clock it arrived so
@@ -210,6 +239,11 @@ export interface LobbyClient extends GameClient {
   /** Hop to the other team while it has a free seat. OPTIONAL like
    * cancelStart — practice rooms are always full, so there's nowhere to hop. */
   switchTeam?(): void;
+  /** Deeds the last SKIRMISH match unlocked (bits-skirmish-deeds.md) — the
+   * lobby plays them as cards on return, then clears. OPTIONAL: practice
+   * earns nothing, so its client has none. */
+  readonly skirmishDeeds?: string[] | null;
+  clearSkirmishDeeds?(): void;
 }
 
 export class ArenaClient {
@@ -254,6 +288,10 @@ export class ArenaClient {
    * opponent's list. Survives the room closing like rankedResult (the
    * ceremony plays on RankedScreen); cleared on the next queue entry. */
   deedUnlocks: string[] | null = null;
+  /** MY newly-unlocked deeds from the last SKIRMISH match (bits-skirmish-
+   * deeds.md) — arrive at matchEnd, shown by the lobby on return, cleared
+   * by the lobby once celebrated (or by leaving the room). */
+  skirmishDeeds: string[] | null = null;
 
   /** Fired on status / room / phase changes (drive React re-renders). */
   onChange: (() => void) | null = null;
@@ -262,6 +300,15 @@ export class ArenaClient {
 
   private readonly ws: WebSocket;
   private seq = 0;
+  // --- Wire diagnostics (readNetStats — the dev perf overlay's `net` line).
+  // Bounded and allocation-light: one Map set per input send, one scan per
+  // snapshot; nothing here renders or is read unless the overlay is on.
+  /** seq → performance.now() at send, insertion order = ascending seq. */
+  private readonly sentAt = new Map<number, number>();
+  /** Highest lastSeq echoed for us so far — each seq's RTT counts once. */
+  private ackedSeq = -1;
+  private lastSnapAt = -1;
+  private readonly net = { rttSum: 0, rttMax: 0, rttN: 0, gapSum: 0, gapMax: 0, gapN: 0, snaps: 0 };
   /** Heartbeat so the server can tell a quiet-but-alive lobby seat from a ghost
    * (force-quit / lost network with no close frame). Runs only while open. */
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -353,6 +400,8 @@ export class ArenaClient {
         // § match end), and "match complete" under the settlement plate
         // would read as an error. The plate IS the message there.
         this.welcome = null;
+    this.skirmishDeeds = null;
+        this.skirmishDeeds = null; // the lobby that would have shown them is gone
         this.roomState = null;
         this.phase = "lobby";
         lastSeat = null; // the room is gone — the seat can never be reclaimed
@@ -363,7 +412,9 @@ export class ArenaClient {
         this.onChange?.();
         return;
       case "snapshot": {
-        const events = this.buffer.push(msg, performance.now());
+        const now = performance.now();
+        this.noteSnapshot(msg, now);
+        const events = this.buffer.push(msg, now);
         if (events.length > 0) this.onEvents?.(events);
         if (msg.round.phase !== this.phase) {
           this.phase = msg.round.phase; // lobby ↔ match transitions re-route the UI
@@ -473,6 +524,11 @@ export class ArenaClient {
         if (this.rankedResult?.matchId === msg.matchId) {
           this.deedUnlocks = msg.unlocks;
           this.onChange?.();
+        } else if (this.rankedMatch === null) {
+          // A skirmish match's unlocks (bits-skirmish-deeds.md): no
+          // settlement to pin to — the lobby shows them on return.
+          this.skirmishDeeds = msg.unlocks;
+          this.onChange?.();
         }
         return;
       case "reject":
@@ -540,15 +596,20 @@ export class ArenaClient {
     this.send({ t: "queueInfo" });
   }
 
-  createRoom(playerName: string, roomName: string, pass: string, teamSize: number, brawl = false): void {
+  /** `token` (bits-skirmish-deeds.md): the persistence bearer secret, so the
+   * seat's skirmish deeds credit this account and the worn title is
+   * verified. Optional — without it the seat plays as before, earns nothing. */
+  createRoom(playerName: string, roomName: string, pass: string, teamSize: number, brawl = false, token?: string): void {
     this.lastError = null;
     this.queued = false; // entering the skirmish flow leaves the queue server-side
+    this.skirmishDeeds = null;
     this.send({
       t: "createRoom",
       v: PROTOCOL_VERSION,
       playerName,
       roomName,
       teamSize,
+      ...(token ? { token } : {}),
       // Brawl (v32): the free-for-all shape — the server ignores teamSize.
       ...(brawl ? { brawl: true } : {}),
       // The cosmetics are claimed at seat time (like the name) — read here
@@ -559,15 +620,17 @@ export class ArenaClient {
     });
   }
 
-  joinRoom(playerName: string, code: string, pass: string): void {
+  joinRoom(playerName: string, code: string, pass: string, token?: string): void {
     this.lastError = null;
     this.queued = false; // ditto createRoom
+    this.skirmishDeeds = null;
     const normalized = code.trim().toUpperCase();
     this.send({
       t: "joinRoom",
       v: PROTOCOL_VERSION,
       code: normalized,
       playerName,
+      ...(token ? { token } : {}),
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
@@ -579,6 +642,13 @@ export class ArenaClient {
 
   listRooms(): void {
     this.send({ t: "listRooms" });
+  }
+
+  /** The lobby celebrated the skirmish cards. */
+  clearSkirmishDeeds(): void {
+    if (this.skirmishDeeds === null) return;
+    this.skirmishDeeds = null;
+    this.onChange?.();
   }
 
   setWeapon(weapon: WeaponId): void {
@@ -624,6 +694,7 @@ export class ArenaClient {
     this.send({ t: "leaveRoom" });
     lastSeat = null; // a deliberate leave forfeits the seat — never rejoin it
     this.welcome = null;
+    this.skirmishDeeds = null;
     this.roomState = null;
     this.phase = "lobby";
     this.buffer.reset();
@@ -632,7 +703,65 @@ export class ArenaClient {
   }
 
   sendInput(sx: number, sy: number, casts: boolean[]): void {
-    this.send({ t: "input", seq: this.seq++, sx, sy, casts });
+    const seq = this.seq++;
+    this.sentAt.set(seq, performance.now());
+    // Cap the unacked window (a seat the server never echoes — spectating,
+    // lobby — would otherwise grow it forever).
+    if (this.sentAt.size > SENT_WINDOW) this.sentAt.delete(this.sentAt.keys().next().value!);
+    this.send({ t: "input", seq, sx, sy, casts });
+  }
+
+  /** Stamp a snapshot's arrival: the inter-arrival gap, and — if it echoes a
+   * newer lastSeq for our seat — the input round trip for that seq. */
+  private noteSnapshot(msg: Extract<ServerMsg, { t: "snapshot" }>, now: number): void {
+    const n = this.net;
+    n.snaps += 1;
+    if (this.lastSnapAt >= 0) {
+      const gap = now - this.lastSnapAt;
+      n.gapSum += gap;
+      n.gapN += 1;
+      if (gap > n.gapMax) n.gapMax = gap;
+    }
+    this.lastSnapAt = now;
+    const myId = this.welcome?.playerId;
+    if (myId === undefined) return;
+    let lastSeq = -1;
+    for (let i = 0; i < msg.players.length; i++) {
+      const p = msg.players[i]!;
+      if (p.id === myId) {
+        lastSeq = p.lastSeq;
+        break;
+      }
+    }
+    if (lastSeq <= this.ackedSeq) return;
+    this.ackedSeq = lastSeq;
+    const sent = this.sentAt.get(lastSeq);
+    if (sent !== undefined) {
+      const rtt = now - sent;
+      n.rttSum += rtt;
+      n.rttN += 1;
+      if (rtt > n.rttMax) n.rttMax = rtt;
+    }
+    // Everything at or below the echoed seq is answered (or superseded).
+    for (const seq of this.sentAt.keys()) {
+      if (seq > lastSeq) break;
+      this.sentAt.delete(seq);
+    }
+  }
+
+  readNetStats(): NetStats | null {
+    const n = this.net;
+    if (n.snaps === 0) return null;
+    const out: NetStats = {
+      rttAvg: n.rttN > 0 ? n.rttSum / n.rttN : 0,
+      rttMax: n.rttMax,
+      rttN: n.rttN,
+      gapAvg: n.gapN > 0 ? n.gapSum / n.gapN : 0,
+      gapMax: n.gapMax,
+      snaps: n.snaps,
+    };
+    n.rttSum = n.rttMax = n.rttN = n.gapSum = n.gapMax = n.gapN = n.snaps = 0;
+    return out;
   }
 
   private send(msg: ClientMsg): void {

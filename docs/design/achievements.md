@@ -287,6 +287,15 @@ Consequence: the skirmish board, skirmish_* counters, and friends-lobby
 farming policy are all DEAD as work items. The milestone roadmap goes
 M1→M2→M3→M5 (secret items).
 
+*(REVISITED 2026-09-09 — Tom wants casual-only players to meet deeds. A
+sealed, ZERO-PAY skirmish board with `skirmish:`-namespaced counters was
+designed and BUILT the same day; both reasons above still hold (ranked
+keeps the only material rewards; the rule stays one sentence). The
+crossing trap is closed by the namespace, not by exempting milestones —
+`counterDeltas` emits only `skirmish:*` for non-ranked summaries, and a
+test holds every board's milestones to counters only its own summaries
+move. [bits-skirmish-deeds.md](./bits-skirmish-deeds.md).)*
+
 ## Wave-2 feats *(Tom 2026-08-08: "do them all" — the deferred second set)*
 
 The Season I sketch deferred every deed the sim couldn't measure ("Wave 2

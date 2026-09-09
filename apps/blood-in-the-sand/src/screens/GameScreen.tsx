@@ -388,11 +388,22 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             `  alloc ${((gc.bytes - lastGc.bytes) / 1048576 / Math.max(0.001, elapsed)).toFixed(1)}MB/s`
           : "";
       lastGc = gc;
-      // Two lines so the readout fits a phone in portrait: pacing (how late
-      // are frames) on top, cost buckets (whose fault) underneath.
+      // Wire timings (online only — practice has no readNetStats). `rtt` =
+      // input send → snapshot echoing it; `snap` = arrival gap avg/max and
+      // the delivered rate. This is the line that splits "the phone is slow"
+      // from "the wire is slow": a fat rtt with a clean JS line above it is
+      // the network or the native socket stack, not us.
+      const net = client.readNetStats?.();
+      const netText = net
+        ? `\nnet rtt ${net.rttN > 0 ? `${net.rttAvg.toFixed(0)}/${net.rttMax.toFixed(0)}ms` : "—"}` +
+          `  snap ${net.gapAvg.toFixed(1)}/${net.gapMax.toFixed(0)}ms ${(net.snaps / Math.max(0.001, elapsed)).toFixed(0)}/s`
+        : "";
+      // Two lines (three online) so the readout fits a phone in portrait:
+      // pacing (how late are frames) on top, cost buckets (whose fault)
+      // underneath, then the wire.
       setPerfText(
         `JS ${fps.toFixed(0)}fps  frame ${(p.frameMs / f).toFixed(1)}/${p.frameMaxMs.toFixed(0)}ms  busy ${(p.busyMs / f).toFixed(1)}ms\n` +
-          `sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms${gcText}`,
+          `sim ${(p.simMs / f).toFixed(1)}ms (${(p.steps / f).toFixed(1)}×)  rec ${(p.recMs / f).toFixed(1)}ms${gcText}${netText}`,
       );
       p.simMs = p.steps = p.recMs = p.frames = p.busyMs = p.frameMs = p.frameMaxMs = 0;
       p.lastFrame = -1;
@@ -733,8 +744,22 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
         } else if (e.type === "sandsStart") {
           // The Closing Sands rolled (bits-sand-circle.md): every client
           // banners it and blows the horn — the circle itself is on
-          // round.sands, this is just the moment.
-          showAnnounce("THE SANDS CLOSE IN");
+          // round.sands, this is just the moment. Player-facing name is
+          // the BLOOD TIDE (Tom, 2026-09-09) — "sands" stays internal.
+          // A CALLED tide names its caller in the kill-call grammar
+          // ("<name> called forth / THE BLOOD TIDE / <worn title>") — the
+          // horn is their cast sound, so the flex is the banner.
+          if (e.callerId !== undefined) {
+            const caller = view?.players.find((p) => p.id === e.callerId);
+            const callerRow = client.roomState?.players.find((p) => p.id === e.callerId);
+            showAnnounce(
+              "THE BLOOD TIDE",
+              caller ? `${caller.name} called forth` : null,
+              resolveTitleText(callerRow?.title),
+            );
+          } else {
+            showAnnounce("THE BLOOD TIDE RISES");
+          }
           playSound("sandsClose");
           playStrikeHaptic("medium");
         } else if (e.type === "roundEnd") {

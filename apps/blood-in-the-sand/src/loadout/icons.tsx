@@ -48,6 +48,8 @@ export const ICON_SOURCES: Record<IconId, number> = {
   "tar-pit": require("../../assets/icons/tar-pit.png"),
   // Forge art owed — ironhide's stand stands in until the draught lands.
   "titans-draught": require("../../assets/icons/titans-draught.png"),
+  // Forge art owed — the sandstorm swirl stands in until the horn lands.
+  "call-the-tide": require("../../assets/icons/call-the-tide.png"),
 };
 
 /**

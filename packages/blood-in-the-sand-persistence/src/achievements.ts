@@ -74,6 +74,20 @@ export interface AchievementAward {
   entitlements?: readonly string[];
 }
 
+/** One other account this player shared a skirmish match with, from this
+ * player's side: beside them (`with`) or across the sand (`against`). */
+export interface CompanionDelta {
+  otherId: string;
+  with: number;
+  against: number;
+}
+
+export interface CompanionRecord {
+  otherId: string;
+  withCount: number;
+  againstCount: number;
+}
+
 export interface MatchAchievementsInput {
   /** The settle's idempotency root — same id recordRankedMatch keyed on. */
   matchId: string;
@@ -82,7 +96,24 @@ export interface MatchAchievementsInput {
    * streak semantics before calling). */
   counters: Record<string, number>;
   unlocks: AchievementAward[];
+  /** Skirmish only (bits-skirmish-deeds.md): the humans this player shared
+   * the room with. Rides the same guarded batch, so a retried apply can't
+   * count a companion twice. */
+  companions?: readonly CompanionDelta[];
 }
+
+/** Everyone this player has ever shared a skirmish room with. */
+export const companionsOf = async (db: Db, playerId: string): Promise<CompanionRecord[]> => {
+  const result = await db.execute({
+    sql: "SELECT other_id, with_count, against_count FROM skirmish_companions WHERE player_id = ?",
+    args: [playerId],
+  });
+  return result.rows.map((row) => ({
+    otherId: String(row["other_id"]),
+    withCount: Number(row["with_count"]),
+    againstCount: Number(row["against_count"]),
+  }));
+};
 
 /**
  * Land one player's whole match outcome atomically. Returns false when this
@@ -130,6 +161,13 @@ export const applyMatchAchievements = async (db: Db, input: MatchAchievementsInp
       }
       return rows;
     }),
+    ...(input.companions ?? []).map((c) => ({
+      sql: `INSERT INTO skirmish_companions (player_id, other_id, with_count, against_count) VALUES (?, ?, ?, ?)
+            ON CONFLICT (player_id, other_id) DO UPDATE SET
+              with_count = with_count + excluded.with_count,
+              against_count = against_count + excluded.against_count`,
+      args: [input.playerId, c.otherId, c.with, c.against] as (string | number)[],
+    })),
   ];
   await db.batch(statements, "write");
   return true;

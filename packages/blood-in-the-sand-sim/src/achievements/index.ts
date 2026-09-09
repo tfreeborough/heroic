@@ -7,8 +7,15 @@ export {
   type MatchSummary,
   type MatchSummaryPlayer,
   type PlayerMatchStats,
+  type SkirmishRoomContext,
 } from "./summary";
-export { COUNTERS, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
+export { COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
+export {
+  ACHIEVEMENT_DEFS_SKIRMISH,
+  SKIRMISH_BOARD,
+  SKIRMISH_TITLE_IDS,
+  humansOnTwoTeams,
+} from "./defsSkirmish";
 export { ACHIEVEMENT_DEFS_2V2, RANKED_2V2_BOARD, TITLE_ONLY_2V2 } from "./defs2v2";
 export {
   ACHIEVEMENT_BOARDS,

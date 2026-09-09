@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { ZoneFile } from "@heroic/core";
-import { CLOSING_SANDS, configureSafeCircle, PLAYER_RADIUS, SANDS_ATTACKER_ID, TICK_DT } from "./config";
+import { CALL_THE_TIDE, CLOSING_SANDS, configureSafeCircle, PLAYER_RADIUS, SANDS_ATTACKER_ID, TICK_DT } from "./config";
 import type { ArenaEvent } from "./events";
 import { startMatch } from "./round";
-import { sandsRadius } from "./sands";
+import { sandsProgress, sandsRadius } from "./sands";
 import { addPlayer, createSim, setPlayerAbilities, setPlayerWeapon, type ArenaSim } from "./sim";
 import { toSnapshot } from "./snapshot";
 import { stepSim } from "./step";
@@ -169,5 +169,187 @@ describe("the Closing Sands", () => {
     const range = makeMatch(0xb100d, true);
     expect(run(range, 8).some((e) => e.type === "sandsStart")).toBe(false);
     expect(range.state.round.sands).toBeNull();
+  });
+});
+
+// ── Deed signals + Call the Tide (bits-sands-deeds.md, 2026-09-09) ─────────
+import { markShoved } from "./abilities/damage";
+import type { PlayerInput } from "./state";
+
+const IDLE_CAST: PlayerInput = { seq: 0, sx: 0, sy: 0, casts: [false, false] };
+const pressing = (seat: number, slot: number): Map<number, PlayerInput> =>
+  new Map([[seat, { ...IDLE_CAST, casts: slot === 0 ? [true, false] : [false, true] }]]);
+
+/** Step `seconds` with `inputs` every tick, collecting events. */
+const runWith = (sim: ArenaSim, seconds: number, inputs: Map<number, PlayerInput>): ArenaEvent[] => {
+  const events: ArenaEvent[] = [];
+  for (let i = 0; i < Math.round(seconds / TICK_DT); i++) events.push(...stepSim(sim, inputs, TICK_DT));
+  return events;
+};
+
+describe("the Blood Tide's deed signals", () => {
+  test("the horn names who already stands inside the final ring", () => {
+    fastSands();
+    const sim = makeMatch();
+    run(sim, 5.4); // countdown done, fuse not yet burnt
+    // Park alice on every candidate centre at once? Can't — so park BOTH
+    // bodies dead-centre of the arena and read the roll honestly.
+    for (const p of [sim.state.players[0]!, sim.state.players[1]!]) {
+      p.mover.pos.x = 256;
+      p.mover.pos.y = 256;
+    }
+    const start = run(sim, 0.3).find((e) => e.type === "sandsStart") as Extract<ArenaEvent, { type: "sandsStart" }>;
+    expect(start).toBeDefined();
+    expect(start.callerId).toBeUndefined(); // the fuse, not a caller
+    const sands = sim.state.round.sands!;
+    const inside = Math.hypot(256 - sands.cx, 256 - sands.cy) + PLAYER_RADIUS <= CLOSING_SANDS.finalRadius;
+    expect(start.inside).toEqual(inside ? [0, 1] : []);
+  });
+
+  test("real hits while the tide is live carry who stood in the blood and the close progress", () => {
+    fastSands();
+    const sim = makeMatch();
+    run(sim, 5.6);
+    const sands = sim.state.round.sands!;
+    // Both in the blood at the corner, adjacent — the blades auto-swing —
+    // and the stamp must read both as out.
+    sim.state.players[0]!.mover.pos.x = 40;
+    sim.state.players[0]!.mover.pos.y = 40;
+    sim.state.players[1]!.mover.pos.x = 70;
+    sim.state.players[1]!.mover.pos.y = 40;
+    const events = run(sim, 1.2); // blades auto-swing at a body in reach
+    const blows = events.filter(
+      (e): e is Extract<ArenaEvent, { type: "hit" }> => e.type === "hit" && e.attackerId === 0 && e.targetId === 1,
+    );
+    expect(blows.length).toBeGreaterThan(0);
+    for (const b of blows) {
+      expect(b.tide).toBeDefined();
+      expect(b.tide!.attackerOut).toBe(true);
+      expect(b.tide!.victimOut).toBe(true);
+      expect(b.tide!.p).toBeGreaterThanOrEqual(0);
+      expect(b.tide!.p).toBeLessThanOrEqual(1);
+    }
+    // The tide's own ticks are never stamped.
+    const ticks = events.filter((e) => e.type === "hit" && e.attackerId === SANDS_ATTACKER_ID);
+    expect(ticks.length).toBeGreaterThan(0);
+    expect(ticks.every((e) => e.type === "hit" && e.tide === undefined)).toBe(true);
+    void sands;
+  });
+
+  test("a body put over the shoreline inside the shove window emits sandsShove; a walk-out doesn't", () => {
+    fastSands();
+    const sim = makeMatch();
+    run(sim, 5.6);
+    const sands = sim.state.round.sands!;
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    alice.mover.pos.x = sands.cx;
+    alice.mover.pos.y = sands.cy;
+    bob.mover.pos.x = sands.cx;
+    bob.mover.pos.y = sands.cy;
+    run(sim, 0.2); // both registered INSIDE
+    // Bob crosses the line under his own steam: no shove on record.
+    bob.mover.pos.x = 30;
+    bob.mover.pos.y = 30;
+    let events = run(sim, 0.2);
+    expect(events.some((e) => e.type === "sandsShove")).toBe(false);
+    bob.mover.pos.x = sands.cx;
+    bob.mover.pos.y = sands.cy;
+    run(sim, 0.2); // back inside
+    // Now alice shoves him (the impulse's stamp) and he lands in the blood.
+    markShoved(bob, alice.id);
+    bob.mover.pos.x = 30;
+    bob.mover.pos.y = 30;
+    events = run(sim, 0.2);
+    const shoves = events.filter((e) => e.type === "sandsShove");
+    expect(shoves).toEqual([{ type: "sandsShove", byId: 0, victimId: 1 }]);
+    // The stamp is consumed — no second shove for staying out.
+    expect(run(sim, 0.2).some((e) => e.type === "sandsShove")).toBe(false);
+  });
+
+  test("a shove's credit expires after the window", () => {
+    fastSands();
+    configureSafeCircle({ finalRadius: 150 }); // room to keep two blades apart
+    const sim = makeMatch();
+    run(sim, 5.6);
+    const sands = sim.state.round.sands!;
+    const alice = sim.state.players[0]!;
+    const bob = sim.state.players[1]!;
+    // Apart, inside: overlapping bodies auto-swing and every weapon hit
+    // re-stamps the shove (correct — a hammer blow IS a shove).
+    alice.mover.pos.x = sands.cx - 100;
+    alice.mover.pos.y = sands.cy;
+    bob.mover.pos.x = sands.cx + 100;
+    bob.mover.pos.y = sands.cy;
+    run(sim, 0.2);
+    markShoved(bob, alice.id);
+    run(sim, 1.5); // > SANDS_SHOVE_WINDOW, still inside
+    expect(bob.shovedBy).toBeNull();
+    bob.mover.pos.x = 30;
+    bob.mover.pos.y = 30;
+    expect(run(sim, 0.2).some((e) => e.type === "sandsShove")).toBe(false);
+  });
+});
+
+describe("Call the Tide", () => {
+  const armed = (): ArenaSim => {
+    const sim = createSim(makeZone(), 0xb100d, 1, false);
+    addPlayer(sim, "alice");
+    addPlayer(sim, "bob");
+    setPlayerWeapon(sim, 0, "blade");
+    setPlayerWeapon(sim, 1, "blade");
+    setPlayerAbilities(sim, 0, ["call-the-tide", "dash"]);
+    setPlayerAbilities(sim, 1, ["dash", "tremor"]);
+    expect(startMatch(sim, [])).toBe(true);
+    return sim;
+  };
+
+  test("too early in the round the press is nothing — no cast, charge kept", () => {
+    configureSafeCircle({ delaySeconds: 60 }); // the fuse is far away
+    const sim = armed();
+    run(sim, 5.2); // countdown over, fight ~0.2s old
+    const events = runWith(sim, 0.5, pressing(0, 0));
+    expect(events.some((e) => e.type === "cast")).toBe(false);
+    expect(events.some((e) => e.type === "sandsStart")).toBe(false);
+    expect(sim.state.round.sands).toBeNull();
+    expect(sim.state.players[0]!.slots[0]!.chargesLeft).toBe(1);
+  });
+
+  test("after the minimum fight time the horn sounds NOW and the close runs from zero", () => {
+    configureSafeCircle({ delaySeconds: 60, closeSeconds: 1, finalRadius: 60 });
+    const sim = armed();
+    // Keep both alive and central so nothing ends the round under us.
+    run(sim, 5 + CALL_THE_TIDE.minFightSeconds + 0.1);
+    for (const p of [sim.state.players[0]!, sim.state.players[1]!]) {
+      p.mover.pos.x = 256;
+      p.mover.pos.y = 256;
+    }
+    const events = runWith(sim, 0.2, pressing(0, 0));
+    expect(events.filter((e) => e.type === "cast" && e.ability === "call-the-tide")).toHaveLength(1);
+    const starts = events.filter((e): e is Extract<ArenaEvent, { type: "sandsStart" }> => e.type === "sandsStart");
+    expect(starts).toHaveLength(1);
+    expect(starts[0]!.callerId).toBe(0); // the banner names the caller
+    expect(sim.state.round.sands).not.toBeNull();
+    expect(sandsProgress(sim.state.round)).toBeLessThan(0.3); // fresh roll, not the fuse's clock
+    expect(sim.state.players[0]!.slots[0]!.chargesLeft).toBe(0);
+    // A second press while the tide is in: nothing.
+    const again = runWith(sim, 0.2, pressing(0, 0));
+    expect(again.some((e) => e.type === "cast")).toBe(false);
+  });
+
+  test("never in the range", () => {
+    configureSafeCircle({ delaySeconds: 60 });
+    const sim = createSim(makeZone(), 1, 1, true);
+    addPlayer(sim, "alice", 1);
+    addPlayer(sim, "bob", 2);
+    setPlayerWeapon(sim, 0, "blade");
+    setPlayerWeapon(sim, 1, "blade");
+    setPlayerAbilities(sim, 0, ["call-the-tide", "dash"]);
+    setPlayerAbilities(sim, 1, ["dash", "tremor"]);
+    expect(startMatch(sim, [])).toBe(true);
+    run(sim, 5 + CALL_THE_TIDE.minFightSeconds + 0.1);
+    const events = runWith(sim, 0.5, pressing(0, 0));
+    expect(events.some((e) => e.type === "sandsStart")).toBe(false);
+    expect(sim.state.round.sands).toBeNull();
   });
 });

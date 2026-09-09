@@ -8,8 +8,10 @@ import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type Anno
 import { QueuePill } from "../components/QueueContext";
 import { IconDock } from "../components/IconDock";
 import { devFlags } from "../dev";
-import { devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
+import { devResetDeeds, devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
+import { forgetCelebratedDeeds } from "../deeds/celebrated";
 import { setEntitlements } from "../deeds/entitlements";
+import { DevDeedPicker } from "./DevDeedPicker";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import type { RankedResultRow } from "../net/connection";
 import { DUST_EFFECT } from "./dustStorm";
@@ -366,6 +368,7 @@ export const HomeScreen = ({
   const [announcer, setAnnouncer] = useState<AnnouncerPackId>("default");
   // Full post-match ceremony on fake data — see REHEARSAL_ROW above.
   const [deedRehearsal, setDeedRehearsal] = useState(false);
+  const [deedPicker, setDeedPicker] = useState(false);
   useEffect(() => {
     void loadAnnouncerPack().then(setAnnouncer);
   }, []);
@@ -649,8 +652,30 @@ export const HomeScreen = ({
           >
             <Text style={styles.devButtonText}>RESET PURCHASES</Text>
           </Pressable>
+          {/* Grant any deed (rewards included) / forget them all — dev API
+              only (STORE_DEV_TOOLS=1), bits-dev-menu.md § deeds. The Deeds
+              screen replays the ceremony for whatever was granted. */}
+          <Pressable onPress={withTap("uiTap", () => setDeedPicker(true))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>GRANT DEED ▸</Text>
+          </Pressable>
+          <Pressable
+            onPress={withTap("uiTap", () => {
+              void (async () => {
+                const identity = await ensureIdentity();
+                if (!identity || !(await devResetDeeds(identity))) return;
+                await forgetCelebratedDeeds();
+                const me = await fetchAchievements(identity);
+                if (me) setEntitlements(me.entitlements.map((e) => e.itemId));
+              })();
+            })}
+            style={styles.devButton}
+          >
+            <Text style={styles.devButtonText}>RESET DEEDS</Text>
+          </Pressable>
         </View>
       )}
+
+      {deedPicker && <DevDeedPicker onClose={() => setDeedPicker(false)} />}
 
       {deedRehearsal && (
         <RankedCeremony

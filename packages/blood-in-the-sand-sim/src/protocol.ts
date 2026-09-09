@@ -286,8 +286,20 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * `RoomListing` gains `brawl` so the directory can badge the mode. Bump: a
  * v31 client seated in a Brawl room would render a two-team scoreboard over
  * a six-way fight and misread the lobby entirely.
+ * v33 (2026-09-09): CALL THE TIDE (bits-sands-deeds.md) — the first
+ * DEED-gated ability id, `call-the-tide` (earned by the Tidecaller
+ * capstone, never sold): the Blood Tide rises on cast. Same-shape wire —
+ * the id rides the existing slot/cast fields. Additive deed signals ride
+ * events too: `hit.tide`, `sandsStart.inside`, the `sandsShove` event
+ * (old clients skip unknowns). Bump: the new-ability rule — a v32 client
+ * can't index the id off a slot snapshot (the trident precedent).
+ * Same day, NO bump: skirmish deeds (bits-skirmish-deeds.md) — `token?` on
+ * createRoom/joinRoom (the reverted 2026-08-08 shape, reinstated now that
+ * the skirmish board is sealed and pays nothing material; see the doc for
+ * why both original objections hold). `deedUnlocks` may now follow a
+ * skirmish matchEnd too, carrying that match's server-minted id.
  */
-export const PROTOCOL_VERSION = 32;
+export const PROTOCOL_VERSION = 33;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -310,12 +322,16 @@ export type ClientMsg =
   /** `teamSize` 1–4 (the host's 1v1/2v2/3v3/4v4 pick) → 2×N seats; absent or
    * off-menu falls back to 1v1 (sanitizeTeamSize). `brawl` (v32) makes the
    * room a free-for-all instead — shape (6 teams × 1), `teamSize` ignored. */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string }
+  /** `token?` (2026-09-09, bits-skirmish-deeds.md): the persistence bearer
+   * secret, OPTIONAL and additive (no bump) — resolved server-side into the
+   * seat's account so skirmish deeds can be credited and the worn title
+   * verified. Absent = plays as before, earns nothing. Never a claimed id. */
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string; token?: string }
   /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
    * secret the last `welcome` for this room carried. Present and matching a
    * disconnected seat, that exact seat is reclaimed — name, team, body.
    * Absent (a fresh join), only a free lobby seat will do. */
-  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; seatToken?: string }
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; seatToken?: string; token?: string }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }

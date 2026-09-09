@@ -56,13 +56,40 @@ export const COUNTERS = {
   doubleKills: "double_kills",
   clutchRounds: "clutch_rounds",
   revengeKills: "revenge_kills",
+  // ── The Blood Tide (bits-sands-deeds.md) ──
+  /** Rounds in which the tide rose — roots the chapter. */
+  sandsRounds: "sands_rounds",
+  /** Killing blows landed after the tide rose — the chapter's chain. */
+  sandsKills: "sands_kills",
+  // ── Skirmish (bits-skirmish-deeds.md) ──
+  /** Every skirmish counter lives under this prefix, and ONLY skirmish
+   * summaries write under it — the namespace is what keeps every board's
+   * `accepts` gate sound without exempting milestones (the crossing trap,
+   * achievements.md § M4 retired): a ranked match never moves a skirmish
+   * counter and a skirmish match never moves a ranked one. Test-enforced. */
+  skirmishMatches: "skirmish:matches",
+  /** Brawl rooms only — structurally zero in every team-shaped room. */
+  skirmishBrawlMatches: "skirmish:brawl_matches",
+  /** Adapter-written from the companions table: the most matches shared
+   * with any one other account (the Regulars chain). */
+  skirmishCompanionBest: "skirmish:companion_best",
 } as const;
+
+export const SKIRMISH_COUNTER_PREFIX = "skirmish:";
+
+/** The skirmish namespace's deltas — nothing ranked, ever. */
+const skirmishDeltas = (summary: MatchSummary): Record<string, number> => {
+  const deltas: Record<string, number> = { [COUNTERS.skirmishMatches]: 1 };
+  if (summary.teamCount > 2) deltas[COUNTERS.skirmishBrawlMatches] = 1;
+  return deltas;
+};
 
 /** Zero-valued deltas are omitted — no point writing rows for them. */
 export const counterDeltas = (summary: MatchSummary, playerId: number): Record<string, number> => {
   const stats = summary.stats[playerId];
   const player = summary.players.find((p) => p.id === playerId);
   if (!stats || !player) return {};
+  if (!summary.ranked) return skirmishDeltas(summary);
   const deltas: Record<string, number> = { [COUNTERS.rankedMatches]: 1 };
   const won = wonMatch(summary, playerId);
   if (won) deltas[COUNTERS.rankedWins] = 1;
@@ -74,6 +101,8 @@ export const counterDeltas = (summary: MatchSummary, playerId: number): Record<s
   if (stats.doubleKills > 0) deltas[COUNTERS.doubleKills] = stats.doubleKills;
   if (stats.clutchRounds > 0) deltas[COUNTERS.clutchRounds] = stats.clutchRounds;
   if (stats.revengeKills > 0) deltas[COUNTERS.revengeKills] = stats.revengeKills;
+  if (stats.tideRounds > 0) deltas[COUNTERS.sandsRounds] = stats.tideRounds;
+  if (stats.tideKills > 0) deltas[COUNTERS.sandsKills] = stats.tideKills;
   if (stats.kills > 0) deltas[COUNTERS.killingBlows] = stats.kills;
   if (stats.damageDealt > 0) deltas[COUNTERS.damageDealt] = stats.damageDealt;
   // Wave 2: healing credits its SOURCE (heal events carry casterId) — a

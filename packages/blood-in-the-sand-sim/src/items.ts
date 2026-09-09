@@ -25,7 +25,7 @@ import type { AbilityId, WeaponId } from "./config";
 
 /** Achievement-granted secrets (bits-secret-items.md). */
 export const DEED_WEAPONS: ReadonlySet<WeaponId> = new Set<WeaponId>(["trident"]);
-export const DEED_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>([]);
+export const DEED_ABILITIES: ReadonlySet<AbilityId> = new Set<AbilityId>(["call-the-tide"]);
 
 /** Signet-purchasable store items (bits-store.md) — stocked by the pre-launch
  * content drops (bits-store-arms.md); a roster id lives in exactly one gate
@@ -88,6 +88,7 @@ export const ITEM_NAMES: Record<string, string> = {
   "ability:sinkhole": "Sinkhole",
   "ability:tar-pit": "Tar Pit",
   "ability:titans-draught": "Titan's Draught",
+  "ability:call-the-tide": "Call the Tide",
 };
 
 /** Display name for an entitlement itemId, with the legacy kebab fallback

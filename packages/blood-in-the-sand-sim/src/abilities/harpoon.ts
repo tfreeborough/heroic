@@ -14,7 +14,7 @@ import type { ArenaEvent } from "../events";
 import type { ArenaSim } from "../sim";
 import { slotOf, type AbilityRuntime, type ArenaPlayer } from "../state";
 import { dashInvulnerable, isDashing } from "./dash";
-import { applyFixedHit, killPlayer } from "./damage";
+import { applyFixedHit, killPlayer, markShoved } from "./damage";
 import { knockbackImmune, mirrorGuardActive } from "./statuses";
 import { targetView } from "./targets";
 
@@ -167,6 +167,7 @@ export const stepHarpoonReels = (
     const toAnchor = normalize(sub(anchor.mover.pos, dragged.mover.pos));
     dragged.mover.vel.x = toAnchor.x * HARPOON.reelSpeed;
     dragged.mover.vel.y = toAnchor.y * HARPOON.reelSpeed;
+    markShoved(dragged, anchor.id); // the reel is a shove (Undertow credit)
     // The anchor roots only when they're the one doing the pulling.
     if (!slot.reelReversed) {
       anchor.mover.vel.x = 0;

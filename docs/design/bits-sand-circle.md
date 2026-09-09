@@ -16,6 +16,15 @@ is a swirling blood tide that damages anyone standing in it. Fight, or bleed.
 It reads instantly to anyone who has seen a battle royale — and a wall of
 churning blood fits this game better than a blue force field ever would.
 
+## Naming (decided 2026-09-09)
+
+Players never hear "sands" or "circle". The thing is **the Blood Tide** —
+in banners, deed names and descriptions, codex copy, the Primer, and title
+announcements. Nobody "drowns": they are *taken by the Blood Tide* or *die
+to the Blood Tide*. "The Closing Sands" and every `sands*` identifier stay
+as the INTERNAL name (code, docs, wire) — no rename churn on protocol
+fields.
+
 ## The rules
 
 - **Per round, not per match.** Every round arms its own circle; the round
@@ -56,7 +65,7 @@ churning blood fits this game better than a blue force field ever would.
 One additive event, `{ type: "sandsStart", cx, cy }`, fired the tick the circle
 rolls:
 
-- **Banner**: the kill-announcement banner shows **THE SANDS CLOSE IN** on
+- **Banner**: the kill-announcement banner shows **THE BLOOD TIDE RISES** on
   every client.
 - **Sound**: catalogue event `sandsClose` → clip `sands_close_1` (owed from the
   Forge: a deep war-horn over a rising wet churn — dread, not a jump scare;
@@ -85,9 +94,9 @@ orbits** — no clean circle may survive anywhere, and all motion points AT the
 player's space (orbiting motion is aura language).*
 
 1. **The blood (always, ~free).** The outside tinted in the floor-blood
-   palette — wet arterial at the shore, congealing near-black past ~130px
-   (deeper = deadlier at a glance) — as two `clipPath(Difference)` + rect
-   fills. The boundary is a *lapping shoreline*: one 48-vertex wavy path per
+   palette — wet arterial at the shore, congealing near-black past ~90px
+   (deeper = deadlier at a glance) — as two even-odd path fills (viewport
+   rect minus shoreline / minus circle; v8 — never clips). The boundary is a *lapping shoreline*: one 48-vertex wavy path per
    frame (offscreen-arrow scale, nowhere near a crack web) that doubles as
    the tint's clip and the stroked, pulsing arterial edge. Its wobble sits
    strictly OUTWARD of the honest damage radius, so the safe sand is never
@@ -139,15 +148,79 @@ edge element. Counts also trimmed: currents 26→16, streaks 34→22, flecks
 22→14, foam 14→9, shoreline verts 72→56. The tide is animated texture, not
 tracked geometry — 25Hz reads identically. Rule going forward: nothing in the
 tide may build paths per rendered frame.*
+
+*V8 — the FLAT-LIQUID tide (2026-09-09, players reported a hard frame drop
+the moment the tide enters, even after v7). Root cause: the v7 picture cache
+only saved JS *recording* time — the GPU still replays every op in the
+picture each frame, and layer 1's two `clipPath(Difference, antiAlias)`
+calls (the 56-vertex shoreline and the r+90 circle) under full-viewport rect
+fills were the wall. A non-rect anti-aliased path clip makes Skia rasterise
+a viewport-sized coverage MASK and sample it for the fill — every frame, at
+device resolution. The blood is now ONE even-odd filled path (viewport rect
++ shoreline contour) and the deep band the same with a circle: plain path
+draws through the tessellating renderer, no clip stack, no mask; the blood
+fill is non-antialiased (the stroked shoreline hides its edge). Layer 2 was
+cut to the bone: boil flecks, foam breaks and crest-slam spray are GONE;
+8 current arcs drawn with `canvas.drawArc` (no path allocation at all) and
+12 inward streaks (`drawLine`) keep the maelstrom read; the pulsing
+shoreline stroke keeps "no clean circle anywhere". A view wholly out in the
+blood (past the widest crest) draws two plain rects and no shoreline. Rule
+going forward, joining v7's: nothing in the tide may CLIP — a path clip
+under a fill is a per-frame mask; subtract shapes with even-odd fills.
+Sim side, same day: the bots' flow field for the tide centre re-flooded the
+whole arena every 6 resolves although the centre never moves (`nav.ts`
+staleness backstop) — a goal that has not moved at all now never
+re-sweeps, which also covers planted fonts and mines.*
+
+*V8.1 (2026-09-09, Tom: "really choppy until it gets to its smallest
+size"): the ring is ~2500px when it rolls, so 48 fixed verts were ~330px
+chords — a visible polygon — and the wave lobes were authored in ANGLE
+space, so at that size one "crest" was a kilometre-long swell sweeping at
+~1700px/s. Now (a) shoreline vertices are spent by arc length, `SANDS_EDGE_SEG`
+10px chords on the stretch the viewport can see (`visibleArc`, capped at
+`SANDS_EDGE_MAX` 720) and coarse every 7.5° off-screen where the contour
+only has to close the fill; (b) `sandsWob(a, t, r)` quantises each lobe
+count to a whole number per radius, anchored at `SANDS_WOB_REF_R` 200 (the
+final ring, exactly the v4 shape) and scales the phase speeds with it, so
+wavelength and crest speed are constant in PIXELS from roll to hold.*
+
+*V8.2, same day (Tom: "jumps around like electricity … a few smooth lines
+rather than linking hundreds"): two fixes. (1) v8.1 had also scaled the
+waves' TEMPORAL rate with the lobe count — wrong: crest speed is ω·r/n px/s
+and with n ∝ r a constant ω is already constant px/s — so at the opening
+radius the chop ran at ~90 rad/s and aliased on the 25Hz beat into jitter.
+Rates are constant again. (2) The visible shoreline is now sampled every
+~26px (cap 240) and emitted as cubic Béziers with Catmull-Rom tangents
+(`emitShorelineCurves`, samples in a reused Float32Array) — a few dozen
+smooth curves, shared tangents at every join, no corners. Off-screen arc
+stays straight coarse verts.*
+
+*V8.3, same day (Tom: "still quite fast … lines instantly snap … make it
+super smooth and slow moving, a smooth creeping line"): (1) the v8.1 lobe
+ROUNDING was the snap — every time the shrinking radius crossed a rounding
+boundary the whole pattern re-phased at once; `sandsLobe` now crossfades
+between the two neighbouring whole lobe counts by the fractional part, so
+the count hands over as a slow amplitude beat, never a jump. (2) Curve
+samples sit on a WORLD-anchored angular grid (multiples of `da` from angle
+0) instead of the viewport's edges, so camera drift never re-samples the
+shape — the curve moves only because the waves move. (3) Every rate cut
+~4×: trains 0.7 / −1.0 rad/s (a crest creeps ~45px/s at any radius), chop
+1.5 rad/s with the 21-lobe term dropped, shoreline pulse 0.5Hz, current
+arcs ~9°/s, streaks ~2.5× slower. Sample spacing 22px. V8.4 ("a touch
+slower"): everything ~30% slower again — trains 0.5 / −0.7, chop 1.0,
+pulse 0.35Hz, arcs ~6.5°/s, streaks 0.18 base (crest ≈ 33px/s).*
 3. **In the blood (local, bounded).** When the LOCAL player stands outside the
    ring: a red radial-gradient vignette in the post-camera screen-space pass.
    At most one instance, ever.
 
-**Constraints (hard):** no blur/mask filters, no per-frame vector webs (the
-cracks-v1 mistake — the one 48-vertex shoreline path is the sanctioned
-exception), no full-screen RuntimeEffect shaders. Streak count / shoreline
-vertices / opacities are on-device tuning knobs; the two tint fills alone are
-an acceptable shipping floor.
+**Constraints (hard):** no blur/mask filters, no path CLIPS (v8 — an AA
+path clip under a fill is a per-frame coverage mask; subtract with even-odd
+fills), no per-frame vector webs (the cracks-v1 mistake — the one 48-vertex
+shoreline path is the sanctioned exception), no full-screen RuntimeEffect
+shaders. Streak count / current count / shoreline vertices / opacities are
+on-device tuning knobs (`SANDS_STREAKS`, `SANDS_CURRENTS`, `SANDS_EDGE_PTS`);
+the two tint fills + the stroked shoreline alone are an acceptable shipping
+floor.
 
 Sim cost: one distance check per player per tick plus a tick accumulator —
 noise next to `stepDeployables`.

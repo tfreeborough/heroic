@@ -32,6 +32,18 @@ const load = async (): Promise<Set<string>> => {
 
 export const loadCelebratedDeeds = (): Promise<Set<string>> => load();
 
+/** Dev only (the deeds reset, bits-dev-menu.md): forget every ceremony so
+ * a re-granted deed replays its card on the Deeds screen. */
+export const forgetCelebratedDeeds = async (): Promise<void> => {
+  const set = await load();
+  set.clear();
+  try {
+    await AsyncStorage.removeItem(KEY);
+  } catch {
+    // survivable — the in-memory set is already clear
+  }
+};
+
 /** Fire-and-forget — callers are mid-ceremony and never wait on storage. */
 export const markDeedsCelebrated = (ids: readonly string[]): void => {
   if (ids.length === 0) return;

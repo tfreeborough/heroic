@@ -38,6 +38,17 @@ const feat = (id: string, test: (s: Summary, p: number) => boolean): Achievement
   trigger: { kind: "feat", test },
 });
 
+const capstone = (id: string, requires: string[]): AchievementDef<Summary> => ({
+  id,
+  board: "ranked",
+  title: id,
+  description: id,
+  icon: id,
+  parent: null,
+  pos: { x: 0, y: 0 },
+  trigger: { kind: "capstone", requires },
+});
+
 const rankedSummary: Summary = { ranked: true, healed: { 0: 250, 1: 40 } };
 
 describe("evaluate", () => {
@@ -101,6 +112,35 @@ describe("evaluate", () => {
       unlocked: new Set(["wins-5"]),
     });
     expect(fired).toHaveLength(0);
+  });
+});
+
+describe("capstone", () => {
+  const defs = [
+    milestone("wins-5", "wins", 5),
+    feat("healer", (s, p) => (s.healed[p] ?? 0) >= 200),
+    capstone("crown", ["wins-5", "healer"]),
+    capstone("crown-of-crowns", ["crown"]),
+  ];
+  const base = { defs, boards: BOARDS, summary: rankedSummary, playerKey: 0 };
+
+  test("never fires with a requisite missing", () => {
+    // wins-5 already held, healer fires now, but crown wants both — and it
+    // gets both → fires. With wins short, it must not.
+    const short = evaluate({ ...base, before: { wins: 1 }, after: { wins: 2 }, unlocked: new Set() });
+    expect(short.map((d) => d.id)).toEqual(["healer"]);
+  });
+
+  test("lands in the SAME evaluation as its last requisite, and chains", () => {
+    const fired = evaluate({ ...base, before: { wins: 4 }, after: { wins: 5 }, unlocked: new Set() });
+    expect(fired.map((d) => d.id)).toEqual(["wins-5", "healer", "crown", "crown-of-crowns"]);
+  });
+
+  test("fires from already-held requisites, and never re-fires", () => {
+    const held = new Set(["wins-5", "healer"]);
+    expect(evaluate({ ...base, before: {}, after: {}, unlocked: held, playerKey: 1 }).map((d) => d.id)).toEqual(["crown", "crown-of-crowns"]);
+    const all = new Set(["wins-5", "healer", "crown", "crown-of-crowns"]);
+    expect(evaluate({ ...base, before: {}, after: {}, unlocked: all, playerKey: 1 })).toHaveLength(0);
   });
 });
 

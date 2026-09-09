@@ -1,6 +1,7 @@
-# The Closing Sands — deeds chapter + Call the Tide
+# The Blood Tide — deeds chapter + Call the Tide
 
-*Designed 2026-09-04 (Tom + Claude). Status: DESIGNED, not built.*
+*Designed 2026-09-04 (Tom + Claude). Status: BUILT 2026-09-09, protocol v33 —
+forge art/SFX + on-device pass + coordinated deploy owed (see § Build notes).*
 
 Companion to [bits-sand-circle.md](bits-sand-circle.md) (the mechanic) and
 [achievements.md](achievements.md) (the deed engine). One new chapter on the
@@ -16,26 +17,28 @@ reward.
 
 ## Deeds
 
-Chapter **The Closing Sands** (new `ACHIEVEMENT_CHAPTERS` entry, sits after
-The Pit). Ranked-only like every deed. Titles are Tom's to rename.
+Chapter **The Blood Tide** (new `ACHIEVEMENT_CHAPTERS` entry, sits after
+The Pit). Naming rule (bits-sand-circle.md § naming, 2026-09-09): every
+player-facing string says **the Blood Tide**, never sands/circle/drown;
+`sands*` stays the internal name. Ranked-only like every deed. Titles are Tom's to rename.
 
 ### Root
 
 | Deed | Criteria | Cost |
 |---|---|---|
-| **The Horn Sounds** | Play a ranked round in which the sands roll. Chapter entry node; no reward. | free (`sands_rounds` ≥ 1) |
+| **The Horn Sounds** | Play a ranked round in which the Blood Tide rises. Chapter entry node; no reward. | free (`sands_rounds` ≥ 1) |
 
 ### The chain — kills after the horn
 
-Counter `sands_kills`: killing blows you land in a round AFTER the sands
-rolled (normal kill credit; sands ticks themselves credit no one). Chosen over
+Counter `sands_kills`: killing blows you land in a round AFTER the Blood
+Tide rose (normal kill credit; sands ticks themselves credit no one). Chosen over
 "seconds in blood" because rewarding time in blood teaches the wrong habit.
 
 | Tier | Threshold | Reward |
 |---|---|---|
 | **High Tide** | 10 | — |
-| **Spring Tide** | 60 | title |
-| **Red Deluge** | 250 | title (capstone requisite) |
+| **Spring Tide** | 60 | — |
+| **Red Deluge** | 250 | — (capstone requisite) |
 
 Sands rounds are a minority of rounds, so 250 is a long climb by design.
 Tune in place per the 2026-08-25 threshold precedent.
@@ -44,32 +47,41 @@ Tune in place per the 2026-08-25 threshold precedent.
 
 | Deed | Criteria | Cost |
 |---|---|---|
-| **Baptism** | Win a round in which YOU struck the killing blow on the last enemy while standing in the blood. | T2: `hit.inBlood` |
-| **Waist Deep** | Win a round in which you took ≥ 20 blood ticks (10 s in the tide). | free |
-| **Let the Sands Decide** | Win a round in which the last enemy died to the sands and you took zero blood ticks that round. | free |
-| **Quicksand** | Win a match in which every round was decided in under 20 s of fight time. | free (`fightStartTick`) |
+| **Baptism** | Win a round in which YOU struck the killing blow on the last enemy while standing in the Blood Tide. | T2: `hit.inBlood` |
+| **Waist Deep** | Win a round in which you took ≥ 20 blood ticks (10 s in the Blood Tide). | free |
+| **Let the Tide Decide** | Win a round in which the last enemy was taken by the Blood Tide and you took zero blood ticks that round. | free |
+| **Quicksand** | Win a match in which every round was decided in under **10 s** of fight time. Tom, 2026-09-09: 10 s is the bar — he has seen exactly one match end that fast ("everything getting fired at once") and it felt like a one-off, which is the right rarity for a feat. | free (`fightStartTick`) |
 | **The Last Grain** | Win a round with a killing blow landed after the circle has fully closed (progress = 1). | T2: `hit.sandsP` |
-| **Undertow** | Displace an enemy (Harpoon, Sinkhole, Warding Shout) from safe sand into the blood, and they die within 4 s. | T2: `sandsShove` event |
+| **Undertow** | Put an enemy over the shoreline into the Blood Tide — any displacement: Harpoon reel, Sinkhole drag, Warding Shout / Sandtrap / shell knockback, even a hammer or bow shove — and they die there within 4 s, to the blood or to you. | T2: `sandsShove` event |
 
-### Jokes and luck (title only, NEVER capstone requisites, pay no Glory/items)
+### Jokes and luck (NEVER capstone requisites, pay no Glory/items)
 
 | Deed | Criteria | Cost |
 |---|---|---|
-| **Eye of the Storm** | Be standing inside the final circle's footprint at the instant the sands roll. Pure luck. | T2: `sandsStart.inside` |
-| **Pearl Diver** | Drown three times in one match. | free |
-| **Watching the Sand Fall** | Win a match of ≥ 3 rounds in which EVERY round reached the sands. Deliberately advertises the stalling loadout — hence pays nothing. | free |
+| **Dry Feet** | Be standing inside the final circle's footprint at the instant the Blood Tide rises. Pure luck. The chapter's one joke title. (Was "Eye of the Storm" — the Sandstorm cast chain already wears that title.) | T2: `sandsStart.inside` |
+| **Taken by the Tide** | Die to the Blood Tide three times in one match. | free |
+| **Watching the Sand Fall** | Win a match of ≥ 3 rounds in which EVERY round saw the Blood Tide rise. Deliberately advertises the stalling loadout — hence pays nothing. | free |
 
 ### Capstone
 
 | Deed | Requires | Reward |
 |---|---|---|
-| **Tidecaller** | Baptism · Waist Deep · Let the Sands Decide · Quicksand · The Last Grain · Undertow · Red Deluge | title + `ability:call-the-tide` |
+| **Tidecaller** | Baptism · Waist Deep · Let the Tide Decide · Quicksand · The Last Grain · Undertow · Red Deluge | title + `ability:call-the-tide` |
 
 Why this beats one big threshold: the six feats pull in opposite directions
 (Quicksand wants fast rounds, The Last Grain wants the full distance;
-Undertow uses displacement against the ring, Let the Sands Decide denies the
+Undertow uses displacement against the ring, Let the Tide Decide denies the
 fight entirely). A Tidecaller has demonstrably played the circle every way
 it can be played — exactly who should own the clock.
+
+## Titles — two, not six
+
+Tom, 2026-09-09: don't oversaturate titles (the boards already pay 37). This
+chapter pays exactly TWO: **Tidecaller** (the flex — the only title that
+proves the whole chapter) and **Dry Feet** (the joke; luck deeds are
+where joke titles live). Every other deed's unlock is its own reward; the
+chain tiers and skill feats pay nothing until the economy pass sets Glory.
+Rule of thumb for future chapters: one earned title + at most one joke.
 
 ## Engine change — the capstone trigger
 
@@ -89,13 +101,13 @@ same-match. Map: parent = Red Deluge (silhouette until the chain tops out).
 
 Free = accumulator only (`summary.ts`), no sim change:
 1. Recognise `SANDS_ATTACKER_ID` hits → per-round `bloodTicks`, and deaths
-   whose last hit was the sands → `drownings`. Also fixes the silent drop
+   whose last hit was the sands → `tideDeaths`. Also fixes the silent drop
    where sands damage taken is indistinguishable from bleed.
 2. Ingest `sandsStart` → round flag `sandsLive` (+ counter `sands_rounds`);
    kills while live → `sands_kills`.
 3. Round duration = `roundEnd` tick − `fightStartTick` → `longestRoundSec`.
 4. Round-scoped win flags computed at `roundEnd` into per-player counts:
-   `waistDeepWins`, `sandsDecidedWins`, plus `drownings` for Pearl Diver.
+   `waistDeepWins`, `tideDecidedWins`, plus `tideDeaths` for Taken by the Tide.
 
 T2 (small sim additions, no protocol bump — events are additive):
 5. `hit` gains `inBlood?: { attacker: boolean; victim: boolean }` and
@@ -110,7 +122,7 @@ T2 (small sim additions, no protocol bump — events are additive):
    Undertow to `byId`. The one real piece of sim work here.
 
 Dependency: the doc's future "credit the last real attacker within ~5 s"
-would change Let the Sands Decide (the drowning would become your kill).
+would change Let the Tide Decide (the tide death would become your kill).
 If that ships, keep the deed's test on the ORIGINAL attacker id (−1 on the
 event) — add the credited id as a separate field rather than overwriting.
 
@@ -119,9 +131,9 @@ event) — add the credited id as a separate field rather than overwriting.
 | | |
 |---|---|
 | Slot | ability, 1 charge per round, no cooldown |
-| Cast | if no circle is live: the sands roll NOW at a fresh random centre (same `rollSands` path, same fairness draws). Nothing else. |
-| Guards | not castable while a circle is live; not castable before **10 s** of fight time (Tom to confirm) so a round never opens with the horn |
-| Tell | fires the normal `cast` event → enemies learn you hold it the moment you use it (cast-flash intel rule) |
+| Cast | if no circle is live: the Blood Tide rises NOW at a fresh random centre (same `rollSands` path, same fairness draws). Nothing else. |
+| Guards | not castable while a circle is live; not castable before **10 s** of fight time (decided 2026-09-09) so a round never opens with the horn — long enough for an exchange or two, short enough that the slot still buys ~35 s of tempo |
+| Tell | fires the normal `cast` event → enemies learn you hold it the moment you use it (cast-flash intel rule). No cast bank: the HORN is the cast sound (Tom, 2026-09-09), and the banner reads **"<name> called forth / THE BLOOD TIDE / <worn title>"** in the kill-call grammar — `sandsStart.callerId` carries who. |
 | Gate | `DEED_ABILITIES = { "call-the-tide" }`; entitlement `ability:call-the-tide`; hidden everywhere until owned; bots never draft it |
 | Symmetry | affects all bodies equally — in 2v2 a coordination tool for the ready team, a liability for the other |
 
@@ -136,10 +148,56 @@ Balance safety valves if it proves too strong: raise the minimum cast time;
 make the cast a 1 s interruptible channel; or have the summoned circle close
 faster but start at the caster's position (telegraphed, punishable).
 
+## Decided 2026-09-09
+
+- Call the Tide minimum cast time: **10 s** of fight time.
+- Quicksand bar: **10 s** per round, from Tom's own play rather than a data
+  pull. Still worth a one-line server log of `roundEnd` fight durations when
+  building — a free sanity check against the first-win-audit rule (a deed
+  that pops on every fast first win is a bug), not a blocker.
+
+## Build notes (2026-09-09)
+
+- **Engine**: `{ kind: "capstone", requires }` trigger, second pass over
+  `unlocked ∪ fresh`, loops so capstones may require capstones
+  (`packages/achievements/src/evaluate.ts`).
+- **Sim signals**: `hit.tide {attackerOut, victimOut, p}` stamped in
+  `stepSafeCircle` on every real hit while a circle is live;
+  `sandsStart.inside`; `sandsShove {byId, victimId}` from a per-player
+  `shovedBy/shoveLeft` stamp (`markShoved`, written by `applyImpulse` — so
+  every knockback — plus the harpoon reel and the sinkhole drag; window
+  `SANDS_SHOVE_WINDOW` = 1 s) + a `sandsOutside` edge detector. Reset on
+  round reset.
+- **Accumulator** (`summary.ts`): tideRounds, roundsPlayed, tideTicks,
+  tideDeaths, tideKills, baptisms, waistDeepWins, tideDecidedWins,
+  lastGrainWins, undertows, eyeOfStorm, longestRoundSec. Counters
+  `sands_rounds`, `sands_kills`. `WAIST_DEEP_TICKS` = 20,
+  `UNDERTOW_WINDOW_SEC` = 4.
+- **Defs**: chapter "The Blood Tide", south cluster y ≥ 2300; ids
+  the-horn-sounds, tide-kills-{10,60,250}, baptism, waist-deep,
+  let-the-tide-decide, quicksand, the-last-grain, undertow, dry-feet,
+  taken-by-the-tide, watching-the-sand-fall, tidecaller. Tests pin: jokes
+  never requisites, two titles, first tideless win pops nothing.
+- **Call the Tide**: `call-the-tide` (offensive, 1 charge, cooldown 30 —
+  moot); `CALL_THE_TIDE.minFightSeconds` = 10; `tideCallable` gate at press
+  time (harpoon rule: gated press = nothing, charge kept); `summonSands`
+  sets `round.elapsed` to the delay and rolls via the shared `rollSands`,
+  so radius/progress start from zero. `DEED_ABILITIES` = {call-the-tide};
+  excluded from FREE_ABILITY_IDS; cast chain casts-call-the-tide-{15,75,300}
+  at offensive row 5 (later rows renumbered, chapter slices 18/33).
+  Protocol **v33**.
+- **Client**: codex entry, showcase script, icon placeholder (sandstorm
+  swirl copied to call-the-tide.png), NO cast bank (the horn is the cast;
+  `clips: []` by decision), caller banner, 12 deed icons registered null
+  (bare medallion).
+
+**Owed**: forge 12 deed emblems + the horn icon (briefs in styleBible
+DEED_SUBJECTS / ICON_SUBJECTS) + `sands_close_1` itself (still unforged);
+coordinated server+client deploy (v33, the trident precedent); on-device
+pass (does the horn read when YOU called it? the codex copy; the War Table
+hiding the spell until earned); a server log line of `roundEnd` fight
+durations as the Quicksand sanity check.
+
 ## Open questions
 
-- Minimum cast time for Call the Tide (10 s proposed).
-- Quicksand's 20 s bar needs real data on round lengths (server log
-  `roundEnd` durations for a week) — the first-win-audit rule: a deed that
-  pops on every fast first win is a bug.
 - Do Waist Deep / Baptism get Glory once the economy pass sets amounts?

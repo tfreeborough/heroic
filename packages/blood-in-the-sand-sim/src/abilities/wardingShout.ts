@@ -25,6 +25,6 @@ export const castWardingShout = (caster: ArenaPlayer, players: readonly ArenaPla
     } else if (away.x * fx + away.y * fy < Math.cos(WARDING_SHOUT.halfAngle)) {
       continue; // outside the cone — a shout has a direction; flanks are safe
     }
-    applyImpulse(e, away.x, away.y, WARDING_SHOUT.knockback);
+    applyImpulse(e, away.x, away.y, WARDING_SHOUT.knockback, caster.id);
   }
 };

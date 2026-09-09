@@ -14,6 +14,7 @@ import { applyTaunt, castDeployable } from "./deployables";
 import { fireHarpoon } from "./harpoon";
 import { inSandstorm, targetView, type TargetView } from "./targets";
 import { castWardingShout } from "./wardingShout";
+import { summonSands, tideCallable } from "../sands";
 
 export * from "./dash";
 export * from "./damage";
@@ -46,7 +47,12 @@ export const stepPlayerAbilities = (
     // No mark in chain range, no cast — Harpoon's rule: a gated press neither
     // fires nor burns the cooldown, the button simply does nothing.
     const mark = pressed && slot.id === "harpoon" ? harpoonMark(sim, p) : null;
-    const triggered = pressed && (slot.id !== "harpoon" || mark !== null);
+    // Call the Tide follows the harpoon rule: no tide can rise (one's
+    // already live, too early in the round, the range) → the press is
+    // nothing, charge kept (bits-sands-deeds.md).
+    const gated =
+      (slot.id === "harpoon" && mark === null) || (slot.id === "call-the-tide" && !tideCallable(sim));
+    const triggered = pressed && !gated;
 
     const step = stepAbility(slot.ability, ABILITIES[slot.id], dt, triggered);
     slot.ability = step.state;
@@ -121,6 +127,10 @@ export const stepPlayerAbilities = (
           castDeployable(sim.state, "tar", p);
           slot.dropX = p.mover.pos.x;
           slot.dropY = p.mover.pos.y;
+          break;
+        // The Blood Tide rises NOW — the deed-gated tempo spell.
+        case "call-the-tide":
+          summonSands(sim, p, players, events);
           break;
         // mirror-guard / ironhide / war-drums: the active phase IS the status.
         default:

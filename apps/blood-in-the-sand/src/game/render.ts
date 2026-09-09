@@ -9,6 +9,7 @@ import {
   BlendMode,
   ClipOp,
   createPicture,
+  FillType,
   FilterMode,
   matchFont,
   MipmapMode,
@@ -21,6 +22,7 @@ import {
   type SkCanvas,
   type SkImage,
   type SkPicture,
+  type SkRect,
   type SkSurface,
 } from "@shopify/react-native-skia";
 import { loadZone, tileSourceRect, TILESETS } from "@heroic/core";
@@ -1402,66 +1404,158 @@ const drawSandstormOverlays = (
 };
 
 // ── The Closing Sands (bits-sand-circle.md § rendering) ────────────────────
-// The perf contract, verbatim: layer 1 is one clip + one rect fill; layer 2 is
-// a fixed count of transform-placed blobs (position = closed-form function of
-// time, the sinkhole infall idiom — no particle state, nothing rebuilt per
-// frame), each culled to the viewport; layer 3 (the local vignette) lives in
-// the post-camera pass, at most one instance. No blur, no per-frame vector
-// webs, no runtime shaders.
+// V8 — the FLAT-LIQUID tide (production perf pass, 2026-09-09: players
+// reported a hard frame drop the moment the tide enters). The v7 picture
+// cache only ever saved JS *recording* time; the GPU still replayed every op
+// each frame, and two of those ops were the real wall: `clipPath(Difference,
+// antiAlias)` on a 56-vertex shoreline (and a circle) under a full-viewport
+// rect. A non-rect anti-aliased path clip makes Skia build a viewport-sized
+// coverage MASK and sample it for the fill — every frame, at device
+// resolution — the most expensive thing a mobile Skia canvas can be asked
+// to do short of a blur. The blood is now ONE even-odd filled path (viewport
+// rect minus the shoreline) — a plain path fill through the tessellating
+// renderer, no mask, no clip stack — and the deep band the same with a
+// circle. Everything else was cut to the bone: no boil flecks, no foam, no
+// crest-slam spray; a few current arcs (drawArc — no path allocation) and a
+// dozen inward streaks (drawLine) keep the maelstrom read, the pulsing
+// shoreline stroke keeps "no clean circle anywhere".
 // Palette straight off the floor-blood ramps (wet arterial rim / oxblood /
 // near-black clot), NOT ability-zone hues — the tide must read as the same
 // substance the kills spill. V2 after the first playtest (Tom's wife,
 // 2026-09-03): v1's orbiting discs + clean circle were the Blood Font's
-// visual grammar and read as a possible HEAL. Now: no clean geometry
+// visual grammar and read as a possible HEAL. So: no clean geometry
 // anywhere, a lapping liquid shoreline, and motion that rushes INWARD at
 // you — threat, never aura.
 const C_SANDS_TINT = Skia.Color("#470303");
 const C_SANDS_DEEP = Skia.Color("#1c0000");
 const C_SANDS_RING = Skia.Color("#c01414");
 const C_SANDS_STREAK = Skia.Color("#9e2016");
-const C_SANDS_SPRAY = Skia.Color("#d2352a");
-/** V3 dials ("a maelstrom the circle is barely holding back" — Tom,
- * 2026-09-03): all on-device tuning knobs; the two tint fills alone remain
- * the acceptable floor. Counts trimmed in the v7 production perf pass (Tom's
- * OnePlus 12 dropped frames in real matches). */
-const SANDS_STREAKS = 22;
-const SANDS_EDGE_PTS = 56;
-const SANDS_FLECKS = 14;
-// V6 (Tom binned the gore-blob sprites — "look kinda crap" — and picked pure
-// liquid): the body of the tide is CURRENTS, not objects. Long curved
-// current-lines sweeping on the maelstrom's handedness (the sandstorm's
-// animated-arc idiom at tide scale) plus short bright foam breaks riding the
-// fast water off the shoreline.
-const SANDS_CURRENTS = 16;
-const SANDS_FOAM = 9;
 const C_SANDS_CURRENT = Skia.Color("#5c0808");
+/** On-device tuning knobs (v8 floor). The two fills + the stroked shoreline
+ * alone remain the acceptable shipping floor; streaks and currents are the
+ * first things to zero if a device still struggles. */
+/** Shoreline SAMPLE spacing in world px along the VISIBLE arc (v8.1 — the
+ * old fixed 48 verts were ~330px chords at the opening radius, a visibly
+ * polygonal ring until the last few seconds). v8.2 (Tom: "a few smooth
+ * lines rather than linking hundreds"): samples are joined by cubic curves
+ * with Catmull-Rom tangents, so ~26px spacing is smooth and the finest chop
+ * (~60px wavelength) still gets 2+ samples. Off-screen arc gets coarse
+ * straight verts (SANDS_EDGE_COARSE rad) — it only has to close the fill's
+ * contour. SANDS_EDGE_MAX bounds the JS + tessellation cost at any zoom. */
+const SANDS_EDGE_SEG = 22;
+const SANDS_EDGE_COARSE = Math.PI / 24;
+const SANDS_EDGE_MAX = 240;
+/** The reference radius the wave shapes are authored at (the final ring).
+ * sandsWob quantises its lobe counts so every wavelength and crest speed
+ * stays constant in PIXELS as the ring shrinks — at 200px it is exactly the
+ * v4 shape; at the opening radius the same chop, not one huge swell. */
+const SANDS_WOB_REF_R = 200;
+const SANDS_STREAKS = 12;
+const SANDS_CURRENTS = 8;
+/** How far the deep near-black band sits past the shoreline. */
+const SANDS_DEEP_AT = 90;
+/** Widest a crest can rear (sandsWob's max) — the whole-view-in-blood test. */
+const SANDS_WOB_MAX = 34;
 
-// V7 — the tide picture cache (production perf pass, 2026-09-03): rebuilding
-// ~40 small paths inside recordArena EVERY rendered frame was the scar-cache
-// lesson repeated, and it showed as a real frame drop on Tom's OnePlus 12.
-// The tide is animated TEXTURE, not tracked geometry, so it re-records on a
-// 25Hz beat into its own world-space SkPicture (the scarLayer idiom) and
-// recordArena replays one op per frame. Culling inside the recording pads by
-// TIDE_PAD so camera drift between rebuilds (≤ ~15px at sprint speed) never
-// pops an element at the screen edge; the shrink itself moves ~1px per beat.
+// Dedicated paints: the blood fill is deliberately NON-antialiased — its
+// edge is hidden under the stroked shoreline, and a non-AA path fill is the
+// cheapest possible fill (no coverage pass). The stroke keeps AA.
+const tideFill = Skia.Paint();
+tideFill.setAntiAlias(false);
+const tideStroke = Skia.Paint();
+tideStroke.setStyle(PaintStyle.Stroke);
+tideStroke.setStrokeCap(StrokeCap.Round);
+
+// The tide picture cache (v7, kept): the tide is animated TEXTURE, not
+// tracked geometry, so it re-records on a 25Hz beat into its own world-space
+// SkPicture (the scarLayer idiom) and recordArena replays one op per frame.
+// Culling inside the recording pads by TIDE_PAD so camera drift between
+// rebuilds (≤ ~15px at sprint speed) never pops an element at the screen
+// edge; the shrink itself moves ~1px per beat.
 let tidePicture: SkPicture | null = null;
 let tideBuiltMs = 0;
 const TIDE_REBUILD_MS = 40;
 const TIDE_PAD = 50;
 
-/** The shoreline's outward displacement at ring angle `a` — the whole
- * "barely holding it back" read lives in this shape. Base sits TIGHT to the
- * honest radius (+3px, the held line) with fast 13-lobe chop riding it, and
- * two counter-travelling wave trains whose CUBED crests rear up to ~+35px
- * and slam along the barrier. Strictly ≥ ~0: the liquid never paints over
- * safe sand. */
-const sandsWob = (a: number, t: number): number => {
-  const w1 = Math.sin(a * 3 + t * 2.6);
-  const w2 = Math.sin(a * 5 - t * 3.9 + 1.7);
-  // V4 (Tom): the v3 chop made the whole line jitter — calmer baseline, the
-  // violence lives in the rearing crests, not a vibrating circle.
-  const chop = Math.sin(a * 13 + t * 7.3) * 1.0 + Math.sin(a * 21 - t * 9.1) * 0.5;
+/** One wave train with a CONTINUOUS lobe count: `c` lobes at the reference
+ * radius, scaling with `r` so its wavelength stays constant in px. The
+ * contour must close, so whole lobe counts are needed — v8.1 rounded and
+ * the whole pattern re-phased with a SNAP every time the shrinking radius
+ * crossed a boundary (Tom: "lines instantly snap"). v8.3 crossfades between
+ * the two neighbouring whole counts by the fractional part: no snap, ever,
+ * only a slow beat in amplitude as one count hands over to the next. */
+const sandsLobe = (a: number, t: number, r: number, c: number, rate: number, phase0: number): number => {
+  const k = (c * r) / SANDS_WOB_REF_R;
+  const n0 = Math.max(1, Math.floor(k));
+  const f = Math.min(1, Math.max(0, k - n0));
+  const s0 = Math.sin(a * n0 + t * rate + phase0);
+  if (f === 0) return s0;
+  const s1 = Math.sin(a * (n0 + 1) + t * rate + phase0);
+  return s0 + (s1 - s0) * f;
+};
+
+/** The shoreline's outward displacement at ring angle `a` for a ring of
+ * radius `r` — the whole "barely holding it back" read lives in this shape.
+ * Base sits TIGHT to the honest radius (+3px, the held line) with a light
+ * slow chop, and two counter-travelling wave trains whose CUBED crests rear
+ * up to ~+31px and creep along the barrier. v8.3 (Tom: "super smooth and
+ * slow moving, a smooth creeping line"): every rate cut ~4×, the fast
+ * 21-lobe chop dropped — a crest now creeps at ~45px/s at any radius.
+ * Strictly ≥ ~0: the liquid never paints over safe sand. Keep its maximum
+ * ≤ SANDS_WOB_MAX. */
+const sandsWob = (a: number, t: number, r: number): number => {
+  const w1 = sandsLobe(a, t, r, 3, 0.5, 0);
+  const w2 = sandsLobe(a, t, r, 5, -0.7, 1.7);
+  const chop = sandsLobe(a, t, r, 13, 1.0, 0.4) * 1.2;
   return 3.4 + chop + Math.max(0, w1) ** 3 * 17 + Math.max(0, w2) ** 3 * 11;
+};
+
+/** The angular span of the padded viewport as seen from the ring centre:
+ * `mid` ± `half`. Centre inside the rect → the full circle. Used to spend
+ * shoreline vertices only where the player can see them. */
+const visibleArc = (
+  cx: number,
+  cy: number,
+  viewL: number,
+  viewT: number,
+  viewR: number,
+  viewB: number,
+): { mid: number; half: number } => {
+  if (cx >= viewL && cx <= viewR && cy >= viewT && cy <= viewB) return { mid: 0, half: Math.PI };
+  const mid = Math.atan2((viewT + viewB) / 2 - cy, (viewL + viewR) / 2 - cx);
+  let half = 0;
+  for (const [x, y] of [[viewL, viewT], [viewR, viewT], [viewL, viewB], [viewR, viewB]] as const) {
+    let d = Math.atan2(y - cy, x - cx) - mid;
+    if (d > Math.PI) d -= Math.PI * 2;
+    else if (d < -Math.PI) d += Math.PI * 2;
+    half = Math.max(half, Math.abs(d));
+  }
+  return { mid, half };
+};
+
+/** Scratch sample buffers for the shoreline (x, y interleaved) — reused
+ * every rebuild, never reallocated. */
+const edgeSamples = new Float32Array((SANDS_EDGE_MAX + 2) * 2);
+
+/** Emit the visible shoreline as smooth cubic curves through `n` samples
+ * (Catmull-Rom tangents, so each curve meets its neighbours with a shared
+ * tangent — no corners). `closed` wraps the tangents round the loop (the
+ * full-circle case); otherwise the end tangents are clamped. */
+const emitShorelineCurves = (edge: ReturnType<typeof Skia.PathBuilder.Make>, n: number, closed: boolean): void => {
+  const P = edgeSamples;
+  const px = (i: number): number => P[(closed ? ((i % n) + n) % n : Math.min(n - 1, Math.max(0, i))) * 2]!;
+  const py = (i: number): number => P[(closed ? ((i % n) + n) % n : Math.min(n - 1, Math.max(0, i))) * 2 + 1]!;
+  edge.moveTo(px(0), py(0));
+  const segs = closed ? n : n - 1;
+  for (let i = 0; i < segs; i++) {
+    // Tangents = half the chord between each point's neighbours (Catmull-Rom,
+    // tension 0.5), scaled by 1/3 for the Bézier control points.
+    const t0x = (px(i + 1) - px(i - 1)) / 6;
+    const t0y = (py(i + 1) - py(i - 1)) / 6;
+    const t1x = (px(i + 2) - px(i)) / 6;
+    const t1y = (py(i + 2) - py(i)) / 6;
+    edge.cubicTo(px(i) + t0x, py(i) + t0y, px(i + 1) - t1x, py(i + 1) - t1y, px(i + 1), py(i + 1));
+  }
 };
 
 const drawClosingSands = (
@@ -1488,7 +1582,8 @@ const drawClosingSands = (
 };
 
 /** The tide itself, recorded in WORLD space on the cache's beat — never call
- * per frame (that was the v7 frame drop). */
+ * per frame (that was the v7 frame drop). Nothing in here may clip: a path
+ * clip is a per-frame coverage mask on the GPU (the v8 frame drop). */
 const recordTide = (
   canvas: SkCanvas,
   sands: SandsSnapshot,
@@ -1508,109 +1603,108 @@ const recordTide = (
     Math.min(Math.max(cx, viewL), viewR) - cx,
     Math.min(Math.max(cy, viewT), viewB) - cy,
   );
-
+  const viewRect = Skia.XYWHRect(viewL, viewT, viewR - viewL, viewB - viewT);
   const t = nowMs / 1000;
 
-  // The choppy shoreline: ONE closed path per frame (72 verbs — still the
-  // offscreen-arrow scale, nowhere near a crack web) doubles as the tint's
-  // clip AND the drawn barrier line, so no clean circle survives anywhere.
-  // sandsWob keeps every vertex OUTWARD of the honest damage radius: the
-  // crests rear and slam in the blood, the safe sand is never overpainted.
+  // The whole view is out in the blood (past the widest crest): two plain
+  // rects, no shoreline at all — the common case for a body caught far out.
+  if (nearDist > r + SANDS_WOB_MAX) {
+    tideFill.setColor(C_SANDS_TINT);
+    tideFill.setAlphaf(0.55);
+    canvas.drawRect(viewRect, tideFill);
+    if (nearDist > r + SANDS_DEEP_AT) {
+      tideFill.setColor(C_SANDS_DEEP);
+      tideFill.setAlphaf(0.45);
+      canvas.drawRect(viewRect, tideFill);
+    } else {
+      drawDeepBand(canvas, viewRect, cx, cy, r);
+    }
+    drawCurrents(canvas, cx, cy, r, t, nearDist, far);
+    return;
+  }
+
+  // The choppy shoreline: ONE closed contour. Vertices are spent by ARC
+  // LENGTH on the stretch the viewport can see (SANDS_EDGE_SEG px chords —
+  // smooth at the opening radius, where a fixed count was visibly
+  // polygonal) and coarsely elsewhere, where the contour only has to close
+  // the fill. sandsWob keeps every visible vertex OUTWARD of the honest
+  // damage radius: the crests rear and slam in the blood, the safe sand is
+  // never overpainted. Off-screen verts sit at the held line (+3.4) — the
+  // fine/coarse join is beyond the pad, never on screen.
+  const arc = visibleArc(cx, cy, viewL, viewT, viewR, viewB);
+  const half = Math.min(Math.PI, arc.half + 0.05);
+  const full = half >= Math.PI;
   const edge = Skia.PathBuilder.Make();
-  for (let i = 0; i < SANDS_EDGE_PTS; i++) {
-    const a = (i / SANDS_EDGE_PTS) * Math.PI * 2;
-    const rr = r + sandsWob(a, t);
-    const x = cx + Math.cos(a) * rr;
-    const y = cy + Math.sin(a) * rr;
-    if (i === 0) edge.moveTo(x, y);
-    else edge.lineTo(x, y);
+  let samples: number;
+  let restStart = 0;
+  let rest = 0;
+  if (full) {
+    const n = Math.min(SANDS_EDGE_MAX, Math.max(16, Math.ceil((Math.PI * 2 * r) / SANDS_EDGE_SEG)));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const rr = r + sandsWob(a, t, r);
+      edgeSamples[i * 2] = cx + Math.cos(a) * rr;
+      edgeSamples[i * 2 + 1] = cy + Math.sin(a) * rr;
+    }
+    samples = n;
+  } else {
+    // Samples sit on a WORLD-anchored angular grid (multiples of `da` from
+    // angle 0), not on the viewport's edges: camera drift between rebuilds
+    // then never re-samples the shape at new angles — the curve only moves
+    // because the waves move (v8.3 — this too read as snapping).
+    const da = Math.max(SANDS_EDGE_SEG / r, (2 * half) / (SANDS_EDGE_MAX - 2));
+    const aStart = Math.floor((arc.mid - half) / da) * da;
+    const n = Math.ceil((arc.mid + half - aStart) / da) + 1;
+    for (let i = 0; i < n; i++) {
+      const a = aStart + i * da;
+      const rr = r + sandsWob(a, t, r);
+      edgeSamples[i * 2] = cx + Math.cos(a) * rr;
+      edgeSamples[i * 2 + 1] = cy + Math.sin(a) * rr;
+    }
+    samples = n;
+    // The hidden remainder, from the fine end round to the fine start, is
+    // straight verts at the held line — never on screen, only closes the
+    // fill's contour (emitted after the curves below).
+    restStart = aStart + (n - 1) * da;
+    rest = Math.PI * 2 - (n - 1) * da;
+  }
+  emitShorelineCurves(edge, samples, full);
+  if (!full) {
+    const coarseN = Math.max(1, Math.ceil(rest / SANDS_EDGE_COARSE));
+    for (let i = 1; i < coarseN; i++) {
+      const a = restStart + (i / coarseN) * rest;
+      edge.lineTo(cx + Math.cos(a) * (r + 3.4), cy + Math.sin(a) * (r + 3.4));
+    }
   }
   const edgePath = edge.close().detach();
 
-  // The blood itself: a wet arterial tint at the shore…
-  canvas.save();
-  canvas.clipPath(edgePath, ClipOp.Difference, true);
-  fill.setColor(C_SANDS_TINT);
-  fill.setAlphaf(0.55);
-  canvas.drawRect(Skia.XYWHRect(viewL, viewT, viewR - viewL, viewB - viewT), fill);
-  canvas.restore();
+  // The blood itself: the viewport rect MINUS the shoreline as one even-odd
+  // fill — a plain path draw, no clip, no mask. (Anything inside the
+  // shoreline but outside the padded rect also fills under even-odd; that
+  // is beyond the pad, so never on screen.)
+  const blood = Skia.PathBuilder.Make()
+    .addRect(viewRect)
+    .addPath(edgePath)
+    .setFillType(FillType.EvenOdd)
+    .detach();
+  tideFill.setColor(C_SANDS_TINT);
+  tideFill.setAlphaf(0.55);
+  canvas.drawPath(blood, tideFill);
   // …congealing to near-black fast (deeper = deadlier, at a glance).
-  canvas.save();
-  canvas.clipPath(Skia.Path.Circle(cx, cy, r + 90), ClipOp.Difference, true);
-  fill.setColor(C_SANDS_DEEP);
-  fill.setAlphaf(0.45);
-  canvas.drawRect(Skia.XYWHRect(viewL, viewT, viewR - viewL, viewB - viewT), fill);
-  canvas.restore();
+  if (far > r + SANDS_DEEP_AT) drawDeepBand(canvas, viewRect, cx, cy, r);
 
-  // The currents (v6 — pure liquid, no floating objects): long curved
-  // current-lines sweeping the body of the tide, all one handedness, with
-  // maelstrom physics — fast water hugging the barrier, lazy in the deep —
-  // each breathing slowly in radius so no line tracks a fixed lane. The
-  // sandstorm's animated-arc idiom (one addArc path per line per frame);
-  // culled by radius band against the visible annulus.
-  stroke.setStrokeCap(StrokeCap.Round);
-  for (let i = 0; i < SANDS_CURRENTS; i++) {
-    const h1 = hash01(i * 13 + 400);
-    const h2 = hash01(i * 13 + 401);
-    const h3 = hash01(i * 13 + 402);
-    const depth = h1 * h1; // squared → most lines crowd the fast shore band
-    const rr = r + 18 + depth * 195 + Math.sin(t * 0.5 + i * 2.3) * 6;
-    if (rr < nearDist - 50 || rr > far + 50) continue;
-    const startDeg = h2 * 360 - t * (26 - depth * 18); // deg/s, one handedness
-    const sweepDeg = (28 + h3 * 52) * (1 - depth * 0.4);
-    stroke.setColor(i % 3 === 0 ? C_SANDS_STREAK : C_SANDS_CURRENT);
-    stroke.setAlphaf(0.28 + 0.22 * Math.sin(t * (0.8 + h3) + i * 1.7));
-    stroke.setStrokeWidth(2 + h2 * 3.5 + (1 - depth) * 1.5);
-    const arc = Skia.PathBuilder.Make()
-      .addArc(Skia.XYWHRect(cx - rr, cy - rr, rr * 2, rr * 2), startDeg % 360, sweepDeg)
-      .detach();
-    canvas.drawPath(arc, stroke);
-  }
-  // Foam: short bright breaks riding the fastest water just off the
-  // shoreline — the white-water read, in arterial spray tones.
-  for (let i = 0; i < SANDS_FOAM; i++) {
-    const h1 = hash01(i * 17 + 500);
-    const h2 = hash01(i * 17 + 501);
-    const rr = r + 8 + h1 * 34;
-    if (rr < nearDist - 30 || rr > far + 30) continue;
-    const startDeg = h2 * 360 - t * (30 + h1 * 16);
-    const sweepDeg = 6 + h2 * 10;
-    stroke.setColor(C_SANDS_SPRAY);
-    stroke.setAlphaf(0.3 + 0.3 * Math.sin(t * (2.2 + h1 * 2) + i * 2.9));
-    stroke.setStrokeWidth(1.6 + h1 * 1.4);
-    const arc = Skia.PathBuilder.Make()
-      .addArc(Skia.XYWHRect(cx - rr, cy - rr, rr * 2, rr * 2), startDeg % 360, sweepDeg)
-      .detach();
-    canvas.drawPath(arc, stroke);
-  }
-  stroke.setAlphaf(1);
-
-  // The boil: flecks shimmering in the shore band on fast independent
-  // blinks — closed-form off hash01, no state. The blood is never still.
-  for (let i = 0; i < SANDS_FLECKS; i++) {
-    const a = i * 2.39996 * 1.31 + Math.sin(t * 0.9 + i * 1.7) * 0.08;
-    const rr = r + 10 + hash01(i * 3 + 1) * 85;
-    const x = cx + Math.cos(a) * rr;
-    const y = cy + Math.sin(a) * rr;
-    if (x < viewL - 20 || x > viewR + 20 || y < viewT - 20 || y > viewB + 20) continue;
-    const blink = 0.5 + 0.5 * Math.sin(t * (5.5 + hash01(i * 3 + 2) * 5) + i * 2.1);
-    fill.setColor(C_SANDS_STREAK);
-    fill.setAlphaf(blink * blink * 0.5);
-    canvas.drawCircle(x, y, 2 + hash01(i * 3) * 2.5, fill);
-  }
-  fill.setAlphaf(1);
+  drawCurrents(canvas, cx, cy, r, t, nearDist, far);
 
   // Surge streaks — the sinkhole's infall grammar (lines streaming along a
   // force, proven to read as "this acts on you"), pointed INWARD with a
   // consistent tangential shear: the whole body of blood spirals AT the
   // barrier, a maelstrom, not an aura (dominant component is always the
   // inward rush — never a clean orbit). Closed-form phase, no particle
-  // state, culled per streak.
-  stroke.setColor(C_SANDS_STREAK);
-  stroke.setStrokeCap(StrokeCap.Round);
+  // state, culled per streak. drawLine: no path, one op each.
+  tideStroke.setColor(C_SANDS_STREAK);
   for (let i = 0; i < SANDS_STREAKS; i++) {
     const a = i * 2.39996 + Math.sin(t * 0.7 + i) * 0.05; // golden-angle spread
-    const phase = (t * (0.6 + ((i * 7) % 5) * 0.11) + i * 0.618) % 1;
+    const phase = (t * (0.18 + ((i * 7) % 5) * 0.035) + i * 0.618) % 1;
     const head = r + 8 + 130 * (1 - phase) * (1 - phase); // decelerating rush
     const len = 17 + 14 * (1 - phase);
     const dx = Math.cos(a);
@@ -1621,43 +1715,63 @@ const recordTide = (
     // Tail = outward + the maelstrom's curl (one shared handedness).
     const tx = dx - dy * 0.55;
     const ty = dy + dx * 0.55;
-    stroke.setAlphaf(Math.sin(Math.PI * phase) * 0.65); // born faint, dies at the shore
-    stroke.setStrokeWidth(2.5 + 1.8 * (1 - phase));
-    canvas.drawLine(hx, hy, hx + tx * len, hy + ty * len, stroke);
+    tideStroke.setAlphaf(Math.sin(Math.PI * phase) * 0.65); // born faint, dies at the shore
+    tideStroke.setStrokeWidth(2.5 + 1.8 * (1 - phase));
+    canvas.drawLine(hx, hy, hx + tx * len, hy + ty * len, tideStroke);
   }
-
-  // Crest slams: where the primary wave train is rearing highest RIGHT NOW,
-  // spray pops off the barrier — the "it's hitting the wall" beat. Crest
-  // angles are closed-form from the train's phase (three lobes), so this is
-  // 12 tiny circles, no state.
-  for (let k = 0; k < 3; k++) {
-    const ca = (Math.PI / 2 - t * 2.6 + k * Math.PI * 2) / 3;
-    const cwob = sandsWob(ca, t);
-    if (cwob < 13) continue; // this lobe is currently slack — no slam
-    const strength = (cwob - 13) / 16;
-    const cdx = Math.cos(ca);
-    const cdy = Math.sin(ca);
-    const bx = cx + cdx * (r + cwob);
-    const by = cy + cdy * (r + cwob);
-    if (bx < viewL - 40 || bx > viewR + 40 || by < viewT - 40 || by > viewB + 40) continue;
-    fill.setColor(C_SANDS_SPRAY);
-    for (let j = 0; j < 4; j++) {
-      const sa = ca + (j - 1.5) * 0.09;
-      const sr = r + cwob + 4 + j * 6 + strength * 8;
-      fill.setAlphaf(strength * (0.7 - j * 0.13));
-      canvas.drawCircle(cx + Math.cos(sa) * sr, cy + Math.sin(sa) * sr, 1.8 + strength * 1.6, fill);
-    }
-  }
-  fill.setAlphaf(1);
 
   // The barrier line over everything: heavy arterial red on the choppy path,
-  // pulsing on a threat beat (the bleed status ring's colour family).
-  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 1.2);
-  stroke.setColor(C_SANDS_RING);
-  stroke.setAlphaf(0.65 + 0.25 * pulse);
-  stroke.setStrokeWidth(4 + 2 * pulse);
-  canvas.drawPath(edgePath, stroke);
-  stroke.setAlphaf(1);
+  // pulsing on a threat beat (the bleed status ring's colour family). This
+  // stroke also hides the non-AA edge of the fill beneath it.
+  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 0.35);
+  tideStroke.setColor(C_SANDS_RING);
+  tideStroke.setAlphaf(0.65 + 0.25 * pulse);
+  tideStroke.setStrokeWidth(4 + 2 * pulse);
+  canvas.drawPath(edgePath, tideStroke);
+};
+
+/** The deep band: viewport rect minus a circle at r + SANDS_DEEP_AT, one
+ * even-odd fill (a circle contour is analytic for Skia — cheap). */
+const drawDeepBand = (canvas: SkCanvas, viewRect: SkRect, cx: number, cy: number, r: number): void => {
+  const deep = Skia.PathBuilder.Make()
+    .addRect(viewRect)
+    .addCircle(cx, cy, r + SANDS_DEEP_AT)
+    .setFillType(FillType.EvenOdd)
+    .detach();
+  tideFill.setColor(C_SANDS_DEEP);
+  tideFill.setAlphaf(0.45);
+  canvas.drawPath(deep, tideFill);
+};
+
+/** The currents (v6 — pure liquid, no floating objects): a few long curved
+ * current-lines sweeping the body of the tide, all one handedness, with
+ * maelstrom physics — fast water hugging the barrier, lazy in the deep —
+ * each breathing slowly in radius so no line tracks a fixed lane. v8: drawn
+ * with canvas.drawArc straight off a rect — no path built, nothing to GC —
+ * and culled by radius band against the visible annulus. */
+const drawCurrents = (
+  canvas: SkCanvas,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  nearDist: number,
+  far: number,
+): void => {
+  for (let i = 0; i < SANDS_CURRENTS; i++) {
+    const h1 = hash01(i * 13 + 400);
+    const h2 = hash01(i * 13 + 401);
+    const h3 = hash01(i * 13 + 402);
+    const depth = h1 * h1; // squared → most lines crowd the fast shore band
+    const rr = r + 18 + depth * 195 + Math.sin(t * 0.5 + i * 2.3) * 6;
+    if (rr < nearDist - 50 || rr > far + 50) continue;
+    const startDeg = h2 * 360 - t * (6.5 - depth * 4.5); // deg/s, one handedness (v8.3: creeping)
+    const sweepDeg = (28 + h3 * 52) * (1 - depth * 0.4);
+    tideStroke.setColor(i % 3 === 0 ? C_SANDS_STREAK : C_SANDS_CURRENT);
+    tideStroke.setAlphaf(0.28 + 0.22 * Math.sin(t * (0.8 + h3) + i * 1.7));
+    tideStroke.setStrokeWidth(2 + h2 * 3.5 + (1 - depth) * 1.5);
+    canvas.drawArc(Skia.XYWHRect(cx - rr, cy - rr, rr * 2, rr * 2), startDeg % 360, sweepDeg, false, tideStroke);
+  }
 };
 
 // Layer 3: the you-are-in-the-blood vignette — screen space, local player

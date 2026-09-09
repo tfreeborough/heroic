@@ -644,6 +644,22 @@ const titansDraughtScript = (): ShowcaseScript =>
     },
   );
 
+const callTheTideScript = (): ShowcaseScript =>
+  duel(
+    { team: 1, weapon: "hammer", abilities: hand("call-the-tide", "dash") },
+    BLADE_FOE,
+    starAt(),
+    foeAt(220, { hp: 60 }),
+    (seat, w, foe) => {
+      if (seat === 1) return IDLE;
+      if (w.t < 0.4) return IDLE;
+      // The horn (the sim gates the press until the round's tenth second —
+      // the showcase rig runs a fast practice clock, so hold the button).
+      if (w.t < 1.5) return withCast(IDLE, cast(w.me, "call-the-tide"));
+      return toward(w.me, foe, 1); // then close in as the sand does
+    },
+  );
+
 // ── The table ─────────────────────────────────────────────────────────────
 
 const RANGED: readonly WeaponId[] = ["bow", "staff", "scorpion"];
@@ -676,6 +692,7 @@ const ABILITY_SCRIPTS: Record<AbilityId, () => ShowcaseScript> = {
   sinkhole: sinkholeScript,
   "tar-pit": tarPitScript,
   "titans-draught": titansDraughtScript,
+  "call-the-tide": callTheTideScript,
 };
 
 export const abilityScript = (id: AbilityId): ShowcaseScript => ABILITY_SCRIPTS[id]();

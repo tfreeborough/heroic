@@ -61,10 +61,13 @@ export {
   achievementCounters,
   achievementUnlocks,
   applyMatchAchievements,
+  companionsOf,
   entitlementsOf,
   gloryEarned,
   type AchievementAward,
   type AchievementUnlockRecord,
+  type CompanionDelta,
+  type CompanionRecord,
   type EntitlementRecord,
   type MatchAchievementsInput,
 } from "./achievements";

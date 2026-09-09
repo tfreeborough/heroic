@@ -17,6 +17,7 @@ import type { RoomListing } from "@heroic/blood-in-the-sand-sim";
 import { playSound, unlockAudio } from "../audio";
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import type { ArenaClient } from "../net/connection";
+import { ensureIdentity } from "../net/api";
 
 const REFRESH_MS = 4000;
 
@@ -83,6 +84,12 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
     setSheet(null);
   };
 
+  // The bearer token rides every create/join (bits-skirmish-deeds.md) so
+  // the seat's deeds credit this account. ensureIdentity is a SecureStore
+  // read once registered — a few ms — and a missing identity (offline first
+  // run) simply means an uncredited seat, never a blocked door.
+  const bearer = async (): Promise<string | undefined> => (await ensureIdentity())?.token;
+
   const join = (room: RoomListing): void => {
     if (room.players >= room.capacity) return;
     if (room.locked) {
@@ -90,23 +97,25 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
       return;
     }
     playSound("uiConfirm");
-    client.joinRoom(playerName, room.code, "");
+    void bearer().then((token) => client.joinRoom(playerName, room.code, "", token));
   };
 
   const joinLocked = (room: RoomListing): void => {
     playSound("uiConfirm");
-    client.joinRoom(playerName, room.code, joinPass);
+    void bearer().then((token) => client.joinRoom(playerName, room.code, joinPass, token));
   };
 
   const joinByCode = (): void => {
     if (joinCode.length !== 4) return;
     playSound("uiConfirm");
-    client.joinRoom(playerName, joinCode, joinPass);
+    void bearer().then((token) => client.joinRoom(playerName, joinCode, joinPass, token));
   };
 
   const create = (): void => {
     playSound("uiConfirm");
-    client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize, brawl);
+    void bearer().then((token) =>
+      client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize, brawl, token),
+    );
   };
 
   // Mid-match rooms aren't joinable in any useful way — don't show them.

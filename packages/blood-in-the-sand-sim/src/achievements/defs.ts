@@ -33,6 +33,7 @@ import {
 import { COUNTERS, UNDYING_STREAK } from "./counters";
 import { summaryTeamOf, wonMatch, type MatchSummary } from "./summary";
 import { ACHIEVEMENT_DEFS_2V2, CHAPTER_2V2, RANKED_2V2_BOARD, RANKED_2V2_BOARD_DEF } from "./defs2v2";
+import { ACHIEVEMENT_DEFS_SKIRMISH, CHAPTERS_SKIRMISH, SKIRMISH_BOARD, SKIRMISH_BOARD_DEF } from "./defsSkirmish";
 
 export type BitsAchievementDef = AchievementDef<MatchSummary>;
 
@@ -44,6 +45,8 @@ export const RANKED_BOARD = "ranked";
 export const ACHIEVEMENT_BOARDS: Record<string, BoardDef<MatchSummary>> = {
   [RANKED_BOARD]: { id: RANKED_BOARD, accepts: (s) => s.ranked },
   [RANKED_2V2_BOARD]: RANKED_2V2_BOARD_DEF,
+  // The sealed, zero-pay skirmish board (bits-skirmish-deeds.md, 2026-09-09).
+  [SKIRMISH_BOARD]: SKIRMISH_BOARD_DEF,
 };
 
 /** The board's root: everyone's first node, parent of every chain. */
@@ -181,13 +184,14 @@ const weaponRounds = [
 
 /** Per-ability cast chains — WEST ribs, clustered BY CATEGORY (offensive /
  * defensive / support — thematic grouping, Tom 2026-08-04) with a wide gap
- * between clusters. Rows 0-4 offensive, 5-9 defensive, 10-13 support
+ * between clusters. Rows 0-5 offensive, 6-10 defensive, 11-14 support
  * (the SIGNET spells joined 2026-08-10/11: sinkhole + titans-draught
- * offensive, tar-pit support) match the authored order below. */
+ * offensive, tar-pit support; the DEED spell Call the Tide joined
+ * 2026-09-09, offensive) match the authored order below. */
 /** Cast tiers TRIPLED with the weapon tiers (Tom, 2026-08-25): charges
  * refill every round, so the old 10-cast tier 1 was a second match. */
 const abilityRowY = (row: number): number =>
-  185 + row * 115 + (row >= 5 ? 100 : 0) + (row >= 10 ? 100 : 0);
+  185 + row * 115 + (row >= 6 ? 100 : 0) + (row >= 11 ? 100 : 0);
 
 const abilityChain = (ability: string, row: number, tiers: readonly ChainTier[]) =>
   milestoneChain<MatchSummary>({
@@ -229,48 +233,55 @@ const abilityCasts = [
     { threshold: 150, title: "Giant's Thirst", description: "Drink Titan's Draught 150 times." },
     { threshold: 750, title: "The Colossus of the Pit", description: "Drink Titan's Draught 750 times.", rewards: [{ kind: "title" }] },
   ]),
-  ...abilityChain("dash", 5, [
+  // The DEED spell's ladder (bits-sands-deeds.md) — climbable only by a
+  // Tidecaller. One cast a round, so the tiers sit low.
+  ...abilityChain("call-the-tide", 5, [
+    { threshold: 15, title: "Early Horn", description: "Call the Tide 15 times." },
+    { threshold: 75, title: "Master of the Clock", description: "Call the Tide 75 times." },
+    { threshold: 300, title: "The Moon's Own Pull", description: "Call the Tide 300 times." },
+  ]),
+  ...abilityChain("dash", 6, [
     { threshold: 75, title: "Quickstep", description: "Cast Dash 75 times." },
     { threshold: 300, title: "Dust Devil", description: "Cast Dash 300 times." },
     { threshold: 1500, title: "Gone in a Blink", description: "Cast Dash 1500 times." },
   ]),
-  ...abilityChain("mirror-guard", 6, [
+  ...abilityChain("mirror-guard", 7, [
     { threshold: 45, title: "Polished Bronze", description: "Cast Mirror Guard 45 times." },
     { threshold: 300, title: "Turnabout", description: "Cast Mirror Guard 300 times." },
     { threshold: 900, title: "The Mirror's Edge", description: "Cast Mirror Guard 900 times." },
   ]),
-  ...abilityChain("ironhide", 7, [
+  ...abilityChain("ironhide", 8, [
     { threshold: 30, title: "Thick-Skinned", description: "Cast Ironhide 30 times." },
     { threshold: 150, title: "Man of Iron", description: "Cast Ironhide 150 times." },
     { threshold: 750, title: "The Anvil", description: "Cast Ironhide 750 times.", rewards: [{ kind: "title" }] },
   ]),
-  ...abilityChain("straw-man", 8, [
+  ...abilityChain("straw-man", 9, [
     { threshold: 30, title: "Decoy", description: "Cast Straw Man 30 times." },
     { threshold: 225, title: "Misdirection", description: "Cast Straw Man 225 times." },
     { threshold: 600, title: "The Puppeteer", description: "Cast Straw Man 600 times." },
   ]),
-  ...abilityChain("warding-shout", 9, [
+  ...abilityChain("warding-shout", 10, [
     { threshold: 60, title: "Stand Back", description: "Cast Warding Shout 60 times." },
     { threshold: 300, title: "Hold the Line", description: "Cast Warding Shout 300 times." },
     { threshold: 750, title: "The Herald's Roar", description: "Cast Warding Shout 750 times." },
   ]),
   // The second SIGNET spell's ladder (bits-store-arms.md) — PLACEHOLDER titles.
-  ...abilityChain("tar-pit", 10, [
+  ...abilityChain("tar-pit", 11, [
     { threshold: 30, title: "Slow Going", description: "Cast Tar Pit 30 times." },
     { threshold: 150, title: "Black Wake", description: "Cast Tar Pit 150 times." },
     { threshold: 750, title: "The Unfollowable", description: "Cast Tar Pit 750 times.", rewards: [{ kind: "title" }] },
   ]),
-  ...abilityChain("war-drums", 11, [
+  ...abilityChain("war-drums", 12, [
     { threshold: 30, title: "Drummer Boy", description: "Cast War Drums 30 times." },
     { threshold: 150, title: "March to War", description: "Cast War Drums 150 times." },
     { threshold: 750, title: "The Rhythm of Ruin", description: "Cast War Drums 750 times." },
   ]),
-  ...abilityChain("blood-font", 12, [
+  ...abilityChain("blood-font", 13, [
     { threshold: 30, title: "First Aid", description: "Cast Blood Font 30 times." },
     { threshold: 150, title: "Haemophiliac", description: "Cast Blood Font 150 times." },
     { threshold: 750, title: "The Red Spring", description: "Cast Blood Font 750 times.", rewards: [{ kind: "title" }] },
   ]),
-  ...abilityChain("sandstorm", 13, [
+  ...abilityChain("sandstorm", 14, [
     { threshold: 30, title: "Dust Kicker", description: "Cast Sandstorm 30 times." },
     { threshold: 150, title: "Eye of the Storm", description: "Cast Sandstorm 150 times." },
     { threshold: 750, title: "The Desert's Wrath", description: "Cast Sandstorm 750 times." },
@@ -535,6 +546,172 @@ const FEATS: BitsAchievementDef[] = [
   },
 ];
 
+// ── The Blood Tide (bits-sands-deeds.md, 2026-09-04/09) ──────────────────
+// Player-facing name is the Blood Tide — never sands/circle/drown in any
+// string here. A SOUTH cluster below everything (y ≥ 2300, the cast ribs
+// end near 2000): the horn root
+// off the trunk, the kills-after-the-horn chain running EAST with the
+// capstone at its end, six skill feats + three jokes in WEST rows.
+// Titles: exactly two (Tidecaller, Dry Feet) — Tom 2026-09-09,
+// don't oversaturate titles. Every other unlock is its own reward.
+const TIDE_Y = 2300;
+
+const tideHorn: BitsAchievementDef = {
+  id: "the-horn-sounds",
+  board: RANKED_BOARD,
+  title: "The Horn Sounds",
+  description: "Fight in a ranked round where the Blood Tide rises.",
+  icon: "deed-tide-horn",
+  parent: FIRST_MATCH.id,
+  pos: { x: 0, y: TIDE_Y },
+  trigger: { kind: "milestone", counter: COUNTERS.sandsRounds, threshold: 1 },
+};
+
+const tideKills = milestoneChain<MatchSummary>({
+  board: RANKED_BOARD,
+  idBase: "tide-kills",
+  counter: COUNTERS.sandsKills,
+  icon: "deed-tide-kills",
+  parent: tideHorn.id,
+  origin: { x: 150, y: TIDE_Y },
+  step: { x: 115, y: 0 },
+  tiers: [
+    { threshold: 10, title: "High Tide", description: "Land 10 killing blows after the Blood Tide has risen." },
+    { threshold: 60, title: "Spring Tide", description: "Land 60 killing blows after the Blood Tide has risen." },
+    { threshold: 250, title: "Red Deluge", description: "Land 250 killing blows after the Blood Tide has risen." },
+  ],
+});
+
+/** The skill feats — every one a Tidecaller requisite. */
+const tideFeat = (
+  id: string,
+  title: string,
+  description: string,
+  icon: string,
+  pos: { x: number; y: number },
+  test: (s: MatchSummary, p: number) => boolean,
+): BitsAchievementDef => ({
+  id,
+  board: RANKED_BOARD,
+  title,
+  description,
+  icon,
+  parent: tideHorn.id,
+  pos,
+  trigger: { kind: "feat", test },
+});
+
+const tideFeats: BitsAchievementDef[] = [
+  tideFeat(
+    "baptism",
+    "Baptism",
+    "Win a round by striking down the last enemy while you stand in the Blood Tide.",
+    "deed-baptism",
+    { x: -150, y: TIDE_Y + 115 },
+    (s, p) => (s.stats[p]?.baptisms ?? 0) > 0,
+  ),
+  tideFeat(
+    "waist-deep",
+    "Waist Deep",
+    "Win a round after ten seconds in the Blood Tide.",
+    "deed-waist-deep",
+    { x: -265, y: TIDE_Y + 115 },
+    (s, p) => (s.stats[p]?.waistDeepWins ?? 0) > 0,
+  ),
+  tideFeat(
+    "let-the-tide-decide",
+    "Let the Tide Decide",
+    "Win a round where the last enemy is taken by the Blood Tide while you never touch it.",
+    "deed-tide-decided",
+    { x: -380, y: TIDE_Y + 115 },
+    (s, p) => (s.stats[p]?.tideDecidedWins ?? 0) > 0,
+  ),
+  tideFeat(
+    "quicksand",
+    "Quicksand",
+    "Win a ranked match with every round decided inside ten seconds.",
+    "deed-quicksand",
+    { x: -150, y: TIDE_Y + 230 },
+    (s, p) => {
+      const st = s.stats[p];
+      return wonMatch(s, p) && st !== undefined && st.longestRoundSec !== null && st.longestRoundSec < 10;
+    },
+  ),
+  tideFeat(
+    "the-last-grain",
+    "The Last Grain",
+    "Win a round with a killing blow landed after the Blood Tide has fully closed.",
+    "deed-last-grain",
+    { x: -265, y: TIDE_Y + 230 },
+    (s, p) => (s.stats[p]?.lastGrainWins ?? 0) > 0,
+  ),
+  tideFeat(
+    "undertow",
+    "Undertow",
+    "Throw, drag or knock an enemy into the Blood Tide, and see them die there within four seconds.",
+    "deed-undertow",
+    { x: -380, y: TIDE_Y + 230 },
+    (s, p) => (s.stats[p]?.undertows ?? 0) > 0,
+  ),
+];
+
+/** The jokes: never Tidecaller requisites, never pay Glory or items. */
+const tideJokes: BitsAchievementDef[] = [
+  {
+    ...tideFeat(
+      "dry-feet",
+      "Dry Feet",
+      "Be standing inside the Blood Tide's final ring at the very moment it rises.",
+      "deed-dry-feet",
+      { x: -150, y: TIDE_Y + 345 },
+      (s, p) => (s.stats[p]?.eyeOfStorm ?? 0) > 0,
+    ),
+    rewards: [{ kind: "title" }],
+  },
+  tideFeat(
+    "taken-by-the-tide",
+    "Taken by the Tide",
+    "Die to the Blood Tide three times in one match.",
+    "deed-taken-by-tide",
+    { x: -265, y: TIDE_Y + 345 },
+    (s, p) => (s.stats[p]?.tideDeaths ?? 0) >= 3,
+  ),
+  tideFeat(
+    "watching-the-sand-fall",
+    "Watching the Sand Fall",
+    "Win a match of three rounds or more where the Blood Tide rose in every one.",
+    "deed-sand-fall",
+    { x: -380, y: TIDE_Y + 345 },
+    (s, p) => {
+      const st = s.stats[p];
+      return wonMatch(s, p) && st !== undefined && st.roundsPlayed >= 3 && st.tideRounds === st.roundsPlayed;
+    },
+  ),
+];
+
+/** The capstone: every skill feat + the chain's top → the title and the
+ * ONLY way to hold Call the Tide (a deed-gated spell, items.ts). */
+export const TIDECALLER: BitsAchievementDef = {
+  id: "tidecaller",
+  board: RANKED_BOARD,
+  title: "Tidecaller",
+  description: "Master the Blood Tide every way it can be mastered.",
+  icon: "deed-tidecaller",
+  parent: tideKills[tideKills.length - 1]!.id,
+  pos: { x: 150 + 115 * tideKills.length, y: TIDE_Y },
+  rewards: [{ kind: "title" }, { kind: "entitlement", itemId: "ability:call-the-tide" }],
+  trigger: {
+    kind: "capstone",
+    requires: [...tideFeats.map((d) => d.id), tideKills[tideKills.length - 1]!.id],
+  },
+};
+
+const tide: BitsAchievementDef[] = [tideHorn, ...tideKills, ...tideFeats, ...tideJokes, TIDECALLER];
+
+/** The jokes' ids — the tests hold them to titles-or-nothing and off the
+ * capstone's requisite list. */
+export const TIDE_JOKE_IDS: readonly string[] = tideJokes.map((d) => d.id);
+
 export const ACHIEVEMENT_DEFS: readonly BitsAchievementDef[] = [
   FIRST_MATCH,
   ...wins,
@@ -547,7 +724,9 @@ export const ACHIEVEMENT_DEFS: readonly BitsAchievementDef[] = [
   ...damage,
   ...healing,
   ...FEATS,
+  ...tide,
   ...ACHIEVEMENT_DEFS_2V2,
+  ...ACHIEVEMENT_DEFS_SKIRMISH,
 ];
 
 /**
@@ -579,14 +758,16 @@ export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
     ],
   },
   CHAPTER_2V2,
+  ...CHAPTERS_SKIRMISH,
   { title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
   { title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
   // Slice bounds = 3 tiers × chains per category cluster (offensive grew
   // to 4 chains with the sinkhole, support to 4 with the tar pit —
-  // 2026-08-10).
-  { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 15)) },
-  { title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(15, 30)), "return-to-sender"] },
-  { title: "Support Arts", ids: idsOf(abilityCasts.slice(30)) },
+  // 2026-08-10; offensive to 6 with Call the Tide — 2026-09-09).
+  { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 18)) },
+  { title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(18, 33)), "return-to-sender"] },
+  { title: "Support Arts", ids: idsOf(abilityCasts.slice(33)) },
   { title: "Glory", ids: idsOf(glory) },
   { title: "Blood & Mercy", ids: [...idsOf(healing), "lifeblood"] },
+  { title: "The Blood Tide", ids: idsOf(tide) },
 ];

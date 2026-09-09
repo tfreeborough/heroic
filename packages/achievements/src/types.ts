@@ -29,7 +29,12 @@ export type AchievementTrigger<S> =
   | { kind: "milestone"; counter: string; threshold: number }
   /** A single-match predicate over the finished summary — where all the
    * interesting ones live. Runs only while still locked. */
-  | { kind: "feat"; test: (summary: S, playerKey: number) => boolean };
+  | { kind: "feat"; test: (summary: S, playerKey: number) => boolean }
+  /** Fires once EVERY listed deed is unlocked — counting deeds unlocked in
+   * this same evaluation, so the capstone lands in the same ceremony as its
+   * last requisite (bits-sands-deeds.md: Tidecaller). Evaluated in a second
+   * pass after milestones and feats; capstones may require capstones. */
+  | { kind: "capstone"; requires: readonly string[] };
 
 export interface AchievementDef<S> {
   /** Stable forever once shipped — it's the persistence key. */

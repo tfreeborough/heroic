@@ -41,6 +41,12 @@ interface TargetField {
   /** Cell the last flood ran from — re-sweep when the target leaves it. */
   cellX: number;
   cellY: number;
+  /** Exact goal the last flood ran from: a goal that has not moved AT ALL
+   * (the Closing Sands' centre, a planted font or mine) never trips the
+   * staleness backstop — a whole-arena flood for nothing, once per bot per
+   * few ticks, on the practice client's JS thread (perf, 2026-09-09). */
+  goalX: number;
+  goalY: number;
   resolvesSince: number;
 }
 
@@ -78,15 +84,22 @@ export const navDirection = (nav: BotNav, targetId: number, from: Vec2, goal: Ve
 
   let cached = nav.fields.get(targetId);
   if (!cached) {
-    cached = { field: createFlowField(nav.grid), cellX: -1, cellY: -1, resolvesSince: 0 };
+    cached = { field: createFlowField(nav.grid), cellX: -1, cellY: -1, goalX: NaN, goalY: NaN, resolvesSince: 0 };
     nav.fields.set(targetId, cached);
   }
   const cell = worldToCell(nav.grid, goal);
+  const moved = goal.x !== cached.goalX || goal.y !== cached.goalY;
   cached.resolvesSince += 1;
-  if (cell.x !== cached.cellX || cell.y !== cached.cellY || cached.resolvesSince >= RESWEEP_RESOLVES) {
+  if (
+    cell.x !== cached.cellX ||
+    cell.y !== cached.cellY ||
+    (moved && cached.resolvesSince >= RESWEEP_RESOLVES)
+  ) {
     computeFlowField(cached.field, nav.grid, goal, nav.floodRadius);
     cached.cellX = cell.x;
     cached.cellY = cell.y;
+    cached.goalX = goal.x;
+    cached.goalY = goal.y;
     cached.resolvesSince = 0;
   }
   const flow = flowAt(cached.field, from);

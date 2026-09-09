@@ -205,6 +205,15 @@ export interface ArenaPlayer {
   /** Ids already struck by the CURRENT thrust — the front passes each body
    * exactly once. Cleared when a new thrust arms. */
   thrustHits: number[];
+  /** The last player who displaced this body (harpoon reel, sinkhole drag,
+   * warding shout / sandtrap knockback) and the seconds left in which a
+   * shoreline crossing still credits them (bits-sands-deeds.md: Undertow).
+   * Transient combat scratch like thrustHits. */
+  shovedBy: number | null;
+  shoveLeft: number;
+  /** Was this body outside the Blood Tide's ring on the last sands tick —
+   * the edge detector the shove credit reads. */
+  sandsOutside: boolean;
 }
 
 export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchEnd";
@@ -444,6 +453,9 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   title: "",
   thrustLeft: 0,
   thrustHits: [],
+  shovedBy: null,
+  shoveLeft: 0,
+  sandsOutside: false,
 });
 
 /** Defensive input scrubbing — the sim never trusts the wire. */

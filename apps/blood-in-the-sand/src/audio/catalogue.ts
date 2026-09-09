@@ -155,6 +155,10 @@ const CAST_VARIANTS: Record<AbilityId, SoundBank> = {
   "titans-draught": {
     clips: bank("cast_titans_draught"),
   },
+  // No cast bank by decision (Tom, 2026-09-09): the horn IS the cast — the
+  // sandsStart event that lands the same tick blows sands_close. An empty
+  // bank here is deliberate silence, not owed art.
+  "call-the-tide": { clips: [] },
 };
 
 /*

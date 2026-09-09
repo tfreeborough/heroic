@@ -71,10 +71,30 @@ arena,duel,pvp,multiplayer,gladiator,fighting,1v1,2v2,online,ranked,pixel,brawl,
 - Screenshots: `out/store/apple/01`–`07`, same order as Play. Only the 6.5"
   slot is required; Apple scales it for the other iPhones. No iPad set
   (the app is iPhone-only).
-- App Review notes: multiplayer needs a second player — tell them practice
-  vs bots works offline with no account, and that the store is reachable
-  from the purse on any menu screen. Include a sandbox Apple ID if they ask
-  to test a Signet pack.
+- App Review notes: paste the block below into "Notes" under App Review
+  Information. No sign-in required, so leave the demo-account fields blank.
+
+**Notes for App Review**
+
+```
+Blood in the Sand is a small online duel game made by one developer. Nothing needs an account or a login: the game creates an anonymous player on first launch.
+
+To see it working quickly:
+
+1. First launch shows a short five-page rules walkthrough. Skip or read it, then tap PLAY.
+2. PRACTICE runs fully offline against bots. Pick a weapon and abilities, tap ARM YOURSELF, and a match starts. This works with no network at all.
+3. RANKED needs the server. Tap RANKED, choose 1v1, and queue. If nobody else is queued a match still starts within about 20 seconds. Accept the match when the sheet appears (15 second timer).
+4. SKIRMISH is private rooms with a passcode. Create a room and tap START NOW to fill the empty seats with bots, so it can be tested by one person.
+5. STORY is intentionally locked until 31 October 2026. Tapping the card shakes it. That is by design, not a bug.
+
+In-app purchases: the shop is the purse at the top of any menu screen. It sells packs of "Signets" (consumable), spent on cosmetic and loadout items. Nothing purchased affects damage or health. Sandbox purchases work with a normal sandbox Apple ID.
+
+Sign in with Apple is optional (Settings > SIGN IN, or the ring beside the purse). It only links purchases to an account so they can be restored on another phone. Everything works without it. Account deletion is in Settings > DELETE ACCOUNT and at https://free-the-borough.com/delete-account/.
+
+The game is portrait only, iPhone only. Blood and fantasy violence throughout, matching the age rating.
+
+Contact for anything: freetheborough.games@gmail.com
+```
 
 ## Notes for the Play Console form
 

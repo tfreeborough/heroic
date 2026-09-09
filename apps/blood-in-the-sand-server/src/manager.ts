@@ -31,6 +31,7 @@ import {
   WEAPONS,
   canJoin,
   counterDeltas,
+  humansOnTwoTeams,
   undyingStreakUpdates,
   generateRoomCode,
   sanitizePasscode,
@@ -40,6 +41,7 @@ import {
   shouldCollect,
   weaponEntitlement,
   abilityEntitlement,
+  type BitsAchievementDef,
   type ClientMsg,
   type RoomListing,
   type ServerMsg,
@@ -50,12 +52,14 @@ import {
   achievementCounters,
   achievementUnlocks,
   applyMatchAchievements,
+  companionsOf,
   entitlementsOf,
   findPlayerByToken,
   getRating,
   gloryEarned,
   recordRankedMatch,
   type AchievementAward,
+  type CompanionDelta,
   type Db,
   type RankedMatchResult,
 } from "@heroic/blood-in-the-sand-persistence";
@@ -91,6 +95,8 @@ const MAX_TITLE_ID = 64;
 /** Seat tokens are server-minted UUIDs (36 chars) — anything longer is
  * garbage, and clamping keeps a hostile join from carrying a payload. */
 const MAX_SEAT_TOKEN = 64;
+/** Bearer tokens on skirmish create/join — same cap queueJoin applies. */
+const MAX_BEARER_TOKEN = 128;
 /** Disguised ranked bots occasionally wear a plausible low-tier title —
  * bare bots would become a backfill tell once titles are common (the same
  * principle as bots counting toward deeds). Curated LOW-tier ids only: a
@@ -368,11 +374,46 @@ export class RoomManager {
       performance.now(),
       brawl ? BRAWL_TEAM_COUNT : 2,
     );
+    room.onSkirmishMatchEnd = (winnerTeam) => void this.settleSkirmish(room, winnerTeam);
     this.rooms.set(code, room);
-    room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), null, performance.now());
+    const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), null, performance.now());
+    if (id !== null) this.claimSkirmishSeat(room, ws, id, msg.token);
     console.log(
       `⚔ room ${code} "${room.meta.name}" (${brawl ? "brawl" : `${teamSize}v${teamSize}`}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
     );
+  }
+
+  /**
+   * Skirmish identity (bits-skirmish-deeds.md § trust): an optional bearer
+   * token on create/join resolves — asynchronously, never blocking the seat
+   * — to the account the seat's deeds credit, and lets the worn title be
+   * verified the way ranked's is (an unowned claim is silently stripped).
+   * No token, no DB, unknown token: the seat plays as before and earns
+   * nothing. The seat must still belong to THIS socket when the lookup
+   * lands, or the answer is dropped (seat ids get re-issued).
+   */
+  private claimSkirmishSeat(room: Room, ws: Socket, id: number, token: unknown): void {
+    const db = this.db;
+    if (!db || room.ranked) return;
+    if (typeof token !== "string" || token.length === 0 || token.length > MAX_BEARER_TOKEN) return;
+    void (async () => {
+      try {
+        const accountId = ws.data.accountId ?? (await findPlayerByToken(db, token));
+        if (!accountId || room.socketOf(id) !== ws) return;
+        ws.data.accountId = accountId;
+        room.accounts.set(id, accountId);
+        const title = room.titleOf(id);
+        if (title !== "") {
+          const owned = await entitlementsOf(db, accountId);
+          if (room.socketOf(id) === ws && !owned.some((e) => e.itemId === `title:${title}`)) {
+            room.setTitle(id, "", performance.now());
+            console.log(`[${room.meta.code}] seat ${id} claimed unowned title "${title}" — stripped`);
+          }
+        }
+      } catch (err) {
+        console.error(`[${room.meta.code}] skirmish identity for seat ${id} failed:`, err);
+      }
+    })();
   }
 
   private onJoin(ws: Socket, msg: Extract<ClientMsg, { t: "joinRoom" }>): void {
@@ -401,6 +442,7 @@ export class RoomManager {
     const playerName = sanitizeName(msg.playerName);
     const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), seatToken, performance.now());
     if (id === null) return this.send(ws, { t: "reject", reason: "room full" });
+    this.claimSkirmishSeat(room, ws, id, msg.token);
     console.log(`⚔ ${playerName} joined room ${room.meta.code} as player ${id}`);
   }
 
@@ -1014,6 +1056,138 @@ export class RoomManager {
   }
 
   /**
+   * The skirmish deed pass (bits-skirmish-deeds.md): runs on a skirmish
+   * room's matchEnd for every seat that resolved an account at match start.
+   * Sealed off from ranked — only `skirmish:` counters move, the board pays
+   * nothing material — and gated on humans facing humans. The summary is
+   * built synchronously off the tallies before any await (the sim is about
+   * to return to lobby and drop them). Failures log and never touch the room.
+   */
+  private async settleSkirmish(room: Room, winnerTeam: Team): Promise<void> {
+    const sk = room.skirmish;
+    const stats = room.matchStats;
+    const db = this.db;
+    const matchId = sk.matchId;
+    if (!stats || !db || matchId === null) return;
+    const state = room.sim.state;
+    const seated = seatedPlayers(state);
+    const players = seated.map((p) => ({
+      id: p.id,
+      team: p.team,
+      weapon: p.weapon,
+      bot: p.bot === true,
+      abilities: [...p.abilities],
+    }));
+    const accounts = new Map(sk.accounts);
+    // The gate, checked up front so uncontested matches (one human and a
+    // roomful of bots) cost no DB reads and leave no room memory behind.
+    if (accounts.size === 0 || !humansOnTwoTeams({ players })) return;
+    const teamOf = (seat: number): Team => state.players[seat]!.team;
+    const humanKey = [...accounts.values()].sort().join(",");
+    const matchIndex = sk.lastHumans === humanKey ? sk.matchIndex + 1 : 1;
+    const winnersNow = new Set([...accounts].filter(([seat]) => teamOf(seat) === winnerTeam).map(([, a]) => a));
+    const losersNow = new Set([...accounts].filter(([seat]) => teamOf(seat) !== winnerTeam).map(([, a]) => a));
+    // Grudge: I lost last time, I won now, and someone who beat me then is
+    // on the losing side now.
+    const last = sk.lastMatch;
+    const avenged = last !== null && [...losersNow].some((a) => last.winners.has(a));
+    const grudgeSeats = [...accounts]
+      .filter(([seat, a]) => avenged && last!.losers.has(a) && teamOf(seat) === winnerTeam)
+      .map(([seat]) => seat);
+    // Companions, from each seat's side of the room.
+    const companionsFor = (seat: number): CompanionDelta[] =>
+      [...accounts]
+        .filter(([other]) => other !== seat)
+        .map(([other, otherId]) => ({
+          otherId,
+          with: teamOf(other) === teamOf(seat) ? 1 : 0,
+          against: teamOf(other) === teamOf(seat) ? 0 : 1,
+        }));
+    try {
+      // Pass 1 — every seat's lifetime reads, in parallel.
+      const reads = await Promise.all(
+        [...accounts].map(async ([seat, accountId]) => {
+          const [counters, unlockRecords, companions] = await Promise.all([
+            achievementCounters(db, accountId),
+            achievementUnlocks(db, accountId),
+            companionsOf(db, accountId),
+          ]);
+          // Merge this match's companions in: the lifetime view AFTER this
+          // match is what the chain and Both Sides Now should see.
+          const merged = new Map(companions.map((c) => [c.otherId, { with: c.withCount, against: c.againstCount }]));
+          const deltas = companionsFor(seat);
+          for (const d of deltas) {
+            const cur = merged.get(d.otherId) ?? { with: 0, against: 0 };
+            merged.set(d.otherId, { with: cur.with + d.with, against: cur.against + d.against });
+          }
+          let best = 0;
+          let bothSides = false;
+          for (const c of merged.values()) {
+            best = Math.max(best, c.with + c.against);
+            if (c.with > 0 && c.against > 0) bothSides = true;
+          }
+          return { seat, accountId, counters, unlockRecords, deltas, best, bothSides };
+        }),
+      );
+      const summary = stats.summary({
+        ranked: false,
+        bracket: null,
+        teamSize: state.players.length / state.teamCount,
+        teamCount: state.teamCount,
+        winnerTeam,
+        players,
+        room: {
+          locked: room.meta.passcode !== null,
+          hostSeat: room.meta.hostId,
+          matchIndex,
+          grudgeSeats,
+          bothSidesSeats: reads.filter((r) => r.bothSides).map((r) => r.seat),
+        },
+      });
+      // Pass 2 — evaluate and land, one seat at a time.
+      for (const r of reads) {
+        try {
+          const before = { ...r.counters };
+          const after: Record<string, number> = { ...before };
+          for (const [counter, delta] of Object.entries(counterDeltas(summary, r.seat))) {
+            after[counter] = (after[counter] ?? 0) + delta;
+          }
+          after[COUNTERS.skirmishCompanionBest] = Math.max(before[COUNTERS.skirmishCompanionBest] ?? 0, r.best);
+          const fired = evaluate({
+            defs: ACHIEVEMENT_DEFS,
+            boards: ACHIEVEMENT_BOARDS,
+            summary,
+            playerKey: r.seat,
+            before,
+            after,
+            unlocked: new Set(r.unlockRecords.map((u) => u.id)),
+          });
+          await applyMatchAchievements(db, {
+            matchId,
+            playerId: r.accountId,
+            counters: after,
+            unlocks: awardsOf(fired),
+            companions: r.deltas,
+          });
+          if (fired.length > 0) {
+            const ws = room.socketOf(r.seat);
+            if (ws) this.trySend(ws, { t: "deedUnlocks", matchId, unlocks: fired.map((d) => d.id) });
+            console.log(`[${room.meta.code}] skirmish deeds for seat ${r.seat}: ${fired.map((d) => d.id).join(", ")}`);
+          }
+        } catch (err) {
+          console.error(`[${room.meta.code}] skirmish deeds for seat ${r.seat} failed:`, err);
+        }
+      }
+      // Room memory for the next match in this room.
+      sk.matchIndex = matchIndex;
+      sk.lastHumans = humanKey;
+      sk.lastMatch = { winners: winnersNow, losers: losersNow };
+    } catch (err) {
+      console.error(`[${room.meta.code}] skirmish deed pass failed:`, err);
+    }
+  }
+
+  /**
    * The achievement pass (achievements.md § award pipeline), one human seat
    * at a time: read counters/unlocks/lifetime-Glory, apply this match's
    * deltas (streak semantics + the ledger-derived glory counter included),
@@ -1032,7 +1206,7 @@ export class RoomManager {
       bracket: ctx.bracket,
       teamSize: room.sim.state.players.length / room.sim.state.teamCount,
       winnerTeam,
-      players: seated.map((p) => ({ id: p.id, team: p.team, weapon: p.weapon, bot: p.bot === true })),
+      players: seated.map((p) => ({ id: p.id, team: p.team, weapon: p.weapon, bot: p.bot === true, abilities: [...p.abilities] })),
     });
     for (const [seatId, account] of ctx.accounts) {
       if (account.bot) continue;
@@ -1069,26 +1243,11 @@ export class RoomManager {
           after,
           unlocked: new Set(unlockRecords.map((u) => u.id)),
         });
-        // Rewards stack (achievements.md § titles): Glory sums, and every
-        // entitlement kind lands its own row — a title records the deed's
-        // OWN id (`title:<id>`); clients render the string from the defs.
-        const unlocks: AchievementAward[] = fired.map((def) => {
-          const rewards = def.rewards ?? [];
-          const gloryTotal = rewards.reduce((sum, r) => (r.kind === "glory" ? sum + r.amount : sum), 0);
-          const entitlements = rewards.flatMap((r) =>
-            r.kind === "entitlement" ? [r.itemId] : r.kind === "title" ? [`title:${def.id}`] : [],
-          );
-          return {
-            id: def.id,
-            ...(gloryTotal > 0 ? { glory: gloryTotal } : {}),
-            ...(entitlements.length > 0 ? { entitlements } : {}),
-          };
-        });
         await applyMatchAchievements(db, {
           matchId: ctx.matchId,
           playerId: account.accountId,
           counters: after,
-          unlocks,
+          unlocks: awardsOf(fired),
         });
         if (fired.length > 0) {
           const ws = room.socketOf(seatId);
@@ -1211,3 +1370,20 @@ const sanitizeSeatToken = (token: unknown): string | null =>
  * titles). "" = bare. */
 const sanitizeTitle = (title: unknown): string =>
   (typeof title === "string" ? title : "").trim().slice(0, MAX_TITLE_ID);
+
+/** Rewards stack (achievements.md § titles): Glory sums, and every
+ * entitlement kind lands its own row — a title records the deed's OWN id
+ * (`title:<id>`); clients render the string from the defs. */
+const awardsOf = (fired: readonly BitsAchievementDef[]): AchievementAward[] =>
+  fired.map((def) => {
+    const rewards = def.rewards ?? [];
+    const gloryTotal = rewards.reduce((sum, r) => (r.kind === "glory" ? sum + r.amount : sum), 0);
+    const entitlements = rewards.flatMap((r) =>
+      r.kind === "entitlement" ? [r.itemId] : r.kind === "title" ? [`title:${def.id}`] : [],
+    );
+    return {
+      id: def.id,
+      ...(gloryTotal > 0 ? { glory: gloryTotal } : {}),
+      ...(entitlements.length > 0 ? { entitlements } : {}),
+    };
+  });

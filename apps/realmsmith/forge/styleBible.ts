@@ -307,6 +307,10 @@ export const ICON_SUBJECTS: Record<string, string> = {
     "a toppled iron cauldron pouring thick black tar across sand, the spill spreading into a glossy splattered pool with fat sticky drips",
   "titans-draught":
     "a rough-hewn stone drinking horn overflowing with golden liquid, oversized fists' worth of cracks glowing up the horn from a giant's grip",
+  // Call the Tide (bits-sands-deeds.md) — the deed-gated horn that raises
+  // the Blood Tide. The object is a war-horn; the tide is the tell.
+  "call-the-tide":
+    "a great curved bronze war-horn with a dark red tide of blood surging up and over its bell, the wave curling inward, droplets flung from the crest",
   // Re-briefed 2026-08-14 (Tom: the reliquary-CANNON read as artillery,
   // not aid) — the anchor object is now unambiguously a healer's tool:
   // lantern body, linen wrap, radiance. The thread stays (it IS the
@@ -1052,6 +1056,20 @@ export const DEED_SUBJECTS: Record<string, string> = {
   "deed-nobodys-hero":
     "a laurel wreath dropped in the sand beside a broken sword, the leaves still green, " +
     "nobody there to pick it up",
+  // ── The Blood Tide chapter (bits-sands-deeds.md, 2026-09-09) — one bold
+  // object each; the tide is always BLOOD, never water, never clean rings ──
+  "deed-tide-horn": "a bronze war-horn raised skyward with a wave of dark blood cresting behind it",
+  "deed-tide-kills": "a gladiator's short sword planted upright in sand as a tide of blood surges around its base",
+  "deed-baptism": "a warrior's fist punching up out of a churning blood tide, clutching a broken blade",
+  "deed-waist-deep": "a gladiator's greaved legs wading waist-deep through thick dark blood, ripples spreading",
+  "deed-tide-decided": "an empty bronze helmet half-sunk in a pool of blood, the surface swirling inward",
+  "deed-quicksand": "an hourglass with sand pouring so fast the lower bulb overflows, cracks in the glass",
+  "deed-last-grain": "a single grain of sand falling from an empty hourglass onto a drop of blood",
+  "deed-undertow": "a harpoon chain dragging a bronze greave down into a curling wave of blood",
+  "deed-dry-feet": "a pair of bare sandaled feet on a small island of clean sand ringed by dark blood",
+  "deed-taken-by-tide": "a gladiator's outstretched hand sinking beneath a surging blood tide, fingers spread",
+  "deed-sand-fall": "an hourglass with the sand almost fully run out, a blood wave rising in the lower bulb",
+  "deed-tidecaller": "a horned bronze crown with a great blood wave curling up through its horns, gold trim",
 };
 
 export interface DeedSpec {

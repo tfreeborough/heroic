@@ -10,6 +10,7 @@ import { PROTOCOL_VERSION, type ArenaEvent, type Team } from "@heroic/blood-in-t
 import {
   achievementCounters,
   achievementUnlocks,
+  companionsOf,
   createDb,
   ensureSchema,
   entitlementsOf,
@@ -277,5 +278,129 @@ describe("achievement awards at settle", () => {
     // The free roster stays free — Bob picks up a hammer like anyone.
     say(manager, b, { t: "setWeapon", weapon: "hammer" });
     expect(room.sim.state.players[seatB]!.weapon).toBe("hammer");
+  });
+});
+
+// ── Skirmish deeds (bits-skirmish-deeds.md, 2026-09-09) ────────────────────
+describe("skirmish deed awards", () => {
+  let db: Db;
+  let manager: RoomManager;
+  let tokenA: string;
+  let tokenB: string;
+  let accountA: string;
+  let accountB: string;
+
+  beforeEach(async () => {
+    db = createDb(":memory:");
+    await ensureSchema(db);
+    const a = await registerPlayer(db);
+    const b = await registerPlayer(db);
+    tokenA = a.token;
+    tokenB = b.token;
+    accountA = a.playerId;
+    accountB = b.playerId;
+    manager = new RoomManager(db, { enabled: false, minWaitMs: 15_000, maxWaitMs: 25_000, ratingJitter: 50 });
+    (manager as unknown as { server: Server<ClientData> }).server = { publish: () => 0 } as unknown as Server<ClientData>;
+  });
+
+  /** Synthetic match: `winner` takes one round with one lethal blow. */
+  const playOut = (seatW: number, seatL: number): ArenaEvent[] => [
+    { type: "roundStart", roundNumber: 1 },
+    { type: "hit", attackerId: seatW, targetId: seatL, damage: 60, crit: false, lethal: true, x: 0, y: 0 },
+    { type: "death", playerId: seatL },
+    { type: "roundEnd", winnerTeam: room_team(seatW), wins: [0, 0], standing: [{ id: seatW, hpFrac: 1 }] },
+  ];
+  // The synthetic roundEnd needs a winner team, but events are built before
+  // the room exists in some helpers — resolve lazily through this slot.
+  let room_team: (seat: number) => Team = () => 1;
+
+  /** Host creates (locked), guest joins by code — both carrying bearer tokens. */
+  const seatTwo = async (a: FakeSocket, b: FakeSocket, opts: { tokenB?: string | null; pass?: string } = {}) => {
+    say(manager, a, { t: "createRoom", v: PROTOCOL_VERSION, playerName: "Alice", teamSize: 1, token: tokenA, ...(opts.pass ? { pass: opts.pass } : {}) });
+    const room = [...internals(manager).rooms.values()][0]!;
+    const joinToken = opts.tokenB === undefined ? tokenB : opts.tokenB;
+    say(manager, b, {
+      t: "joinRoom",
+      v: PROTOCOL_VERSION,
+      code: room.meta.code,
+      playerName: "Bob",
+      ...(opts.pass ? { pass: opts.pass } : {}),
+      ...(joinToken ? { token: joinToken } : {}),
+    });
+    const seatA = a.ws.data.playerId!;
+    const seatB = b.ws.data.playerId!;
+    await until(() => room.accounts.size === (joinToken ? 2 : 1));
+    return { room, seatA, seatB };
+  };
+
+  /** Drive a match without stepping the sim: begin, play, end, wait. */
+  const playMatch = async (room: import("./room").Room, seatW: number, seatL: number) => {
+    room_team = (seat) => room.sim.state.players[seat]!.team as Team;
+    room.beginSkirmishMatch();
+    room.matchStats!.ingest(playOut(seatW, seatL));
+    const winnerTeam = room.sim.state.players[seatW]!.team as Team;
+    const matchId = room.skirmish.matchId!;
+    const indexBefore = room.skirmish.matchIndex;
+    room.onSkirmishMatchEnd!(winnerTeam);
+    // The room memory is written AFTER every seat's apply landed — a
+    // match-specific signal (the index climbs once per contested match).
+    await until(() => room.skirmish.matchIndex !== indexBefore);
+    return matchId;
+  };
+
+  test("two humans, tokens on the door: Well Met for both, counters namespaced, per-socket unlock, companions written", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    const { room, seatA, seatB } = await seatTwo(a, b, { pass: "1234" });
+    expect(room.accounts.get(seatA)).toBe(accountA);
+    expect(room.accounts.get(seatB)).toBe(accountB);
+    const matchId = await playMatch(room, seatA, seatB);
+    await until(() => a.of("deedUnlocks").length > 0 && b.of("deedUnlocks").length > 0);
+
+    const aDeeds = a.of("deedUnlocks")[0]!;
+    expect(aDeeds.matchId).toBe(matchId);
+    expect(aDeeds.unlocks).toEqual(expect.arrayContaining(["well-met", "behind-closed-doors"]));
+    const bDeeds = b.of("deedUnlocks")[0]!;
+    expect(bDeeds.unlocks).toContain("well-met");
+    expect(bDeeds.unlocks).not.toContain("behind-closed-doors"); // the loser
+
+    const counters = await achievementCounters(db, accountA);
+    expect(counters["skirmish:matches"]).toBe(1);
+    expect(counters["skirmish:companion_best"]).toBe(1);
+    expect(Object.keys(counters).every((k) => k.startsWith("skirmish:"))).toBe(true); // nothing ranked moved
+    expect((await achievementUnlocks(db, accountA)).map((u) => u.id)).toContain("well-met");
+    expect(await companionsOf(db, accountA)).toEqual([{ otherId: accountB, withCount: 0, againstCount: 1 }]);
+    // Nothing material: no Glory, no entitlements for either.
+    expect(await entitlementsOf(db, accountA)).toEqual([]);
+  });
+
+  test("a seat without a token plays but earns nothing — and the other human still counts as opposition", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    const { room, seatA, seatB } = await seatTwo(a, b, { tokenB: null });
+    expect(room.accounts.has(seatB)).toBe(false);
+    await playMatch(room, seatA, seatB);
+    await until(() => a.of("deedUnlocks").length > 0);
+    expect(a.of("deedUnlocks")[0]!.unlocks).toContain("well-met");
+    expect(b.of("deedUnlocks")).toHaveLength(0);
+    expect(await achievementCounters(db, accountB)).toEqual({});
+  });
+
+  test("room memory: the rematch is a Grudge Match for the avenged loser, and the third match is One More", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    const { room, seatA, seatB } = await seatTwo(a, b);
+    await playMatch(room, seatA, seatB); // Alice wins
+    await until(() => a.of("deedUnlocks").length > 0);
+    await playMatch(room, seatB, seatA); // Bob runs it back and wins
+    await until(() => b.of("deedUnlocks").length >= 2);
+    const bobSecond = b.of("deedUnlocks").at(-1)!;
+    expect(bobSecond.unlocks).toContain("grudge-match");
+    expect(a.of("deedUnlocks").flatMap((m) => m.unlocks as string[])).not.toContain("grudge-match");
+    expect(room.skirmish.matchIndex).toBe(2);
+    await playMatch(room, seatA, seatB);
+    expect(room.skirmish.matchIndex).toBe(3);
+    expect((await achievementUnlocks(db, accountA)).map((u) => u.id)).toContain("one-more");
+    expect((await achievementUnlocks(db, accountB)).map((u) => u.id)).toContain("one-more");
   });
 });

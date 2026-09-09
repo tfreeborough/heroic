@@ -13,7 +13,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { RANKED_BRACKETS, SIGNET_ITEM_IDS, SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
+import { ACHIEVEMENT_DEFS, RANKED_BRACKETS, SIGNET_ITEM_IDS, SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
 import {
   FEEDBACK_EMAIL_MAX,
   FEEDBACK_KINDS,
@@ -23,6 +23,7 @@ import {
   RATING_START,
   achievementCounters,
   achievementUnlocks,
+  applyMatchAchievements,
   createDb,
   creditIapSignets,
   displayFloorOf,
@@ -386,7 +387,7 @@ if (accountsEnabled) {
  * never set in prod.
  */
 if (process.env.STORE_DEV_TOOLS === "1") {
-  console.log("🛠  STORE_DEV_TOOLS on — /dev/reset-purchases + mock IAP live");
+  console.log("🛠  STORE_DEV_TOOLS on — /dev/reset-purchases, /dev/grant-deed, /dev/reset-deeds + mock IAP live");
 
   /** Forget every store purchase (entitlements bought with Signets) — deed
    * grants are untouched; Signet balances stay as they are. */
@@ -397,6 +398,59 @@ if (process.env.STORE_DEV_TOOLS === "1") {
       sql: "DELETE FROM entitlements WHERE player_id = ? AND source LIKE 'purchase:%'",
       args: [playerId],
     });
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Grant ANY deed to the caller, rewards included, exactly as a settle
+   * would record it (bits-dev-menu.md § deeds): the unlock row, the Glory,
+   * every entitlement — same writer, same idempotency shape, so a granted
+   * Tidecaller IS a Tidecaller (the spell lands, the title lands, the
+   * Deeds screen replays the ceremony). A milestone's counter is raised to
+   * its threshold so the codex bar reads full. Never a game-server path:
+   * real awards only ever come from ranked settles.
+   */
+  app.post("/dev/grant-deed", async (c) => {
+    const playerId = await authedPlayer(c);
+    if (!playerId) return c.json({ error: "unauthorized" }, 401);
+    const body = (await c.req.json().catch(() => null)) as { id?: unknown } | null;
+    const id = typeof body?.id === "string" ? body.id : null;
+    const def = id ? ACHIEVEMENT_DEFS.find((d) => d.id === id) : undefined;
+    if (!def) return c.json({ error: "unknown deed" }, 404);
+    const counters = await achievementCounters(db, playerId);
+    if (def.trigger.kind === "milestone") {
+      const { counter, threshold } = def.trigger;
+      counters[counter] = Math.max(counters[counter] ?? 0, threshold);
+    }
+    const rewards = def.rewards ?? [];
+    const glory = rewards.reduce((sum, r) => (r.kind === "glory" ? sum + r.amount : sum), 0);
+    const entitlements = rewards.flatMap((r) =>
+      r.kind === "entitlement" ? [r.itemId] : r.kind === "title" ? [`title:${def.id}`] : [],
+    );
+    await applyMatchAchievements(db, {
+      matchId: `dev:grant:${def.id}:${Date.now()}`,
+      playerId,
+      counters,
+      unlocks: [{ id: def.id, ...(glory > 0 ? { glory } : {}), ...(entitlements.length > 0 ? { entitlements } : {}) }],
+    });
+    return c.json({ ok: true, id: def.id, entitlements });
+  });
+
+  /** Forget every deed: unlocks, counters, and every achievement-granted
+   * entitlement (titles and secrets alike). Purchases and the Glory ledger
+   * stay — a re-granted deed's Glory row is idempotency-keyed and won't
+   * pay twice, which is the honest dev behaviour. */
+  app.post("/dev/reset-deeds", async (c) => {
+    const playerId = await authedPlayer(c);
+    if (!playerId) return c.json({ error: "unauthorized" }, 401);
+    await db.batch(
+      [
+        { sql: "DELETE FROM achievement_unlocks WHERE player_id = ?", args: [playerId] },
+        { sql: "DELETE FROM achievement_counters WHERE player_id = ?", args: [playerId] },
+        { sql: "DELETE FROM entitlements WHERE player_id = ? AND source LIKE 'achievement:%'", args: [playerId] },
+      ],
+      "write",
+    );
     return c.json({ ok: true });
   });
 }

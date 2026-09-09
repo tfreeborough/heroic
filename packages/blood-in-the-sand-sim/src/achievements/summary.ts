@@ -10,7 +10,7 @@
  * here (a kill window, an HP sample), THIS class grows it, keeping the
  * summary the single audited surface.
  */
-import { TICK_RATE, type AbilityId, type WeaponId } from "../config";
+import { SANDS_ATTACKER_ID, TICK_RATE, WINS_TO_TAKE_MATCH, type AbilityId, type WeaponId } from "../config";
 import type { ArenaEvent } from "../events";
 import type { Team } from "../state";
 
@@ -18,6 +18,9 @@ import type { Team } from "../state";
 export const CONCERT_WINDOW_TICKS = 2 * TICK_RATE;
 /** Avenging a fallen partner counts as SWIFT inside this many seconds. */
 export const SWIFT_REVENGE_SEC = 5;
+/** A body shoved into the Blood Tide that dies inside this window is an
+ * Undertow for the shover (bits-sands-deeds.md). */
+export const UNDERTOW_WINDOW_SEC = 4;
 
 export interface PlayerMatchStats {
   /** Lethal blows dealt to enemy PLAYERS (straw men and other deployables
@@ -75,19 +78,101 @@ export interface PlayerMatchStats {
   fastestKillSec: number | null;
   /** Healing this player dealt to TEAMMATES (never self). */
   alliedHealing: number;
+
+  // ── The Blood Tide (bits-sands-deeds.md). Player-facing name is the
+  // Blood Tide; the sim calls it the sands. Every stat here is zero in a
+  // round the tide never rose in.
+  /** Rounds this player was in when the tide rose. */
+  tideRounds: number;
+  /** Rounds this player was in, full stop (Watching the Sand Fall reads
+   * tideRounds === roundsPlayed). */
+  roundsPlayed: number;
+  /** Blood ticks taken across the match. */
+  tideTicks: number;
+  /** Deaths where the killing blow was the tide's. */
+  tideDeaths: number;
+  /** Killing blows landed AFTER the tide rose that round (the chain). */
+  tideKills: number;
+  /** Rounds won where this player's blow on the LAST enemy landed while
+   * standing in the blood (Baptism). */
+  baptisms: number;
+  /** Rounds won after taking WAIST_DEEP_TICKS or more blood ticks that
+   * round (Waist Deep). */
+  waistDeepWins: number;
+  /** Rounds won where the last enemy fell to the tide and this player took
+   * no blood tick that round (Let the Tide Decide). */
+  tideDecidedWins: number;
+  /** Rounds won with the closing blow landed after the ring fully closed
+   * (The Last Grain). */
+  lastGrainWins: number;
+  /** Enemies this player put into the tide who died within
+   * UNDERTOW_WINDOW_SEC (Undertow). */
+  undertows: number;
+  /** Times this player already stood inside the final ring at the roll
+   * (Dry Feet). */
+  eyeOfStorm: number;
+  /** The longest round's fight time in seconds — null until a fightStart
+   * was clocked (Quicksand reads it; a clockless caller never pops it). */
+  longestRoundSec: number | null;
+
+  // ── Skirmish (bits-skirmish-deeds.md). Round-shaped stats the brawl and
+  // party-trick deeds read; every one is derived from the per-round scratch
+  // and none of them is a ranked counter (the skirmish board's deltas are
+  // namespaced — counters.ts).
+  /** Most killing blows this player landed in a single round. */
+  bestRoundKills: number;
+  /** Rounds this player's team won in which they landed NO killing blow
+   * (in a brawl: the others did your work, or the Blood Tide did). */
+  roundsWonWithoutKilling: number;
+  /** Rounds won without taking a single point of damage (tide included). */
+  untouchedRoundWins: number;
+  /** Rounds in which this player was the second-to-last body standing. */
+  runnerUpRounds: number;
+  /** Killing blows on a fighter whose team sat on match point while this
+   * player's did not (Not Today). */
+  matchPointKills: number;
 }
+
+/** Blood ticks in one round that make a win Waist Deep (10 s at 0.5 s). */
+export const WAIST_DEEP_TICKS = 20;
 
 export interface MatchSummaryPlayer {
   id: number;
   team: Team;
   weapon: WeaponId | null;
   bot: boolean;
+  /** Picked hand (Mirror, Mirror reads it) — optional: older callers and
+   * ranked tests never supplied it, and no ranked deed needs it. */
+  abilities?: readonly AbilityId[];
+}
+
+/** Room-level context the SKIRMISH adapter fills (bits-skirmish-deeds.md):
+ * everything the friends deeds read that a sim event can't carry. Null on
+ * ranked summaries. */
+export interface SkirmishRoomContext {
+  /** The room was passcode-locked. */
+  locked: boolean;
+  /** The host's seat at match end. */
+  hostSeat: number;
+  /** How many consecutive matches this room has played with the SAME set of
+   * human accounts, this one included (1 = the first, or the set changed). */
+  matchIndex: number;
+  /** Seats whose account lost this room's PREVIOUS match to someone now on
+   * the losing side (the adapter works it out from account ids). */
+  grudgeSeats: readonly number[];
+  /** Seats whose account has, over their lifetime, fought both beside and
+   * against the same other account (this match included). */
+  bothSidesSeats: readonly number[];
 }
 
 export interface MatchSummary {
   ranked: boolean;
   bracket: string | null;
   teamSize: number;
+  /** Sides in the room — 2 everywhere but the brawl's 6 (bits-brawl.md). */
+  teamCount: number;
+  /** Skirmish room context, null on ranked summaries. */
+  room: SkirmishRoomContext | null;
   winnerTeam: Team;
   /** Indexed team − 1 (length = the room's teamCount; 2 everywhere ranked). */
   roundWins: number[];
@@ -119,6 +204,23 @@ const freshStats = (): PlayerMatchStats => ({
   concertKills: 0,
   fastestKillSec: null,
   alliedHealing: 0,
+  tideRounds: 0,
+  roundsPlayed: 0,
+  tideTicks: 0,
+  tideDeaths: 0,
+  tideKills: 0,
+  baptisms: 0,
+  waistDeepWins: 0,
+  tideDecidedWins: 0,
+  lastGrainWins: 0,
+  undertows: 0,
+  eyeOfStorm: 0,
+  longestRoundSec: null,
+  bestRoundKills: 0,
+  roundsWonWithoutKilling: 0,
+  untouchedRoundWins: 0,
+  runnerUpRounds: 0,
+  matchPointKills: 0,
 });
 
 /** The per-round scratch state the partnership stats are derived from —
@@ -135,6 +237,16 @@ interface RoundScratch {
   /** Players left alone against a full enemy side this round. */
   outnumbered: Set<number>;
   fightStartTick: number | null;
+  /** The tide rose this round. */
+  tideLive: boolean;
+  /** Blood ticks taken this round, per player. */
+  tideTicks: Map<number, number>;
+  /** How the round's LAST death happened — the round closers read it. */
+  lastDeath: { kind: "tide" } | { kind: "blow"; killer: number; attackerOut: boolean; p: number } | null;
+  /** victim → who put them in the tide, and when (the Undertow window). */
+  shovedInto: Map<number, { by: number; tick: number }>;
+  /** Damage each player took this round, every source (Untouchable). */
+  damageTaken: Map<number, number>;
 }
 
 const freshScratch = (ids: Iterable<number>): RoundScratch => ({
@@ -145,6 +257,11 @@ const freshScratch = (ids: Iterable<number>): RoundScratch => ({
   kills: new Map(),
   outnumbered: new Set(),
   fightStartTick: null,
+  tideLive: false,
+  tideTicks: new Map(),
+  lastDeath: null,
+  shovedInto: new Map(),
+  damageTaken: new Map(),
 });
 
 export class MatchStatsAccumulator {
@@ -156,8 +273,11 @@ export class MatchStatsAccumulator {
   /** Seats are fixed for a room's life — seed them up front so hit targets
    * can be filtered to real players (deployable ids never match). */
   private round: RoundScratch;
+  /** Round wins that take the match — match point is one short of it. */
+  private readonly winsToTake: number;
 
-  constructor(players: readonly { id: number; team: Team }[]) {
+  constructor(players: readonly { id: number; team: Team }[], opts: { winsToTake?: number } = {}) {
+    this.winsToTake = opts.winsToTake ?? WINS_TO_TAKE_MATCH;
     for (const p of players) {
       this.stats.set(p.id, freshStats());
       this.teams.set(p.id, p.team);
@@ -193,6 +313,19 @@ export class MatchStatsAccumulator {
           const target = this.stats.get(e.targetId);
           if (!target) break; // a deployable soaked it
           target.damageTaken += e.damage;
+          this.round.damageTaken.set(e.targetId, (this.round.damageTaken.get(e.targetId) ?? 0) + e.damage);
+          if (e.attackerId === SANDS_ATTACKER_ID) {
+            // The Blood Tide's tick: nobody's damage dealt, but the victim's
+            // blood-seconds — and, if lethal, the round's last death.
+            target.tideTicks += 1;
+            this.round.tideTicks.set(e.targetId, (this.round.tideTicks.get(e.targetId) ?? 0) + 1);
+            if (e.lethal) {
+              target.tideDeaths += 1;
+              this.round.lastDeath = { kind: "tide" };
+              this.undertow(e.targetId, tick);
+            }
+            break;
+          }
           const attacker = this.stats.get(e.attackerId);
           if (attacker && e.attackerId !== e.targetId) {
             attacker.damageDealt += e.damage;
@@ -202,7 +335,36 @@ export class MatchStatsAccumulator {
               ledger.set(e.attackerId, (ledger.get(e.attackerId) ?? 0) + e.damage);
               this.round.damageOn.set(e.targetId, ledger);
             }
-            if (e.lethal) this.lethal(e.attackerId, e.targetId, tick);
+            if (e.lethal) {
+              this.lethal(e.attackerId, e.targetId, tick);
+              if (this.teams.get(e.attackerId) !== this.teams.get(e.targetId)) {
+                if (this.round.tideLive) attacker.tideKills += 1;
+                this.round.lastDeath = {
+                  kind: "blow",
+                  killer: e.attackerId,
+                  attackerOut: e.tide?.attackerOut ?? false,
+                  p: e.tide?.p ?? 0,
+                };
+                this.undertow(e.targetId, tick);
+              }
+            }
+          }
+          break;
+        }
+        case "sandsStart": {
+          this.round.tideLive = true;
+          for (const [, s] of this.stats) s.tideRounds += 1;
+          for (const id of e.inside) {
+            const s = this.stats.get(id);
+            if (s) s.eyeOfStorm += 1;
+          }
+          break;
+        }
+        case "sandsShove": {
+          // Only an ENEMY's shove is an Undertow — a teammate's sinkhole
+          // dragging you out is your own problem.
+          if (this.teams.get(e.byId) !== this.teams.get(e.victimId) && this.stats.has(e.byId)) {
+            this.round.shovedInto.set(e.victimId, { by: e.byId, tick });
           }
           break;
         }
@@ -210,6 +372,8 @@ export class MatchStatsAccumulator {
           this.stats.get(e.playerId)!.deaths += 1;
           this.round.alive.delete(e.playerId);
           this.round.deathTick.set(e.playerId, tick);
+          // Second-to-last standing: exactly one body left after this fall.
+          if (this.round.alive.size === 1) this.stats.get(e.playerId)!.runnerUpRounds += 1;
           // The fallen's teammates who still stand, against a full enemy
           // side: outnumbered from here — a round win now is a clutch.
           const enemies = this.enemiesOf(e.playerId);
@@ -270,10 +434,46 @@ export class MatchStatsAccumulator {
             s.lastRoundClutch = clutch;
             if (clutch) s.clutchRounds += 1;
           }
+          // The Blood Tide's round closers (bits-sands-deeds.md).
+          const last = this.round.lastDeath;
+          for (const [id, s] of this.stats) {
+            s.roundsPlayed += 1;
+            if (this.round.fightStartTick !== null) {
+              const sec = (tick - this.round.fightStartTick) / TICK_RATE;
+              if (s.longestRoundSec === null || sec > s.longestRoundSec) s.longestRoundSec = sec;
+            }
+            if (e.winnerTeam === 0 || this.teams.get(id) !== e.winnerTeam) continue;
+            const ticks = this.round.tideTicks.get(id) ?? 0;
+            if (ticks >= WAIST_DEEP_TICKS) s.waistDeepWins += 1;
+            if (last?.kind === "tide" && ticks === 0) s.tideDecidedWins += 1;
+            if (last?.kind === "blow" && last.killer === id) {
+              if (last.attackerOut) s.baptisms += 1;
+              if (last.p >= 1) s.lastGrainWins += 1;
+            }
+          }
+          // Skirmish round closers (bits-skirmish-deeds.md): best single
+          // round, the kill-less win, the untouched win.
+          for (const [id, s] of this.stats) {
+            const kills = this.round.kills.get(id) ?? 0;
+            if (kills > s.bestRoundKills) s.bestRoundKills = kills;
+            if (e.winnerTeam === 0 || this.teams.get(id) !== e.winnerTeam) continue;
+            if (kills === 0) s.roundsWonWithoutKilling += 1;
+            if ((this.round.damageTaken.get(id) ?? 0) === 0) s.untouchedRoundWins += 1;
+          }
           break;
         }
       }
     }
+  }
+
+  /** `victim` just died — if an enemy put them in the tide inside the
+   * window, that's the shover's Undertow (any cause of death counts: the
+   * blood, or a blow landed while they flailed in it). */
+  private undertow(victim: number, tick: number): void {
+    const shove = this.round.shovedInto.get(victim);
+    if (!shove) return;
+    this.round.shovedInto.delete(victim);
+    if (tick - shove.tick <= UNDERTOW_WINDOW_SEC * TICK_RATE) this.stats.get(shove.by)!.undertows += 1;
   }
 
   /** A lethal blow by `killer` on `victim` at `tick`: the kill itself, the
@@ -286,6 +486,17 @@ export class MatchStatsAccumulator {
     stats.kills += 1;
     this.round.kills.set(killer, (this.round.kills.get(killer) ?? 0) + 1);
     this.round.killerOf.set(victim, killer);
+
+    // Not Today: the victim's side sat on match point (wins as of the last
+    // roundEnd) and the killer's did not.
+    const victimTeam = this.teams.get(victim);
+    const killerTeam = this.teams.get(killer);
+    if (victimTeam !== undefined && killerTeam !== undefined && victimTeam !== killerTeam) {
+      const matchPoint = this.winsToTake - 1;
+      if ((this.roundWins[victimTeam - 1] ?? 0) >= matchPoint && (this.roundWins[killerTeam - 1] ?? 0) < matchPoint) {
+        stats.matchPointKills += 1;
+      }
+    }
 
     const ledger = this.round.damageOn.get(victim);
     for (const mate of this.teammatesOf(killer)) {
@@ -326,6 +537,10 @@ export class MatchStatsAccumulator {
     ranked: boolean;
     bracket: string | null;
     teamSize: number;
+    /** Defaults to 2 — only brawl rooms pass more. */
+    teamCount?: number;
+    /** Skirmish only; absent = ranked (null). */
+    room?: SkirmishRoomContext | null;
     winnerTeam: Team;
     players: readonly MatchSummaryPlayer[];
   }): MatchSummary {
@@ -335,6 +550,8 @@ export class MatchStatsAccumulator {
       ranked: ctx.ranked,
       bracket: ctx.bracket,
       teamSize: ctx.teamSize,
+      teamCount: ctx.teamCount ?? 2,
+      room: ctx.room ?? null,
       winnerTeam: ctx.winnerTeam,
       roundWins: this.roundWins,
       roundWinners: [...this.roundWinners],

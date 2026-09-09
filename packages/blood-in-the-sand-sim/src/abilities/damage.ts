@@ -5,7 +5,7 @@
  * BleedConfig rule) that every ability number uses.
  */
 import { resolveAttack, type AttackResult, type Rng } from "@heroic/core";
-import { IRONHIDE } from "../config";
+import { IRONHIDE, SANDS_SHOVE_WINDOW } from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaPlayer } from "../state";
 import { damageFactorOf, ironhideActive, knockbackImmune } from "./statuses";
@@ -51,9 +51,20 @@ export const applyFixedHit = (victim: ArenaPlayer, base: number): number => {
   return damage;
 };
 
-/** A radial velocity impulse, gated by Ironhide's immunity. */
-export const applyImpulse = (victim: ArenaPlayer, dirX: number, dirY: number, impulse: number): void => {
+/** Stamp `victim` as displaced by `byId` — every shove/pull/drag calls it so
+ * a shoreline crossing inside SANDS_SHOVE_WINDOW credits the right player
+ * (bits-sands-deeds.md: Undertow). Self-displacement never counts. */
+export const markShoved = (victim: ArenaPlayer, byId: number): void => {
+  if (byId === victim.id) return;
+  victim.shovedBy = byId;
+  victim.shoveLeft = SANDS_SHOVE_WINDOW;
+};
+
+/** A radial velocity impulse, gated by Ironhide's immunity. `byId` = who
+ * threw it (the shove credit). */
+export const applyImpulse = (victim: ArenaPlayer, dirX: number, dirY: number, impulse: number, byId: number): void => {
   if (knockbackImmune(victim)) return;
   victim.mover.vel.x += dirX * impulse;
   victim.mover.vel.y += dirY * impulse;
+  markShoved(victim, byId);
 };

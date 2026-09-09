@@ -23,6 +23,7 @@ export interface EvaluateInput<S> {
 
 export const evaluate = <S>(input: EvaluateInput<S>): AchievementDef<S>[] => {
   const fresh: AchievementDef<S>[] = [];
+  const capstones: AchievementDef<S>[] = [];
   for (const def of input.defs) {
     if (input.unlocked.has(def.id)) continue;
     // An unregistered board is an authoring error — fail closed (no award).
@@ -39,8 +40,30 @@ export const evaluate = <S>(input: EvaluateInput<S>): AchievementDef<S>[] => {
       const before = input.before[t.counter] ?? 0;
       const after = input.after[t.counter] ?? 0;
       if (before < t.threshold && after >= t.threshold) fresh.push(def);
-    } else if (t.test(input.summary, input.playerKey)) {
-      fresh.push(def);
+    } else if (t.kind === "feat") {
+      if (t.test(input.summary, input.playerKey)) fresh.push(def);
+    } else {
+      capstones.push(def);
+    }
+  }
+  // Second pass: capstones see everything unlocked so far INCLUDING this
+  // match's fresh awards. Loop until a pass adds nothing, so a capstone that
+  // requires another capstone still lands the same match.
+  if (capstones.length > 0) {
+    const have = new Set<string>(input.unlocked);
+    for (const d of fresh) have.add(d.id);
+    let progressed = true;
+    while (progressed) {
+      progressed = false;
+      for (const def of capstones) {
+        if (have.has(def.id)) continue;
+        const t = def.trigger as Extract<typeof def.trigger, { kind: "capstone" }>;
+        if (t.requires.every((id) => have.has(id))) {
+          have.add(def.id);
+          fresh.push(def);
+          progressed = true;
+        }
+      }
     }
   }
   return fresh;

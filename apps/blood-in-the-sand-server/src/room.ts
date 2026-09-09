@@ -36,6 +36,7 @@ import {
   makeClientConfig,
   markDisconnected,
   MatchStatsAccumulator,
+  winsToTakeOf,
   nextHost,
   reconnectPlayer,
   removePlayer,
@@ -104,6 +105,28 @@ export interface RankedSeatAccount {
   bot?: boolean;
 }
 
+/** A skirmish room's deed bookkeeping (bits-skirmish-deeds.md). Identity is
+ * best-effort: a seat whose client sent a bearer token resolves to an
+ * account (the manager does the async lookup); everything else plays
+ * exactly as before and earns nothing. */
+export interface SkirmishContext {
+  /** Server-minted per MATCH at the lobby→match transition — the award
+   * batch's idempotency root. Null between matches. */
+  matchId: string | null;
+  /** Seat → account, SNAPSHOTTED at match start from the live map (seat ids
+   * are re-issued, and a mid-match reclaim with another token must never
+   * credit a stranger). Humans with a resolved account only. */
+  accounts: Map<number, string>;
+  /** The matchEnd award pass ran for the current matchId. */
+  ended: boolean;
+  /** Consecutive contested matches with the SAME human account set (One
+   * More) and the set they were played with. */
+  matchIndex: number;
+  lastHumans: string | null;
+  /** Who beat whom last time (Grudge Match), by account id. */
+  lastMatch: { winners: Set<string>; losers: Set<string> } | null;
+}
+
 /** What makes a room ranked (bits-ranked.md) — set by the manager right after
  * construction for queue-born rooms; null = a normal skirmish room. Ranked
  * rooms are unlisted, unjoinable from outside (rejoin excepted), hostless in
@@ -129,6 +152,15 @@ export class Room {
   readonly createdAtMs: number;
   /** Ranked context, or null for skirmish. Assigned by the manager. */
   ranked: RankedContext | null = null;
+  /** Live seat → account for skirmish deeds (bits-skirmish-deeds.md), filled
+   * by the manager's async token resolution after seating. Scrubbed the
+   * moment a seat frees (ids get re-issued — a stale entry credits a
+   * stranger); match-time reads go through the snapshot in `skirmish`. */
+  readonly accounts = new Map<number, string>();
+  skirmish: SkirmishContext = { matchId: null, accounts: new Map(), ended: false, matchIndex: 0, lastHumans: null, lastMatch: null };
+  /** Assigned by the manager on skirmish rooms — fires once per match on the
+   * sim's matchEnd event (the deed pass lives there). */
+  onSkirmishMatchEnd: ((winnerTeam: Team) => void) | null = null;
   /** Assigned by the manager on ranked rooms — fires exactly once, on the
    * sim's matchEnd event (the settle + rankedResult broadcast live there;
    * the room stays transport). */
@@ -139,11 +171,10 @@ export class Room {
    * the manager closes it once the settlement has landed. */
   ceremonyOver = false;
   /** Achievement tallies (achievements.md § MatchSummary) — assigned by the
-   * manager on ranked rooms once both seats exist; fed each step with
-   * exactly what stepSim returned (never the persistent event buffer, which
-   * lives on across steps). Null = nothing tallies (deeds are ranked-only,
-   * decided 2026-08-08 — a skirmish-counting pass was built and reverted
-   * the same day). */
+   * manager on ranked rooms once both seats exist, and by the room itself
+   * on skirmish rooms at each match start (bits-skirmish-deeds.md); fed
+   * each step with exactly what stepSim returned (never the persistent
+   * event buffer, which lives on across steps). Null = nothing tallies. */
   matchStats: MatchStatsAccumulator | null = null;
 
   private readonly server: Server<ClientData>;
@@ -294,8 +325,13 @@ export class Room {
     }
     if (playerId === null) return null;
     // A fresh seat mints its rejoin secret here — a reclaim keeps (and
-    // re-receives) the one the seat was born with.
-    if (!ghost) this.seatTokens.set(playerId, randomUUID());
+    // re-receives) the one the seat was born with. A fresh seat also owns
+    // no identity yet — whatever the id's previous occupant resolved to
+    // must not carry over (bits-skirmish-deeds.md § trust).
+    if (!ghost) {
+      this.seatTokens.set(playerId, randomUUID());
+      this.accounts.delete(playerId);
+    }
     // The cosmetics ride both non-ranked-reclaim paths — a rejoiner's picks
     // land like a joiner's (reconnectPlayer refreshes name; these are its
     // cosmetic siblings). A ranked reclaim keeps the seat's own (see above).
@@ -342,7 +378,23 @@ export class Room {
     this.seats.clear();
     this.lastSeen.clear();
     this.seatTokens.clear();
+    this.accounts.clear();
     this.watchers.clear();
+  }
+
+  /** The worn title on a seat (a deed id, "" = bare). */
+  titleOf(playerId: number): string {
+    return this.sim.state.players[playerId]?.title ?? "";
+  }
+
+  /** Strip or set a seat's worn title — the manager's skirmish title
+   * verification (achievements.md § wearing titles: an unowned claim is
+   * silently stripped to bare, never a rejection). */
+  setTitle(playerId: number, title: string, nowMs: number): void {
+    const p = this.sim.state.players[playerId];
+    if (!p || p.title === title) return;
+    p.title = title;
+    this.syncRoomState(nowMs);
   }
 
   private detach(ws: Socket, farewell: ServerMsg): void {
@@ -384,6 +436,7 @@ export class Room {
     if (this.sim.state.round.phase === "lobby") {
       removePlayer(this.sim, id);
       this.seatTokens.delete(id); // the seat is gone — its secret dies with it
+      this.accounts.delete(id); // …and so does its identity
     } else {
       markDisconnected(this.sim, id);
       console.log(`[${this.meta.code}] player ${id} dropped — body idles on`);
@@ -636,12 +689,30 @@ export class Room {
         // The latch fires on the first catch-up step only — one press, one cast.
         stepInputs.set(id, { ...input, casts: i === 0 ? (this.castLatch.get(id) ?? noCasts) : noCasts });
       }
+      const wasLobby = this.sim.state.round.phase === "lobby";
       const events = stepSim(this.sim, stepInputs, TICK_DT);
       this.eventBuffer.push(...events);
+      if (!this.ranked) {
+        const inLobby = this.sim.state.round.phase === "lobby";
+        // A skirmish match begins the tick the sim leaves the lobby — tallies
+        // start here (this very batch included) and the seat→account map
+        // is frozen for the match. The lobby return drops the tallies: the
+        // award pass already read them at matchEnd.
+        if (wasLobby && !inLobby) this.beginSkirmishMatch();
+        else if (!wasLobby && inLobby) this.matchStats = null;
+      }
       this.matchStats?.ingest(events, this.sim.state.tick); // the tick clocks the Wave-3 timed stats
     }
     this.castLatch.clear();
     this.logEvents();
+    // The sim frees ghost seats itself at lobby return — never let an
+    // identity outlive its seat (the id will be re-issued).
+    if (!this.ranked) {
+      for (const id of [...this.accounts.keys()]) {
+        const p = this.sim.state.players[id];
+        if (!p || p.bot) this.accounts.delete(id);
+      }
+    }
 
     if (this.sim.state.tick % SNAPSHOT_DIVISOR === 0) {
       this.lastSnap = toSnapshot(this.sim.state, this.eventBuffer);
@@ -655,6 +726,24 @@ export class Room {
     // plumbing; the brain reap rides the same beat.
     this.dismissBotBrains();
     this.syncRoomState(nowMs);
+  }
+
+  /** Skirmish match start (bits-skirmish-deeds.md): mint the match id,
+   * snapshot the resolved identities, and start tallying. Public for the
+   * test harness, which drives matches without stepping the sim. */
+  beginSkirmishMatch(): void {
+    this.skirmish.matchId = randomUUID();
+    this.skirmish.ended = false;
+    this.skirmish.accounts = new Map(
+      [...this.accounts].filter(([id]) => {
+        const p = this.sim.state.players[id];
+        return p !== null && p !== undefined && !p.bot;
+      }),
+    );
+    this.matchStats = new MatchStatsAccumulator(
+      seatedPlayers(this.sim.state).map((p) => ({ id: p.id, team: p.team })),
+      { winsToTake: winsToTakeOf(this.sim.state) },
+    );
   }
 
   /** One decision per bot seat per manager beat, exactly the practice-mode
@@ -753,6 +842,9 @@ export class Room {
         if (this.ranked && !this.ranked.ended) {
           this.ranked.ended = true;
           this.onRankedMatchEnd?.(e.winnerTeam);
+        } else if (!this.ranked && this.skirmish.matchId !== null && !this.skirmish.ended) {
+          this.skirmish.ended = true;
+          this.onSkirmishMatchEnd?.(e.winnerTeam);
         }
       }
     }

@@ -60,8 +60,47 @@ export const DEED_ICONS: Record<string, number | null> = {
   "deed-meat-shield": require("../../assets/deeds/deed-meat-shield.png"),
   "deed-along-for-the-ride": require("../../assets/deeds/deed-along-for-the-ride.png"),
   "deed-nobodys-hero": require("../../assets/deeds/deed-nobodys-hero.png"),
+  // The Blood Tide chapter (bits-sands-deeds.md, 2026-09-09) — forge art
+  // OWED: null renders the bare medallion until the PNGs land (briefs in
+  // the style bible's DEED_SUBJECTS).
+  "deed-tide-horn": null,
+  "deed-tide-kills": null,
+  "deed-baptism": null,
+  "deed-waist-deep": null,
+  "deed-tide-decided": null,
+  "deed-quicksand": null,
+  "deed-last-grain": null,
+  "deed-undertow": null,
+  "deed-dry-feet": null,
+  "deed-taken-by-tide": null,
+  "deed-sand-fall": null,
+  "deed-tidecaller": null,
   // Loadout-icon reuse — derived, never forged as deeds.
   ...Object.fromEntries(WEAPON_IDS.map((w) => [`deed-rounds-${w}`, ICON_SOURCES[w]])),
+  // The skirmish board (bits-skirmish-deeds.md, 2026-09-09) — forge owed;
+  // null renders the bare medallion until each PNG lands.
+  "deed-well-met": null,
+  "deed-regulars": null,
+  "deed-both-sides": null,
+  "deed-grudge": null,
+  "deed-one-more": null,
+  "deed-closed-doors": null,
+  "deed-open-house": null,
+  "deed-full-house": null,
+  "deed-six-enter": null,
+  "deed-one-leaves": null,
+  "deed-six-strangers": null,
+  "deed-clean-house": null,
+  "deed-vulture": null,
+  "deed-untouchable": null,
+  "deed-not-today": null,
+  "deed-bridesmaid": null,
+  "deed-doppelganger": null,
+  "deed-uniform": null,
+  "deed-full-set": null,
+  "deed-mirror": null,
+  "deed-gentlemen": null,
+  "deed-nobody-wins": null,
   ...Object.fromEntries(ABILITY_IDS.map((a) => [`deed-casts-${a}`, ICON_SOURCES[a]])),
 };
 
