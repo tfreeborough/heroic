@@ -125,7 +125,7 @@ export const ForgePanel = ({ onClose }: Props) => {
   const isBadge = type === "badge-bits";
   const isDeed = type === "deed-bits";
   const isHome = type === "home-bits";
-  /** All gpt-image-1 flows: one candidate kept, saved as `<id>.png`. */
+  /** All GPT Image flows: one candidate kept, saved as `<id>.png`. */
   const isImage = isIcon || isSprite || isMode || isBadge || isDeed || isHome;
   const isBits = type === "sfx-bits"; // the SFX type with a done-tick sound manifest
   // The set comes from the game's own tables; the server only says which files exist.
@@ -752,7 +752,7 @@ export const ForgePanel = ({ onClose }: Props) => {
             ? "Generating… (30–90s per image)"
             : "Generating… (a few seconds per take)"
           : isImage
-            ? "Generate 2 candidates"
+            ? "Generate 4 candidates"
             : provider === "both"
               ? "Generate 3 + 3 takes (local + ElevenLabs)"
               : "Generate 3 takes"}

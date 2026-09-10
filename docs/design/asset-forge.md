@@ -1,7 +1,7 @@
 # Asset Forge — AI asset generation in Realmsmith
 
 Status: **SFX path built (v1); image path built (v1, 2026-07-14; sprites 2026-07-17)** — the `icon-bits` type
-generates Blood in the Sand's weapon/ability icons (gpt-image-1, transparent 1024 → sharp
+generates Blood in the Sand's weapon/ability icons (GPT Image — gpt-image-2.5-flare since 2026-09-10, gpt-image-1 before — transparent 1024 → sharp
 downscale to 256 + libimagequant palette quantization: ~15KB per icon vs ~240KB lossless,
 alpha-dithered, verified visually indistinguishable on the game void), verified end-to-end ·
 Applies to: both games (tooling; consumers: Enter the Gauntlet SFX, Blood in the Sand icons) ·
@@ -22,13 +22,13 @@ ElevenLabs + OpenAI calls, ffmpeg-static audio + sharp image processing) + the F
 Image path (2026-07-14): the style bible carries an **ICON spec + checked-in 14-icon manifest**
 (ids mirror the sim's WeaponId/AbilityId; subjects from the pvp-abilities identity pass; a
 per-category accent — gold/red/steel/green — bakes the game's category-colour system into the
-art). The panel gains a manifest picker with done-ticks ("3 of 14"), generates 2 candidates,
+art). The panel gains a manifest picker with done-ticks ("3 of 14"), generates 4 candidates (2–3 until 2026-09-10; candidates run in parallel so the count is free wall-clock),
 previews each **at 32px on the game's void colour** (the roster-row acceptance test), keeps
 exactly one, and saves `<id>.png` (+ sidecar; regenerating overwrites). Save hands back the
 `icons.tsx` require-map line for when the app switches off the placeholder Skia glyphs.
 
 Sprite path (2026-07-17): the `sprite-bits` type generates **full-figure scene art** (title-screen
-gladiators first) through the same gpt-image-1 pipeline, generalized server-side (`imageSpec` routes
+gladiators first) through the same GPT Image pipeline, generalized server-side (`imageSpec` routes
 both image types through one generate/save path). Differences from icons, all deliberate: saved at
 **512px** (title figures render ~180px at 3×; headroom for reuse), and the template speaks **figure
 language, not emblem language** — whole body in frame with margin, high-sun rim light on crest and
@@ -232,7 +232,7 @@ follows the text; hidden on the local engine.
   "subject": "a screaming berserker face, red mist",   // what the user typed
   "prompt": "…the full expanded prompt actually sent…",
   "provider": "openai-image",
-  "model": "gpt-image-1",
+  "model": "gpt-image-2.5-flare",       // whichever model actually ran (gpt-image-1 on older sidecars)
   "params": { "size": "1024x1024", "quality": "high", "background": "transparent" },
   "references": ["assets/icons/talents/heavy_handed.png"],
   "created": "2026-07-05"
@@ -246,6 +246,24 @@ diffs a sidecar's `subject` against the live brief — after a brief rewrite tha
 list. Never clear a bank by deleting its mp3: the app manifest `require()`s it and the bundle
 breaks; save overwrites `<id>_1.mp3` + the sidecar in place. Sound sidecars record the engine that
 made the takes (`provider: "stable-audio-3"` / `"elevenlabs-sfx"`).
+
+## Model
+
+`DEFAULT_IMAGE_MODEL` in `forge/openai.ts` = **`gpt-image-2.5-flare`** (switched 2026-09-10 from
+gpt-image-1). GPT Image 2.5 shipped 2026-09-08 with two API models on the **same request shape**
+(size / quality / background / output_format all unchanged, so the swap was one constant): Flare is
+OpenAI's default pick — ~50% lower latency, output tokens $30/M vs gpt-image-1's $40/M — and
+Sunburst is the slower one tuned for edit precision, which the forge never exercises (it only calls
+`/images/generations`). New in 2.5 and deliberately unused: custom `WIDTHxHEIGHT` canvases
+(multiples of 16, up to 3:1) and `xhigh`/`max` quality tiers — every template's crop and
+sacrificial-band arithmetic assumes the three standard canvases, and quality stays `medium` because
+the pixel-grid snap + palette quantization throws away fine detail anyway.
+
+`FORGE_IMAGE_MODEL` in `.env.local` overrides the model per machine (A/B sunburst, or fall back to
+gpt-image-1 on a bad batch); sidecars record whichever model actually ran, so old assets still say
+`gpt-image-1` and that is correct provenance, not a STALE signal — STALE diffs `subject` only.
+Whether 2.5 fakes the pixel grid better or worse than gpt-image-1 is unmeasured until the next
+regenerate pass (docs/design/bits-art-style.md — all image assets are owed regeneration anyway).
 
 ## Layering
 

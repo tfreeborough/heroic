@@ -44,7 +44,7 @@ import {
   weightsCached,
   type StableAudioEnv,
 } from "./stableAudio";
-import { IMAGE_MODEL_ID, generateImage } from "./openai";
+import { DEFAULT_IMAGE_MODEL, generateImage } from "./openai";
 import { processSfx } from "./audio";
 import { bitsManifestTarget, listBankFiles, writeSfxManifest } from "./sfxManifest";
 import { processIcon, processScene } from "./images";
@@ -70,7 +70,7 @@ const ICON_NAME_RE = /^[a-z][a-z0-9-]*$/;
 const sfxSpec = (type: string): SfxSpec | null =>
   type === SFX.id ? SFX : type === SFX_BITS.id ? SFX_BITS : null;
 
-/** The gpt-image-1 types share a pipeline — canvas/destination/template differ. */
+/** The GPT Image types share a pipeline — canvas/destination/template differ. */
 type ImageSpec = IconSpec | SpriteSpec | ModeSpec | BadgeSpec | DeedSpec | HomeSpec;
 const imageSpec = (type: string): ImageSpec | null =>
   type === ICON.id
@@ -133,6 +133,8 @@ const clampInfluence = (v: number | undefined): number | undefined =>
 export const forgePlugin = (): Plugin => {
   let elevenKey = "";
   let openaiKey = "";
+  /** FORGE_IMAGE_MODEL overrides the GPT Image model (see openai.ts). */
+  let imageModel: string = DEFAULT_IMAGE_MODEL;
   /** FORGE_SFX_PROVIDER: "stable-audio" runs the local model (stableAudio.ts),
    * "both" runs it AND ElevenLabs on the same prompt (takes tagged per engine);
    * anything else = ElevenLabs only. */
@@ -222,7 +224,13 @@ export const forgePlugin = (): Plugin => {
 
     const settled = await Promise.allSettled(
       Array.from({ length: spec.candidates }, () =>
-        generateImage(openaiKey, prompt, spec.size, "background" in spec ? spec.background : "transparent"),
+        generateImage(
+          openaiKey,
+          prompt,
+          spec.size,
+          "background" in spec ? spec.background : "transparent",
+          imageModel,
+        ),
       ),
     );
     const candidates: Candidate[] = [];
@@ -389,7 +397,7 @@ export const forgePlugin = (): Plugin => {
       subject: body.subject ?? "",
       prompt: body.prompt ?? "",
       provider: spec.provider,
-      model: IMAGE_MODEL_ID,
+      model: imageModel,
       params: {
         size: spec.size,
         quality: "medium",
@@ -610,6 +618,7 @@ export const forgePlugin = (): Plugin => {
       openaiKey = env.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
       repoRoot = resolve(config.root, "../..");
       const pick = (k: string): string | undefined => env[k] ?? process.env[k];
+      imageModel = pick("FORGE_IMAGE_MODEL")?.trim() || DEFAULT_IMAGE_MODEL;
       const providerEnv = pick("FORGE_SFX_PROVIDER");
       sfxProvider = providerEnv === "stable-audio" || providerEnv === "both" ? providerEnv : "elevenlabs";
       // Defaults: the checkout as a sibling of this monorepo, uv where its

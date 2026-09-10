@@ -711,7 +711,16 @@ body {
 
 .forge .icon-candidates {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Four candidates per spread (2026-09-10): squares fit in one row; the wide
+   canvases (mode cards, sprites, home) get a floor so they wrap 2×2 instead of
+   shrinking to a strip nobody can judge. */
+.forge .icon-candidate.mode,
+.forge .icon-candidate.sprite {
+  flex: 1 1 calc(50% - 4px);
 }
 
 /* Candidates sit on the game's void colour — judging bone-on-transparent

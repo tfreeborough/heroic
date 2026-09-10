@@ -57,7 +57,7 @@ export const SFX: SfxSpec = {
   label: "Sound effect — Enter the Gauntlet",
   provider: "elevenlabs-sfx",
   soundIdentity: SOUND_IDENTITY,
-  candidates: 3,
+  candidates: 4,
   promptInfluence: 0.3,
   loudnessLufs: -16,
   truePeakDb: -1.5,
@@ -83,7 +83,7 @@ export const SFX_BITS: SfxSpec = {
   // subject. The subject briefs in SOUND_SUBJECTS carry their own tone now;
   // only the one-shot format clause survives (it's what stops ElevenLabs
   // drifting into music beds and ambient loops, not brand styling).
-  candidates: 3,
+  candidates: 4,
   promptInfluence: 0.3,
   loudnessLufs: -16,
   truePeakDb: -1.5,
@@ -364,7 +364,7 @@ export const ICON: IconSpec = {
   id: "icon-bits",
   label: "Icon (Blood in the Sand)",
   provider: "openai-image",
-  candidates: 2,
+  candidates: 4,
   // Largest in-app render is the codex hero at 52pt → 156px on a 3× screen;
   // 256 covers that with margin. Bump only if a bigger surface appears.
   savedSize: 256,
@@ -482,7 +482,7 @@ export const SPRITE: SpriteSpec = {
   id: "sprite-bits",
   label: "Sprite (Blood in the Sand)",
   provider: "openai-image",
-  candidates: 2,
+  candidates: 4,
   savedSize: 512,
   pixelGrid: 128,
   paletteColours: 48,
@@ -603,7 +603,7 @@ export interface ModeSpec {
   /** Hard palette budget (see IconSpec.paletteColours) — scenes get the
    * biggest budget: gradient skies need more ramp steps than emblems. */
   paletteColours: number;
-  /** Generation canvas: LANDSCAPE, the widest gpt-image-1 offers. 3:2 is
+  /** Generation canvas: LANDSCAPE, the widest of the three standard GPT Image canvases. 3:2 is
    * taller than the card — the save keeps the middle band, so the template
    * declares the top/bottom quarters sacrificial. */
   size: "1536x1024";
@@ -622,7 +622,7 @@ export const MODE: ModeSpec = {
   id: "mode-bits",
   label: "Mode card (Blood in the Sand)",
   provider: "openai-image",
-  candidates: 2,
+  candidates: 4,
   savedWidth: 900,
   savedHeight: 360,
   pixelGridWidth: 300,
@@ -704,7 +704,7 @@ export interface HomeSpec {
   pixelGridHeight: number;
   /** Hard palette budget (see IconSpec.paletteColours) — scene-sized. */
   paletteColours: number;
-  /** Generation canvas: PORTRAIT, the tallest gpt-image-1 offers. */
+  /** Generation canvas: PORTRAIT, the tallest of the three standard GPT Image canvases. */
   size: "1024x1536";
   /** Full-bleed scenes are opaque — asking for alpha invites holes in the sky. */
   background: "opaque";
@@ -720,7 +720,7 @@ export const HOME: HomeSpec = {
   id: "home-bits",
   label: "Home backdrop (Blood in the Sand)",
   provider: "openai-image",
-  candidates: 2,
+  candidates: 4,
   savedWidth: 1024,
   savedHeight: 1536,
   pixelGridWidth: 256,
@@ -854,7 +854,7 @@ export const BADGE: BadgeSpec = {
   id: "badge-bits",
   label: "Rank badge (Blood in the Sand)",
   provider: "openai-image",
-  candidates: 2,
+  candidates: 4,
   savedSize: 256,
   pixelGrid: 64,
   paletteColours: 32,
@@ -1070,6 +1070,55 @@ export const DEED_SUBJECTS: Record<string, string> = {
   "deed-taken-by-tide": "a gladiator's outstretched hand sinking beneath a surging blood tide, fingers spread",
   "deed-sand-fall": "an hourglass with the sand almost fully run out, a blood wave rising in the lower bulb",
   "deed-tidecaller": "a horned bronze crown with a great blood wave curling up through its horns, gold trim",
+
+  // ── The skirmish board (bits-skirmish-deeds.md, 2026-09-09) — casual
+  // play, friends, the 6-way brawl, party tricks. Warmer than the ranked
+  // sets: tavern and company motifs for Good Company, the SIX for the
+  // brawl, doubled/matched objects for the tricks. One bold object each.
+  // Good Company — "Well Met", the board's root.
+  "deed-well-met": "two gladiator forearms clasped in a warrior's handshake, leather bracers, a red cord tied around both wrists",
+  // The company ladder: Regulars → Old Friends → Thick as Thieves.
+  "deed-regulars": "two worn bronze tankards knocked together in a toast, foam spilling over the rims",
+  // "Both Sides Now" — beside and against the same fighter.
+  "deed-both-sides": "a single round bronze shield split down the middle, one half polished blue-tinted, one half red-tinted, a sword laid across the seam",
+  // "Grudge Match" — the rematch won.
+  "deed-grudge": "two gladiator helms butting brow to brow, one cracked, sparks at the point of contact",
+  // "One More" — the third match in a row.
+  "deed-one-more": "three tally marks scratched deep into an arena wall, the third still fresh and bright, a chalk stub beneath",
+  // "Behind Closed Doors" — the locked room.
+  "deed-closed-doors": "a heavy iron padlock hanging from a barred wooden door with a small viewing hatch slid shut",
+  // "Open House" — the host whose room fills with people.
+  "deed-open-house": "an open wooden door with warm lamplight spilling out, a bronze key hanging from the latch",
+  // "Full House" — eight people, no bots.
+  "deed-full-house": "eight small wooden gladiator tokens packed tight in a bronze tray, not one gap",
+  // Six Enter — the chapter's root; SIX ENTER, ONE LEAVES.
+  "deed-six-enter": "six trails of sandalled footprints converging from every edge onto one point in the sand",
+  // "One Leaves" — the brawl won.
+  "deed-one-leaves": "one sword standing upright in sand among five fallen swords lying flat in a ring around it",
+  // "Six Strangers" — six humans in the ring.
+  "deed-six-strangers": "six different gladiator helms in a ring, each a different shape and metal, facing the centre",
+  // "Clean House" — all five kills in one round.
+  "deed-clean-house": "a straw broom sweeping five small bronze helmets off the edge of a sandy floor",
+  // "The Vulture" — the round won without a kill.
+  "deed-vulture": "a hunched bronze vulture perched on the pommel of a sword driven into sand, waiting",
+  // "Untouchable" — the round won without a scratch.
+  "deed-untouchable": "a single white feather drifting above five upturned sword points, not a barb on it",
+  // "Not Today" — the leader denied at match point.
+  "deed-not-today": "a bronze victory bell with a short sword jammed through its mouth mid-swing, silenced",
+  // "Always the Bridesmaid" — the joke: second-to-last, every round.
+  "deed-bridesmaid": "a small bunch of wilted desert flowers left on the lower step of a two-step wooden podium, the top step empty",
+  // Party Tricks — "Doppelganger", the board's one title: eight, one weapon.
+  "deed-doppelganger": "one bronze gladius sword standing in sand casting eight identical long shadows fanning out around it",
+  // "Uniform" — your whole side on one weapon.
+  "deed-uniform": "four identical bronze war hammers stacked heads-together into a star, handles pointing out",
+  // "The Full Set" — four different weapons on your side.
+  "deed-full-set": "a sword, a bow, a staff and a hammer arranged in a cross over a round wooden shield, one of each",
+  // "Mirror, Mirror" — the identical loadout.
+  "deed-mirror": "a bronze gladiator figure upright and the same figure inverted beneath him, joined at the waist like a king on a playing card",
+  // "Gentlemen's Agreement" — no abilities cast by anyone.
+  "deed-gentlemen": "two gloves laid crossed on a wooden table beside an unlit candle, a bronze coin on top as a wager",
+  // "Nobody Wins" — the double-wipe draw.
+  "deed-nobody-wins": "an empty wooden victor's stool in the sand with a single black crow perched on it, the seat unclaimed",
 };
 
 export interface DeedSpec {
@@ -1095,7 +1144,7 @@ export const DEED: DeedSpec = {
   id: "deed-bits",
   label: "Deed icon (Blood in the Sand)",
   provider: "openai-image",
-  candidates: 2,
+  candidates: 4,
   savedSize: 256,
   pixelGrid: 64,
   paletteColours: 32,
