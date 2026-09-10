@@ -62,7 +62,8 @@ import {
 import { SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
 import { getEntitlements, grantEntitlement } from "../deeds/entitlements";
 import { AccountSheet } from "../components/AccountSheet";
-import { ScreenHeader } from "../components/ScreenHeader";
+import { RedeemCodeSheet } from "../components/RedeemCodeSheet";
+import { HeaderDoor, ScreenHeader } from "../components/ScreenHeader";
 import {
   CLERK_PUBLISHABLE_KEY,
   markOfferShown,
@@ -135,6 +136,8 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   const [packsMock, setPacksMock] = useState(false);
   /** The post-purchase account offer (bits-accounts.md § the sheet). */
   const [accountOffer, setAccountOffer] = useState(false);
+  /** The redeem-a-code sheet (bits-redeem-codes.md), off the header's ticket. */
+  const [redeemOpen, setRedeemOpen] = useState(false);
   const busy = useRef(false);
 
   /**
@@ -490,6 +493,24 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
               playSound("uiBack");
               onBack();
             }}
+            // The ticket door (bits-redeem-codes.md): shown whenever a code
+            // COULD be redeemed — linked already, or accounts live so the
+            // sheet can offer the sign-in. Off entirely otherwise.
+            right={
+              wallet !== null && CLERK_PUBLISHABLE_KEY.length > 0 && (wallet.linked || wallet.accounts) ? (
+                <HeaderDoor
+                  onPress={() => {
+                    unlockAudio();
+                    playSound("uiTap");
+                    setRedeemOpen(true);
+                  }}
+                >
+                  <View style={styles.ticket}>
+                    <View style={styles.ticketTear} />
+                  </View>
+                </HeaderDoor>
+              ) : null
+            }
           />
         </Animated.View>
 
@@ -649,6 +670,16 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
             setCeremony(null);
             maybeOfferAccount(wallet);
           }}
+        />
+      ) : null}
+
+      {/* ── Redeem a code (bits-redeem-codes.md) — off the header ticket. ── */}
+      {redeemOpen && wallet !== null ? (
+        <RedeemCodeSheet
+          wallet={wallet}
+          onClose={() => setRedeemOpen(false)}
+          onLinked={onAccountLinked}
+          onRedeemed={setWallet}
         />
       ) : null}
 
@@ -879,6 +910,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#7e2020",
   },
 
+  // The header ticket: a small gold stub with a tear line — a code is a
+  // ticket you hand in.
+  ticket: {
+    width: 13,
+    height: 9,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    borderColor: C_GOLD,
+    justifyContent: "center",
+  },
+  ticketTear: { alignSelf: "center", width: 1, height: 5, backgroundColor: C_GOLD, opacity: 0.8 },
   counter: { gap: 10 },
   counterBtns: { flexDirection: "row", alignItems: "stretch", gap: 9 },
   // The money door: outlined, not solid — present, never shouting.

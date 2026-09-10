@@ -89,12 +89,16 @@ already proved out (its notes survive in achievements.md and protocol.ts):
 
 Two rules, both cheap, both explicable:
 
-- **Humans face humans.** A skirmish match counts only when human players
-  sit on at least two distinct teams. One human plus seven bots is practice
-  with extra steps and counts for nobody; two friends versus six bots is
-  the same. This is the board's `accepts` gate (summary-level — it needs
-  `players[].bot` and `team`, both already on the summary). Brawl: six
-  teams of one, so two humans anywhere satisfies it.
+- **One other human in the room.** *(REVISED 2026-09-10, Tom — was
+  "humans on two distinct teams". Testing solo brawl vs five bots popped
+  nothing, and the solo-vs-bots player is exactly who this board is for;
+  but a lone human is still practice with extra steps.)* A skirmish match
+  counts when at least two humans are seated, whatever their sides — two
+  friends versus six bots is company. This is the board's `accepts` gate
+  (`twoHumansInRoom`, summary-level, reads `players[].bot`). Deeds that
+  need people on both sides say so themselves (Six Strangers, Full House,
+  Open House, Doppelganger require no bots; Mirror, Mirror a human foe;
+  the companion deeds only ever count accounts).
 - **Nothing material is paid** (above). Two phones and an afternoon buy a
   full codex chapter and not one Glory.
 
@@ -105,7 +109,7 @@ are fine outcomes for a board whose job is to make casual play feel seen.
 
 ## Deeds
 
-One board, `skirmish` (`accepts: !ranked && humansOnTwoTeams`), three
+One board, `skirmish` (`accepts: !ranked && twoHumansInRoom`), three
 Chronicle chapters in reading order after *Brothers in Arms*. Titles are
 placeholders in the house voice; Tom renames. Following the Blood Tide rule
 (one earned title, at most one joke) and Tom's "no titles" brief, the board
@@ -117,7 +121,7 @@ moment.
 
 | Deed | Criteria | Reads |
 |---|---|---|
-| **Well Met** | Fight a skirmish match against another human. The board's root. | `skirmish:matches` ≥ 1 |
+| **Well Met** | Fight a skirmish match with another human in the room. The board's root. | `skirmish:matches` ≥ 1 |
 | **Regulars → Old Friends → Thick as Thieves** | Share a room with the same fighter for 5 / 25 / 100 matches. The board's one chain. | `skirmish:companion_best` (adapter, from the companions table) |
 | **Both Sides Now** | Fight both beside and against the same fighter. | companions table `with` + `against` both > 0 |
 | **Grudge Match** | Beat a fighter who beat you in this room's previous match. | room's last-match memory → `room.grudgeSeats` on the summary |
@@ -280,7 +284,7 @@ at nothing**, no nudge copy yet.
    `roundsWonWithoutKilling`, `untouchedRoundWins`, `runnerUpRounds`,
    `matchPointKills`; accumulator takes `{ winsToTake }`.
 2. **S2 — content.** `achievements/defsSkirmish.ts`: `SKIRMISH_BOARD_DEF`
-   (`!ranked && humansOnTwoTeams`), 22 defs, `SKIRMISH_TITLE_IDS`,
+   (`!ranked && twoHumansInRoom`), 22 defs, `SKIRMISH_TITLE_IDS`,
    `CHAPTERS_SKIRMISH` (Good Company · Six Enter · Party Tricks, after
    Brothers in Arms). Tests: the sealed-boards test replaced the old
    "ranked-only" one; the namespace invariant; zero-pay; a scripted 6-way

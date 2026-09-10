@@ -204,6 +204,34 @@ const applySchema = async (db: Db): Promise<void> => {
         against_count INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (player_id, other_id)
       )`,
+      // Redeem codes (bits-redeem-codes.md): promo (public, use-limited +
+      // dated) and tester (single-use) codes paying Glory and/or Signets.
+      // `code` is the normalised form (A–Z0–9 only); `display` is what was
+      // minted, hyphens and all. NULL max_redemptions = unlimited.
+      `CREATE TABLE IF NOT EXISTS codes (
+        code TEXT PRIMARY KEY,
+        display TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        glory INTEGER NOT NULL DEFAULT 0,
+        signets INTEGER NOT NULL DEFAULT 0,
+        max_redemptions INTEGER,
+        expires_at INTEGER,
+        active INTEGER NOT NULL DEFAULT 1,
+        note TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`,
+      // One row per (code, player) — the PRIMARY KEY is what makes "once per
+      // code per player" true. Only linked players can hold a row (the API
+      // refuses anonymous redeems), so the Clerk id is audit only.
+      `CREATE TABLE IF NOT EXISTS code_redemptions (
+        code TEXT NOT NULL REFERENCES codes(code),
+        player_id TEXT NOT NULL REFERENCES players(id),
+        clerk_user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        PRIMARY KEY (code, player_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_code_redemptions_player
+        ON code_redemptions (player_id)`,
     ],
     "write",
   );

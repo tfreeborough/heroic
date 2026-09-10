@@ -66,9 +66,12 @@ export interface ScreenHeaderProps {
   /** One more thing for the middle slot, beside the queue pill when both
    * show — today the ping pill on RankedScreen (bits-regions.md § Stage 1). */
   middle?: ReactNode;
+  /** One more door after the purse — today the Armory's redeem-a-code
+   * ticket (bits-redeem-codes.md). */
+  right?: ReactNode;
 }
 
-export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style, queuePill = true, middle }: ScreenHeaderProps) => (
+export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style, queuePill = true, middle, right }: ScreenHeaderProps) => (
   <View style={[styles.bar, style]}>
     <Pressable onPress={onBack} hitSlop={12} style={styles.back}>
       <Text style={styles.backText}>‹</Text>
@@ -77,12 +80,26 @@ export const ScreenHeader = ({ onBack, onPurse, wallet, onLinked, style, queuePi
       {queuePill ? <QueuePill /> : null}
       {middle}
     </View>
-    {wallet === undefined ? (
-      <LivePurse onPress={onPurse} onLinked={onLinked} />
-    ) : (
-      <Purse wallet={wallet} onPress={onPurse} onLinked={onLinked} />
-    )}
+    <View style={styles.right}>
+      {wallet === undefined ? (
+        <LivePurse onPress={onPurse} onLinked={onLinked} />
+      ) : (
+        <Purse wallet={wallet} onPress={onPurse} onLinked={onLinked} />
+      )}
+      {right}
+    </View>
   </View>
+);
+
+/**
+ * A small round door in the header's vocabulary (the restore door's ring,
+ * sized and bordered the same) around whatever glyph the screen supplies —
+ * exported so a screen's extra door matches without copying the styles.
+ */
+export const HeaderDoor = ({ onPress, children }: { onPress: () => void; children: ReactNode }) => (
+  <Pressable onPress={onPress} hitSlop={10} style={styles.door}>
+    {children}
+  </Pressable>
 );
 
 /** Uncontrolled purse: owns its own wallet fetch. Split from Purse so the
@@ -182,6 +199,7 @@ const styles = StyleSheet.create({
   },
   back: { width: 44, paddingVertical: 2 },
   middle: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  right: { flexDirection: "row", alignItems: "center", gap: 8 },
   backText: { color: "#8a7f70", fontSize: 26, fontWeight: "800", lineHeight: 28 },
 
   purseRow: { flexDirection: "row", alignItems: "center", gap: 8 },

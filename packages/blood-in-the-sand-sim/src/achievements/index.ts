@@ -14,7 +14,7 @@ export {
   ACHIEVEMENT_DEFS_SKIRMISH,
   SKIRMISH_BOARD,
   SKIRMISH_TITLE_IDS,
-  humansOnTwoTeams,
+  twoHumansInRoom,
 } from "./defsSkirmish";
 export { ACHIEVEMENT_DEFS_2V2, RANKED_2V2_BOARD, TITLE_ONLY_2V2 } from "./defs2v2";
 export {

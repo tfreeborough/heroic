@@ -2,10 +2,18 @@
  * The one evaluation function: given the finished match summary and the
  * player's lifetime counters before/after it, which definitions newly
  * unlocked? Pure — the adapter reads state, calls this, and persists what
- * comes back. "New" is structural: milestones fire on the threshold crossing
- * (before < t ≤ after, exactly once), feats only while still locked; both
- * are additionally filtered against the already-unlocked set so a replayed
- * evaluation can never re-award.
+ * comes back. "New" is structural: milestones fire when the counter is AT
+ * OR PAST the threshold and the deed isn't unlocked yet, feats only while
+ * still locked; both are filtered against the already-unlocked set, which is
+ * what guarantees once-only — a replayed evaluation can never re-award.
+ *
+ * Milestones were crossing-only (before < t ≤ after) until 2026-09-10. That
+ * left a deed stuck forever whenever its counter moved past the line
+ * OUTSIDE an evaluation: a retuned threshold moves the chain id under a
+ * counter already past it (Lights Out 1→5, the tripled weapon tiers), and
+ * an adapter-supplied counter can jump in a lump (glory_earned via a merge
+ * or a code). "At or past" catches every one of those up on the next
+ * accepted match — a one-time ceremony flood for veterans, and correct.
  */
 import type { AchievementDef, BoardDef, Counters } from "./types";
 
@@ -27,19 +35,16 @@ export const evaluate = <S>(input: EvaluateInput<S>): AchievementDef<S>[] => {
   for (const def of input.defs) {
     if (input.unlocked.has(def.id)) continue;
     // An unregistered board is an authoring error — fail closed (no award).
-    // The accepts gate binds EVERYTHING on the board — sound only while
-    // every counter-moving apply also passes the gate (true today: deeds
-    // are ranked-only, decided 2026-08-08 after a built-then-reverted
-    // skirmish-counting experiment). If a non-accepted context ever applies
-    // counters again, milestones must be exempted here or their crossings
-    // are consumed without firing (evaluate sees each before/after once).
+    // The accepts gate binds EVERYTHING on the board. A non-accepted context
+    // moving a counter past a threshold no longer loses the award (the old
+    // crossing trap, achievements.md § M4 retired): the milestone simply
+    // fires on the next accepted match, since "at or past" needs no
+    // crossing to observe.
     const board = input.boards[def.board];
     if (!board || (board.accepts && !board.accepts(input.summary))) continue;
     const t = def.trigger;
     if (t.kind === "milestone") {
-      const before = input.before[t.counter] ?? 0;
-      const after = input.after[t.counter] ?? 0;
-      if (before < t.threshold && after >= t.threshold) fresh.push(def);
+      if ((input.after[t.counter] ?? 0) >= t.threshold) fresh.push(def);
     } else if (t.kind === "feat") {
       if (t.test(input.summary, input.playerKey)) fresh.push(def);
     } else {

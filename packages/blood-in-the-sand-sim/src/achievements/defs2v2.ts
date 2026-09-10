@@ -318,6 +318,7 @@ export const TITLE_ONLY_2V2 = new Set(["along-for-the-ride", "nobodys-hero"]);
 
 /** The Chronicle chapter — reading order: the pair, then the moments. */
 export const CHAPTER_2V2 = {
+  id: "brothers-in-arms",
   title: "Brothers in Arms",
   ids: ACHIEVEMENT_DEFS_2V2.map((d) => d.id),
 };

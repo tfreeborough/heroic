@@ -36,16 +36,21 @@ import {
   gloryEarned,
   linkAccount,
   linkedClerkUserId,
+  listCodes,
   listFeedback,
+  mintCodes,
   rankedSummary,
   recordFeedback,
+  redeemCode,
   restoreAccount,
+  setCodeActive,
   unlinkAccount,
   recentForm,
   registerPlayer,
   rungAbove,
   unlockWithSignet,
   signetBalance,
+  type CodeKind,
   type FeedbackKind,
 } from "@heroic/blood-in-the-sand-persistence";
 import { accountsEnabled, deleteClerkUser, verifyClerkToken } from "./clerk";
@@ -529,6 +534,37 @@ app.get("/achievements/me", async (c) => {
 });
 
 /**
+ * Redeem a promo / tester code (bits-redeem-codes.md). LINKED players only —
+ * the anti-farm rule: a redemption keyed to an account, never an install, so
+ * reinstalling can't earn a code twice and a merge can never double-pay. The
+ * client hides the field from unlinked players; this is the check that
+ * matters. 10/min/player: enumeration is pointless at that rate.
+ */
+app.post("/codes/redeem", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  if (overLimit(`codes:${playerId}`, 10)) return c.json({ error: "rate_limited" }, 429);
+  const clerkUserId = await linkedClerkUserId(db, playerId);
+  if (!clerkUserId) return c.json({ error: "not_linked" }, 403);
+  const body = (await c.req.json().catch(() => ({}))) as { code?: unknown };
+  const code = typeof body.code === "string" ? body.code.slice(0, 64) : "";
+  const result = await redeemCode(db, { playerId, clerkUserId, code });
+  switch (result.result) {
+    case "invalid":
+      return c.json({ error: "code_invalid" }, 404);
+    case "already":
+      return c.json({ error: "already_redeemed" }, 409);
+    case "expired":
+      return c.json({ error: "code_expired" }, 410);
+    case "ok":
+      return c.json({
+        ...(await walletOf(playerId)),
+        credited: { glory: result.glory, signets: result.signets },
+      });
+  }
+});
+
+/**
  * Feedback + bug reports (bits-feedback.md): one row per report, stamped
  * with the caller's identity and whatever version context the client sends.
  * Everything free-text is length-capped here AND clipped again in the
@@ -578,16 +614,25 @@ app.post("/feedback", async (c) => {
  * against the env value and the route is IP-limited so the secret can't be
  * guessed at wire speed. `?before=<id>&limit=<n>` pages newest-first.
  */
+const digest = (s: string): Buffer => createHash("sha256").update(s).digest();
+/** An admin bearer check against one env secret: constant-time compare of
+ * digests (so lengths never leak either) and IP-limited. True = refused
+ * (the caller has already been answered). */
+const adminRefused = (c: Context, expected: Buffer): Response | null => {
+  if (overLimit(`admin:${callerIp(c)}`, 30)) return c.json({ error: "rate_limited" }, 429);
+  const header = c.req.header("authorization") ?? "";
+  const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+  if (!timingSafeEqual(digest(presented), expected)) return c.json({ error: "unauthorized" }, 401);
+  return null;
+};
+
 const feedbackAdminToken = process.env.FEEDBACK_ADMIN_TOKEN ?? "";
 if (feedbackAdminToken) {
   console.log("📬 FEEDBACK_ADMIN_TOKEN set — GET /admin/feedback live");
-  const digest = (s: string): Buffer => createHash("sha256").update(s).digest();
   const expected = digest(feedbackAdminToken);
   app.get("/admin/feedback", async (c) => {
-    if (overLimit(`admin:${callerIp(c)}`, 30)) return c.json({ error: "rate_limited" }, 429);
-    const header = c.req.header("authorization") ?? "";
-    const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-    if (!timingSafeEqual(digest(presented), expected)) return c.json({ error: "unauthorized" }, 401);
+    const refused = adminRefused(c, expected);
+    if (refused) return refused;
     const before = Number(c.req.query("before"));
     const limit = Number(c.req.query("limit"));
     const reports = await listFeedback(db, {
@@ -595,6 +640,64 @@ if (feedbackAdminToken) {
       limit: Number.isFinite(limit) ? limit : undefined,
     });
     return c.json({ reports });
+  });
+}
+
+/**
+ * Code minting and oversight (bits-redeem-codes.md § API). Same gate shape
+ * as the feedback reader, its own secret: CODES_ADMIN_TOKEN. Rule
+ * violations from the persistence layer (a promo without limits, an empty
+ * payout, an authored code that already exists) come back as 400 with the
+ * rule's name — an admin path, so loud beats lenient.
+ */
+const codesAdminToken = process.env.CODES_ADMIN_TOKEN ?? "";
+if (codesAdminToken) {
+  console.log("🎟️  CODES_ADMIN_TOKEN set — /admin/codes live");
+  const expected = digest(codesAdminToken);
+  const optionalInt = (v: unknown): number | null | undefined => {
+    if (v === undefined || v === null) return v as null | undefined;
+    return typeof v === "number" && Number.isInteger(v) ? v : Number.NaN;
+  };
+  app.post("/admin/codes", async (c) => {
+    const refused = adminRefused(c, expected);
+    if (refused) return refused;
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const maxRedemptions = optionalInt(body.maxRedemptions);
+    const expiresAt = optionalInt(body.expiresAt);
+    const count = optionalInt(body.count);
+    if ([maxRedemptions, expiresAt, count].some((n) => Number.isNaN(n))) {
+      return c.json({ error: "invalid_number" }, 400);
+    }
+    try {
+      const codes = await mintCodes(db, {
+        kind: body.kind as CodeKind,
+        glory: typeof body.glory === "number" ? body.glory : 0,
+        signets: typeof body.signets === "number" ? body.signets : 0,
+        note: typeof body.note === "string" ? body.note.slice(0, 200) : null,
+        maxRedemptions,
+        expiresAt,
+        display: typeof body.display === "string" ? body.display : undefined,
+        count: count ?? undefined,
+      });
+      return c.json({ codes });
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+  });
+  app.get("/admin/codes", async (c) => {
+    const refused = adminRefused(c, expected);
+    if (refused) return refused;
+    return c.json({ codes: await listCodes(db) });
+  });
+  app.post("/admin/codes/active", async (c) => {
+    const refused = adminRefused(c, expected);
+    if (refused) return refused;
+    const body = (await c.req.json().catch(() => ({}))) as { code?: unknown; active?: unknown };
+    if (typeof body.code !== "string" || typeof body.active !== "boolean") {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    const found = await setCodeActive(db, body.code, body.active);
+    return found ? c.json({ ok: true }) : c.json({ error: "code_invalid" }, 404);
   });
 }
 

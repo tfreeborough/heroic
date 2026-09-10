@@ -53,11 +53,15 @@ export const entitlementsOf = async (db: Db, playerId: string): Promise<Entitlem
   }));
 };
 
-/** LIFETIME Glory earned — credits only, never netted against spending
- * (balance breaks as a milestone counter the day debits exist). */
+/** LIFETIME Glory earned FROM RANKED MATCHES — the settle's `ranked:<match>`
+ * rows only, never netted against spending (balance breaks as a milestone
+ * counter the day debits exist). Merges, codes, dev grants and achievement
+ * rewards are excluded (2026-09-10): the glory chain reads "from ranked
+ * matches", and a lump from any of those carried the counter past a tier
+ * outside any evaluation. */
 export const gloryEarned = async (db: Db, playerId: string): Promise<number> => {
   const result = await db.execute({
-    sql: "SELECT COALESCE(SUM(amount), 0) AS earned FROM glory_ledger WHERE player_id = ? AND amount > 0",
+    sql: "SELECT COALESCE(SUM(amount), 0) AS earned FROM glory_ledger WHERE player_id = ? AND amount > 0 AND source LIKE 'ranked:%'",
     args: [playerId],
   });
   return Number(result.rows[0]?.["earned"] ?? 0);

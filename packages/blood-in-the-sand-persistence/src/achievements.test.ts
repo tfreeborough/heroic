@@ -112,6 +112,15 @@ describe("gloryEarned", () => {
     expect(await gloryBalance(db, playerId)).toBe(80);
     expect(await gloryEarned(db, playerId)).toBe(140);
   });
+
+  test("ranked settles only — merges, codes, grants and deed rewards never move the counter (2026-09-10)", async () => {
+    await recordGlory(db, { playerId, amount: 100, source: "ranked:m1", idempotencyKey: "r1" });
+    await recordGlory(db, { playerId, amount: 500, source: "merge:old-device", idempotencyKey: "m1" });
+    await recordGlory(db, { playerId, amount: 250, source: "code:LAUNCH", idempotencyKey: "c1" });
+    await recordGlory(db, { playerId, amount: 75, source: "achievement:ranked-wins-5", idempotencyKey: "a1" });
+    expect(await gloryBalance(db, playerId)).toBe(925);
+    expect(await gloryEarned(db, playerId)).toBe(100);
+  });
 });
 
 describe("skirmish companions (bits-skirmish-deeds.md)", () => {

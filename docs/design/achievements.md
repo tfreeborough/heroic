@@ -486,6 +486,147 @@ bundled display font, and the entry-reveal micro-animation pass.
 The DeedMap component below REMAINS in `@heroic/achievements/map` (pure,
 tested, unused by BITS) — another game can still choose it.
 
+## Milestones fire "at or past", not "on the crossing" *(FIXED 2026-09-10)*
+
+Tom hit two stuck deeds: **Lights Out** (5 kills) and **I can go the
+distance** (100 Glory) both showed full progress and never unlocked. One root
+cause: milestones fired only on the crossing (`before < t ≤ after` within one
+evaluation), so a counter that moved past the line OUTSIDE an evaluation left
+the deed stuck forever. Two ways that happened:
+
+- **Retuned thresholds move the chain id.** Chain ids embed the threshold, so
+  the 2026-08-25 audit's Lights Out 1→5 (and the tripled weapon/cast tiers)
+  minted new ids under counters veterans were already past.
+- **Adapter-read counters jump in lumps.** `glory_earned` summed EVERY positive
+  ledger row — merges, codes, dev grants, deed rewards — so one lump carried
+  it past 100 and 500 between matches.
+
+Fixes: the engine now fires a milestone when `after ≥ threshold` and the deed
+is still locked (the already-unlocked set was always what guaranteed
+once-only; the crossing half only ever cost awards). Side effect, accepted:
+the next ranked match pays every earned-but-never-received deed in one
+ceremony. And `gloryEarned` counts only `ranked:%` rows, matching its own
+description. The M4-retired "crossing trap" is moot — a non-accepted context
+moving a counter no longer consumes anything; the next accepted match pays.
+Server-side only (Render deploy), no protocol bump.
+
+## The Chronicle v2 — the shelf *(DESIGNED 2026-09-10, Tom: "a chore to go through… not the celebration it should be")*
+
+**The problem, measured.** The codex reached 186 deeds in 13 chapters, all
+expanded on entry, in one scroll. Only 3 deeds are board roots, so a brand-new
+player sees 3 real rows and ~180 rows of `???`. Chains run 7–8 tiers deep and
+the frontier rule reveals one tier past the last unlock, so even a veteran with
+40 unlocks reads a mostly-`???` wall. The doc's "N deeds lie beyond" collapse
+was never built — every hidden tier renders as its own `???` rung. Chapters
+fold, but session-only and all open on entry, with no way to jump; The Blood
+Tide at the bottom is a long thumb away every visit. Two faults, two fixes:
+
+### Reveal rule — icon + title for everything, the description is earned
+
+Every deed on the board shows its **emblem and title from the start**, locked
+or not. The **description is hidden until unlocked** — the "how" is still part
+of the reveal, but the player can always see what exists and what it's called,
+which is enough to guess at most of them and to want the rest. Tom chose this
+over a "tease descriptions too, flag the jokes as secret" variant precisely so
+no deed ever needs a `secret` field: the rule is uniform, content never opts
+in or out, and Fossil Record / Nobody's Hero / the item-dropping tiers keep
+their punchline for free. The three frontier states from `visibility()` stay
+(the engine is shared and tested) but the screen maps them differently:
+
+| state | emblem | title | description | progress |
+|---|---|---|---|---|
+| unlocked | full | full | shown | — (date instead) |
+| frontier (next earnable) | ghosted | dim | hidden | milestone bar + `n / N` |
+| hidden (deeper) | ghosted | dim | hidden | none |
+
+No dashed `?` wells, no `???` rows, anywhere. A tier ladder reads as a column
+of named, numbered rungs — the height shows through names, not through
+punctuation. Reward marks stay unlocked-only (an "Unlocked Trident" line on a
+locked row is exactly the spoiler the rule protects). Datamining the bundle
+already exposes everything; nothing changes there.
+
+### Layout — chapter shelf → chapter page
+
+The Deeds screen becomes **two levels**:
+
+1. **The shelf** (the screen you land on). A grid of chapter cards, two
+   across: forged chapter art (the header art the v1 doc already owes, now
+   with a place to live), the chapter name, its `done / total`, and the one
+   **next-up** deed in that chapter (emblem + title — the same reveal rule).
+   Thirteen cards fit in two screens; the chapter order stays the content-owned
+   `ACHIEVEMENT_CHAPTERS` reading order. Fully-done chapters get a gilt frame.
+2. **The chapter page**. Tap a card → that chapter's codex, which is the
+   existing row design (head rows, indented tier ladders, WEAR pills, unlock
+   dates) under the new reveal rule. Back returns to the shelf at the same
+   scroll position. Nothing is ever more than one tap and a short scroll away.
+
+### The celebration band — the trophy cabinet
+
+Above the shelf, before any chapter, the screen answers "who am I here":
+
+- **Worn title + quick pick** (Tom, 2026-09-10) — big, in the display face,
+  with its emblem. Once the player holds **at least one** title the slot is
+  the picker: tap → a bottom sheet listing every earned title (emblem, name,
+  the chapter it came from), the worn one marked WORN, plus a *go bare* row.
+  Pick = `uiTap`, sets `wornTitle`, sheet closes. With no titles yet the slot
+  isn't tappable and instead names the nearest title-crowning frontier deed
+  ("Earn *The Sand snake* to wear a title"), so a new player learns titles
+  exist and where the first one is. The WEAR pills on chapter rows stay — the
+  Chronicle is still a picker — the sheet is the fast path.
+- **Latest deeds** — a horizontal strip of the 4 most recent unlocks by
+  `unlockedAt`, emblem + title + date. Empty for a new player, so the strip
+  yields to:
+- **Nearly there** — up to 3 frontier *milestone* deeds ranked by progress
+  fraction (ties: lower threshold first), each with its bar. For a new player
+  this is the onboarding: three concrete things to go and do. For a veteran it
+  is the next hill. Tap → chapter page, scrolled to the deed.
+
+The tally (`12 / 186`) moves from the sign to the band's corner; the sign
+stays DEEDS.
+
+### Optional trim
+
+Offensive / Defensive / Support Arts could fold into one **The Arts** card
+with three sections inside (11 cards). Chapters are pure data, so this is a
+later content call, not a screen change.
+
+### Build notes *(BUILT 2026-09-10, same day)*
+
+- `packages/achievements/src/progress.ts` — `nearlyThere(defs, vis, counters,
+  limit)` (frontier milestones by fraction desc, threshold asc; feats and
+  capstones never appear; a counter past its threshold clamps under 100%)
+  and `latestUnlocks`. Tested.
+- `AchievementChapter.id` — every chapter now carries a stable slug
+  (`the-pit`, `brothers-in-arms`, `good-company`, `six-enter`, `party-tricks`,
+  `the-kill`, `the-arsenal`, `offensive-arts`, `defensive-arts`,
+  `support-arts`, `glory`, `blood-and-mercy`, `the-blood-tide`) — the key for
+  presentation assets, so a renamed title never orphans its art.
+- `src/deeds/chapterArt.ts` — MODE_ART-shaped map keyed by chapter id: ramp +
+  glow stand-ins, `image: null` until the forge lands 13 landscape subjects.
+  The stand-in also ghosts the chapter's first-deed emblem large.
+- `src/components/TitleSheet.tsx` — the quick pick: earned titles (emblem,
+  name, chapter), WORN mark, GO BARE row; SignetPacks' sheet pattern
+  (useBackClose + useSheetDrag).
+- `DeedsScreen.tsx` — `view` state shelf ↔ chapter (Android back on a chapter
+  page pops to the shelf via a mounted-only `useBackClose`; the header ‹ does
+  the same). Shelf = one two-column FlatList with the band as its header.
+  Chapter page = the old block/tier rows under the new reveal rule; band taps
+  land on the deed's block (scrollToIndex, block tinted). Chapter "next up" =
+  first frontier deed in reading order, else the first deeper one.
+- Nothing in the engine, defs (beyond the id), persistence or protocol moved.
+- Owed: 13 chapter-art subjects (style-bible landscape crop), an on-device
+  pass (band spacing, card height, sheet drag), and the doc's optional
+  Arts-fold is still a content call.
+
+### What it costs
+
+Screen-only. Engine, defs, persistence, protocol untouched: `unlockedAt` and
+`counters` already ride `/achievements/me`, chapters are already content, and
+the missed-ceremony replay, embers and dev preview cycle carry over. New:
+`deeds-shelf` route state (shelf ↔ chapter) inside the screen, chapter art
+subjects for the forge (13 × landscape cards, style-bible `mode-bits` crop
+rules apply), and the nearly-there ranking (a pure helper, tested).
+
 ## The map (the Deed Map) *(retired for BITS — see the Chronicle above)*
 
 *(Greenfield gesture work: the game camera is fully automatic today — this is our

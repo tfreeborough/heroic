@@ -736,6 +736,9 @@ export const ACHIEVEMENT_DEFS: readonly BitsAchievementDef[] = [
  * are Tom's to rename like any other content string.
  */
 export interface AchievementChapter {
+  /** Stable key for presentation assets (chapter art, chapterArt.ts) —
+   * titles are Tom's to rename, ids are not. */
+  id: string;
   title: string;
   ids: readonly string[];
 }
@@ -744,6 +747,7 @@ const idsOf = (defs: readonly BitsAchievementDef[]): string[] => defs.map((d) =>
 
 export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
   {
+    id: "the-pit",
     title: "The Pit",
     ids: [
       FIRST_MATCH.id,
@@ -759,15 +763,15 @@ export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
   },
   CHAPTER_2V2,
   ...CHAPTERS_SKIRMISH,
-  { title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
-  { title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
+  { id: "the-kill", title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
+  { id: "the-arsenal", title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
   // Slice bounds = 3 tiers × chains per category cluster (offensive grew
   // to 4 chains with the sinkhole, support to 4 with the tar pit —
   // 2026-08-10; offensive to 6 with Call the Tide — 2026-09-09).
-  { title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 18)) },
-  { title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(18, 33)), "return-to-sender"] },
-  { title: "Support Arts", ids: idsOf(abilityCasts.slice(33)) },
-  { title: "Glory", ids: idsOf(glory) },
-  { title: "Blood & Mercy", ids: [...idsOf(healing), "lifeblood"] },
-  { title: "The Blood Tide", ids: idsOf(tide) },
+  { id: "offensive-arts", title: "Offensive Arts", ids: idsOf(abilityCasts.slice(0, 18)) },
+  { id: "defensive-arts", title: "Defensive Arts", ids: [...idsOf(abilityCasts.slice(18, 33)), "return-to-sender"] },
+  { id: "support-arts", title: "Support Arts", ids: idsOf(abilityCasts.slice(33)) },
+  { id: "glory", title: "Glory", ids: idsOf(glory) },
+  { id: "blood-and-mercy", title: "Blood & Mercy", ids: [...idsOf(healing), "lifeblood"] },
+  { id: "the-blood-tide", title: "The Blood Tide", ids: idsOf(tide) },
 ];

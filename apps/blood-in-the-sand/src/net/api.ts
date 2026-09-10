@@ -308,6 +308,47 @@ export const storeIapCredit = async (
 export const storeUnlock = (identity: Identity, itemId: string): Promise<StoreResult> =>
   storePost("/store/unlock", identity, { itemId });
 
+/**
+ * A redeem's outcome (bits-redeem-codes.md). Every refusal is a real
+ * server answer the row voices in one line; `unavailable` is network.
+ * `notLinked` should be unreachable — the row never shows the field to an
+ * unlinked player — but a stale wallet could get there, so it has words.
+ */
+export type RedeemResult =
+  | { ok: true; wallet: Wallet; credited: { glory: number; signets: number } }
+  | { ok: false; reason: "invalid" | "already" | "expired" | "notLinked" | "unavailable" };
+
+/** Redeem a promo / tester code. Linked players only, server-enforced. */
+export const redeemCode = async (identity: Identity, code: string): Promise<RedeemResult> => {
+  if (!API_URL) return { ok: false, reason: "unavailable" };
+  try {
+    const res = await apiFetch("/codes/redeem", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    if (res.status === 403) return { ok: false, reason: "notLinked" };
+    if (res.status === 404) return { ok: false, reason: "invalid" };
+    if (res.status === 409) return { ok: false, reason: "already" };
+    if (res.status === 410) return { ok: false, reason: "expired" };
+    if (!res.ok) return { ok: false, reason: "unavailable" };
+    const body = (await res.json()) as Wallet & { credited?: { glory?: unknown; signets?: unknown } };
+    if (typeof body.glory !== "number" || typeof body.signets !== "number") {
+      return { ok: false, reason: "unavailable" };
+    }
+    return {
+      ok: true,
+      wallet: publishWallet(withAccountFields(body)),
+      credited: {
+        glory: typeof body.credited?.glory === "number" ? body.credited.glory : 0,
+        signets: typeof body.credited?.signets === "number" ? body.credited.signets : 0,
+      },
+    };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+};
+
 /** Dev-only (STORE_DEV_TOOLS=1): forget every Signet purchase so an unlock
  * flow can be re-tested. Deed grants are untouched. */
 export const devResetPurchases = async (identity: Identity): Promise<boolean> => {

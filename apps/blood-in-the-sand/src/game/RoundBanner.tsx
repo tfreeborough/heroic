@@ -114,14 +114,15 @@ const HonourRowView = ({ row, index, color }: { row: HonourRow; index: number; c
         },
       ]}
     >
-      {/* Name and title stack — a title NEVER shares a line with the name
-          (Tom, 2026-09-01: long name + long title blew the row out). */}
-      <View style={styles.honourId}>
-        <Text style={[styles.honourName, { color }]} numberOfLines={1}>
-          {row.name}
-        </Text>
-        <TitleFlex title={row.title} size={11} style={styles.honourTitle} />
-      </View>
+      {/* Victors stack on the plate's OWN centre axis — name, then title,
+          then kit, each on its own line (Tom, 2026-09-10). The old side-by-
+          side row centred the name inside `340 - iconWidth`, so every seat
+          sat a different distance left of the VICTORY title above it. */}
+      {index > 0 ? <View style={styles.honourSep} /> : null}
+      <Text style={[styles.honourName, { color }]} numberOfLines={1}>
+        {row.name}
+      </Text>
+      <TitleFlex title={row.title} size={11} style={styles.honourTitle} />
       <View style={styles.honourIcons}>
         {row.weapon ? <LoadoutIcon id={row.weapon} size={22} /> : null}
         {(row.abilities ?? []).map((a) => (
@@ -369,13 +370,16 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   scoreDash: { fontSize: 22, color: "#6b6155" },
-  honourCol: { marginTop: 22, gap: 12, width: 340, maxWidth: "88%" },
-  honourRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  // The identity block: name CENTRE-STACKED over its title — the exact
-  // EntranceCard seat treatment, so start and end of match read the same
-  // (Tom, 2026-09-03). The flexed width (with minWidth 0) is what lets both
-  // lines actually shrink instead of shoving the icons off screen.
-  honourId: { flex: 1, minWidth: 0, alignItems: "center" },
+  honourCol: { marginTop: 20, width: 340, maxWidth: "88%", alignItems: "center" },
+  // Each seat is a centred three-line stack; the hairline above rows 2+ is
+  // what keeps a 4v4 roll from reading as one undifferentiated blur.
+  honourRow: { alignSelf: "stretch", alignItems: "center" },
+  honourSep: {
+    width: 90,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(207,169,100,0.35)",
+    marginVertical: 12,
+  },
   // Name in the winners' allegiance colour (your blue on victory, their red
   // on defeat) — the same cue the bodies and the scoreboard wear.
   honourName: {
@@ -388,5 +392,5 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   honourTitle: { marginTop: 1 },
-  honourIcons: { flexDirection: "row", alignItems: "center", gap: 6 },
+  honourIcons: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 6 },
 });

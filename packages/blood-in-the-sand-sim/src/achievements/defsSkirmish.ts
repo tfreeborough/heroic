@@ -12,9 +12,10 @@
  * the `accepts` gate is sound without exempting milestones (the crossing
  * trap, achievements.md § M4 retired). Test-enforced in achievements.test.ts.
  *
- * Anti-farm posture is two rules: humans must face humans (the gate below —
- * one human and seven bots is practice with extra steps), and nothing paid
- * is worth staging. Everything else a scripted lobby can do is accepted.
+ * Anti-farm posture is two rules: at least one other human in the room (the
+ * gate below — one human and seven bots is practice with extra steps), and
+ * nothing paid is worth staging. Everything else a scripted lobby can do is
+ * accepted. Deeds that need PEOPLE on both sides say so themselves.
  *
  * Titles are placeholders in the house voice — Tom's naming pass, as ever.
  * Board positions live in their own coordinate space (x ≥ 2700, east of
@@ -29,15 +30,17 @@ export const SKIRMISH_BOARD = "skirmish";
 
 const humans = (s: Pick<MatchSummary, "players">): MatchSummaryPlayer[] => s.players.filter((p) => !p.bot);
 
-/** Humans on at least two distinct teams — the board's whole gate. A brawl
- * is six teams of one, so any two humans anywhere satisfy it. Takes just
- * the roster so the adapter can ask before it builds a summary. */
-export const humansOnTwoTeams = (s: Pick<MatchSummary, "players">): boolean =>
-  new Set(humans(s).map((p) => p.team)).size >= 2;
+/** At least one OTHER human in the room — the board's whole gate (Tom,
+ * 2026-09-10: relaxed from "humans on two teams"; two friends against a
+ * roomful of bots is company, and company is what this board celebrates).
+ * A lone human filling seats with bots still earns nothing — that's
+ * practice with extra steps. Takes just the roster so the adapter can ask
+ * before it builds a summary. */
+export const twoHumansInRoom = (s: Pick<MatchSummary, "players">): boolean => humans(s).length >= 2;
 
 export const SKIRMISH_BOARD_DEF: BoardDef<MatchSummary> = {
   id: SKIRMISH_BOARD,
-  accepts: (s) => !s.ranked && humansOnTwoTeams(s),
+  accepts: (s) => !s.ranked && twoHumansInRoom(s),
 };
 
 const noBots = (s: MatchSummary): boolean => s.players.every((p) => !p.bot);
@@ -64,7 +67,7 @@ const WELL_MET: BitsAchievementDef = {
   id: "well-met",
   board: SKIRMISH_BOARD,
   title: "Well Met",
-  description: "Fight your first skirmish match against another player.",
+  description: "Fight your first skirmish match with another player in the room.",
   icon: "deed-well-met",
   parent: null,
   pos: { x: OX, y: 0 },
@@ -364,7 +367,7 @@ export const SKIRMISH_TITLE_IDS: ReadonlySet<string> = new Set([DOPPELGANGER_ID]
 
 /** The Chronicle chapters — reading order: friends, the brawl, the tricks. */
 export const CHAPTERS_SKIRMISH = [
-  { title: "Good Company", ids: [WELL_MET.id, ...regulars.map((d) => d.id), ...GOOD_COMPANY.map((d) => d.id)] },
-  { title: "Six Enter", ids: [SIX_ENTER.id, ...BRAWL_FEATS.map((d) => d.id)] },
-  { title: "Party Tricks", ids: PARTY_TRICKS.map((d) => d.id) },
+  { id: "good-company", title: "Good Company", ids: [WELL_MET.id, ...regulars.map((d) => d.id), ...GOOD_COMPANY.map((d) => d.id)] },
+  { id: "six-enter", title: "Six Enter", ids: [SIX_ENTER.id, ...BRAWL_FEATS.map((d) => d.id)] },
+  { id: "party-tricks", title: "Party Tricks", ids: PARTY_TRICKS.map((d) => d.id) },
 ] as const;

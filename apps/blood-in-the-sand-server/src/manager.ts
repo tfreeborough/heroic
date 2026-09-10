@@ -31,7 +31,7 @@ import {
   WEAPONS,
   canJoin,
   counterDeltas,
-  humansOnTwoTeams,
+  twoHumansInRoom,
   undyingStreakUpdates,
   generateRoomCode,
   sanitizePasscode,
@@ -1111,9 +1111,9 @@ export class RoomManager {
       abilities: [...p.abilities],
     }));
     const accounts = new Map(sk.accounts);
-    // The gate, checked up front so uncontested matches (one human and a
-    // roomful of bots) cost no DB reads and leave no room memory behind.
-    if (accounts.size === 0 || !humansOnTwoTeams({ players })) return;
+    // The gate, checked up front so solo matches (one human and a roomful
+    // of bots) cost no DB reads and leave no room memory behind.
+    if (accounts.size === 0 || !twoHumansInRoom({ players })) return;
     const teamOf = (seat: number): Team => state.players[seat]!.team;
     const humanKey = [...accounts.values()].sort().join(",");
     const matchIndex = sk.lastHumans === humanKey ? sk.matchIndex + 1 : 1;

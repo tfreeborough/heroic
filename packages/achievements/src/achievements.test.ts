@@ -52,15 +52,20 @@ const capstone = (id: string, requires: string[]): AchievementDef<Summary> => ({
 const rankedSummary: Summary = { ranked: true, healed: { 0: 250, 1: 40 } };
 
 describe("evaluate", () => {
-  test("milestone fires exactly on the crossing", () => {
+  test("milestone fires at or past the threshold while still locked", () => {
     const defs = [milestone("wins-5", "wins", 5)];
     const base = { defs, boards: BOARDS, summary: rankedSummary, playerKey: 0, unlocked: new Set<string>() };
     expect(evaluate({ ...base, before: { wins: 3 }, after: { wins: 4 } })).toHaveLength(0);
     expect(evaluate({ ...base, before: { wins: 4 }, after: { wins: 5 } })).toHaveLength(1);
-    // Already past — a later match must never re-fire it.
-    expect(evaluate({ ...base, before: { wins: 5 }, after: { wins: 6 } })).toHaveLength(0);
-    // A jump across the threshold still fires (0 → 7 crosses 5).
+    // A jump across the threshold fires (0 → 7).
     expect(evaluate({ ...base, before: {}, after: { wins: 7 } })).toHaveLength(1);
+    // Already past and STILL LOCKED (2026-09-10): the counter moved past the
+    // line outside any evaluation — a retuned threshold under a veteran's
+    // counter, or a lump landing in an adapter-read counter — and the deed
+    // catches up on the next match instead of sticking forever.
+    expect(evaluate({ ...base, before: { wins: 5 }, after: { wins: 6 } })).toHaveLength(1);
+    // Once unlocked, a later match never re-fires it.
+    expect(evaluate({ ...base, before: { wins: 5 }, after: { wins: 6 }, unlocked: new Set(["wins-5"]) })).toHaveLength(0);
   });
 
   test("several tiers can fire in one evaluation", () => {

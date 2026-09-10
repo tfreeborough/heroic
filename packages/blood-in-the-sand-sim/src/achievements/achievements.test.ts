@@ -906,14 +906,17 @@ const teamSummary = (
 };
 
 describe("the skirmish board", () => {
-  test("humans must face humans — a lone human versus bots earns nothing, two humans earn Well Met", () => {
+  test("one other human in the room — a lone human versus bots earns nothing, two humans earn Well Met on any sides", () => {
     const vsBot: MatchSummary = { ...play1v1(), ranked: false }; // seat 1 is a bot in play1v1
     expect(fireFor(vsBot, 0)).toEqual([]);
     const vsHuman: MatchSummary = { ...vsBot, players: [human(0, 1), human(1, 2, "bow")] };
     expect(fireFor(vsHuman, 0)).toContain("well-met");
-    // Two humans on ONE side against bots is practice with extra steps.
+    // Two friends on ONE side against bots is company (Tom, 2026-09-10) —
+    // it counts, and the bot-sensitive deeds still hold themselves back.
     const sameSide = teamSummary([human(0, 1), human(1, 1), { id: 2, team: 2, weapon: "bow", bot: true }, { id: 3, team: 2, weapon: "bow", bot: true }]);
-    expect(fireFor(sameSide, 0)).toEqual([]);
+    expect(fireFor(sameSide, 0)).toContain("well-met");
+    expect(fireFor(sameSide, 0)).not.toContain("open-house");
+    expect(fireFor(sameSide, 0)).not.toContain("full-house");
   });
 
   test("the counter namespace — skirmish deltas never touch a ranked counter and vice versa", () => {

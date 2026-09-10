@@ -95,3 +95,17 @@ export {
   type FeedbackKind,
   type FeedbackRecord,
 } from "./feedback";
+export {
+  CODE_KINDS,
+  CODE_ALPHABET,
+  normaliseCode,
+  mintCodes,
+  redeemCode,
+  listCodes,
+  setCodeActive,
+  type CodeKind,
+  type MintCodesInput,
+  type RedeemCodeInput,
+  type RedeemCodeResult,
+  type CodeRecord,
+} from "./codes";
