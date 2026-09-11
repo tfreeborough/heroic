@@ -7,6 +7,7 @@ import {
   playerOverview,
 } from "@heroic/blood-in-the-sand-persistence";
 import { Bars } from "@/components/Bars";
+import { LiveStats } from "@/components/LiveStats";
 import { Stat, Tiles } from "@/components/Stat";
 import { db, nowS } from "@/lib/db";
 import { liveStats } from "@/lib/live";
@@ -32,23 +33,7 @@ export default async function Dashboard() {
       <p className="sub">How the arena is doing right now and over the last month.</p>
 
       <h2>Live</h2>
-      {live.state === "ok" ? (
-        <Tiles>
-          <Stat label="Connected" value={live.stats.connections} detail="open sockets" />
-          <Stat label="In rooms" value={live.stats.seatedHumans} detail="humans seated" />
-          <Stat label="Rooms" value={live.stats.rooms} detail={`${live.stats.roomsInMatch} mid-match · ${live.stats.rankedRooms} ranked`} />
-          {Object.entries(live.stats.queue).map(([bracket, size]) => (
-            <Stat key={bracket} label={`Queue ${bracket}`} value={size} detail="waiting" />
-          ))}
-          <Stat label="Pending" value={live.stats.pendingMatches} detail="matches awaiting accept" />
-        </Tiles>
-      ) : live.state === "offline" ? (
-        <p className="hint">
-          Game server unreachable: {live.reason}. (BITS_SERVER_URL is set, so this is worth a look.)
-        </p>
-      ) : (
-        <p className="hint">Set BITS_SERVER_URL and BITS_STATS_TOKEN (matching the server's STATS_TOKEN) to see who's online.</p>
-      )}
+      <LiveStats initial={live} variant="tiles" />
 
       <h2>Today</h2>
       <Tiles>

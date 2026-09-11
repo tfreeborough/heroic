@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { economyOverview, matchOverview, playerOverview, feedbackOverview } from "@heroic/blood-in-the-sand-persistence";
+import { LiveStats } from "@/components/LiveStats";
 import { db, nowS } from "@/lib/db";
 import { liveStats } from "@/lib/live";
 import { n } from "@/lib/format";
@@ -25,13 +26,7 @@ export default async function Overview() {
         <div className="card">
           <h3>
             <Link href="/blood-in-the-sand">Blood in the Sand</Link>{" "}
-            {live.state === "ok" ? (
-              <span className="pill ok">live · {live.stats.seatedHumans} in rooms · {live.stats.connections} connected</span>
-            ) : live.state === "offline" ? (
-              <span className="pill bad">server offline</span>
-            ) : (
-              <span className="pill">live stats not configured</span>
-            )}
+            <LiveStats initial={live} variant="pill" />
           </h3>
           <div className="row">
             <span>
