@@ -694,18 +694,27 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
     const y = contentH.current > 0 ? Math.min(wanted, Math.max(0, contentH.current - viewportH.current)) : wanted;
     scrollRef.current?.scrollTo({ y, animated: false });
   };
-  // Measurements belong to one chapter's blocks — drop them when the page
-  // changes. Declared FIRST so a chapter switch clears before the aim below
-  // can read a stale `y` from the chapter we just left.
-  useEffect(() => {
+  // Arm DURING RENDER, not in an effect. Layout events beat passive effects
+  // here: every block reported its `y` and the content its height before a
+  // single effect ran, so arming in an effect meant the aim was still
+  // disarmed when the only measurements it would ever get went past — and
+  // the reset inside that effect then wiped them. Nothing re-measures a
+  // settled page, so the scroll never happened. Both writes below are
+  // idempotent ref updates guarded by a key, which is safe in render.
+  const measuredFor = useRef("");
+  if (measuredFor.current !== (current?.id ?? "")) {
+    measuredFor.current = current?.id ?? "";
     blockTops.current.clear();
     contentH.current = 0;
-  }, [current?.id]);
-  useEffect(() => {
+  }
+  const armedFor = useRef("");
+  const armKey = `${current?.id ?? "-"}|${view.kind === "chapter" ? view.focus ?? "-" : "-"}`;
+  if (armedFor.current !== armKey) {
+    armedFor.current = armKey;
     pendingFocus.current = focusIndex > 0 ? focusIndex : null;
-    // A chapter already on screen is already measured; a fresh one aims
-    // from its blocks' onLayout instead. The viewport height is the screen's
-    // and survives either way.
+  }
+  // The backstop, for a page whose layout settled before this render.
+  useEffect(() => {
     aimAtFocus();
   }, [focusIndex, view]);
 
