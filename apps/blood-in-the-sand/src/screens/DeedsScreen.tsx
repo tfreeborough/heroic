@@ -310,8 +310,17 @@ const Block = ({ block, counters, worn, onWear, focused }: { block: CodexBlock; 
 
 /** A chapter card: painted ramp + glow (forged art when it lands), the
  * chapter emblem ghosted large, the name, the tally bar, and the next-up
- * deed. A finished chapter wears a gilt frame. */
-const ChapterCard = ({ chapter, onOpen }: { chapter: Chapter; onOpen: (id: string) => void }) => {
+ * deed. A finished chapter wears a gilt frame.
+ *
+ * The card opens its chapter ON the deed it advertises (Tom, 2026-09-11:
+ * "I pressed Tidecaller and it didn't come into view" — the card named
+ * Tidecaller as NEXT, and opening the chapter dropped that deed on the
+ * floor, so the page just opened at the top and the capstone sat off the
+ * bottom of a twelve-block chapter). The whole card carries it, not a
+ * nested pressable on the NEXT row: a thumb that lands an inch off must
+ * not silently mean something else. A chapter you've barely started names
+ * its first deed, which is already at the top — nothing moves. */
+const ChapterCard = ({ chapter, onOpen }: { chapter: Chapter; onOpen: (id: string, focus?: string) => void }) => {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [pressed, setPressed] = useState(false);
   const art = chapterArt(chapter.id);
@@ -319,7 +328,7 @@ const ChapterCard = ({ chapter, onOpen }: { chapter: Chapter; onOpen: (id: strin
   const nextIcon = chapter.nextUp ? DEED_ICONS[chapter.nextUp.icon] : null;
   return (
     <Pressable
-      onPress={() => onOpen(chapter.id)}
+      onPress={() => onOpen(chapter.id, chapter.nextUp?.id)}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       style={styles.cardFill}
@@ -798,7 +807,7 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
           }
           renderItem={({ item, index }) => (
             <Reveal index={index} style={styles.cardSlot}>
-              <ChapterCard chapter={item} onOpen={(id) => openChapter(id)} />
+              <ChapterCard chapter={item} onOpen={openChapter} />
             </Reveal>
           )}
           contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
