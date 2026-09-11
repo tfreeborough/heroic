@@ -69,6 +69,14 @@ for (const c of ACHIEVEMENT_CHAPTERS) for (const id of c.ids) CHAPTER_OF.set(id,
 /** The band's strip widths. */
 const LATEST_LIMIT = 4;
 const NEARLY_LIMIT = 3;
+/** Chapter-page focus (see `focusIndex`): where the tapped block lands
+ * (fraction of the viewport from the top), how many times to re-aim after
+ * a miss, and how long to give layout between attempts. FlatList's default
+ * first render is ten rows. */
+const FOCUS_VIEW_POSITION = 0.15;
+const FOCUS_RETRIES = 5;
+const FOCUS_RETRY_MS = 80;
+const INITIAL_BLOCKS = 10;
 
 /** One tier's resolved display state. */
 interface TierEntry {
@@ -620,17 +628,38 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
   const current = view.kind === "chapter" ? chapters.find((c) => c.id === view.id) ?? null : null;
 
   // Focus: land the tapped deed's block near the top of the chapter page.
+  //
+  // scrollToIndex only lands when the target block has been rendered AND
+  // measured; otherwise the list fires onScrollToIndexFailed, whose only
+  // information is an average row height — useless here, where a single
+  // row and a five-tier ladder differ several-fold. So: (1) render every
+  // block up to the focused one on the first pass, so it exists to be
+  // measured, and (2) on a miss, jump to the estimate to get its
+  // neighbourhood mounted, then aim again once layout has caught up.
   const listRef = useRef<FlatList<CodexBlock>>(null);
   const focusIndex =
     current && view.kind === "chapter" && view.focus
       ? current.data.findIndex((b) => (b.kind === "single" ? b.entry.def.id === view.focus : b.entries.some((e) => e.def.id === view.focus)))
       : -1;
+  const focusRetries = useRef(0);
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollToFocus = (index: number): void => {
+    listRef.current?.scrollToIndex({ index, viewPosition: FOCUS_VIEW_POSITION, animated: false });
+  };
+  const scrollToFocusLater = (index: number, ms: number): void => {
+    if (focusTimer.current !== null) clearTimeout(focusTimer.current);
+    focusTimer.current = setTimeout(() => {
+      focusTimer.current = null;
+      scrollToFocus(index);
+    }, ms);
+  };
   useEffect(() => {
-    if (focusIndex <= 0) return;
-    const t = setTimeout(() => {
-      listRef.current?.scrollToIndex({ index: focusIndex, viewPosition: 0.15, animated: false });
-    }, 60);
-    return () => clearTimeout(t);
+    focusRetries.current = 0;
+    if (focusIndex > 0) scrollToFocusLater(focusIndex, 60);
+    return () => {
+      if (focusTimer.current !== null) clearTimeout(focusTimer.current);
+      focusTimer.current = null;
+    };
   }, [focusIndex, view]);
 
   return (
@@ -685,8 +714,12 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
                 />
               </Reveal>
             )}
+            initialNumToRender={Math.max(INITIAL_BLOCKS, focusIndex + 1)}
             onScrollToIndexFailed={({ averageItemLength, index }) => {
               listRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false });
+              if (index !== focusIndex || focusRetries.current >= FOCUS_RETRIES) return;
+              focusRetries.current += 1;
+              scrollToFocusLater(index, FOCUS_RETRY_MS);
             }}
             contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
             showsVerticalScrollIndicator={false}
