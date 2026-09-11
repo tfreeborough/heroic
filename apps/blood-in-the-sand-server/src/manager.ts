@@ -57,6 +57,7 @@ import {
   findPlayerByToken,
   getRating,
   gloryEarned,
+  recordMatchLog,
   recordRankedMatch,
   type AchievementAward,
   type CompanionDelta,
@@ -152,6 +153,54 @@ export class RoomManager {
 
   roomCount(): number {
     return this.rooms.size;
+  }
+
+  /** The live picture for the studio console (hq.md): rooms by state, seated
+   * humans, the honest (un-fuzzed) queue sizes, and pairings awaiting an
+   * accept. Everything here is memory — no database read. */
+  liveStats(now: number): {
+    rooms: number;
+    roomsInMatch: number;
+    rankedRooms: number;
+    seatedHumans: number;
+    queue: Record<string, number>;
+    pendingMatches: number;
+  } {
+    let roomsInMatch = 0;
+    let rankedRooms = 0;
+    let seatedHumans = 0;
+    for (const room of this.rooms.values()) {
+      if (room.sim.state.round.phase !== "lobby") roomsInMatch++;
+      if (room.ranked) rankedRooms++;
+      seatedHumans += room.connectedCount();
+    }
+    const queue: Record<string, number> = {};
+    for (const b of this.queue.statusFor(null, now)) queue[b.bracket] = b.size;
+    return { rooms: this.rooms.size, roomsInMatch, rankedRooms, seatedHumans, queue, pendingMatches: this.pending.length };
+  }
+
+  /** One match_log row per online match end, every mode (hq.md) — the
+   * studio console's "matches a day". Fire-and-forget: a failed log is a
+   * lost statistic, never a held-up settle. */
+  private logMatch(room: Room): void {
+    if (!this.db) return;
+    const state = room.sim.state;
+    const seated = seatedPlayers(state);
+    const bots = seated.filter((p) => p.bot).length;
+    const mode = room.ranked ? "ranked" : state.teamCount > 2 ? "brawl" : "skirmish";
+    const matchId = room.ranked?.matchId ?? room.skirmish.matchId ?? randomUUID();
+    const started = room.matchStartedAtMs;
+    void recordMatchLog(this.db, {
+      matchId,
+      mode,
+      bracket: room.ranked?.bracket ?? null,
+      teamSize: state.players.length / state.teamCount,
+      teamCount: state.teamCount,
+      humans: seated.length - bots,
+      bots,
+      rounds: state.round.roundNumber,
+      durationS: started === null ? null : (performance.now() - started) / 1000,
+    }).catch((err) => console.error(`[${room.meta.code}] match log failed:`, err));
   }
 
   message(ws: Socket, raw: string | Buffer): void {
@@ -1012,6 +1061,7 @@ export class RoomManager {
    * room is still allowed to close. */
   private async settleRanked(room: Room, winnerTeam: Team): Promise<void> {
     const ctx = room.ranked!;
+    this.logMatch(room);
     try {
       const seated = seatedPlayers(room.sim.state);
       const winners = seated.filter((p) => p.team === winnerTeam);
@@ -1096,6 +1146,7 @@ export class RoomManager {
    * to return to lobby and drop them). Failures log and never touch the room.
    */
   private async settleSkirmish(room: Room, winnerTeam: Team): Promise<void> {
+    this.logMatch(room);
     const sk = room.skirmish;
     const stats = room.matchStats;
     const db = this.db;

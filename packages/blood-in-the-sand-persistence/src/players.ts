@@ -87,3 +87,18 @@ export const findPlayerByToken = async (db: Db, token: string): Promise<string |
   const id = result.rows[0]?.["player_id"];
   return typeof id === "string" ? id : null;
 };
+
+/**
+ * Mark a player as seen now (hq.md): the wallet read every app boot makes
+ * calls this, and the write only happens when the stamp is older than ten
+ * minutes — so a session's many wallet reads cost one row write, and the
+ * day/week/month active counts stay honest to within that window.
+ */
+export const SEEN_THROTTLE_S = 600;
+export const touchPlayerSeen = async (db: Db, playerId: string): Promise<void> => {
+  await db.execute({
+    sql: `UPDATE players SET last_seen_at = unixepoch()
+          WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < unixepoch() - ?)`,
+    args: [playerId, SEEN_THROTTLE_S],
+  });
+};

@@ -175,6 +175,9 @@ export class Room {
   readonly createdAtMs: number;
   /** Ranked context, or null for skirmish. Assigned by the manager. */
   ranked: RankedContext | null = null;
+  /** When the sim last left the lobby (manager clock, ms) — the match log's
+   * duration source (hq.md). Null until a match has started in this room. */
+  matchStartedAtMs: number | null = null;
   /** Live seat → account for skirmish deeds (bits-skirmish-deeds.md), filled
    * by the manager's async token resolution after seating. Scrubbed the
    * moment a seat frees (ids get re-issued — a stale entry credits a
@@ -720,6 +723,7 @@ export class Room {
       const wasLobby = this.sim.state.round.phase === "lobby";
       const events = stepSim(this.sim, stepInputs, TICK_DT);
       this.eventBuffer.push(...events);
+      if (wasLobby && this.sim.state.round.phase !== "lobby") this.matchStartedAtMs = nowMs;
       if (!this.ranked) {
         const inLobby = this.sim.state.round.phase === "lobby";
         // A skirmish match begins the tick the sim leaves the lobby — tallies

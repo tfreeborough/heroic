@@ -50,6 +50,7 @@ import {
   rungAbove,
   unlockWithSignet,
   signetBalance,
+  touchPlayerSeen,
   type CodeKind,
   type FeedbackKind,
 } from "@heroic/blood-in-the-sand-persistence";
@@ -148,6 +149,10 @@ const authedPlayer = async (c: Context): Promise<string | null> => {
 app.get("/wallet", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  // The "seen" stamp (hq.md): every app boot reads the wallet, so this is
+  // where daily-active counts come from. Throttled inside, never awaited —
+  // a slow write must not hold the purse.
+  void touchPlayerSeen(db, playerId).catch((err) => console.warn("touchPlayerSeen failed:", err));
   const [glory, signets, clerkUserId] = await Promise.all([
     gloryBalance(db, playerId),
     signetBalance(db, playerId),

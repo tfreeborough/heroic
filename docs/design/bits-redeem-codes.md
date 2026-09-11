@@ -238,6 +238,8 @@ already exist. No new events.
   referrer paid on a milestone (first ranked match), friend must be a younger
   player than the referrer. Would add `owner_player_id` to `codes` and a
   `referral` kind; the redeem path is unchanged.
-- **Realmsmith tab** over the admin routes.
+- ~~Realmsmith tab over the admin routes~~ — superseded by **HQ** (hq.md,
+  2026-09-11): mint/list/switch-off live at Blood in the Sand → Codes,
+  through the same persistence writers. The curl routes stay as a backstop.
 - **Deed?** A "Redeemed a code" deed would be count-based, which Tom finds
   boring. Not proposed.

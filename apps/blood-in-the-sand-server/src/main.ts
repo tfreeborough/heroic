@@ -7,6 +7,7 @@
  * Prints the LAN addresses for local play. Tip for long sessions on a Mac:
  * `caffeinate -i bun src/main.ts` stops macOS sleeping mid-match.
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -67,9 +68,34 @@ if (db) {
 }
 const manager = new RoomManager(db, botCfg);
 
+/**
+ * The studio console's live read (hq.md): GET /stats answers only when
+ * STATS_TOKEN is set, with a constant-time bearer compare (the same posture
+ * as the API's admin routes). Unset = the route does not exist.
+ */
+const statsToken = process.env.STATS_TOKEN ?? "";
+const statsDigest = statsToken ? createHash("sha256").update(statsToken).digest() : null;
+if (statsDigest) console.log("📊 STATS_TOKEN set — GET /stats live");
+const statsResponse = (req: Request): Response | null => {
+  if (!statsDigest || new URL(req.url).pathname !== "/stats") return null;
+  const header = req.headers.get("authorization") ?? "";
+  const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+  if (!timingSafeEqual(createHash("sha256").update(presented).digest(), statsDigest)) {
+    return Response.json({ error: "unauthorized" }, { status: 401 });
+  }
+  return Response.json({
+    ok: true,
+    protocol: PROTOCOL_VERSION,
+    connections: server.pendingWebSockets,
+    ...manager.liveStats(performance.now()),
+  });
+};
+
 const server = Bun.serve<ClientData, never>({
   port,
   fetch(req, srv) {
+    const stats = statsResponse(req);
+    if (stats) return stats;
     if (srv.upgrade(req, { data: { roomCode: null, playerId: null, accountId: null, rtt: [] } })) return;
     return new Response(`Blood in the Sand server — protocol v${PROTOCOL_VERSION}, ${manager.roomCount()} room(s) open. Connect with the app.`);
   },

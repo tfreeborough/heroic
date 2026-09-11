@@ -2,8 +2,8 @@
 
 Status: **designed + BUILT 2026-08-24** (persistence `feedback` table, API
 `POST /feedback` + env-gated `GET /admin/feedback`, FeedbackScreen, Settings
-rows, mailto contact door) — owed: on-device pass, a way to browse reports
-that isn't curl/Turso shell ·
+rows, mailto contact door) — reports are browsed in **HQ** (hq.md,
+2026-09-11: Blood in the Sand → Feedback); owed: on-device pass ·
 Applies to: **Blood in the Sand** ·
 Companion to [bits-store.md](./bits-store.md) (real money is why a contact
 route is non-negotiable) and [bits-accounts.md](./bits-accounts.md) (the

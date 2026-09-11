@@ -232,6 +232,26 @@ const applySchema = async (db: Db): Promise<void> => {
       )`,
       `CREATE INDEX IF NOT EXISTS idx_code_redemptions_player
         ON code_redemptions (player_id)`,
+      // Every ONLINE match, all modes (hq.md, 2026-09-11): the studio
+      // console's "matches a day" — ranked has its own richer rows in
+      // ranked_matches; this is the one table that also sees skirmish and
+      // brawl, which otherwise leave only timestamp-less lifetime counters.
+      // Written once per match end by the game server, keyed on the match
+      // id so a retry is a no-op. Practice is offline and never lands here.
+      `CREATE TABLE IF NOT EXISTS match_log (
+        id TEXT PRIMARY KEY,
+        mode TEXT NOT NULL,
+        bracket TEXT,
+        team_size INTEGER NOT NULL,
+        team_count INTEGER NOT NULL,
+        humans INTEGER NOT NULL,
+        bots INTEGER NOT NULL,
+        rounds INTEGER NOT NULL,
+        duration_s INTEGER,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_match_log_created
+        ON match_log (created_at)`,
     ],
     "write",
   );
@@ -247,6 +267,11 @@ const applySchema = async (db: Db): Promise<void> => {
   // them on a hot path.
   await addColumnIfMissing(db, "ranked_match_players", "rtt_ms INTEGER");
   await addColumnIfMissing(db, "feedback", "rtt_ms INTEGER");
+  // "Last seen" (hq.md, 2026-09-11): bumped by GET /wallet at most once per
+  // ten minutes per player, so active-player counts (day/week/month) read
+  // straight off this column. NULL = never seen since the column landed.
+  await addColumnIfMissing(db, "players", "last_seen_at INTEGER");
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_players_last_seen ON players (last_seen_at)`);
   // One player per Clerk account (bits-accounts.md) — partial so the unlinked
   // majority (NULL) never collide. Outside the batch: players predates it.
   await db.execute(
