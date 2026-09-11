@@ -32,6 +32,7 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
 } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -71,14 +72,11 @@ for (const c of ACHIEVEMENT_CHAPTERS) for (const id of c.ids) CHAPTER_OF.set(id,
 /** The band's strip widths. */
 const LATEST_LIMIT = 4;
 const NEARLY_LIMIT = 3;
-/** Chapter-page focus (see `focusIndex`): where the tapped block lands
- * (fraction of the viewport from the top), how many times to re-aim after
- * a miss, and how long to give layout between attempts. FlatList's default
- * first render is ten rows. */
+/** Chapter-page focus: where the tapped block lands, as a fraction of the
+ * viewport from the top. The last block in a chapter can't sit that high —
+ * the scroll simply clamps to the end and the block lands lower, still in
+ * full view. */
 const FOCUS_VIEW_POSITION = 0.15;
-const FOCUS_RETRIES = 5;
-const FOCUS_RETRY_MS = 80;
-const INITIAL_BLOCKS = 10;
 /** What a locked secret deed says instead of its description. */
 const SECRET_LINE = "A secret deed — how it's earned is told when it's earned.";
 
@@ -251,7 +249,17 @@ const TierRow = ({ entry, tier, counters, worn, onWear }: { entry: TierEntry; ti
 /** An entrance: a quiet fade-and-rise on mount (rows arrive like entries
  * being penned, never pop). The stagger is capped so deep scrolling never
  * feels laggy. Native-driven. */
-const Reveal = ({ index, children, style }: { index: number; children: ReactNode; style?: object }) => {
+const Reveal = ({
+  index,
+  children,
+  style,
+  onLayout,
+}: {
+  index: number;
+  children: ReactNode;
+  style?: object;
+  onLayout?: (e: LayoutChangeEvent) => void;
+}) => {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(t, {
@@ -264,6 +272,7 @@ const Reveal = ({ index, children, style }: { index: number; children: ReactNode
   }, [t, index]);
   return (
     <Animated.View
+      onLayout={onLayout}
       style={[
         style,
         {
@@ -642,37 +651,53 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
 
   // Focus: land the tapped deed's block near the top of the chapter page.
   //
-  // scrollToIndex only lands when the target block has been rendered AND
-  // measured; otherwise the list fires onScrollToIndexFailed, whose only
-  // information is an average row height — useless here, where a single
-  // row and a five-tier ladder differ several-fold. So: (1) render every
-  // block up to the focused one on the first pass, so it exists to be
-  // measured, and (2) on a miss, jump to the estimate to get its
-  // neighbourhood mounted, then aim again once layout has caught up.
-  const listRef = useRef<FlatList<CodexBlock>>(null);
+  // A chapter is 1–17 blocks, so the page is a plain ScrollView with every
+  // block mounted — NOT a FlatList (Tom, 2026-09-11: "I pressed Tidecaller
+  // and it didn't come into view", the last block of its chapter).
+  // Virtualized, the aim depended on whether the target happened to be
+  // rendered and measured yet: a miss fell back to an average row height,
+  // and a single row versus a five-tier ladder differ several-fold, so deep
+  // deeds landed in the right neighbourhood and no further. Here each block
+  // reports its own `y` through onLayout and the scroll goes to a MEASURED
+  // offset, re-aimed whenever that block or the viewport is measured again
+  // (art loading, fonts, rotation) until the player takes the scroll over.
+  const scrollRef = useRef<ScrollView>(null);
+  const blockTops = useRef(new Map<number, number>());
+  const viewportH = useRef(0);
+  const contentH = useRef(0);
+  const pendingFocus = useRef<number | null>(null);
   const focusIndex =
     current && view.kind === "chapter" && view.focus
       ? current.data.findIndex((b) => (b.kind === "single" ? b.entry.def.id === view.focus : b.entries.some((e) => e.def.id === view.focus)))
       : -1;
-  const focusRetries = useRef(0);
-  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollToFocus = (index: number): void => {
-    listRef.current?.scrollToIndex({ index, viewPosition: FOCUS_VIEW_POSITION, animated: false });
+  /** Aim, once the pieces of the sum have been measured. The last block of
+   * a chapter can't sit at FOCUS_VIEW_POSITION — there isn't that much page
+   * below it — so the target is clamped to the bottom of the content and it
+   * lands lower, fully in view, rather than overscrolling and bouncing. */
+  const aimAtFocus = (): void => {
+    const index = pendingFocus.current;
+    if (index === null) return;
+    const top = blockTops.current.get(index);
+    if (top === undefined || viewportH.current === 0) return;
+    const wanted = Math.max(0, top - viewportH.current * FOCUS_VIEW_POSITION);
+    // Content height arrives on its own beat; until it does, aim unclamped
+    // and let onContentSizeChange re-aim.
+    const y = contentH.current > 0 ? Math.min(wanted, Math.max(0, contentH.current - viewportH.current)) : wanted;
+    scrollRef.current?.scrollTo({ y, animated: false });
   };
-  const scrollToFocusLater = (index: number, ms: number): void => {
-    if (focusTimer.current !== null) clearTimeout(focusTimer.current);
-    focusTimer.current = setTimeout(() => {
-      focusTimer.current = null;
-      scrollToFocus(index);
-    }, ms);
-  };
+  // Measurements belong to one chapter's blocks — drop them when the page
+  // changes. Declared FIRST so a chapter switch clears before the aim below
+  // can read a stale `y` from the chapter we just left.
   useEffect(() => {
-    focusRetries.current = 0;
-    if (focusIndex > 0) scrollToFocusLater(focusIndex, 60);
-    return () => {
-      if (focusTimer.current !== null) clearTimeout(focusTimer.current);
-      focusTimer.current = null;
-    };
+    blockTops.current.clear();
+    contentH.current = 0;
+  }, [current?.id]);
+  useEffect(() => {
+    pendingFocus.current = focusIndex > 0 ? focusIndex : null;
+    // A chapter already on screen is already measured; a fresh one aims
+    // from its blocks' onLayout instead. The viewport height is the screen's
+    // and survives either way.
+    aimAtFocus();
   }, [focusIndex, view]);
 
   return (
@@ -704,39 +729,50 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
       ) : current ? (
         <>
           <ChapterBack onBack={toShelf} />
-          <FlatList
+          <ScrollView
             key={current.id}
-            ref={listRef}
-            data={current.data}
-            keyExtractor={(block) => block.key}
-            ListHeaderComponent={
-              <ScreenSign
-                title={current.title.toUpperCase()}
-                right={<Text style={styles.progress}>{`${current.done} / ${current.total}`}</Text>}
-                style={styles.chapterSign}
-              />
-            }
-            renderItem={({ item, index }) => (
-              <Reveal index={index}>
+            ref={scrollRef}
+            onLayout={(e) => {
+              viewportH.current = e.nativeEvent.layout.height;
+              aimAtFocus();
+            }}
+            onContentSizeChange={(_w, h) => {
+              contentH.current = h;
+              aimAtFocus();
+            }}
+            // The player's own scroll wins: one drag and we stop re-aiming.
+            onScrollBeginDrag={() => {
+              pendingFocus.current = null;
+            }}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <ScreenSign
+              title={current.title.toUpperCase()}
+              right={<Text style={styles.progress}>{`${current.done} / ${current.total}`}</Text>}
+              style={styles.chapterSign}
+            />
+            {current.data.map((block, index) => (
+              <Reveal
+                key={block.key}
+                index={index}
+                // Measured against the content, not the screen — Reveal's
+                // own rise is a transform and never moves this.
+                onLayout={(e) => {
+                  blockTops.current.set(index, e.nativeEvent.layout.y);
+                  if (index === pendingFocus.current) aimAtFocus();
+                }}
+              >
                 <Block
-                  block={item}
+                  block={block}
                   counters={counters}
                   worn={worn}
                   onWear={onWear}
                   focused={view.kind === "chapter" && view.focus !== undefined && index === focusIndex}
                 />
               </Reveal>
-            )}
-            initialNumToRender={Math.max(INITIAL_BLOCKS, focusIndex + 1)}
-            onScrollToIndexFailed={({ averageItemLength, index }) => {
-              listRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false });
-              if (index !== focusIndex || focusRetries.current >= FOCUS_RETRIES) return;
-              focusRetries.current += 1;
-              scrollToFocusLater(index, FOCUS_RETRY_MS);
-            }}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
-            showsVerticalScrollIndicator={false}
-          />
+            ))}
+          </ScrollView>
         </>
       ) : (
         <FlatList
