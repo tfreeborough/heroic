@@ -40,6 +40,7 @@ import {
 import { playSound, unlockAudio } from "../audio";
 import { playStrikeHaptic } from "../game/haptics";
 import {
+  CODES_ENABLED,
   ensureIdentity,
   fetchStore,
   fetchWallet,
@@ -495,9 +496,14 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
             }}
             // The ticket door (bits-redeem-codes.md): shown whenever a code
             // COULD be redeemed — linked already, or accounts live so the
-            // sheet can offer the sign-in. Off entirely otherwise.
+            // sheet can offer the sign-in. Off entirely otherwise, and off
+            // on iOS whatever the wallet says (CODES_ENABLED — App Review
+            // 3.1.1, 2026-09-11).
             right={
-              wallet !== null && CLERK_PUBLISHABLE_KEY.length > 0 && (wallet.linked || wallet.accounts) ? (
+              CODES_ENABLED &&
+              wallet !== null &&
+              CLERK_PUBLISHABLE_KEY.length > 0 &&
+              (wallet.linked || wallet.accounts) ? (
                 <HeaderDoor
                   onPress={() => {
                     unlockAudio();
@@ -674,7 +680,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
       ) : null}
 
       {/* ── Redeem a code (bits-redeem-codes.md) — off the header ticket. ── */}
-      {redeemOpen && wallet !== null ? (
+      {CODES_ENABLED && redeemOpen && wallet !== null ? (
         <RedeemCodeSheet
           wallet={wallet}
           onClose={() => setRedeemOpen(false)}

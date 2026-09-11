@@ -11,6 +11,7 @@
  * losing the wallet, which is exactly what account linking will insure.
  */
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -309,6 +310,17 @@ export const storeUnlock = (identity: Identity, itemId: string): Promise<StoreRe
   storePost("/store/unlock", identity, { itemId });
 
 /**
+ * Codes are OFF on iOS (bits-redeem-codes.md § Platforms). App Review
+ * rejected the 1.0 submission under guideline 3.1.1 on 2026-09-11: a code
+ * that pays Signets unlocks digital content by a mechanism other than In-App
+ * Purchase, and Apple's own alternative (IAP promo codes) doesn't cover
+ * consumables, so there is no compliant iOS shape for this. Android keeps
+ * codes. Every door and the call itself read this one flag; the server
+ * refuses an iOS caller too, so a modified client gains nothing.
+ */
+export const CODES_ENABLED = Platform.OS !== "ios";
+
+/**
  * A redeem's outcome (bits-redeem-codes.md). Every refusal is a real
  * server answer the row voices in one line; `unavailable` is network.
  * `notLinked` should be unreachable — the row never shows the field to an
@@ -318,13 +330,19 @@ export type RedeemResult =
   | { ok: true; wallet: Wallet; credited: { glory: number; signets: number } }
   | { ok: false; reason: "invalid" | "already" | "expired" | "notLinked" | "unavailable" };
 
-/** Redeem a promo / tester code. Linked players only, server-enforced. */
+/** Redeem a promo / tester code. Linked players only, server-enforced;
+ * never called on iOS (CODES_ENABLED), and the platform stamp lets the
+ * server hold that line for clients that call anyway. */
 export const redeemCode = async (identity: Identity, code: string): Promise<RedeemResult> => {
-  if (!API_URL) return { ok: false, reason: "unavailable" };
+  if (!API_URL || !CODES_ENABLED) return { ok: false, reason: "unavailable" };
   try {
     const res = await apiFetch("/codes/redeem", {
       method: "POST",
-      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${identity.token}`,
+        "content-type": "application/json",
+        "x-client-platform": Platform.OS,
+      },
       body: JSON.stringify({ code }),
     });
     if (res.status === 403) return { ok: false, reason: "notLinked" };

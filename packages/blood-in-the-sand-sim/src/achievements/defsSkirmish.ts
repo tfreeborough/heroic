@@ -209,6 +209,8 @@ const BRAWL_FEATS: BitsAchievementDef[] = [
     board: SKIRMISH_BOARD,
     title: "The Vulture",
     description: "Win a brawl round without landing a killing blow. They did your work for you.",
+    // Secret — it happens to you; you don't set out to do it.
+    secret: true,
     icon: "deed-vulture",
     parent: SIX_ENTER.id,
     pos: br(0, 1),
@@ -240,6 +242,8 @@ const BRAWL_FEATS: BitsAchievementDef[] = [
     board: SKIRMISH_BOARD,
     title: "Always the Bridesmaid",
     description: "Finish a brawl of three or more rounds as the second-to-last standing in every one of them, without winning a round.",
+    // Secret — a consolation, funnier unannounced.
+    secret: true,
     icon: "deed-bridesmaid",
     parent: SIX_ENTER.id,
     pos: br(0, 2),
@@ -344,6 +348,8 @@ const PARTY_TRICKS: BitsAchievementDef[] = [
     board: SKIRMISH_BOARD,
     title: "Nobody Wins",
     description: "Be there for a round where the last fighters standing all fell on the same tick.",
+    // Secret — pure luck; the pop IS the deed.
+    secret: true,
     icon: "deed-nobody-wins",
     parent: WELL_MET.id,
     pos: pt(1, 2),

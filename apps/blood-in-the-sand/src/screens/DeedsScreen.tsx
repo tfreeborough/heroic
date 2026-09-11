@@ -10,11 +10,13 @@
  *  2. THE CHAPTER PAGE: one chapter's codex — head rows, indented tier
  *     ladders, WEAR pills, unlock dates — under the v2 reveal rule.
  *
- * REVEAL RULE (Tom's pick, no `secret` flag anywhere): every deed shows its
- * emblem and title from the start, locked or not; the DESCRIPTION is hidden
- * until unlocked; the next earnable tier carries its progress bar; deeper
- * tiers show a name and a numeral and nothing else. No ??? rows, no dashed
- * ? wells — the ladder's height reads through names, not punctuation.
+ * REVEAL RULE (Tom, 2026-09-11 — reversed from "the description is
+ * earned"): every deed shows its emblem, title AND description from the
+ * start, locked or not — a deed nobody can read is a deed nobody sets out
+ * to do. The exception is a `secret` deed, which keeps its description
+ * until unlocked and says so in one muted line: the handful whose punchline
+ * is the reward. The next earnable tier carries its progress bar; reward
+ * marks stay unlocked-only. No ??? rows, no dashed ? wells.
  *
  * On entry, anything unlocked that this device never celebrated replays the
  * unlock ceremony first — the moment is delayed, never skipped.
@@ -30,6 +32,7 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
 } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -69,6 +72,13 @@ for (const c of ACHIEVEMENT_CHAPTERS) for (const id of c.ids) CHAPTER_OF.set(id,
 /** The band's strip widths. */
 const LATEST_LIMIT = 4;
 const NEARLY_LIMIT = 3;
+/** Chapter-page focus: where the tapped block lands, as a fraction of the
+ * viewport from the top. The last block in a chapter can't sit that high —
+ * the scroll simply clamps to the end and the block lands lower, still in
+ * full view. */
+const FOCUS_VIEW_POSITION = 0.15;
+/** What a locked secret deed says instead of its description. */
+const SECRET_LINE = "A secret deed — how it's earned is told when it's earned.";
 
 /** One tier's resolved display state. */
 interface TierEntry {
@@ -136,6 +146,13 @@ const WearButton = ({ id, worn, onWear }: { id: string; worn: boolean; onWear: (
   </Pressable>
 );
 
+/** A locked row's "how" (the reveal rule, header comment): the description
+ * in a dimmer ink, or — on a secret deed — one muted line saying the how is
+ * withheld, so a bare title never reads as a missing string. */
+const LockedDescription = ({ def, style }: { def: BitsAchievementDef; style: object }) => (
+  <Text style={[style, def.secret && styles.descSecret]}>{def.secret ? SECRET_LINE : def.description}</Text>
+);
+
 const ProgressBar = ({ def, counters }: { def: BitsAchievementDef; counters: Record<string, number> }) => {
   if (def.trigger.kind !== "milestone") return null;
   const value = Math.min(counters[def.trigger.counter] ?? 0, def.trigger.threshold);
@@ -182,6 +199,7 @@ const HeadRow = ({ entry, counters, worn, onWear }: { entry: TierEntry; counters
       </View>
       <View style={styles.copy}>
         <Text style={styles.titleLocked}>{def.title}</Text>
+        <LockedDescription def={def} style={styles.descLocked} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -221,6 +239,7 @@ const TierRow = ({ entry, tier, counters, worn, onWear }: { entry: TierEntry; ti
           progress bar underneath simply grows the column. */}
       <View style={[styles.copy, styles.copyLevel]}>
         <Text style={styles.tierTitleLocked}>{def.title}</Text>
+        <LockedDescription def={def} style={styles.tierDescLocked} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -230,7 +249,17 @@ const TierRow = ({ entry, tier, counters, worn, onWear }: { entry: TierEntry; ti
 /** An entrance: a quiet fade-and-rise on mount (rows arrive like entries
  * being penned, never pop). The stagger is capped so deep scrolling never
  * feels laggy. Native-driven. */
-const Reveal = ({ index, children, style }: { index: number; children: ReactNode; style?: object }) => {
+const Reveal = ({
+  index,
+  children,
+  style,
+  onLayout,
+}: {
+  index: number;
+  children: ReactNode;
+  style?: object;
+  onLayout?: (e: LayoutChangeEvent) => void;
+}) => {
   const t = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(t, {
@@ -243,6 +272,7 @@ const Reveal = ({ index, children, style }: { index: number; children: ReactNode
   }, [t, index]);
   return (
     <Animated.View
+      onLayout={onLayout}
       style={[
         style,
         {
@@ -280,8 +310,17 @@ const Block = ({ block, counters, worn, onWear, focused }: { block: CodexBlock; 
 
 /** A chapter card: painted ramp + glow (forged art when it lands), the
  * chapter emblem ghosted large, the name, the tally bar, and the next-up
- * deed. A finished chapter wears a gilt frame. */
-const ChapterCard = ({ chapter, onOpen }: { chapter: Chapter; onOpen: (id: string) => void }) => {
+ * deed. A finished chapter wears a gilt frame.
+ *
+ * The card opens its chapter ON the deed it advertises (Tom, 2026-09-11:
+ * "I pressed Tidecaller and it didn't come into view" — the card named
+ * Tidecaller as NEXT, and opening the chapter dropped that deed on the
+ * floor, so the page just opened at the top and the capstone sat off the
+ * bottom of a twelve-block chapter). The whole card carries it, not a
+ * nested pressable on the NEXT row: a thumb that lands an inch off must
+ * not silently mean something else. A chapter you've barely started names
+ * its first deed, which is already at the top — nothing moves. */
+const ChapterCard = ({ chapter, onOpen }: { chapter: Chapter; onOpen: (id: string, focus?: string) => void }) => {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [pressed, setPressed] = useState(false);
   const art = chapterArt(chapter.id);
@@ -289,7 +328,7 @@ const ChapterCard = ({ chapter, onOpen }: { chapter: Chapter; onOpen: (id: strin
   const nextIcon = chapter.nextUp ? DEED_ICONS[chapter.nextUp.icon] : null;
   return (
     <Pressable
-      onPress={() => onOpen(chapter.id)}
+      onPress={() => onOpen(chapter.id, chapter.nextUp?.id)}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       style={styles.cardFill}
@@ -620,17 +659,63 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
   const current = view.kind === "chapter" ? chapters.find((c) => c.id === view.id) ?? null : null;
 
   // Focus: land the tapped deed's block near the top of the chapter page.
-  const listRef = useRef<FlatList<CodexBlock>>(null);
+  //
+  // A chapter is 1–17 blocks, so the page is a plain ScrollView with every
+  // block mounted — NOT a FlatList (Tom, 2026-09-11: "I pressed Tidecaller
+  // and it didn't come into view", the last block of its chapter).
+  // Virtualized, the aim depended on whether the target happened to be
+  // rendered and measured yet: a miss fell back to an average row height,
+  // and a single row versus a five-tier ladder differ several-fold, so deep
+  // deeds landed in the right neighbourhood and no further. Here each block
+  // reports its own `y` through onLayout and the scroll goes to a MEASURED
+  // offset, re-aimed whenever that block or the viewport is measured again
+  // (art loading, fonts, rotation) until the player takes the scroll over.
+  const scrollRef = useRef<ScrollView>(null);
+  const blockTops = useRef(new Map<number, number>());
+  const viewportH = useRef(0);
+  const contentH = useRef(0);
+  const pendingFocus = useRef<number | null>(null);
   const focusIndex =
     current && view.kind === "chapter" && view.focus
       ? current.data.findIndex((b) => (b.kind === "single" ? b.entry.def.id === view.focus : b.entries.some((e) => e.def.id === view.focus)))
       : -1;
+  /** Aim, once the pieces of the sum have been measured. The last block of
+   * a chapter can't sit at FOCUS_VIEW_POSITION — there isn't that much page
+   * below it — so the target is clamped to the bottom of the content and it
+   * lands lower, fully in view, rather than overscrolling and bouncing. */
+  const aimAtFocus = (): void => {
+    const index = pendingFocus.current;
+    if (index === null) return;
+    const top = blockTops.current.get(index);
+    if (top === undefined || viewportH.current === 0) return;
+    const wanted = Math.max(0, top - viewportH.current * FOCUS_VIEW_POSITION);
+    // Content height arrives on its own beat; until it does, aim unclamped
+    // and let onContentSizeChange re-aim.
+    const y = contentH.current > 0 ? Math.min(wanted, Math.max(0, contentH.current - viewportH.current)) : wanted;
+    scrollRef.current?.scrollTo({ y, animated: false });
+  };
+  // Arm DURING RENDER, not in an effect. Layout events beat passive effects
+  // here: every block reported its `y` and the content its height before a
+  // single effect ran, so arming in an effect meant the aim was still
+  // disarmed when the only measurements it would ever get went past — and
+  // the reset inside that effect then wiped them. Nothing re-measures a
+  // settled page, so the scroll never happened. Both writes below are
+  // idempotent ref updates guarded by a key, which is safe in render.
+  const measuredFor = useRef("");
+  if (measuredFor.current !== (current?.id ?? "")) {
+    measuredFor.current = current?.id ?? "";
+    blockTops.current.clear();
+    contentH.current = 0;
+  }
+  const armedFor = useRef("");
+  const armKey = `${current?.id ?? "-"}|${view.kind === "chapter" ? view.focus ?? "-" : "-"}`;
+  if (armedFor.current !== armKey) {
+    armedFor.current = armKey;
+    pendingFocus.current = focusIndex > 0 ? focusIndex : null;
+  }
+  // The backstop, for a page whose layout settled before this render.
   useEffect(() => {
-    if (focusIndex <= 0) return;
-    const t = setTimeout(() => {
-      listRef.current?.scrollToIndex({ index: focusIndex, viewPosition: 0.15, animated: false });
-    }, 60);
-    return () => clearTimeout(t);
+    aimAtFocus();
   }, [focusIndex, view]);
 
   return (
@@ -662,35 +747,50 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
       ) : current ? (
         <>
           <ChapterBack onBack={toShelf} />
-          <FlatList
+          <ScrollView
             key={current.id}
-            ref={listRef}
-            data={current.data}
-            keyExtractor={(block) => block.key}
-            ListHeaderComponent={
-              <ScreenSign
-                title={current.title.toUpperCase()}
-                right={<Text style={styles.progress}>{`${current.done} / ${current.total}`}</Text>}
-                style={styles.chapterSign}
-              />
-            }
-            renderItem={({ item, index }) => (
-              <Reveal index={index}>
+            ref={scrollRef}
+            onLayout={(e) => {
+              viewportH.current = e.nativeEvent.layout.height;
+              aimAtFocus();
+            }}
+            onContentSizeChange={(_w, h) => {
+              contentH.current = h;
+              aimAtFocus();
+            }}
+            // The player's own scroll wins: one drag and we stop re-aiming.
+            onScrollBeginDrag={() => {
+              pendingFocus.current = null;
+            }}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
+            showsVerticalScrollIndicator={false}
+          >
+            <ScreenSign
+              title={current.title.toUpperCase()}
+              right={<Text style={styles.progress}>{`${current.done} / ${current.total}`}</Text>}
+              style={styles.chapterSign}
+            />
+            {current.data.map((block, index) => (
+              <Reveal
+                key={block.key}
+                index={index}
+                // Measured against the content, not the screen — Reveal's
+                // own rise is a transform and never moves this.
+                onLayout={(e) => {
+                  blockTops.current.set(index, e.nativeEvent.layout.y);
+                  if (index === pendingFocus.current) aimAtFocus();
+                }}
+              >
                 <Block
-                  block={item}
+                  block={block}
                   counters={counters}
                   worn={worn}
                   onWear={onWear}
                   focused={view.kind === "chapter" && view.focus !== undefined && index === focusIndex}
                 />
               </Reveal>
-            )}
-            onScrollToIndexFailed={({ averageItemLength, index }) => {
-              listRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false });
-            }}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
-            showsVerticalScrollIndicator={false}
-          />
+            ))}
+          </ScrollView>
         </>
       ) : (
         <FlatList
@@ -716,7 +816,7 @@ export const DeedsScreen = ({ onBack, onArmory }: DeedsScreenProps) => {
           }
           renderItem={({ item, index }) => (
             <Reveal index={index} style={styles.cardSlot}>
-              <ChapterCard chapter={item} onOpen={(id) => openChapter(id)} />
+              <ChapterCard chapter={item} onOpen={openChapter} />
             </Reveal>
           )}
           contentContainerStyle={{ paddingBottom: insets.bottom + 32, paddingHorizontal: 20 }}
@@ -891,6 +991,7 @@ const styles = StyleSheet.create({
   tierTitle: { fontFamily: DISPLAY_FONT, color: "#e8d9b8", fontSize: 13, letterSpacing: 1 },
   tierTitleLocked: { fontFamily: DISPLAY_FONT, color: "#8a7f70", fontSize: 13, letterSpacing: 1 },
   tierDesc: { color: "#a89a83", fontSize: 11, lineHeight: 15 },
+  tierDescLocked: { color: "#7a6f60", fontSize: 11, lineHeight: 15 },
   iconWell: {
     width: 52,
     height: 52,
@@ -909,6 +1010,8 @@ const styles = StyleSheet.create({
   title: { fontFamily: DISPLAY_FONT, color: "#e8d9b8", fontSize: 15, letterSpacing: 1 },
   titleLocked: { fontFamily: DISPLAY_FONT, color: "#8a7f70", fontSize: 15, letterSpacing: 1 },
   desc: { color: "#a89a83", fontSize: 12, lineHeight: 17 },
+  descLocked: { color: "#7a6f60", fontSize: 12, lineHeight: 17 },
+  descSecret: { fontStyle: "italic" },
   rewardLine: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 0.3, marginTop: 3 },
   wearPill: {
     alignSelf: "flex-start",

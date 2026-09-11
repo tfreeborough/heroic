@@ -44,8 +44,16 @@ export interface AchievementDef<S> {
   board: string;
   /** Visible from the silhouette (frontier) stage. */
   title: string;
-  /** Hidden until unlocked — the "how" is part of the reveal. */
+  /** The "how". Shown from the start (achievements.md § reveal rule,
+   * 2026-09-11: a deed nobody can read is a deed nobody sets out to do)
+   * unless the deed is `secret`. */
   description: string;
+  /** A secret deed keeps its description until unlocked — the punchline IS
+   * the reward. Reserve it for deeds a player stumbles into in ordinary
+   * play (a loss streak, a round nobody wins); a deed that takes planning
+   * or coordination must stay readable or it never happens. Emblem and
+   * title show regardless. */
+  secret?: boolean;
   /** Forge asset key for the map icon. */
   icon: string;
   /** Frontier edge: children of an unlocked node show as silhouettes; null =

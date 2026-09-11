@@ -287,6 +287,8 @@ const FEATS_2V2: BitsAchievementDef[] = [
     board: RANKED_2V2_BOARD,
     title: "Nobody's Hero",
     description: "Lose a ranked 2v2 match having dealt more damage than the other three fighters combined.",
+    // Secret — the punchline is the reward; nobody plans to carry and lose.
+    secret: true,
     icon: "deed-nobodys-hero",
     parent: FIRST_2V2.id,
     pos: feat(0, 5),

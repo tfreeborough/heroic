@@ -31,6 +31,9 @@ export interface ChainSpec {
   origin: { x: number; y: number };
   /** Spacing between consecutive tiers on the board. */
   step: { x: number; y: number };
+  /** Marks every tier `secret` (see AchievementDef.secret) — a joke ladder
+   * keeps its punchline on every rung. */
+  secret?: boolean;
 }
 
 export const milestoneChain = <S>(spec: ChainSpec): AchievementDef<S>[] => {
@@ -46,6 +49,7 @@ export const milestoneChain = <S>(spec: ChainSpec): AchievementDef<S>[] => {
       pos: { x: spec.origin.x + spec.step.x * i, y: spec.origin.y + spec.step.y * i },
       trigger: { kind: "milestone", counter: spec.counter, threshold: tier.threshold },
       ...(tier.rewards && tier.rewards.length > 0 ? { rewards: tier.rewards } : {}),
+      ...(spec.secret ? { secret: true } : {}),
     };
     parent = def.id;
     return def;

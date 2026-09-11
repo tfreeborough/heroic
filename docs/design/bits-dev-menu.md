@@ -1,8 +1,9 @@
 # Blood in the Sand — Dev Menu & the Target-Dummy Range
 
-Status: **BUILT 2026-07-16** (perf overlay added 2026-07-17; pruned 2026-08-25) ·
+Status: **BUILT 2026-07-16** (perf overlay added 2026-07-17; pruned 2026-08-25;
+locked out of production builds 2026-09-11) ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-08-25
+Last decided: 2026-09-11
 
 A hidden toolbox for on-device testing — things a developer needs mid-playtest
 that must never be visible (or reachable) in a normal session.
@@ -14,6 +15,17 @@ slower starts the count over). The dev menu toggles on: a small panel pinned to
 the **bottom-left corner** of the title screen. Another 5 taps (or its ✕)
 hides it.
 
+- **Not in a production build, at all (2026-09-11).** The knock is gated on
+  `DEV_MENU_ENABLED` (`src/dev.ts`) = `__DEV__ || EXPO_PUBLIC_DEV_MENU === "1"`,
+  and eas.json sets that flag on the **preview** profile only — so dev
+  sessions and internal preview builds keep the toolbox, and a store build has
+  no way in. The grant rows were already inert against the production ledger
+  (`STORE_DEV_TOOLS` unset), but the **announcer cycler is purely local**: in a
+  shipped build, five taps handed a player the paid voices. That is guideline
+  3.1.1 — the same rule the redeem codes fell to on 2026-09-11
+  ([bits-redeem-codes.md](./bits-redeem-codes.md) § Platforms) — and a hidden
+  feature under 2.3.1 besides. Caveat: `eas update` never carries eas.json
+  env, so an OTA onto a preview build drops the menu until the next build.
 - **Session-only, on purpose.** The unlock never persists — a fresh launch is
   always clean, so a handed-over phone or a wife-test can't stumble into it.
 - Silent until the fifth tap (a secret shouldn't click), then the ordinary
