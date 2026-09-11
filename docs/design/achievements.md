@@ -521,29 +521,48 @@ was never built — every hidden tier renders as its own `???` rung. Chapters
 fold, but session-only and all open on entry, with no way to jump; The Blood
 Tide at the bottom is a long thumb away every visit. Two faults, two fixes:
 
-### Reveal rule — icon + title for everything, the description is earned
+### Reveal rule — icon, title AND description for everything; `secret` for the punchlines *(REVERSED 2026-09-11)*
 
-Every deed on the board shows its **emblem and title from the start**, locked
-or not. The **description is hidden until unlocked** — the "how" is still part
-of the reveal, but the player can always see what exists and what it's called,
-which is enough to guess at most of them and to want the rest. Tom chose this
-over a "tease descriptions too, flag the jokes as secret" variant precisely so
-no deed ever needs a `secret` field: the rule is uniform, content never opts
-in or out, and Fossil Record / Nobody's Hero / the item-dropping tiers keep
-their punchline for free. The three frontier states from `visibility()` stay
-(the engine is shared and tested) but the screen maps them differently:
+**As shipped 2026-09-10:** emblem and title from the start, the description
+hidden until unlocked — chosen over a "show descriptions, flag the jokes as
+secret" variant so that no deed ever needed a `secret` field.
+
+**Reversed 2026-09-11 (Tom: "with the amount we have, it feels like users are
+just randomly guessing at how to do it").** The roster answers the question
+by type. Half the deeds are counters ("Cast Sinkhole 30 / 150 / 750 times")
+whose hidden description was pure friction — the title and the progress bar
+already said it. The coordinated skirmish feats (Doppelganger, Uniform, Six
+Strangers) are the best thing a multiplayer achievement can do — make a
+friend group say "let's do that one tonight" — and nobody stumbles into eight
+people on one weapon: hidden, they were dead content. The skill feats (Not a
+Scratch, The Old Ways) are goals that change how a match is played, which is
+the World of Warcraft value of a visible achievement list. Hiding only buys
+discovery when a player can plausibly hit the deed unprompted, and only a
+handful are like that. So:
+
+Every deed shows **emblem, title and description from the start**, locked or
+not. A deed marked **`secret`** keeps its description until unlocked and shows
+one muted italic line in its place ("A secret deed — how it's earned is told
+when it's earned"), so a bare title never reads as a missing string. The
+rule for flagging one: *the player could realistically hit it unprompted, and
+the reveal is a delight rather than an explanation.* Anything that takes
+planning or coordination stays readable or it never happens. The current set
+(a content test pins it — extend it on purpose): the loss-streak ladder
+(Swallowed by the Dunes / Bleached Bones / Fossil Record), Nobody's Hero,
+Taken by the Tide, The Vulture, Always the Bridesmaid, Nobody Wins.
+`milestoneChain` takes `secret` for a whole ladder.
 
 | state | emblem | title | description | progress |
 |---|---|---|---|---|
 | unlocked | full | full | shown | — (date instead) |
-| frontier (next earnable) | ghosted | dim | hidden | milestone bar + `n / N` |
-| hidden (deeper) | ghosted | dim | hidden | none |
+| frontier (next earnable) | ghosted | dim | dim (secret: withheld line) | milestone bar + `n / N` |
+| hidden (deeper) | ghosted | dim | dim (secret: withheld line) | none |
 
-No dashed `?` wells, no `???` rows, anywhere. A tier ladder reads as a column
-of named, numbered rungs — the height shows through names, not through
-punctuation. Reward marks stay unlocked-only (an "Unlocked Trident" line on a
-locked row is exactly the spoiler the rule protects). Datamining the bundle
-already exposes everything; nothing changes there.
+No dashed `?` wells, no `???` rows, anywhere. Reward marks stay unlocked-only
+(an "Unlocked Trident" line on a locked row is still a spoiler; the
+item-dropping tiers' descriptions name only the deed, never the steel).
+Datamining the bundle already exposes everything; nothing changes there. The
+retired DeedMap keeps its own older labels rule; no game renders it.
 
 ### Layout — chapter shelf → chapter page
 

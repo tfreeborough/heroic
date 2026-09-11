@@ -205,6 +205,19 @@ describe("milestoneChain", () => {
     expect(chain[1]!.title).toBe("Proven");
     expect(chain[1]!.rewards).toEqual([{ kind: "glory", amount: 50 }, { kind: "title" }]);
     expect(chain[0]!.rewards).toBeUndefined();
+    // Not secret unless the spec says so — and then every rung is.
+    expect(chain.every((d) => d.secret === undefined)).toBe(true);
+    const joke = milestoneChain<Summary>({
+      board: "ranked",
+      idBase: "losses",
+      counter: "losses",
+      tiers: [{ threshold: 3, title: "Oops", description: "Lose 3" }],
+      icon: "i",
+      origin: { x: 0, y: 0 },
+      step: { x: 0, y: 0 },
+      secret: true,
+    });
+    expect(joke[0]!.secret).toBe(true);
   });
 });
 

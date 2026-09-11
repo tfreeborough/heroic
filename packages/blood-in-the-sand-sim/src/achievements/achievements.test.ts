@@ -503,6 +503,25 @@ describe("Wave-1 defs", () => {
       }
     }
   });
+
+  test("secret deeds are a curated few — the punchlines, never anything that takes planning", () => {
+    // achievements.md § reveal rule (2026-09-11): descriptions show from
+    // the start; `secret` is reserved for deeds a player stumbles into.
+    // Adding one here is a content decision — extend the list on purpose.
+    const secret = ACHIEVEMENT_DEFS.filter((d) => d.secret === true).map((d) => d.id).sort();
+    expect(secret).toEqual(
+      [
+        "loss-streak-3",
+        "loss-streak-5",
+        "loss-streak-10",
+        "nobodys-hero",
+        "taken-by-the-tide",
+        "the-vulture",
+        "always-the-bridesmaid",
+        "nobody-wins",
+      ].sort(),
+    );
+  });
 });
 
 // ── Wave 3: the 2v2 board (achievements.md § Wave-3) ───────────────────────

@@ -10,11 +10,13 @@
  *  2. THE CHAPTER PAGE: one chapter's codex — head rows, indented tier
  *     ladders, WEAR pills, unlock dates — under the v2 reveal rule.
  *
- * REVEAL RULE (Tom's pick, no `secret` flag anywhere): every deed shows its
- * emblem and title from the start, locked or not; the DESCRIPTION is hidden
- * until unlocked; the next earnable tier carries its progress bar; deeper
- * tiers show a name and a numeral and nothing else. No ??? rows, no dashed
- * ? wells — the ladder's height reads through names, not punctuation.
+ * REVEAL RULE (Tom, 2026-09-11 — reversed from "the description is
+ * earned"): every deed shows its emblem, title AND description from the
+ * start, locked or not — a deed nobody can read is a deed nobody sets out
+ * to do. The exception is a `secret` deed, which keeps its description
+ * until unlocked and says so in one muted line: the handful whose punchline
+ * is the reward. The next earnable tier carries its progress bar; reward
+ * marks stay unlocked-only. No ??? rows, no dashed ? wells.
  *
  * On entry, anything unlocked that this device never celebrated replays the
  * unlock ceremony first — the moment is delayed, never skipped.
@@ -77,6 +79,8 @@ const FOCUS_VIEW_POSITION = 0.15;
 const FOCUS_RETRIES = 5;
 const FOCUS_RETRY_MS = 80;
 const INITIAL_BLOCKS = 10;
+/** What a locked secret deed says instead of its description. */
+const SECRET_LINE = "A secret deed — how it's earned is told when it's earned.";
 
 /** One tier's resolved display state. */
 interface TierEntry {
@@ -144,6 +148,13 @@ const WearButton = ({ id, worn, onWear }: { id: string; worn: boolean; onWear: (
   </Pressable>
 );
 
+/** A locked row's "how" (the reveal rule, header comment): the description
+ * in a dimmer ink, or — on a secret deed — one muted line saying the how is
+ * withheld, so a bare title never reads as a missing string. */
+const LockedDescription = ({ def, style }: { def: BitsAchievementDef; style: object }) => (
+  <Text style={[style, def.secret && styles.descSecret]}>{def.secret ? SECRET_LINE : def.description}</Text>
+);
+
 const ProgressBar = ({ def, counters }: { def: BitsAchievementDef; counters: Record<string, number> }) => {
   if (def.trigger.kind !== "milestone") return null;
   const value = Math.min(counters[def.trigger.counter] ?? 0, def.trigger.threshold);
@@ -190,6 +201,7 @@ const HeadRow = ({ entry, counters, worn, onWear }: { entry: TierEntry; counters
       </View>
       <View style={styles.copy}>
         <Text style={styles.titleLocked}>{def.title}</Text>
+        <LockedDescription def={def} style={styles.descLocked} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -229,6 +241,7 @@ const TierRow = ({ entry, tier, counters, worn, onWear }: { entry: TierEntry; ti
           progress bar underneath simply grows the column. */}
       <View style={[styles.copy, styles.copyLevel]}>
         <Text style={styles.tierTitleLocked}>{def.title}</Text>
+        <LockedDescription def={def} style={styles.tierDescLocked} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -924,6 +937,7 @@ const styles = StyleSheet.create({
   tierTitle: { fontFamily: DISPLAY_FONT, color: "#e8d9b8", fontSize: 13, letterSpacing: 1 },
   tierTitleLocked: { fontFamily: DISPLAY_FONT, color: "#8a7f70", fontSize: 13, letterSpacing: 1 },
   tierDesc: { color: "#a89a83", fontSize: 11, lineHeight: 15 },
+  tierDescLocked: { color: "#7a6f60", fontSize: 11, lineHeight: 15 },
   iconWell: {
     width: 52,
     height: 52,
@@ -942,6 +956,8 @@ const styles = StyleSheet.create({
   title: { fontFamily: DISPLAY_FONT, color: "#e8d9b8", fontSize: 15, letterSpacing: 1 },
   titleLocked: { fontFamily: DISPLAY_FONT, color: "#8a7f70", fontSize: 15, letterSpacing: 1 },
   desc: { color: "#a89a83", fontSize: 12, lineHeight: 17 },
+  descLocked: { color: "#7a6f60", fontSize: 12, lineHeight: 17 },
+  descSecret: { fontStyle: "italic" },
   rewardLine: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 0.3, marginTop: 3 },
   wearPill: {
     alignSelf: "flex-start",

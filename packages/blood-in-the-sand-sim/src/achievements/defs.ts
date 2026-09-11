@@ -307,12 +307,15 @@ const winStreaks = milestoneChain<MatchSummary>({
 
 /** Never pays Glory or items — paying out for losing in ranked is a throw
  * incentive (achievements.md § content sketch). Joke TITLES are fair game
- * (the wearable punchline); the coverage test enforces the line. */
+ * (the wearable punchline); the coverage test enforces the line. Secret:
+ * nobody sets out to lose ten in a row, and "It happens." lands harder
+ * unannounced. */
 const lossStreaks = milestoneChain<MatchSummary>({
   board: RANKED_BOARD,
   idBase: "loss-streak",
   counter: `${LOSS_STREAK}_best`,
   icon: "deed-loss-streak",
+  secret: true,
   parent: FIRST_MATCH.id,
   origin: { x: -140, y: 45 },
   step: { x: -115, y: 0 },
@@ -590,6 +593,7 @@ const tideFeat = (
   icon: string,
   pos: { x: number; y: number },
   test: (s: MatchSummary, p: number) => boolean,
+  secret = false,
 ): BitsAchievementDef => ({
   id,
   board: RANKED_BOARD,
@@ -599,6 +603,7 @@ const tideFeat = (
   parent: tideHorn.id,
   pos,
   trigger: { kind: "feat", test },
+  ...(secret ? { secret: true } : {}),
 });
 
 const tideFeats: BitsAchievementDef[] = [
@@ -668,6 +673,7 @@ const tideJokes: BitsAchievementDef[] = [
     ),
     rewards: [{ kind: "title" }],
   },
+  // Secret — a deed for drowning three times is a consolation, not a goal.
   tideFeat(
     "taken-by-the-tide",
     "Taken by the Tide",
@@ -675,6 +681,7 @@ const tideJokes: BitsAchievementDef[] = [
     "deed-taken-by-tide",
     { x: -265, y: TIDE_Y + 345 },
     (s, p) => (s.stats[p]?.tideDeaths ?? 0) >= 3,
+    true,
   ),
   tideFeat(
     "watching-the-sand-fall",
