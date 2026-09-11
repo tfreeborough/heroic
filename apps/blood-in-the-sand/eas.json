@@ -20,6 +20,9 @@
     "preview": {
       "extends": "base",
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_DEV_MENU": "1"
+      },
       "channel": "preview"
     },
     "production": {

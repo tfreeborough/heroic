@@ -543,6 +543,11 @@ app.get("/achievements/me", async (c) => {
 app.post("/codes/redeem", async (c) => {
   const playerId = await authedPlayer(c);
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  // No codes on iOS (bits-redeem-codes.md § Platforms): App Review rejected
+  // them under guideline 3.1.1 on 2026-09-11 — a code pays Signets, and
+  // Signets are bought with In-App Purchase. The iOS client shows no door
+  // and never calls this; the stamp holds the line for one that does.
+  if (c.req.header("x-client-platform") === "ios") return c.json({ error: "not_available" }, 403);
   if (overLimit(`codes:${playerId}`, 10)) return c.json({ error: "rate_limited" }, 429);
   const clerkUserId = await linkedClerkUserId(db, playerId);
   if (!clerkUserId) return c.json({ error: "not_linked" }, 403);

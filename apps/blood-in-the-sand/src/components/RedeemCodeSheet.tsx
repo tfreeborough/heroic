@@ -7,14 +7,15 @@
  * the field, so someone who arrived with a code from Discord finishes without
  * leaving. The Armory hides the door entirely when accounts are off
  * server-side or no Clerk key shipped — nobody could link, so nobody could
- * redeem.
+ * redeem — and hides it on iOS entirely (CODES_ENABLED), where codes are
+ * off under App Review guideline 3.1.1.
  */
 import { useEffect, useRef, useState } from "react";
 import { Animated, Keyboard, Modal, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { playSound, unlockAudio } from "../audio";
-import { ensureIdentity, redeemCode, type Wallet } from "../net/api";
+import { CODES_ENABLED, ensureIdentity, redeemCode, type Wallet } from "../net/api";
 import { C_BONE, C_GOLD, C_MUTED } from "../loadout/catalogue";
 import { DISPLAY_FONT } from "../typography";
 import { AccountSheet } from "./AccountSheet";
@@ -110,6 +111,11 @@ export const RedeemCodeSheet = ({ wallet, onClose, onLinked, onRedeemed }: Redee
       onRedeemed(res.wallet);
     })();
   };
+
+  // Belt and braces behind the Armory's own gate (after the hooks, never
+  // before them): no door on iOS mounts this, but nothing that pays out
+  // paid currency should be one careless prop away from rendering there.
+  if (!CODES_ENABLED) return null;
 
   return (
     <Modal transparent statusBarTranslucent animationType="none" onRequestClose={requestClose}>

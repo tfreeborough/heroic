@@ -7,7 +7,7 @@ import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { QueuePill } from "../components/QueueContext";
 import { IconDock } from "../components/IconDock";
-import { devFlags } from "../dev";
+import { DEV_MENU_ENABLED, devFlags } from "../dev";
 import { devResetDeeds, devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
 import { forgetCelebratedDeeds } from "../deeds/celebrated";
 import { setEntitlements } from "../deeds/entitlements";
@@ -434,7 +434,10 @@ export const HomeScreen = ({
   };
 
   // Deliberately silent until the fifth tap — a secret shouldn't click.
+  // Dev and opted-in internal builds only (DEV_MENU_ENABLED, 2026-09-11):
+  // a shipped build must have no way in at all.
   const onTitleTap = (): void => {
+    if (!DEV_MENU_ENABLED) return;
     const now = Date.now();
     knock.current.count = now - knock.current.lastMs <= DEV_TAP_GAP_MS ? knock.current.count + 1 : 1;
     knock.current.lastMs = now;
@@ -601,7 +604,7 @@ export const HomeScreen = ({
 
       <Text style={[styles.foot, { bottom: insets.bottom + 18 }]}>THE CROWD WAITS</Text>
 
-      {devOpen && (
+      {DEV_MENU_ENABLED && devOpen && (
         <View style={[styles.devMenu, { bottom: insets.bottom + 16 }]}>
           <View style={styles.devHeader}>
             <Text style={styles.devTitle}>DEV</Text>

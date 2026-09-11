@@ -2,7 +2,8 @@
 
 Status: **designed 2026-09-10 · BUILT same day** (persistence `codes.ts` +
 tests, API `/codes/redeem` + `/admin/codes`, client: Armory header ticket →
-`RedeemCodeSheet`) · owed: `CODES_ADMIN_TOKEN` on Render, on-device pass ·
+`RedeemCodeSheet`) · **ANDROID ONLY since 2026-09-11** (App Review 3.1.1 —
+§ Platforms) · owed: `CODES_ADMIN_TOKEN` on Render, on-device pass ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-09-10 ·
 Companion to [bits-accounts.md](./bits-accounts.md) (the gate every code sits
@@ -37,6 +38,41 @@ behind), [bits-store.md](./bits-store.md) (what a code pays out in),
 5. **Glory is cheap, Signets are money.** A Signet code is a real discount on a
    real-money item. Default to Glory for public codes; reserve Signets for
    testers and deliberate moments.
+
+## Platforms — no codes on iOS
+
+**Apple rejected the 1.0 submission over this feature (guideline 3.1.1, App
+Review, 2026-09-11):** *"the app unlocks or enables additional functionality
+with mechanisms other than In-App Purchase… the app uses code to unlock or
+enable digital content or features."* Principle 4 above ("codes are never
+sold, so granting in-app currency by code is fine") is the assumption that
+got rejected — Apple's line is about the *mechanism*, not about money
+changing hands. A code pays Signets; Signets are sold through IAP; therefore
+a code is a non-IAP unlock of paid content, gift or not.
+
+Apple's own alternative doesn't fit: their promo codes don't cover
+**consumables**, and `signet_pack_1/3/6` are consumables. There is no
+compliant in-app shape for this on iOS, so **iOS has no code door at all**:
+
+- `CODES_ENABLED` (`net/api.ts`) is `Platform.OS !== "ios"`. It gates the
+  Armory header ticket, the `RedeemCodeSheet` render, and `redeemCode`
+  itself — three places so no future caller reopens the door by accident.
+- `/codes/redeem` answers **403 `not_available`** to any caller stamped
+  `x-client-platform: ios`. The client stamp is the only signal the server
+  has and a modified client could lie, which is fine: the rule is about what
+  the *shipped app* offers.
+- **Android is untouched.** Google has no equivalent objection to free
+  promotional currency, so testers and promo drops keep working there.
+- A player who redeems on Android and links the same account **keeps the
+  balance on iOS**. That's ordinary multi-platform entitlement; what matters
+  is that nothing in the iOS build offers, advertises or explains codes.
+- **The iOS tester path** is therefore TestFlight with sandbox purchases (a
+  sandbox tester buys any pack for free), or a direct server-side grant
+  against the linked account.
+
+Room **passcodes** in Skirmish are not affected and are not this: they're
+private-lobby join keys, they unlock no content, currency or feature. Worth a
+line in Review Notes so the two "codes" never get conflated again.
 
 ## Kinds
 
