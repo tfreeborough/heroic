@@ -164,6 +164,11 @@ export interface RankedContext {
   /** The settlement batch landed (or conclusively failed) — the manager may
    * close the room once the sim returns to lobby. */
   settled: boolean;
+  /** The `rankedResult` this room broadcast, kept for a seat that reclaims
+   * during the ceremony hold (bits-reconnect.md § auto-rejoin): it missed
+   * the broadcast, and without it the close would read as an error instead
+   * of the settle. Absent until the settle lands. */
+  lastResult?: ServerMsg;
 }
 
 export class Room {
@@ -295,18 +300,25 @@ export class Room {
     return this.sim.state.players.includes(null) || seatedPlayers(this.sim.state).some((p) => p.bot);
   }
 
-  /** A disconnected seat the offered token PROVES ownership of. This is the
-   * one reclaim test everywhere (canJoin's `reclaimableSeat`, the manager's
-   * ranked door): no token — or a token minted for some other seat — finds
-   * nothing, so a ghost seat without the proof reads like a full room. */
+  /** A seat the offered token PROVES ownership of. This is the one reclaim
+   * test everywhere (canJoin's `reclaimableSeat`, the manager's ranked
+   * door): no token — or a token minted for some other seat — finds nothing,
+   * so a ghost seat without the proof reads like a full room. */
   hasReclaimableSeat(seatToken: string | null): boolean {
     return this.findGhost(seatToken) !== undefined;
   }
 
-  /** The exact seat a token reclaims: disconnected AND minted this secret. */
+  /** The exact seat a token reclaims: the one minted this secret. NOT gated
+   * on `connected` (relaxed 2026-09-16, the auto-rejoin): a wifi drop sends
+   * no close frame, so for up to HEARTBEAT_TIMEOUT_MS the old socket still
+   * reads as alive here while the client — which noticed the death first —
+   * is already back with the token. The token IS the proof of ownership; a
+   * still-"connected" seat it names is a zombie socket, and seat() closes
+   * that socket as it hands the seat over. Only the token's holder can do
+   * this, so nothing a stranger can send unseats a live player. */
   private findGhost(seatToken: string | null) {
     if (seatToken === null) return undefined;
-    return seatedPlayers(this.sim.state).find((p) => !p.connected && this.seatTokens.get(p.id) === seatToken);
+    return seatedPlayers(this.sim.state).find((p) => this.seatTokens.get(p.id) === seatToken);
   }
 
   /**
@@ -366,10 +378,19 @@ export class Room {
       this.sim.state.players[playerId]!.title = title;
     }
 
-    // A stale socket may still hold the seat (rejoin racing the close event).
-    this.seats.get(playerId)?.close();
+    // A stale socket may still hold the seat (a rejoin racing the close
+    // event, or beating the heartbeat sweep to a wifi drop's zombie): the
+    // new socket takes the seat FIRST, so the zombie's close event finds it
+    // superseded (dropSocket) and cannot drop the rejoiner — then it closes.
+    const stale = this.seats.get(playerId);
     this.seats.set(playerId, ws);
     this.lastSeen.set(playerId, nowMs); // fresh — don't sweep a just-seated player
+    if (stale !== undefined && stale !== ws) {
+      stale.data.roomCode = null;
+      stale.data.playerId = null;
+      stale.unsubscribe(this.topic);
+      stale.close();
+    }
     ws.data.roomCode = this.meta.code;
     ws.data.playerId = playerId;
     ws.subscribe(this.topic);

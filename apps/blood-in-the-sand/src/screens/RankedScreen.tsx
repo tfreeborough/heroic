@@ -27,7 +27,7 @@ import {
 import { playSound, unlockAudio } from "../audio";
 import { PingPill } from "../components/PingPill";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { formatWait, useSmoothWait } from "../components/QueueContext";
+import { formatWait, useQueueClock } from "../components/QueueContext";
 import { badgeFor } from "../components/rankBadges";
 import {
   ensureIdentity,
@@ -217,10 +217,10 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
 
 
   const statusOf = (bracket: string) => client.queueStatus.find((b) => b.bracket === bracket);
-  /** The brackets THIS socket is waiting in right now (server truth). */
-  const queuedIn = client.queueStatus.filter((b) => b.waitedSec !== undefined).map((b) => b.bracket);
-  // One timer for the whole search — the longest of the waits.
-  const waitedSec = queuedIn.length > 0 ? Math.max(...queuedIn.map((b) => statusOf(b)!.waitedSec!)) : undefined;
+  /** The brackets THIS socket is waiting in — flipped on the tap itself
+   * (ArenaClient.queuedBrackets is optimistic), so the card never waits on
+   * the server's round trip to read SEARCHING. */
+  const queuedIn = client.queuedBrackets;
   const standing = standings?.find((b) => b.bracket === focus) ?? null;
   const settlement = client.lastSettlement;
   // The ceremony (bits-ranked.md § ceremony): one full-screen reveal per
@@ -234,9 +234,9 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
   const placing = standing === null || standing.placementsLeft > 0;
   const played = standing ? standing.wins + standing.losses : 0;
 
-  // The wait timer counts on the LOCAL clock, anchored to the server's
-  // floored beat (QueueContext.useSmoothWait — shared with the header pill).
-  const displayWait = useSmoothWait(waitedSec);
+  // The wait timer counts on the LOCAL clock from the tap that entered the
+  // line (QueueContext.useQueueClock — shared with the header pill).
+  const displayWait = useQueueClock(client.queuedSinceMs);
 
   const canQueue = identity !== null && identity !== "loading";
 

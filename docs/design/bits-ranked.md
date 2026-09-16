@@ -275,6 +275,22 @@ Tapping the RANKED card opens **RankedScreen** — the ranked home, not a spinne
   Queueing-while-roaming-the-app is future polish.~~ **Reversed 2026-08-25** — the queue
   now follows the player around the app and a match must be ACCEPTED before it seats
   (§ Queue roaming & match accept). Losing the socket still leaves the queue.
+- **Optimistic queue buttons + a local wait clock** *(2026-09-16)*. QUEUE FOR / ALSO
+  QUEUE / CANCEL used to wait on the server's `queueStatus` (two or three DB reads
+  behind a `queueJoin`) before the card changed — "the buttons feel a bit laggy" (Tom).
+  Now `ArenaClient.queuedBrackets` flips on the tap and the server confirms or corrects
+  it after: an exact-set `queueStatus` confirms a join, `queueLeft` a leave, and a
+  `reject` (lockout, sign-in, a live match on the account) backs the join out entirely
+  — which is also the server's truth, since its handler drops every held line before
+  it decides. Inside a short window (8 s join / 3 s leave) a `queueStatus` that
+  disagrees is treated as one the server sent before it saw us (a matcher beat or a
+  queueInfo answer crossing the wire) and leaves the optimistic view alone; past it
+  the server's word is the truth again. The wait timer (`queuedSinceMs`) is a LOCAL
+  clock anchored at the tap — the queue time is relative to the player and never
+  needs a server number to be right — and the server's floored `waitedSec` only ever
+  pulls it BACK (by > 3 s) when a void or an innocent cancel re-queued us with the
+  old earned wait. The anchor survives a summons so an innocent cancel's "back in
+  line" resumes the count instead of restarting at 0:00.
 
 ## The queue & matchmaker
 

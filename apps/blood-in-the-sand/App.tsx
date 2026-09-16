@@ -246,28 +246,37 @@ export default function App() {
     [client],
   );
 
-  // A ranked welcome pulls the route home from wherever the player roamed:
-  // the accept stage seated us, and the arming wizard lives on the ranked
-  // route's RoomScreen. (A welcome on the play route is a skirmish seat.)
-  const rankedSeated = client?.welcome != null && client.rankedMatch !== null;
+  // A seat pulls the route to its flow from wherever the player is: a
+  // ranked welcome from wherever the queue roamed (the accept stage seated
+  // us, and the arming wizard lives on the ranked route's RoomScreen), and
+  // an AUTO-REJOINED seat (bits-reconnect.md, 2026-09-16 — the manager
+  // reclaimed the match we lost a socket or the whole app in) from the title
+  // screen or anywhere else. The client knows which flow: rankedMatch is
+  // restored from the remembered seat on a reclaim.
+  const seated = client?.welcome != null;
+  const rankedSeat = seated && client.rankedMatch !== null;
   useEffect(() => {
-    if (rankedSeated && route !== "ranked") setRoute("ranked");
-  }, [rankedSeated, route]);
+    if (!seated) return;
+    if (rankedSeat) {
+      if (route !== "ranked") setRoute("ranked");
+    } else if (route !== "play" && route !== "ranked") {
+      setRoute("play");
+    }
+  }, [seated, rankedSeat, route]);
 
   // What every menu screen's header needs to show the roaming queue.
   const queued = conn.state === "online" && client?.queued === true;
-  const queuedIn = client?.queueStatus.filter((b) => b.waitedSec !== undefined) ?? [];
-  const waitedSec = queued && queuedIn.length > 0 ? Math.max(...queuedIn.map((b) => b.waitedSec!)) : undefined;
+  const queuedSinceMs = queued ? (client?.queuedSinceMs ?? null) : null;
   const queuePresence = useMemo<QueuePresence>(
     () => ({
       queued,
-      waitedSec,
+      queuedSinceMs,
       goToRanked: () => {
         conn.wake();
         setRoute("ranked");
       },
     }),
-    [queued, waitedSec, conn],
+    [queued, queuedSinceMs, conn],
   );
 
   useEffect(() => {

@@ -508,6 +508,14 @@ export class RoomManager {
     if (room.ranked && !room.hasReclaimableSeat(seatToken)) {
       return this.send(ws, { t: "reject", reason: "no such room" });
     }
+    // The client's AUTOMATIC rejoin (bits-reconnect.md § auto-rejoin) may
+    // only ever RECLAIM: room codes are reused, so the seat it remembers
+    // from a dead socket — or yesterday's match, on a cold launch — must
+    // never land it in whatever fresh lobby now wears that code. Same
+    // generic reject as a guessed code; the client forgets the seat on it.
+    if (msg.reclaimOnly === true && !room.hasReclaimableSeat(seatToken)) {
+      return this.send(ws, { t: "reject", reason: "no such room" });
+    }
 
     const verdict = canJoin({
       freeSeatInLobby: room.ranked ? false : room.hasFreeSeatInLobby(),
@@ -521,6 +529,10 @@ export class RoomManager {
     const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), seatToken, performance.now());
     if (id === null) return this.send(ws, { t: "reject", reason: "room full" });
     this.claimSkirmishSeat(room, ws, id, msg.token);
+    // A reclaim landing during the ceremony hold missed the settle's
+    // broadcast — hand it over, so the close that follows reads as the
+    // settlement (the ceremony plays), not as "match complete" in red.
+    if (room.ranked?.lastResult) this.send(ws, room.ranked.lastResult);
     console.log(`⚔ ${playerName} joined room ${room.meta.code} as player ${id}`);
   }
 
@@ -1105,7 +1117,7 @@ export class RoomManager {
           if (result) {
             // Result rows come back in the order the sides were listed —
             // zip them back onto seat ids for the wire.
-            room.publish({
+            ctx.lastResult = {
               t: "rankedResult",
               matchId: ctx.matchId,
               bracket: ctx.bracket,
@@ -1114,7 +1126,8 @@ export class RoomManager {
                 ...winners.map((p, i) => ({ playerId: p.id, ...sideResult(result.winners[i]!) })),
                 ...losers.map((p, i) => ({ playerId: p.id, ...sideResult(result.losers[i]!) })),
               ],
-            });
+            };
+            room.publish(ctx.lastResult);
             const line = (p: (typeof seated)[number], r: (typeof result.winners)[number]) =>
               `${accountOf(p)!.name} ${r.before}→${r.after} (+${r.glory}g)`;
             console.log(
