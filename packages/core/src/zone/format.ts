@@ -15,8 +15,8 @@
  * tile arrays. Reuses the core `Aabb` (centre + size) so loaded collision feeds
  * `stepCrowd` / `buildNavGrid` / line-of-sight unchanged.
  */
-import type { Aabb } from "../physics/crowd";
 import type { Vec2 } from "../math/vec2";
+import type { Aabb } from "../physics/crowd";
 import type { DoorLock } from "../keys/keys";
 import type { LevelRange } from "../progression/levelGap";
 // Type-only, so the format↔tileset import cycle is erased at compile time.
@@ -119,9 +119,22 @@ export interface CollisionRect extends Aabb {
   material?: CollisionMaterial;
 }
 
+/**
+ * An authored collision outline (world px, any winding, concave fine). Becomes
+ * half-tile box strips at load (`zone/polygon.ts`) — nothing past `loadZone`
+ * ever sees a polygon. Only `"hidden"` for now: an invisible fence around the
+ * places players mustn't go. (Wall/void polygons would draw as staircases.)
+ */
+export interface CollisionPolygon {
+  points: Vec2[];
+  material?: "hidden";
+}
+
 export interface ZoneCollision {
   /** Free rectangles — walls, columns, thin geometry, or void gaps (per `material`). */
   rects: CollisionRect[];
+  /** Authored outlines, rasterised to `POLYGON_CELL_DIV`ths of a tile at load. */
+  polys?: CollisionPolygon[];
   /**
    * Painted solid cells, `[row][col]` of material codes: `0` empty, `1` wall,
    * `2` void, `3` hidden. Greedy-meshed per material into rects at load.
@@ -134,6 +147,9 @@ export interface ZoneCollision {
 
 /** Painted-cell material codes (the non-empty values in `ZoneCollision.cells`). */
 export const COLLISION_CELL = { none: 0, wall: 1, void: 2, hidden: 3 } as const;
+
+/** Polygon rasterisation resolution: cells per tile side (2 = half tiles). */
+export const POLYGON_CELL_DIV = 2;
 
 /** Extra effect run when a breakable is destroyed (it always vanishes regardless). */
 export type BreakEffect =

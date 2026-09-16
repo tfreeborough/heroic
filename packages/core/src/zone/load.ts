@@ -15,9 +15,11 @@
 import type { Vec2 } from "../math/vec2";
 import type { Aabb } from "../physics/crowd";
 import { greedyMesh } from "./mesh";
+import { rasterizePolygon } from "./polygon";
 import { TILESETS, resolveProp, type PlacedProp } from "./tileset";
 import {
   COLLISION_CELL,
+  POLYGON_CELL_DIV,
   ZONE_FORMAT_VERSION,
   type Breakable,
   type BreakableDef,
@@ -103,6 +105,12 @@ export const loadZone = (file: ZoneFile): Zone => {
     walls.push(...meshMaterial(cells, cellSize, COLLISION_CELL.wall));
     voids.push(...meshMaterial(cells, cellSize, COLLISION_CELL.void));
     hidden.push(...meshMaterial(cells, cellSize, COLLISION_CELL.hidden));
+  }
+  // 1a. Authored polygons → half-tile box strips (zone/polygon.ts). Hidden only
+  // for now, so they join the invisible-barrier channel like painted cells.
+  const polyCell = tileSize / POLYGON_CELL_DIV;
+  for (const poly of file.collision.polys ?? []) {
+    hidden.push(...rasterizePolygon(poly.points, polyCell, cols * POLYGON_CELL_DIV, rows * POLYGON_CELL_DIV));
   }
 
   // 1b. Fence the void: floorless cells (floor id 0) are outside the painted shape,

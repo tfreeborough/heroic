@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DIFFICULTIES, DIFFICULTY_IDS, type DifficultyId } from "@heroic/blood-in-the-sand-sim";
+import { ARENAS, ARENA_IDS, DIFFICULTIES, DIFFICULTY_IDS, type DifficultyId } from "@heroic/blood-in-the-sand-sim";
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { loadBotDifficulty, saveBotDifficulty } from "../settings";
 import type { PracticeMode } from "../net/practice";
@@ -40,6 +40,8 @@ export interface PracticeScreenProps {
     opponent: PracticeMode,
     /** Brawl (bits-brawl.md): six teams of one — teamSize is ignored. */
     brawl: boolean,
+    /** The map (bits-arenas.md): a registry id, or null = random. */
+    arena: string | null,
   ) => void;
 }
 
@@ -61,6 +63,8 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
   /** Brawl = the sixth size chip: six teams of one, last one standing. */
   const [brawl, setBrawl] = useState(false);
   const [difficulty, setDifficulty] = useState<DifficultyId>("skilled");
+  /** Which map — null rolls one from the whole registry (bits-arenas.md). */
+  const [arena, setArena] = useState<string | null>(null);
 
   useEffect(() => {
     void AsyncStorage.getItem(KEY_NAME).then((v) => {
@@ -86,6 +90,23 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
           <Pressable key={o} onPress={() => setOpponent(o)} style={[styles.sizeOption, opponent === o && styles.sizeOptionOn]}>
             <Text style={[styles.sizeText, opponent === o && styles.sizeTextOn]}>
               {o === "bot" ? "BOTS" : "TARGET DUMMIES"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* The map: every registered arena, shipped or not — practice is where a
+          new one gets walked. Online rooms roll from the rotation instead. */}
+      <Text style={styles.sectionLabel}>ARENA</Text>
+      <View style={styles.sizeRow}>
+        {[null, ...ARENA_IDS].map((id) => (
+          <Pressable
+            key={id ?? "random"}
+            onPress={() => setArena(id)}
+            style={[styles.sizeOption, arena === id && styles.sizeOptionOn]}
+          >
+            <Text style={[styles.sizeText, arena === id && styles.sizeTextOn]}>
+              {id === null ? "RANDOM" : ARENAS[id]!.name.toUpperCase()}
             </Text>
           </Pressable>
         ))}
@@ -138,7 +159,7 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
       )}
 
       <Pressable
-        onPress={() => onStart(name, teamSize, difficulty, opponent, opponent === "bot" && brawl)}
+        onPress={() => onStart(name, teamSize, difficulty, opponent, opponent === "bot" && brawl, arena)}
         style={styles.play}
       >
         <Text style={styles.playText}>{opponent === "bot" ? "ARM YOURSELF" : "ENTER THE RANGE"}</Text>

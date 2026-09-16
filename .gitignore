@@ -38,3 +38,7 @@ dev.db*
 
 # bun
 # (bun.lock is committed; lockb binary is also fine to commit)
+
+# Purchased asset packs: keep the source folders out of git — only the repacked
+# atlases (apps/*/assets/tilesets) and the few sheets the repack reads are committed.
+ancient_tiles/

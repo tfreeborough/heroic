@@ -32,7 +32,11 @@ export const normalizeZoneFile = (file: ZoneFile): ZoneFile => {
   const { cols, rows } = file.size;
   file.layers.floor = fitGrid(file.layers.floor ?? [], rows, cols);
   if (file.layers.decor) file.layers.decor = fitGrid(file.layers.decor, rows, cols);
-  if (file.collision.cells) file.collision.cells = fitGrid(file.collision.cells, rows, cols);
+  if (file.collision.cells) {
+    // The collision grid may be finer than the tile grid (quarter-tile painting).
+    const div = Math.max(1, Math.round(file.tileSize / (file.collision.cellSize ?? file.tileSize)));
+    file.collision.cells = fitGrid(file.collision.cells, rows * div, cols * div);
+  }
   return file;
 };
 

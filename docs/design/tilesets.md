@@ -139,12 +139,69 @@ collides against them with zero new netcode — props never move, nothing new go
 An `occludes` boulder becomes gameplay (it breaks auto-targeting like the pillar does); a cactus
 (`occludes: false`) is cover for your body but not your target-lock.
 
+## Terrain brushes (autotiling) — built 2026-09-13
+
+Painting the first arena by hand — picking every edge and corner piece by eye — was the slowest
+part of the whole tileset job. A *terrain brush* fixes that: you paint "this cell is wall" and the
+editor picks the tiles. As promised in v1, the saved format is untouched: the brush writes the same
+ordinary ids into the same `floor`/`decor` layers, and the games never know it existed.
+
+**Two stages, both pure, in `@heroic/core` `zone/terrain.ts` (unit-tested):**
+
+1. **Corner solve.** The convention purchased packs use (Tiled's "corner" Wang set, the 16-tile
+   blob): every tile is tagged with which of its four *corners* are inside the terrain, so the
+   right tile for a cell is a 4-bit lookup with weighted art variants per entry. Membership is
+   per **cell** — the cell you paint is solid interior, the ring around it becomes edges — and it
+   is *derived from the ids already in the layer* (a cell is a member iff it holds the terrain's
+   full-interior tile), so nothing new is stored and a hand-painted wall solves like a brushed
+   one. Cell membership rather than Tiled's vertex model keeps paint/erase symmetric: erasing B
+   after painting A+B leaves exactly what painting A alone would.
+2. **Rule passes.** A port of Tiled automapping (the pack's `.tmx` rule maps): box patterns of
+   "if these tiles sit here, write those there", with Tiled's special matchers (Empty, NonEmpty,
+   Other, Ignore), `MatchInOrder`, per-rule `Probability`. The ancient-ruins walls need it: the
+   corner solve produces the parapet *top edge*; the rules hang the two rows of wall *face*
+   under it and sprinkle cracked variants. Passes run over the painted cells ± `RULE_MARGIN`
+   (8, ≥ 2× the tallest rule, so the region is self-contained and re-solving is idempotent).
+
+All randomness is hashed from cell position — extending a wall never reshuffles its neighbours.
+
+**Where the tables come from.** Nobody hand-types a corner map. `scripts/repack-tileset.py`
+reads the pack's Tiled `.tsx` (its `<wangsets>`, with per-tile `probability` as variant weight —
+weight 0 = "never auto-pick", the pack's template/rule-only tiles) and rule `.tmx` files, rebases
+local tile ids to atlas ids, and emits `apps/realmsmith/src/terrains/<name>.ts`. The tables are
+**editor-side**: `TERRAINS[tilesetName]` in Realmsmith, never in the game bundles. A tileset with
+no Tiled metadata (the desert pack) simply offers no terrains; a 16-entry table could be authored
+by hand for it later.
+
+**In the editor.** The palette shows terrains as 3×3 blob swatches above the raw tile grid; a
+swatch makes the current layer's brush a terrain, a raw tile makes it a plain id again. Floor and
+decor each keep their own brush — walls go on **decor** (the face rows overwrite what's below
+them; erased decor shows the floor again, exactly like Tiled's separate wall layer), grass tones on
+floor. Left paints, right erases. Strokes now interpolate between pointer events (`lineCells`),
+which also fixed the plain brush's skipped cells on fast drags.
+
+**Base vs overlay (found the hard way, same day).** Half the pack's sets have see-through pieces:
+wall-9's parapets and corners, every "…to transparency" edge. On the floor layer the void showed
+through them as grey patches. The extractor now records `opaque` per terrain (dropping a stray
+transparent variant from an otherwise-opaque mask — the pack mis-tags one), the Floor tool offers
+only base terrains, and overlays live on Decor with a hint pointing there. And wall-9 is a **raised
+platform** set, not a line wall: what you paint becomes the plateau top (grey cracked stone, random
+tufted variants), the ring around it becomes parapet + face — a one-cell line is a three-cell-wide
+raised strip. That's the pack's design (all its "wall N" sheets are cliffs); the swatch tooltip
+says so.
+
+**Foliage.** Standing art goes through the **Prop** toolbar button (the object tool's `prop`
+kind, surfaced so it's findable); the ancient set has no `tileRows` cap, so the props sheet's 1×1
+dressing (tufts, flowers, pebbles) paints as ordinary **decor tiles** from the bottom of the grid.
+
+**Known limits.** A terrain with no art for a corner combination (wall-9 lacks the two
+diagonal-only ones) leaves that cell as it was. Leaving a *floor* terrain writes `outside` (default
+0 = empty) — fine for decor, a hole for floor; the grass-transition sets want an `outside` id
+before they're pleasant on the floor layer. Walls are still visual: drop a `hidden` collision
+run under the parapet by hand (auto-collision under wall tops is the obvious next step).
+
 ### Deliberately out of scope in v1
 
-- **Autotiling** — editors like Tiled can auto-pick edge/corner variants so painted regions get
-  seamless borders (Wang/blob tiles). Big authoring win, big feature. v1 paints explicit ids; the
-  format doesn't change when autotiling arrives later (it's an editor-side brush, the saved ids
-  are the same kind of ids).
 - **Animated tiles** (water, torches) — needs a frame schedule per id; add as a `TilesetDef`
   extension later.
 - **Margins/spacing in the atlas** — many purchased sheets pad each cell. Rather than carry
@@ -249,5 +306,5 @@ later if it becomes routine):
    no sim changes.
 5. **Enter the Gauntlet**: same swaps inside `bakeFloorChunks` and its entity draw — mechanical
    after (4).
-6. Later, separately: autotile brush, tiled wall skins, animated tiles, multi-cell decor stamps,
-   Asset Forge tileset importer.
+6. Later, separately: ~~autotile brush~~ (built — "Terrain brushes" above, with the ancient-ruins
+   pack), tiled wall skins, animated tiles, multi-cell decor stamps, Asset Forge tileset importer.

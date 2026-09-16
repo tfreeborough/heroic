@@ -45,6 +45,7 @@ import { BRAWL_TEAM_HEX, EMPTY_ARENA_PICTURE, KILL_KICK_MS, recordArena, type Fx
 import { resolveTitleText } from "../deeds/wornTitle";
 import { noteFirstOnlineWin } from "../net/account";
 import { useArenaAtlas } from "../game/tilesets";
+import { arenaScene } from "../game/scene";
 import { FloatingStick } from "../game/FloatingStick";
 import { PingPill } from "../components/PingPill";
 import { EntranceCard } from "../game/EntranceCard";
@@ -196,7 +197,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const insets = useSafeAreaInsets();
   // The tileset atlas decodes async; recordArena draws the flat fallback until
   // it lands (a frame or two), then bakes the floor chunks once.
-  const atlas = useArenaAtlas();
+  // Which map this room rolled (bits-arenas.md) — the scene + atlas follow it.
+  const zoneId = client.welcome?.zoneId ?? "";
+  const atlas = useArenaAtlas(zoneId);
+  const scene = arenaScene(zoneId);
   // Forge icon art for the cast flash (decodes async; flashes skip until ready).
   const abilityIcons = useAbilityIconImages();
   const picture = useSharedValue(EMPTY_ARENA_PICTURE);
@@ -947,6 +951,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
           const prevPic = picture.value;
           picture.value = recordArena({
+            scene,
             view,
             config: client.welcome.config,
             myId: client.welcome.playerId,

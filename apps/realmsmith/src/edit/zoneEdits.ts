@@ -1,6 +1,8 @@
 import {
   COLLISION_CELL,
+  pointInPolygon,
   type Aabb,
+  type Vec2,
   type BreakableDef,
   type CollisionMaterial,
   type ZoneFile,
@@ -30,6 +32,25 @@ const uniqueId = (existing: Iterable<string>, base: string): string => {
   return `${base}-${n}`;
 };
 
+/**
+ * Painted collision lives on a QUARTER-tile grid (`collision.cellSize =
+ * tileSize / COLLISION_DIV`) so hidden fences can hug a shape; drawn solids
+ * (wall, void) stay tile-grain — they render, and a quarter of a pillar in a
+ * floor tile would look wrong — so their edits fill the whole tile's sub-cells.
+ * Legacy tile-grain grids are upsampled on first touch.
+ */
+export const COLLISION_DIV = 4;
+
+/** The sub-cells of tile (col,row) run [col*div, col*div+div) × [row*div, …). */
+const forTileSubCells = (z: ZoneFile, col: number, row: number, f: (sc: number, sr: number) => void): void => {
+  const div = collisionDiv(z);
+  for (let sr = row * div; sr < (row + 1) * div; sr++) for (let sc = col * div; sc < (col + 1) * div; sc++) f(sc, sr);
+};
+
+/** Sub-cells per tile side of the file's current collision grid (1 for legacy). */
+export const collisionDiv = (z: ZoneFile): number =>
+  z.collision.cells ? Math.max(1, Math.round(z.tileSize / (z.collision.cellSize ?? z.tileSize))) : COLLISION_DIV;
+
 // --- Floor layer --------------------------------------------------------------
 export const setFloor = (z: ZoneFile, col: number, row: number, v: number): boolean => {
   if (!inBounds(z, col, row)) return false;
@@ -47,11 +68,14 @@ export const setFloor = (z: ZoneFile, col: number, row: number, v: number): bool
   // (invisible fence over normal-looking ground), so floor paints leave them.
   // (Free rects aren't cell-aligned, so those are removed via right-click.)
   if (v !== 0 && z.collision.cells) {
-    const cr = z.collision.cells[row];
-    if (cr && (cr[col] === COLLISION_CELL.wall || cr[col] === COLLISION_CELL.void)) {
-      cr[col] = COLLISION_CELL.none;
-      changed = true;
-    }
+    const cells = z.collision.cells;
+    forTileSubCells(z, col, row, (sc, sr) => {
+      const cr = cells[sr];
+      if (cr && (cr[sc] === COLLISION_CELL.wall || cr[sc] === COLLISION_CELL.void)) {
+        cr[sc] = COLLISION_CELL.none;
+        changed = true;
+      }
+    });
   }
   return changed;
 };
@@ -74,26 +98,44 @@ export const setDecor = (z: ZoneFile, col: number, row: number, v: number): bool
 };
 
 // --- Collision: painted cells + free rects ------------------------------------
+/** The quarter-tile grid, created — or a coarser legacy grid upsampled — on demand. */
 const ensureCells = (z: ZoneFile): number[][] => {
-  if (!z.collision.cells || z.collision.cells.length !== z.size.rows) {
-    z.collision.cells = Array.from({ length: z.size.rows }, () =>
-      new Array<number>(z.size.cols).fill(0),
-    );
-    // The editor paints collision at tile resolution, so cells align with floor.
-    z.collision.cellSize = z.tileSize;
+  const rows = z.size.rows * COLLISION_DIV;
+  const cols = z.size.cols * COLLISION_DIV;
+  const old = z.collision.cells;
+  const oldDiv = old ? collisionDiv(z) : 0;
+  if (!old || old.length !== rows || oldDiv !== COLLISION_DIV) {
+    const next = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+    if (old && oldDiv > 0) {
+      // Nearest-neighbour resample: a legacy tile cell becomes a div×div block.
+      const k = COLLISION_DIV / oldDiv;
+      for (let sr = 0; sr < rows; sr++) {
+        const src = old[Math.floor(sr / k)];
+        if (!src) continue;
+        for (let sc = 0; sc < cols; sc++) next[sr]![sc] = src[Math.floor(sc / k)] ?? 0;
+      }
+    }
+    z.collision.cells = next;
+    z.collision.cellSize = z.tileSize / COLLISION_DIV;
   }
-  return z.collision.cells;
+  return z.collision.cells!;
 };
 
+/**
+ * Paint a whole TILE's collision: drawn solids (wall/void) and tile-grain
+ * erase. Every sub-cell of the tile is set.
+ */
 export const setCollisionCell = (z: ZoneFile, col: number, row: number, v: number): boolean => {
   if (!inBounds(z, col, row)) return false;
-  const r = ensureCells(z)[row];
-  if (!r) return false;
+  const cells = ensureCells(z);
   let changed = false;
-  if (r[col] !== v) {
-    r[col] = v;
-    changed = true;
-  }
+  forTileSubCells(z, col, row, (sc, sr) => {
+    const r = cells[sr];
+    if (r && r[sc] !== v) {
+      r[sc] = v;
+      changed = true;
+    }
+  });
   // A DRAWN solid (wall or void) and walkable floor can't share a cell: painting
   // one clears the floor beneath, so there's never hidden ground under a pit or a
   // pillar — the floorless cell renders as the void/pillar it now is. Erasing
@@ -109,6 +151,28 @@ export const setCollisionCell = (z: ZoneFile, col: number, row: number, v: numbe
     }
   }
   return changed;
+};
+
+/**
+ * Paint one quarter-tile SUB-cell (`sc`,`sr` in sub-cell units) — the hidden
+ * fence brush. Erasing a sub-cell that holds a drawn solid clears that whole
+ * tile instead (drawn solids are tile-grain).
+ */
+export const setCollisionSubCell = (z: ZoneFile, sc: number, sr: number, v: number): boolean => {
+  const div = COLLISION_DIV;
+  const col = Math.floor(sc / div);
+  const row = Math.floor(sr / div);
+  if (!inBounds(z, col, row)) return false;
+  const cells = ensureCells(z);
+  const r = cells[sr];
+  if (!r) return false;
+  const cur = r[sc] ?? 0;
+  if (v === COLLISION_CELL.none && (cur === COLLISION_CELL.wall || cur === COLLISION_CELL.void)) {
+    return setCollisionCell(z, col, row, COLLISION_CELL.none);
+  }
+  if (cur === v) return false;
+  r[sc] = v;
+  return true;
 };
 
 /** Clear floor in every cell whose centre lies inside `box` — so a collision rect
@@ -152,6 +216,61 @@ export const rectIndexAt = (z: ZoneFile, wx: number, wy: number): number =>
 export const deleteRect = (z: ZoneFile, idx: number): boolean => {
   if (idx < 0) return false;
   z.collision.rects.splice(idx, 1);
+  return true;
+};
+
+// --- Collision polygons (hidden fences; core zone/polygon.ts) -----------------
+/** Append a closed hidden polygon. Returns its index. */
+export const addPolygon = (z: ZoneFile, points: Vec2[]): number => {
+  if (!z.collision.polys) z.collision.polys = [];
+  z.collision.polys.push({ points: points.map((p) => ({ x: p.x, y: p.y })), material: "hidden" });
+  return z.collision.polys.length - 1;
+};
+
+/** Index of the topmost polygon containing (wx,wy), or -1. */
+export const polygonIndexAt = (z: ZoneFile, wx: number, wy: number): number => {
+  const polys = z.collision.polys ?? [];
+  for (let i = polys.length - 1; i >= 0; i--) {
+    if (pointInPolygon({ x: wx, y: wy }, polys[i]!.points)) return i;
+  }
+  return -1;
+};
+
+/** The polygon vertex within `tol` px of (wx,wy), nearest first, or null. */
+export const polygonVertexAt = (
+  z: ZoneFile,
+  wx: number,
+  wy: number,
+  tol: number,
+): { poly: number; vertex: number } | null => {
+  let best: { poly: number; vertex: number } | null = null;
+  let bestD = tol;
+  const polys = z.collision.polys ?? [];
+  for (let pi = 0; pi < polys.length; pi++) {
+    const pts = polys[pi]!.points;
+    for (let vi = 0; vi < pts.length; vi++) {
+      const d = Math.hypot(pts[vi]!.x - wx, pts[vi]!.y - wy);
+      if (d <= bestD) {
+        bestD = d;
+        best = { poly: pi, vertex: vi };
+      }
+    }
+  }
+  return best;
+};
+
+export const movePolygonVertex = (z: ZoneFile, poly: number, vertex: number, x: number, y: number): boolean => {
+  const p = z.collision.polys?.[poly]?.points[vertex];
+  if (!p || (p.x === x && p.y === y)) return false;
+  p.x = x;
+  p.y = y;
+  return true;
+};
+
+export const deletePolygon = (z: ZoneFile, idx: number): boolean => {
+  if (!z.collision.polys || idx < 0 || idx >= z.collision.polys.length) return false;
+  z.collision.polys.splice(idx, 1);
+  if (z.collision.polys.length === 0) delete z.collision.polys;
   return true;
 };
 

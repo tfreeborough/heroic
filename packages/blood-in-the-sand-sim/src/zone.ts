@@ -1,20 +1,43 @@
 /**
- * The bundled arena zone. It lives inside this package (not on the wire, not
- * in an app's assets) so the Bun server and the Expo client statically import
- * the SAME file — a mismatch is impossible and there's no disk-path plumbing.
- * `welcome.zoneId` exists only to assert both ends agree.
+ * The bundled arena zones (docs/design/bits-arenas.md). They live inside this
+ * package (not on the wire, not in an app's assets) so the Bun server and the
+ * Expo client statically import the SAME files — a mismatch is impossible and
+ * there's no disk-path plumbing. `welcome.zoneId` tells a client which one its
+ * room is playing.
  *
- * Ordinary Realmsmith format-v1 JSON — open it in Realmsmith to edit. Layout
- * notes: 1024×1024, a centre pillar plus two 180°-symmetric slabs — the pillar
- * breaks line of sight (auto-targeting drops, attacks lock-break), which is
- * what gives the dash a juke purpose. Dressed with the desert tileset
- * (docs/design/tilesets.md): floor tile ids index the desert atlas, and the
- * prop objects (cacti/tufts, 180°-symmetric) carry hidden footprints — body
- * cover that blocks movement but not sight.
+ * Ordinary Realmsmith format-v1 JSON — open them in Realmsmith to edit (its
+ * landing page lists them; "New arena" adds one here). arena-00: 1024×1024, a
+ * centre pillar plus two 180°-symmetric slabs — the pillar breaks line of
+ * sight (auto-targeting drops, attacks lock-break), which is what gives the
+ * dash a juke purpose. Dressed with the desert tileset (tilesets.md).
  */
 import type { ZoneFile } from "@heroic/core";
-import arena00 from "./zones/arena-00.json";
+import { ARENAS } from "./zones";
 
-// JSON imports widen literal unions (e.g. kind: string), hence the cast —
-// same idiom the gauntlet uses for its zone imports.
-export const ARENA_00 = arena00 as unknown as ZoneFile;
+export { ARENAS };
+
+/** The original arena — the fixed map for anything scripted against its
+ *  layout (the Primer, showcase captures, the bot script). */
+export const ARENA_00: ZoneFile = ARENAS["arena-00"]!;
+
+/** Every registered arena id, registry order. */
+export const ARENA_IDS: readonly string[] = Object.keys(ARENAS);
+
+/**
+ * The arenas the server deals to ONLINE rooms (skirmish, brawl, ranked), one
+ * picked uniformly per room. Hand-edited on purpose: an arena can sit in the
+ * registry (practice, editor) while it's still being built.
+ *
+ * COMPATIBILITY: a client that doesn't know an id can't render it, and the
+ * zone never travels — so adding an id here is a PROTOCOL_VERSION bump.
+ */
+export const ARENA_ROTATION: readonly string[] = ["arena-00"];
+
+/** Pick a rotation arena with the caller's rng (Math.random on the server). */
+export const pickArena = (rand: () => number): ZoneFile => {
+  const id = ARENA_ROTATION[Math.min(ARENA_ROTATION.length - 1, Math.floor(rand() * ARENA_ROTATION.length))]!;
+  return ARENAS[id] ?? ARENA_00;
+};
+
+/** A registry arena by id; unknown → the default (never throw over a map name). */
+export const arenaById = (id: string | null | undefined): ZoneFile => (id ? (ARENAS[id] ?? ARENA_00) : ARENA_00);

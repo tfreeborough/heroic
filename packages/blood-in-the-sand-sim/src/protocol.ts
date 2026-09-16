@@ -298,6 +298,10 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the skirmish board is sealed and pays nothing material; see the doc for
  * why both original objections hold). `deedUnlocks` may now follow a
  * skirmish matchEnd too, carrying that match's server-minted id.
+ * 2026-09-13, NO bump: arenas (bits-arenas.md) — the server deals a map per
+ * room from ARENA_ROTATION; `welcome.zoneId` (always sent) is now what the
+ * client renders from, and `RoomListing.arena?` names it. Same-shape wire.
+ * The bump rule lives on ARENA_ROTATION: adding an id there is a bump.
  */
 export const PROTOCOL_VERSION = 33;
 export const DEFAULT_PORT = 7777;
@@ -555,6 +559,9 @@ export interface RoomListing {
   phase: "lobby" | "in-match";
   /** v32: a free-for-all room (6 seats reads ambiguous next to 3v3 without it). */
   brawl: boolean;
+  /** The arena's display name (bits-arenas.md) — rooms roll a map from the
+   *  rotation, so the directory says which. Additive; old clients ignore it. */
+  arena?: string;
 }
 
 export interface SnapshotMsg {

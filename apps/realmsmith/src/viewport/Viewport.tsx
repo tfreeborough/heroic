@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Aabb, Zone } from "@heroic/core";
+import type { Aabb, CollisionPolygon, Vec2, Zone } from "@heroic/core";
 import { drawZone, type TilesetArt, type View } from "./zoneRenderer";
 import type { Corner, EditPointer, Selection } from "../edit/types";
 
@@ -19,10 +19,17 @@ interface Props {
   pending: { box: Aabb; valid: boolean } | null;
   /** The selected breakable's box — draws corner handles + enables resize drags. */
   resizeBox: Aabb | null;
+  /** Authored hidden polygons, drawn as outlines (+ vertex handles when editing them). */
+  polys: readonly CollisionPolygon[];
+  polyHandles: boolean;
+  /** Polygon-in-progress vertices; the viewport supplies the cursor for the rubber band. */
+  draft: readonly Vec2[] | null;
   /** Left/right edit events (down/drag/up). Middle-drag pan is internal. */
   onPointer: (e: EditPointer) => void;
   /** Whether the current tool's action at a cell is valid (drives the hover tint). */
   validateHover: (col: number, row: number) => boolean;
+  /** Hover box subdivisions per tile: 1 = tile, 4 = the quarter-tile collision brush. */
+  hoverDiv: number;
 }
 
 export const Viewport = ({
@@ -34,8 +41,12 @@ export const Viewport = ({
   focus,
   pending,
   resizeBox,
+  polys,
+  polyHandles,
+  draft,
   onPointer,
   validateHover,
+  hoverDiv,
 }: Props) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View>({ camX: 0, camY: 0, zoom: 1 });
@@ -50,8 +61,17 @@ export const Viewport = ({
     showGrid,
     pending,
     resizeBox,
-    hover: null as { col: number; row: number } | null,
+    polys,
+    polyHandles,
+    draft,
+    hover: null as { col: number; row: number; div: number } | null,
+    cursor: null as Vec2 | null,
+    hoverDiv,
   });
+  live.current.hoverDiv = hoverDiv;
+  live.current.polys = polys;
+  live.current.polyHandles = polyHandles;
+  live.current.draft = draft;
   live.current.zone = zone;
   live.current.art = art;
   live.current.onPointer = onPointer;
@@ -102,7 +122,8 @@ export const Viewport = ({
       }
       const hv = live.current.hover;
       // Recompute validity each draw so it stays fresh after an edit, not just on move.
-      const valid = hv ? live.current.validateHover(hv.col, hv.row) : true;
+      // Validity is a tile-level question even when the hover box is a sub-cell.
+      const valid = hv ? live.current.validateHover(Math.floor(hv.col / hv.div), Math.floor(hv.row / hv.div)) : true;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawZone(
         ctx,
@@ -117,6 +138,9 @@ export const Viewport = ({
           selection: live.current.selection,
           pending: live.current.pending,
           resize: live.current.resizeBox,
+          polys: live.current.polys,
+          polyHandles: live.current.polyHandles,
+          draft: live.current.draft ? { points: live.current.draft, cursor: live.current.cursor } : null,
         },
         live.current.art,
       );
@@ -170,8 +194,17 @@ export const Viewport = ({
     const updateHover = (clientX: number, clientY: number) => {
       const p = at(clientX, clientY);
       const h = live.current.hover;
-      if (!h || h.col !== p.col || h.row !== p.row) {
-        live.current.hover = { col: p.col, row: p.row };
+      const div = live.current.hoverDiv;
+      const sub = live.current.zone.tileSize / div;
+      const col = Math.floor(p.wx / sub);
+      const row = Math.floor(p.wy / sub);
+      if (!h || h.col !== col || h.row !== row || h.div !== div) {
+        live.current.hover = { col, row, div };
+        requestDraw();
+      }
+      // The polygon rubber band follows the exact cursor, not the cell.
+      if (live.current.draft) {
+        live.current.cursor = { x: p.wx, y: p.wy };
         requestDraw();
       }
     };

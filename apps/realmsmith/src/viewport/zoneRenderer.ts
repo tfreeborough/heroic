@@ -14,6 +14,8 @@ import {
   type Aabb,
   type TilesetDef,
   type Zone,
+  type CollisionPolygon,
+  type Vec2,
 } from "@heroic/core";
 import type { Selection } from "../edit/types";
 
@@ -35,8 +37,9 @@ export interface View {
 export interface EditOverlay {
   /** Draw the per-cell tile grid. */
   grid?: boolean;
-  /** Highlight the cell under the cursor (in tile coords), if any. */
-  hover?: { col: number; row: number } | null;
+  /** Highlight the cell under the cursor — in tile coords, or in `div`ths of a
+   *  tile (the quarter-tile collision brush), if any. */
+  hover?: { col: number; row: number; div?: number } | null;
   /** When false, the hover cell is tinted red (the current action would conflict). */
   hoverValid?: boolean;
   /** The selected breakable/object, outlined so it reads as picked. */
@@ -45,6 +48,13 @@ export interface EditOverlay {
   pending?: { box: Aabb; valid: boolean } | null;
   /** The selected breakable's box — draws corner resize handles on it. */
   resize?: Aabb | null;
+  /** Authored hidden polygons (the outlines; their half-tile strips already
+   *  draw via `zone.hidden`). Vertices are shown when the collision tool is up. */
+  polys?: readonly CollisionPolygon[];
+  /** The polygon being drawn: its vertices so far, the cursor as the rubber-band end. */
+  draft?: { points: readonly Vec2[]; cursor: Vec2 | null } | null;
+  /** Show polygon vertex handles (the collision tool's polygon shape is active). */
+  polyHandles?: boolean;
 }
 
 // Mirror the game's breakable look (apps/enter-the-gauntlet renderCombat.ts): an
@@ -520,13 +530,15 @@ export const drawZone = (
     ctx.stroke();
   }
   const h = overlay.hover;
-  if (h && h.col >= 0 && h.col < cols && h.row >= 0 && h.row < rows) {
+  const hd = h?.div ?? 1;
+  if (h && h.col >= 0 && h.col < cols * hd && h.row >= 0 && h.row < rows * hd) {
+    const hs = t / hd;
     const valid = overlay.hoverValid !== false;
     ctx.fillStyle = valid ? "rgba(255,255,255,0.18)" : "rgba(255,90,90,0.28)";
-    ctx.fillRect(h.col * t, h.row * t, t, t);
+    ctx.fillRect(h.col * hs, h.row * hs, hs, hs);
     ctx.lineWidth = 2 / view.zoom;
     ctx.strokeStyle = valid ? "rgba(255,255,255,0.7)" : "rgba(255,90,90,0.95)";
-    ctx.strokeRect(h.col * t, h.row * t, t, t);
+    ctx.strokeRect(h.col * hs, h.row * hs, hs, hs);
   }
 
   // Selection: a bright outline around the picked breakable/object.
@@ -575,6 +587,51 @@ export const drawZone = (
     const xs = [rz.x - rz.w / 2, rz.x + rz.w / 2];
     const ys = [rz.y - rz.h / 2, rz.y + rz.h / 2];
     for (const hx of xs) for (const hy of ys) ctx.fillRect(hx - hs, hy - hs, hs * 2, hs * 2);
+  }
+
+  // Hidden polygons: the authored outline over its rasterised strips (which
+  // drew above as ordinary hidden boxes — the staircase IS the real boundary).
+  for (const poly of overlay.polys ?? []) {
+    if (poly.points.length < 2) continue;
+    ctx.beginPath();
+    poly.points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+    ctx.closePath();
+    ctx.lineWidth = 2 / view.zoom;
+    ctx.strokeStyle = "rgba(120,170,255,0.95)";
+    ctx.stroke();
+    if (overlay.polyHandles) {
+      for (const pt of poly.points) {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 5 / view.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = "#5fd0ff";
+        ctx.fill();
+      }
+    }
+  }
+  // The polygon under construction: dashed, rubber-banded to the cursor, first
+  // vertex ringed (click it to close).
+  const d = overlay.draft;
+  if (d && d.points.length > 0) {
+    ctx.beginPath();
+    d.points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+    if (d.cursor) ctx.lineTo(d.cursor.x, d.cursor.y);
+    ctx.lineWidth = 2 / view.zoom;
+    ctx.strokeStyle = "#5fd0ff";
+    ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const pt of d.points) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4 / view.zoom, 0, Math.PI * 2);
+      ctx.fillStyle = "#5fd0ff";
+      ctx.fill();
+    }
+    const first = d.points[0]!;
+    ctx.beginPath();
+    ctx.arc(first.x, first.y, 9 / view.zoom, 0, Math.PI * 2);
+    ctx.lineWidth = 2 / view.zoom;
+    ctx.strokeStyle = d.points.length >= 3 ? "#7fe0a0" : "rgba(95,208,255,0.6)";
+    ctx.stroke();
   }
 
   // Free-rect being dragged out: a dashed box, red if it would cover a breakable/object.

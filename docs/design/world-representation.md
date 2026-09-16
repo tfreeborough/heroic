@@ -191,6 +191,24 @@ Realmsmith could let you draw rotated rects or polygons, but we deliberately **d
   natively** — so the only real work would be `resolveCircleAabb` → circle-vs-oriented-box for the enemy
   crowd, plus a point-in-polygon cell test in `buildNavGrid`.
 
+### Polygons — authored outlines, box collision (built 2026-09-13)
+
+The v1 argument above still holds: the *runtime* never sees an angle. What arrived is the authoring
+half: a **polygon fence** you draw in Realmsmith (`ZoneCollision.polys`, world-px points, `"hidden"`
+material only) that `loadZone` rasterises to **half-tile** boxes (`POLYGON_CELL_DIV = 2`,
+`zone/polygon.ts`: even-odd centre sampling, then the same greedy mesher as painted cells) and pours
+into the `hidden` channel. Physics, nav, the PvP server and the wire are untouched; a diagonal is a
+half-tile staircase nobody feels. The ask (Tom): fence off no-go areas whose shape isn't a rect and
+isn't a prop. The editor draws the outline over the strips it became, so the real boundary is never
+a surprise. Wall/void polygons stay deferred — they'd *draw* as staircases.
+
+**Quarter-tile painting (2026-09-16).** Realmsmith's painted collision grid is now
+`tileSize / 4` per cell (`collision.cellSize`, which the format always allowed) so hidden fences can
+hug a shape: the hidden brush paints sub-cells (with ¼-tile snap and a quarter-size hover box);
+wall/void — they *draw* — stay tile-grain, filling all sixteen sub-cells, and erasing a sub-cell
+under a drawn solid clears its whole tile. Legacy tile-grain grids are upsampled on first touch;
+the game's `loadZone` never cared (it meshes at whatever `cellSize` says).
+
 ## Zone shape (irregular & outdoor zones)
 
 A zone's array is always a rectangle — `cols × rows` is its **bounding box** — but the bounding box and the

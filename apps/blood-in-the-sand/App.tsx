@@ -470,11 +470,11 @@ export default function App() {
       <PracticeScreen
         onBack={() => setRoute("modes")}
         onArmory={() => openArmory("practice")}
-        onStart={(name, teamSize, difficulty, opponent, brawl) =>
+        onStart={(name, teamSize, difficulty, opponent, brawl, arena) =>
           setPractice(
             opponent === "dummies"
-              ? new PracticeClient(name, RANGE_TEAM_SIZE, "dummies")
-              : new PracticeClient(name, teamSize, "bot", difficulty, null, brawl),
+              ? new PracticeClient(name, RANGE_TEAM_SIZE, "dummies", undefined, null, false, arena)
+              : new PracticeClient(name, teamSize, "bot", difficulty, null, brawl, arena),
           )
         }
       />

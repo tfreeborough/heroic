@@ -134,6 +134,7 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
         <Text style={styles.roomMeta}>
           {item.brawl ? <Text style={styles.brawlTag}>6-WAY BRAWL · </Text> : null}
           {item.code} · {item.players}/{item.capacity} gladiators
+          {item.arena ? ` · ${item.arena}` : ""}
         </Text>
       </View>
       <Text style={styles.joinHint}>{item.players < item.capacity ? "JOIN ›" : "FULL"}</Text>

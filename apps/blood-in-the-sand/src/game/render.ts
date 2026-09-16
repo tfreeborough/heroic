@@ -25,9 +25,8 @@ import {
   type SkRect,
   type SkSurface,
 } from "@shopify/react-native-skia";
-import { loadZone, tileSourceRect, TILESETS } from "@heroic/core";
+import { tileSourceRect } from "@heroic/core";
 import {
-  ARENA_00,
   BLOOD_FONT,
   PLAYER_RADIUS as SIM_PLAYER_RADIUS,
   SANDSTORM,
@@ -64,36 +63,18 @@ import {
   type CrackDecal,
   type CrackField,
 } from "./cracks";
-import { buildCrowd, CROWD_REVEAL } from "./crowd";
+import { CROWD_REVEAL } from "./crowd";
+import type { ArenaScene } from "./scene";
 import type { StatusPulses } from "./statusRings";
 import type { TarField } from "./tar";
 
-// Zone geometry is static — derive once at module scope (loadZone is pure).
-const ZONE = loadZone(ARENA_00);
-const WORLD_W = ZONE.size.x;
-const WORLD_H = ZONE.size.y;
-const TILESET = TILESETS[ZONE.tileset];
-
-// The animated pit crowd (crowd.ts) — a procedural amphitheatre drawn in the
-// void beyond the sand, revealed by the relaxed camera clamp below.
-const CROWD = buildCrowd(WORLD_W, WORLD_H);
-
-// Props pre-resolved for the draw loop: cached src/dst rects + sprite bounds,
-// sorted by baseline (feet y) once — the per-frame y-sort only interleaves
-// players between them. `fade` is mutable per-frame state: the current alpha,
-// eased toward FADE_ALPHA while someone stands behind the sprite.
-const PROPS_SORTED = [...ZONE.props]
-  .sort((a, b) => a.y - b.y)
-  .map((p) => ({
-    y: p.y,
-    left: p.x - p.w / 2,
-    top: p.y - p.h,
-    w: p.w,
-    h: p.h,
-    src: Skia.XYWHRect(p.src.x, p.src.y, p.src.w, p.src.h),
-    dst: Skia.XYWHRect(p.x - p.w / 2, p.y - p.h, p.w, p.h),
-    fade: 1,
-  }));
+// The arena being drawn (scene.ts, bits-arenas.md): world size, tileset,
+// crowd, props, walls — everything that used to be derived here at module
+// scope from the one bundled arena. `recordArena` installs the frame's scene
+// before anything reads it; one assignment per frame, no allocation (the same
+// idiom as the other per-frame module state below). Never read before a
+// recordArena call.
+let S: ArenaScene = undefined as unknown as ArenaScene;
 
 /**
  * PVP information beats the depth illusion: a prop with ANY living player
@@ -245,17 +226,15 @@ const RANGE_RING_ALPHA = 0.22;
  * image swap rebakes. Ids the atlas doesn't cover fall back to the flat sand
  * fill, so a half-painted zone still reads.
  */
-let bakedAtlas: SkImage | null = null;
-let bakedFloor: SkImage | null = null;
 const floorImage = (atlas: SkImage): SkImage | null => {
-  if (bakedAtlas === atlas) return bakedFloor;
-  const surface = Skia.Surface.Make(WORLD_W, WORLD_H);
+  if (S.bakedAtlas === atlas) return S.bakedFloor;
+  const surface = Skia.Surface.Make(S.worldW, S.worldH);
   if (!surface) return null; // keep the flat fallback; retry next frame
   const canvas = surface.getCanvas();
-  const t = ZONE.tileSize;
-  const ct = ZONE.chunkTiles;
+  const t = S.zone.tileSize;
+  const ct = S.zone.chunkTiles;
   const paint = Skia.Paint();
-  for (const chunk of ZONE.chunks) {
+  for (const chunk of S.zone.chunks) {
     const drawLayer = (
       layer: Uint16Array | null,
       floorFallback: boolean,
@@ -267,7 +246,7 @@ const floorImage = (atlas: SkImage): SkImage | null => {
           if (id === 0) continue;
           const wx = (chunk.cx * ct + lx) * t;
           const wy = (chunk.cy * ct + ly) * t;
-          const src = TILESET ? tileSourceRect(TILESET, id) : null;
+          const src = S.tileset ? tileSourceRect(S.tileset, id) : null;
           if (src) {
             canvas.drawImageRectOptions(
               atlas,
@@ -287,18 +266,10 @@ const floorImage = (atlas: SkImage): SkImage | null => {
     drawLayer(chunk.floor, true);
     drawLayer(chunk.decor, false);
   }
-  bakedFloor = surface.makeImageSnapshot();
-  bakedAtlas = atlas;
-  return bakedFloor;
+  S.bakedFloor = surface.makeImageSnapshot();
+  S.bakedAtlas = atlas;
+  return S.bakedFloor;
 };
-const FLOOR_RECT = Skia.XYWHRect(0, 0, WORLD_W, WORLD_H);
-
-// Wall geometry is static — two fresh rects per wall per frame was free GC
-// food (the allocation diet).
-const WALL_RECTS = ZONE.walls.map((w) => ({
-  body: Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h),
-  top: Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h),
-}));
 
 /** A transient visual: damage numbers, hit rings, the harpoon's chain flash,
  * the cast flash (an ability icon popping above its caster), the warding
@@ -353,6 +324,8 @@ const NAME_FONT = matchFont({
   fontWeight: "600",
 });
 export interface ArenaRenderInput {
+  /** The arena being drawn (arenaScene(welcome.zoneId), bits-arenas.md). */
+  scene: ArenaScene;
   view: InterpolatedView;
   config: ArenaClientConfig;
   /** Our slot — identifies the real self for range-ring / ally-pointer logic;
@@ -1891,9 +1864,9 @@ let splatWashMs = 0;
  *  visibly blurry and the settle→bake handoff popped sharp→soft (Tom). The
  *  bake cost was never the measured hitch source anyway — GC was. */
 const SPLAT_SCALE = 1;
-const SPLAT_W = Math.ceil(WORLD_W * SPLAT_SCALE);
-const SPLAT_H = Math.ceil(WORLD_H * SPLAT_SCALE);
-const SPLAT_SRC = Skia.XYWHRect(0, 0, SPLAT_W, SPLAT_H);
+/** The arena the surface was made for — a room on a different-sized map
+ *  (bits-arenas.md) gets a fresh surface. */
+let splatArena: string | null = null;
 const splatPaint = Skia.Paint();
 /** Anti-saturation: multiply the baked layer's alpha down a hair on a slow
  *  beat — invisible at match timescales (half-life ≈ 11½ min), but guards a
@@ -1930,8 +1903,13 @@ const scarLayer = (
     splatSurface?.getCanvas().clear(Skia.Color("rgba(0, 0, 0, 0)"));
     splatWashMs = nowMs;
   }
+  if (splatSurface && splatArena !== S.id) {
+    splatSurface = null;
+    splatImage = null;
+  }
   if (!splatSurface) {
-    splatSurface = Skia.Surface.Make(SPLAT_W, SPLAT_H); // null → retry next beat
+    splatArena = S.id;
+    splatSurface = Skia.Surface.Make(Math.ceil(S.worldW * SPLAT_SCALE), Math.ceil(S.worldH * SPLAT_SCALE)); // null → retry next beat
     // Stamps arrive in world coords; the baked-in matrix maps them to the
     // half-res surface.
     splatSurface?.getCanvas().scale(SPLAT_SCALE, SPLAT_SCALE);
@@ -1947,7 +1925,7 @@ const scarLayer = (
       // this beat's stamps, so fresh marks aren't washed.
       if (splatImage && nowMs - splatWashMs >= WASH_INTERVAL_MS) {
         splatWashMs = nowMs;
-        canvas.drawRect(FLOOR_RECT, washPaint);
+        canvas.drawRect(S.floorRect, washPaint);
       }
       // Settled crack webs stamp at exactly the alpha (and frozen reveal)
       // the live pass last drew them with — the handoff is invisible
@@ -1968,15 +1946,15 @@ const scarLayer = (
     if (splatImage) {
       canvas.drawImageRectOptions(
         splatImage,
-        SPLAT_SRC,
-        FLOOR_RECT,
+        S.floorRect, // SPLAT_SCALE is 1: surface px == world px
+        S.floorRect,
         FilterMode.Linear,
         MipmapMode.None,
         splatPaint,
       );
     }
     drawBlood(canvas, blood.decals, nowMs);
-  }, FLOOR_RECT);
+  }, S.floorRect);
   return scarPicture;
 };
 
@@ -2337,8 +2315,9 @@ const drawOffscreenAllies = (
   }
 };
 
-export const recordArena = (r: ArenaRenderInput): SkPicture =>
-  createPicture((canvas) => {
+export const recordArena = (r: ArenaRenderInput): SkPicture => {
+  S = r.scene;
+  return createPicture((canvas) => {
     const { view, config, myId, spectateId, screenW, screenH } = r;
 
     // The camera aims at the SAFE viewport — the band between the top notch and
@@ -2387,23 +2366,23 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       // wall slides a band of the pit crowd into frame instead of hard void.
       cx = Math.min(
         Math.max(follow.x, halfW - CROWD_REVEAL),
-        WORLD_W - halfW + CROWD_REVEAL,
+        S.worldW - halfW + CROWD_REVEAL,
       );
       cy = Math.min(
         Math.max(follow.y, halfH - CROWD_REVEAL),
-        WORLD_H - halfH + CROWD_REVEAL,
+        S.worldH - halfH + CROWD_REVEAL,
       );
       // A viewport axis larger than the world: just centre it.
-      if (halfW * 2 >= WORLD_W) cx = WORLD_W / 2;
-      if (halfH * 2 >= WORLD_H) cy = WORLD_H / 2;
+      if (halfW * 2 >= S.worldW) cx = S.worldW / 2;
+      if (halfH * 2 >= S.worldH) cy = S.worldH / 2;
     } else {
       // Spectators fit the whole bowl — sand PLUS the revealed crowd band.
       zoom = Math.min(
-        viewW / (WORLD_W + CROWD_REVEAL * 2),
-        viewH / (WORLD_H + CROWD_REVEAL * 2),
+        viewW / (S.worldW + CROWD_REVEAL * 2),
+        viewH / (S.worldH + CROWD_REVEAL * 2),
       );
-      cx = WORLD_W / 2;
-      cy = WORLD_H / 2;
+      cx = S.worldW / 2;
+      cy = S.worldH / 2;
     }
 
     fill.setColor(C_VOID);
@@ -2447,24 +2426,24 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     if (floor) {
       canvas.drawImageRectOptions(
         floor,
-        FLOOR_RECT,
-        FLOOR_RECT,
+        S.floorRect,
+        S.floorRect,
         FilterMode.Linear,
         MipmapMode.None,
         fill,
       );
     } else {
       fill.setColor(C_FLOOR_EDGE);
-      canvas.drawRect(Skia.XYWHRect(0, 0, WORLD_W, WORLD_H), fill);
+      canvas.drawRect(Skia.XYWHRect(0, 0, S.worldW, S.worldH), fill);
       fill.setColor(C_FLOOR);
-      canvas.drawRect(Skia.XYWHRect(12, 12, WORLD_W - 24, WORLD_H - 24), fill);
+      canvas.drawRect(Skia.XYWHRect(12, 12, S.worldW - 24, S.worldH - 24), fill);
     }
 
     // The pit crowd, in the void beyond the sand. LOD is picked from the zoom
-    // inside CROWD.draw: the live culled mob down in the pit, a single baked
+    // inside S.crowd.draw: the live culled mob down in the pit, a single baked
     // still when a spectator fits the whole bowl. The mob does NOT react to
     // kills — the crowd-roar SFX carries that (a bodily lurch read badly).
-    CROWD.draw(
+    S.crowd.draw(
       canvas,
       cx - vcx / zoom,
       cy - vcy / zoom,
@@ -2486,7 +2465,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:
     // the prop sprite is their visual (docs/design/tilesets.md).
-    for (const w of WALL_RECTS) {
+    for (const w of S.wallRects) {
       fill.setColor(C_WALL);
       canvas.drawRect(w.body, fill);
       fill.setColor(C_WALL_TOP);
@@ -2502,10 +2481,10 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
 
     // Bodies and props in one painter's pass, ordered by baseline (feet) y — a
     // player north of a cactus draws under it (walks behind); south, over it.
-    // PROPS_SORTED is static so only the handful of players sort per frame.
+    // S.propsSorted is static so only the handful of players sort per frame.
     const byFeet = [...view.players].sort((a, b) => a.y - b.y);
     let pi = 0;
-    for (const prop of PROPS_SORTED) {
+    for (const prop of S.propsSorted) {
       while (
         pi < byFeet.length &&
         byFeet[pi]!.y + config.playerRadius <= prop.y
@@ -2595,5 +2574,6 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
       drawSandsVignette(canvas, screenW, screenH, r.nowMs);
     }
   });
+};
 
 export const EMPTY_ARENA_PICTURE: SkPicture = createPicture(() => {});

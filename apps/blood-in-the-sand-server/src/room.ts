@@ -12,11 +12,12 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Server, ServerWebSocket } from "bun";
+import type { ZoneFile } from "@heroic/core";
 import {
   ABILITY_IDS,
-  ARENA_00,
   LOADOUT_ABILITY_COUNT,
   PROTOCOL_VERSION,
+  pickArena,
   FREE_WEAPON_IDS,
   SNAPSHOT_DIVISOR,
   TICK_DT,
@@ -169,6 +170,8 @@ export interface RankedContext {
 export class Room {
   readonly meta: RoomMeta;
   readonly sim: ArenaSim;
+  /** The authored arena this room plays (its display name feeds the listing). */
+  readonly zoneFile: ZoneFile;
   /** When the last connected player left, for the GC sweep. Null while occupied. */
   emptySinceMs: number | null;
   /** Construction time — the ranked arm deadline counts from here. */
@@ -247,10 +250,21 @@ export class Room {
   private eventBuffer: ArenaEvent[] = [];
   private lastRoomStateKey = "";
 
-  constructor(server: Server<ClientData>, meta: RoomMeta, seed: number, teamSize: number, nowMs: number, teamCount = 2) {
+  constructor(
+    server: Server<ClientData>,
+    meta: RoomMeta,
+    seed: number,
+    teamSize: number,
+    nowMs: number,
+    teamCount = 2,
+    // The map this room plays for its whole life (bits-arenas.md): the manager
+    // deals one from the rotation; `welcome.zoneId` tells every client.
+    zoneFile: ZoneFile = pickArena(Math.random),
+  ) {
     this.server = server;
     this.meta = meta;
-    this.sim = createSim(ARENA_00, seed, teamSize, false, false, teamCount);
+    this.zoneFile = zoneFile;
+    this.sim = createSim(zoneFile, seed, teamSize, false, false, teamCount);
     this.nav = createBotNav(this.sim.zone);
     this.createdAtMs = nowMs;
     this.emptySinceMs = nowMs; // occupied the moment the creator is seated
@@ -283,6 +297,7 @@ export class Room {
       locked: this.meta.passcode !== null,
       phase: this.sim.state.round.phase === "lobby" ? "lobby" : "in-match",
       brawl: this.sim.state.teamCount > 2,
+      arena: this.zoneFile.name,
     };
   }
 
