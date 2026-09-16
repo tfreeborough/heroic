@@ -84,9 +84,12 @@ export interface RoundBannerProps {
   honour?: HonourRow[];
 }
 
-/** Rows land staggered after the plate settles — a ceremony, not a table. */
-const HONOUR_DELAY_MS = 900;
-const HONOUR_STAGGER_MS = 450;
+/** Rows land staggered after the plate settles — a ceremony, not a table.
+ * Quickened 2026-09-16 (was 900/450/320) to fit the 4s match-end hold: a
+ * 4v4 roll is fully landed by ~1.6s. */
+const HONOUR_DELAY_MS = 600;
+const HONOUR_STAGGER_MS = 250;
+const HONOUR_LAND_MS = 260;
 
 const HonourRowView = ({ row, index, color }: { row: HonourRow; index: number; color: string }) => {
   const land = useRef(new Animated.Value(0)).current;
@@ -94,7 +97,7 @@ const HonourRowView = ({ row, index, color }: { row: HonourRow; index: number; c
     const delay = HONOUR_DELAY_MS + index * HONOUR_STAGGER_MS;
     Animated.timing(land, {
       toValue: 1,
-      duration: 320,
+      duration: HONOUR_LAND_MS,
       delay,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
