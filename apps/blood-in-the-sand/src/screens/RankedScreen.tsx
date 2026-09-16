@@ -11,7 +11,7 @@
  * settlement banner still up.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
-import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -270,7 +270,7 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 16 }]}>
       {/* The purse is a door to the Armory, queued or not — the summons
           finds the player there too. No queue pill here: the SEARCHING
           line on the card already says it. The middle carries the PING
@@ -284,6 +284,16 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
         middle={<PingPill rtt={client.rttMs} />}
       />
 
+      {/* Everything under the header scrolls. The content grows to fill the
+          screen, so the cards share the leftover height as before — but
+          they have a floor (cardLive.minHeight), so when the standing panel
+          and the last-match card take up most of the screen the page scrolls
+          instead of squashing the card art. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 16 }]}
+        showsVerticalScrollIndicator={false}
+      >
       {/* Your standing. During PLACEMENTS (first 10 matches — and the safe
           default while /ranked/me loads) rank and rating stay hidden: the
           panel sells the reveal instead of showing a meaningless 1500. */}
@@ -421,6 +431,7 @@ export const RankedScreen = ({ client, playerName, onBack, onArmory }: RankedScr
         <Text style={styles.note}>Ranked needs the arena account service — check your connection and retry.</Text>
       )}
       {client.lastError && <Text style={styles.error}>{client.lastError}</Text>}
+      </ScrollView>
 
       {ceremony && (
         <RankedCeremony
@@ -555,6 +566,10 @@ const CardBody = ({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingHorizontal: 16 },
   header: { paddingHorizontal: 4 },
+  // Negative margin + matching padding so the scroll area runs to the
+  // screen edge (no clipped card borders) while content keeps its inset.
+  scroll: { flex: 1, marginHorizontal: -16 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 16 },
   standing: {
     borderWidth: 1,
     borderColor: "#8a6d44",
@@ -647,7 +662,9 @@ const styles = StyleSheet.create({
   // grew near-square and even a right-anchored crop lost most of the scene.
   // Two live cards now share the column (2v2, 2026-08-24) — capped a touch
   // lower than the single-card 230 so both keep a scene on small screens.
-  cardLive: { maxHeight: 200 },
+  // The floor keeps the art and copy readable when the standing panel and
+  // the last-match card eat the column — below it the screen scrolls.
+  cardLive: { minHeight: 170, maxHeight: 200 },
   cardFill: { flex: 1 },
   cardCopy: {
     flex: 1,
