@@ -3,11 +3,13 @@
 Status: **connection layer (silent redial + connect screen) BUILT 2026-07-30 ·
 seat TOKENS built 2026-08-15 (protocol v28, security pass: welcome carries
 `seatToken`, reclaim is token-only, ranked joins/watches without proof read as
-"no such room"; the client keeps `lastSeat` in module memory and sends it on a
-manual rejoin by code) · AUTO-rejoin (the manager re-dialing the room itself)
-still not built** ·
+"no such room") · AUTO-REJOIN + APP-RESTART REJOIN BUILT 2026-09-16 (R1 done:
+the seat is persisted to AsyncStorage and the connection manager reclaims it
+on every fresh socket — redial and cold launch alike — before the UI settles;
+`joinRoom.reclaimOnly`, additive, no bump) · R2 queue resume and R3 the
+in-match overlay still not built** ·
 Applies to: **Blood in the Sand** ·
-Last decided: 2026-08-15
+Last decided: 2026-09-16
 
 > "This can happen randomly and can be quite frustrating […] it's not really
 > obvious to a user why this screen is showing or what they can do."
@@ -47,7 +49,71 @@ dial/watch/redial lifecycle. Policy:
 - Each dial has a 15s timeout (RN's WebSocket has none); protocol mismatch
   never redials — that stays the update flow.
 
-**What a mid-match blip still costs: the seat.** That's the unbuilt half.
+~~**What a mid-match blip still costs: the seat.** That's the unbuilt half.~~
+Built 2026-09-16 — see § Built: auto-rejoin below.
+
+## Built: auto-rejoin, across sockets AND app restarts (2026-09-16)
+
+> "If you close the app down accidentally then come back to it, it would be
+> nice if we could try and reconnect to our last game […] if the game is still
+> ongoing this is the first thing we should do for players when coming back
+> into the app." (Tom, 2026-09-16 — he'd lost a match to exactly this.)
+
+The seat is now remembered in `src/net/seat.ts` — an in-memory copy for the
+connection manager's hot path, written through to AsyncStorage (`bits.seat`)
+so a killed app still knows it. Stamped on every `welcome` (with the name the
+seat was claimed under and, for a ranked room, the bracket — the welcome
+itself doesn't say, and the client needs it to route the rejoin and to read
+the eventual `roomClosed` as the settle rather than an error), re-stamped
+every 15 s while snapshots flow (so the 30-minute TTL means "last seen in the
+fight", not "joined once"), cleared on `leaveRoom`, `roomClosed`, and every
+refused reclaim.
+
+**The manager reclaims on every open.** `ConnectionManager.watch()` sends
+`ArenaClient.rejoinSeat(seat)` the moment a socket opens with a seat
+remembered — once per socket, after a redial and on a cold launch alike — and
+**holds its "connecting" state until the server answers**, so a mid-match blip
+reads as one continuous "connecting… → the fight" instead of a flash of the
+room list in between. `welcome` → the client restores `rankedMatch` from the
+seat, App's route follows it (a seat pulls the route to its flow — `play` or
+`ranked` — from wherever the player was, the title screen included), and
+GameScreen mounts mid-match through the existing routing. `reject` → the seat
+is forgotten, silently: the player asked for nothing, so there is nothing to
+apologise for. The dead-seat notice ("connection to the arena was lost") now
+fires only when the death cost something the reclaim could NOT recover (a
+queue spot, or a seat the server no longer had).
+
+**`reclaimOnly` on the wire** (`joinRoom`, additive — no bump). Room codes
+are four letters and get reused, so the remembered seat from yesterday could
+otherwise walk a relaunching player into a stranger's fresh lobby that
+happens to wear the same code. With the flag, the server admits the join
+ONLY as a reclaim; anything else is the same "no such room" a dead room
+answers. Manual joins by code are unchanged. (Deploy the server first: an old
+server ignores the flag and would fresh-join.)
+
+**Reclaim beats the heartbeat.** `Room.findGhost` no longer requires the seat
+to read disconnected. A wifi drop sends no close frame, so for up to
+`HEARTBEAT_TIMEOUT_MS` (15 s) the server still thinks the old socket is
+alive — while the client, which noticed first, is already back with the
+token inside the quiet-redial window. Before this the reclaim bounced and
+the client would have forgotten the seat. The token IS the proof; the seat
+it names on a still-"connected" player is a zombie socket, which `seat()`
+detaches and closes as it hands the seat over (new socket seated FIRST, so
+the zombie's late close finds itself superseded). Only the token's holder
+can do this — a stranger's token still finds nothing.
+
+**Rejoining into the ceremony hold.** A ranked room keeps its `rankedResult`
+(`RankedContext.lastResult`) and hands it to a seat that reclaims after the
+settle broadcast — a player who relaunches as the match ends gets the
+ceremony, not a red "match complete".
+
+**What it does NOT cover** (unchanged, deliberate): a lobby disconnect still
+frees the seat instantly (ranked: the arming room voids and the dropper eats
+the lockout), so a relaunch during the arming wizard reclaims nothing — the
+attempt costs one round trip and the seat is forgotten. And a 1v1 with an
+idling body ends within a couple of minutes (the body dies every round), so
+the realistic relaunch window is that long; 2v2 and skirmish rooms hold
+longer.
 
 ## The server already keeps the seat warm
 
@@ -75,9 +141,12 @@ Ranked rooms admit joiners **only** through this door
   When absent, reclaim only seats that never had a token claim… simpler: no
   token → never reclaim, always take a free lobby seat. (Ranked rooms then
   admit *nobody* without a matching token, closing the hijack.)
-- Tokens live in client memory only (v1). Persisting to AsyncStorage would
+- ~~Tokens live in client memory only (v1). Persisting to AsyncStorage would
   survive an app restart mid-match — nice, later, and needs a room-still-
-  exists probe to avoid a doomed rejoin dance on every cold launch.
+  exists probe to avoid a doomed rejoin dance on every cold launch.~~ Built
+  2026-09-16 (§ Built: auto-rejoin). The "probe" turned out to be the reclaim
+  itself: `reclaimOnly` makes a doomed attempt answer "no such room" in one
+  round trip and forget the seat — no separate probe needed.
 
 ### Client: the manager remembers
 
@@ -110,8 +179,9 @@ queues are long enough to notice.
 
 ## Milestones
 
-- **R1 — seat tokens + auto-rejoin.** Protocol bump (token in welcome/join),
-  manager `lastSeat`, ranked join gate becomes token-only. Kills both flaws.
+- **R1 — seat tokens + auto-rejoin.** ✅ Tokens 2026-08-15, auto-rejoin
+  2026-09-16 (persisted seat, `reclaimOnly`, reclaim-beats-heartbeat, the
+  manager's hold-until-answered). Kills both flaws.
 - **R2 — queue resume.** Client-side re-queue on reconnect.
 - **R3 — in-match reconnect overlay (polish).** Instead of dropping to the
   connect screen for the gap, GameScreen holds the dead client's last frame
@@ -129,4 +199,5 @@ queues are long enough to notice.
 - Should abandoning (deliberate leave) vs dropping (socket death) diverge
   further in ranked penalties once rejoin exists? (bits-ranked.md owns the
   penalty table; rejoin makes "drop" forgivable in a way it couldn't be.)
-- AsyncStorage token persistence for app-restart rejoin (see above).
+- ~~AsyncStorage token persistence for app-restart rejoin (see above).~~ Built
+  2026-09-16.

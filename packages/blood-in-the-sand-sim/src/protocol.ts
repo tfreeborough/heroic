@@ -298,6 +298,13 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the skirmish board is sealed and pays nothing material; see the doc for
  * why both original objections hold). `deedUnlocks` may now follow a
  * skirmish matchEnd too, carrying that match's server-minted id.
+ * 2026-09-16, NO bump: AUTO-REJOIN (bits-reconnect.md § R1 + app-restart
+ * rejoin) — `joinRoom` gains `reclaimOnly?: true`: the client's automatic
+ * seat reclaim on every fresh socket (redial AND cold launch) sets it so a
+ * stale remembered seat can only ever reclaim, never fresh-join whatever
+ * room now wears that code. Additive: an old client never sends it, an old
+ * server ignores it (and would fresh-join — the one reason to deploy the
+ * server first).
  */
 export const PROTOCOL_VERSION = 33;
 export const DEFAULT_PORT = 7777;
@@ -330,8 +337,13 @@ export type ClientMsg =
   /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
    * secret the last `welcome` for this room carried. Present and matching a
    * disconnected seat, that exact seat is reclaimed — name, team, body.
-   * Absent (a fresh join), only a free lobby seat will do. */
-  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; seatToken?: string; token?: string }
+   * Absent (a fresh join), only a free lobby seat will do.
+   * `reclaimOnly` (2026-09-16, additive): the AUTOMATIC rejoin's guard — with
+   * it set, the join succeeds ONLY as a reclaim; a room that has no seat for
+   * this token answers "no such room" even with a free lobby seat. Room
+   * codes are reused, so a remembered seat from yesterday must never walk a
+   * relaunching player into a stranger's lobby. */
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; seatToken?: string; token?: string; reclaimOnly?: boolean }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }
@@ -594,7 +606,9 @@ export type ServerMsg =
       /** This seat's rejoin secret (bits-reconnect.md § seat tokens) — send
        * it back in `joinRoom.seatToken` to reclaim the seat after a socket
        * death. Minted when the seat is first taken and stable for its life
-       * (a reclaim re-receives the same token). Client memory only, v1. */
+       * (a reclaim re-receives the same token). The client persists it
+       * (bits-reconnect.md § app-restart rejoin, 2026-09-16) so a relaunch
+       * mid-match can walk straight back into the fight. */
       seatToken: string;
     }
   | { t: "rooms"; rooms: RoomListing[] }

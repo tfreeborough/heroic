@@ -17,18 +17,20 @@ import { Animated, Easing, Pressable, StyleSheet, Text, type StyleProp, type Vie
 import { playSound, unlockAudio } from "../audio";
 
 export interface QueuePresence {
-  /** This socket holds a place in line right now (server truth). */
+  /** This socket holds a place in line right now (the client's view —
+   * optimistic on the tap, confirmed by the server a beat later). */
   queued: boolean;
-  /** The server's floored wait for the longest of our queued brackets —
-   * undefined while not queued. Smooth it with useSmoothWait for display. */
-  waitedSec: number | undefined;
+  /** Local clock (performance.now()) the line was entered at — the timer's
+   * anchor (ArenaClient.queuedSinceMs); null while not queued. Count it with
+   * useQueueClock. */
+  queuedSinceMs: number | null;
   /** Back to the ranked home (App routes; a redial rides along). */
   goToRanked: () => void;
 }
 
 export const QueueContext = createContext<QueuePresence>({
   queued: false,
-  waitedSec: undefined,
+  queuedSinceMs: null,
   goToRanked: () => {},
 });
 
@@ -38,39 +40,29 @@ export const formatWait = (sec: number): string =>
   `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 
 /**
- * The wait timer counts on the LOCAL clock — smooth by definition. The
- * server's waitedSec is floored AND arrives on a 2s beat, so it routinely
- * disagrees with local elapsed by up to ~2s; treating that as drift is what
- * made the digits jump. Anchor once on entry, and re-anchor only on a REAL
- * discontinuity (a void's re-queue that preserved earned wait). The 250ms
- * tick outpaces the second boundary so the display can never skip a digit.
- * (Lifted out of RankedScreen 2026-08-25 so the header pill counts the same.)
+ * The wait timer counts on the LOCAL clock, from the tap that entered the
+ * line — smooth by definition, and running before the server has even
+ * answered. The queue time is relative to the player and nothing else, so
+ * no server number ever needs to land for it to be right (Tom, 2026-09-16);
+ * the one correction — a re-queue that preserved earned wait — is
+ * ArenaClient's, folded into the anchor itself. The 250ms tick outpaces the
+ * second boundary so the display can never skip a digit. (Lifted out of
+ * RankedScreen 2026-08-25 so the header pill counts the same.)
  */
-export const useSmoothWait = (waitedSec: number | undefined): number => {
-  const anchor = useRef<number | null>(null);
+export const useQueueClock = (sinceMs: number | null): number => {
   const [, tick] = useReducer((x: number) => x + 1, 0);
-  if (waitedSec === undefined) {
-    anchor.current = null;
-  } else {
-    const nowMs = performance.now();
-    if (anchor.current === null) {
-      anchor.current = nowMs - waitedSec * 1000;
-    } else if (Math.abs((nowMs - anchor.current) / 1000 - waitedSec) > 2.5) {
-      anchor.current = nowMs - waitedSec * 1000;
-    }
-  }
-  const counting = waitedSec !== undefined;
+  const counting = sinceMs !== null;
   useEffect(() => {
     if (!counting) return;
     const timer = setInterval(tick, 250);
     return () => clearInterval(timer);
   }, [counting]);
-  return anchor.current === null ? 0 : Math.max(0, Math.floor((performance.now() - anchor.current) / 1000));
+  return sinceMs === null ? 0 : Math.max(0, Math.floor((performance.now() - sinceMs) / 1000));
 };
 
 export const QueuePill = ({ style }: { style?: StyleProp<ViewStyle> }) => {
-  const { queued, waitedSec, goToRanked } = useQueuePresence();
-  const wait = useSmoothWait(waitedSec);
+  const { queued, queuedSinceMs, goToRanked } = useQueuePresence();
+  const wait = useQueueClock(queuedSinceMs);
   const pulse = useRef(new Animated.Value(0)).current;
   // The same breath as RankedScreen's SEARCHING line — one search, one pulse.
   useEffect(() => {
