@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   COLLISION_CELL,
+  COLLISION_CELL_OF,
   CREATURE_IDS,
   TILESETS,
   lineCells,
@@ -8,6 +9,7 @@ import {
   paintTerrain,
   type Aabb,
   type CollisionMaterial,
+  type InvisibleMaterial,
   type CreatureId,
   type Vec2,
   type Zone,
@@ -43,6 +45,7 @@ import {
   deleteBreakable,
   deleteObject,
   addCollisionRect,
+  isDrawnMaterial,
   deleteRect,
   duplicateBreakable,
   duplicateObject,
@@ -136,8 +139,17 @@ export const App = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [tool, setTool] = useState<Tool>("floor");
-  const [collisionMaterial, setCollisionMaterial] = useState<CollisionMaterial>("wall");
-  // Collision tool shape: paint cells / drag rects, or draw a hidden polygon
+  // Drawn `wall` is deliberately NOT offered: art-painted zones use the invisible
+  // materials (solid / low) under their tile art; the black pillar only ever
+  // trapped a cliff (Tom, 2026-09-17). Core still loads it for the gauntlet.
+  const [collisionMaterial, setCollisionMaterial] = useState<CollisionMaterial>("solid");
+  // Polygons are for the invisible materials only (a void staircase would draw).
+  const polygonMaterial: InvisibleMaterial = collisionMaterial === "low" ? "low" : "solid";
+  // Mirrored in a ref for the keydown effect (Enter closes a polygon) so it
+  // doesn't re-bind on every picker change.
+  const polygonMaterialRef = useRef<InvisibleMaterial>(polygonMaterial);
+  polygonMaterialRef.current = polygonMaterial;
+  // Collision tool shape: paint cells / drag rects, or draw a solid/low polygon
   // (bits-arenas.md § fences) — click vertices, click the first one to close.
   const [collisionShape, setCollisionShape] = useState<"paint" | "polygon">("paint");
   const [draft, setDraft] = useState<Vec2[] | null>(null);
@@ -434,7 +446,7 @@ export const App = () => {
           }
         }
       } else if (tool === "collision" && collisionShape === "polygon") {
-        // Vertices snap like everything else (half-tile when snap is on — the
+        // Vertices snap like everything else (quarter-tile snap matches the
         // rasteriser's own resolution, so what you draw is what blocks).
         if (left) {
           if (e.phase === "down") {
@@ -443,7 +455,7 @@ export const App = () => {
               const first = cur[0]!;
               // Clicking within ~a third of a tile of the first vertex closes the outline.
               if (cur.length >= 3 && Math.hypot(e.wx - first.x, e.wy - first.y) <= t * 0.3) {
-                addPolygon(z, cur);
+                addPolygon(z, cur, polygonMaterial);
                 draftRef.current = null;
                 setDraft(null);
                 changed = true;
@@ -500,8 +512,8 @@ export const App = () => {
             }
           }
         } else if (e.phase !== "up") {
-          // Painted collision: hidden fences brush QUARTER-tile sub-cells; drawn
-          // solids (wall/void) and erase-over-a-solid work whole tiles (zoneEdits).
+          // Painted collision: the invisible materials (solid/low) brush QUARTER-tile
+          // sub-cells; drawn void and erase-over-a-drawn-solid work whole tiles (zoneEdits).
           // Right-click erases (a free rect under the cursor first, then cells).
           if (!left && e.phase === "down") {
             const ri = rectIndexAt(z, e.wx, e.wy);
@@ -511,20 +523,14 @@ export const App = () => {
             }
           }
           if (!changed) {
-            const fine = left ? collisionMaterial === "hidden" : true;
+            const fine = left ? !isDrawnMaterial(collisionMaterial) : true;
             const div = fine ? COLLISION_DIV : 1;
             const sub = t / div;
             const here = { col: Math.floor(e.wx / sub), row: Math.floor(e.wy / sub) };
             const prev = e.phase === "drag" ? brushCellRef.current : null;
             brushCellRef.current = here;
             const cells = prev ? lineCells(prev, here).slice(1) : [here];
-            const code = !left
-              ? COLLISION_CELL.none
-              : collisionMaterial === "void"
-                ? COLLISION_CELL.void
-                : collisionMaterial === "hidden"
-                  ? COLLISION_CELL.hidden
-                  : COLLISION_CELL.wall;
+            const code = left ? COLLISION_CELL_OF[collisionMaterial] : COLLISION_CELL.none;
             for (const c of cells) {
               const tc = Math.floor(c.col / div);
               const tr = Math.floor(c.row / div);
@@ -708,7 +714,7 @@ export const App = () => {
         strokePreRef.current = null;
       }
     },
-    [tool, collisionMaterial, collisionShape, breakableKind, objectKind, creatureId, floorBrush, decorBrush, terrains, propName, tilesetDef, snapMode, selection, zone, bump],
+    [tool, collisionMaterial, polygonMaterial, collisionShape, breakableKind, objectKind, creatureId, floorBrush, decorBrush, terrains, propName, tilesetDef, snapMode, selection, zone, bump],
   );
 
   // Clicking a validation issue: select the offending entity + centre the camera.
@@ -839,7 +845,7 @@ export const App = () => {
       } else if (e.key === "Enter" && draftRef.current && draftRef.current.length >= 3 && zoneRef.current) {
         // Close the polygon from the keyboard (one undo step).
         pushUndo();
-        addPolygon(zoneRef.current, draftRef.current);
+        addPolygon(zoneRef.current, draftRef.current, polygonMaterialRef.current);
         draftRef.current = null;
         setDraft(null);
         commitEdit();
@@ -911,11 +917,11 @@ export const App = () => {
               <select
                 value={collisionMaterial}
                 onChange={(e) => setCollisionMaterial(e.target.value as CollisionMaterial)}
-                title="Collision material: wall (solid, blocks sight), void (chasm — blocks movement only), or hidden (invisible barrier — blocks movement, renders as nothing in-game)"
+                title="Collision material — solid: invisible, blocks walking, shots and target lock (a painted rock, column, ruin wall; blue in the editor). low: invisible, blocks walking ONLY — shoot and aim over it (a cliff edge, chest-high wall, fence; green). void: the drawn mist chasm — blocks walking, see/shoot across. Solid and low paint at quarter tiles and keep the floor art; both can be polygons."
               >
-                <option value="wall">wall</option>
+                <option value="solid">solid</option>
+                <option value="low">low</option>
                 <option value="void">void</option>
-                <option value="hidden">hidden</option>
               </select>
             )}
             {tool === "collision" && (
@@ -926,10 +932,10 @@ export const App = () => {
                   draftRef.current = null;
                   setDraft(null);
                 }}
-                title="Shape: paint cells / drag rects, or draw a hidden polygon fence — click to drop vertices, click the first one (or Enter) to close, right-click to back up, drag a vertex to move it, right-click inside to delete. Becomes half-tile boxes in the game."
+                title="Shape: paint cells / drag rects, or draw a polygon of the chosen invisible material (solid or low) — click to drop vertices, click the first one (or Enter) to close, right-click to back up, drag a vertex to move it, right-click inside to delete. Becomes quarter-tile boxes in the game."
               >
                 <option value="paint">paint / rect</option>
-                <option value="polygon">polygon fence</option>
+                <option value="polygon">polygon</option>
               </select>
             )}
             {tool === "collision" && collisionShape === "polygon" && draft && (
@@ -1126,7 +1132,7 @@ export const App = () => {
             polyHandles={tool === "collision" && collisionShape === "polygon"}
             draft={draft}
             hoverDiv={
-              tool === "collision" && collisionShape === "paint" && collisionMaterial === "hidden" && snapMode !== "off"
+              tool === "collision" && collisionShape === "paint" && !isDrawnMaterial(collisionMaterial) && snapMode !== "off"
                 ? COLLISION_DIV
                 : 1
             }

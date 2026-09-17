@@ -5,10 +5,12 @@
 import type { ZoneFile } from "@heroic/core";
 import arena00 from "./arena-00.json";
 import grasslands from "./grasslands.json";
+import desert1 from "./desert-1.json";
 
 // JSON imports widen literal unions (e.g. kind: string), hence the casts —
 // same idiom the gauntlet uses for its zone imports.
 export const ARENAS: Record<string, ZoneFile> = {
   "arena-00": arena00 as unknown as ZoneFile,
   "grasslands": grasslands as unknown as ZoneFile,
+  "desert-1": desert1 as unknown as ZoneFile,
 };

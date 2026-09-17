@@ -314,8 +314,14 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * so the client can draw the 60 s arm deadline (a rejoin gets the true
  * remainder). Additive: old clients ignore it; on an old server the bar
  * simply never shows.
+ * 2026-09-17, v34: COLLISION MATERIALS (bits-arenas.md) — `hidden` becomes
+ * `solid` (blocks feet, shots AND target lock) and a new `low` material
+ * (cliff edge, chest-high wall) blocks feet only: shots and lock pass over.
+ * Same wire shape, but the sim's projectile + lock rules changed and arena
+ * files may now carry `low` cells (code 4) / polygons, so an old client
+ * would disagree with the server about where a shot dies.
  */
-export const PROTOCOL_VERSION = 33;
+export const PROTOCOL_VERSION = 34;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a

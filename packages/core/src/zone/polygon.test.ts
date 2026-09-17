@@ -95,7 +95,7 @@ describe("rasterizePolygon", () => {
 });
 
 describe("loadZone polygons", () => {
-  test("a hidden polygon lands in the hidden + collision channels, never walls", () => {
+  test("a polygon with no material lands in the solid + collision channels, never walls", () => {
     const cols = 4;
     const rows = 4;
     const file: ZoneFile = {
@@ -125,9 +125,19 @@ describe("loadZone polygons", () => {
     } as unknown as ZoneFile;
     const zone = loadZone(file);
     expect(zone.walls).toEqual([]);
-    expect(zone.hidden.length).toBeGreaterThan(0);
-    // Half-tile resolution: the staircase steps are 32px on a 64px tile.
-    expect(zone.hidden.every((b) => b.h % 32 === 0 && b.w % 32 === 0)).toBe(true);
-    expect(zone.collision).toEqual(expect.arrayContaining(zone.hidden));
+    expect(zone.low).toEqual([]);
+    expect(zone.solid.length).toBeGreaterThan(0);
+    // Quarter-tile resolution: the staircase steps are 16px on a 64px tile.
+    expect(zone.solid.every((b) => b.h % 16 === 0 && b.w % 16 === 0)).toBe(true);
+    expect(zone.collision).toEqual(expect.arrayContaining(zone.solid));
+
+    // A "low" polygon takes the low channel instead; "hidden" is legacy solid.
+    const polys = file.collision.polys!;
+    const lowZone = loadZone({ ...file, collision: { rects: [], polys: [{ ...polys[0]!, material: "low" }] } });
+    expect(lowZone.solid).toEqual([]);
+    expect(lowZone.low).toEqual(zone.solid);
+    expect(lowZone.collision).toEqual(expect.arrayContaining(lowZone.low));
+    const legacy = loadZone({ ...file, collision: { rects: [], polys: [{ ...polys[0]!, material: "hidden" }] } });
+    expect(legacy.solid).toEqual(zone.solid);
   });
 });

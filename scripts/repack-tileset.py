@@ -21,6 +21,16 @@ automapping `.tmx` rule maps. Those are translated — local tile ids rebased to
 atlas ids — into a generated TypeScript table for Realmsmith, so nobody ever
 hand-types a 16-entry corner map or a 200-strip rule set.
 
+Sheets stack top-to-bottom; a *band* (a list of specs) lays several narrow sheets
+side by side in one row band so a 16-column wall sheet doesn't cost a full atlas
+row. A spec's `names` renames the pack's wangsets to what the palette should say.
+
+Packs only ship TRANSITION sets ("grass to sand": grass inside, sand outside) —
+the plain ground underneath is a base layer in Tiled, never a brush. So a spec's
+`fills` synthesises plain FILL brushes ("sand") from a set's full-interior
+variants, and `outside` names, per transition set, the fill a cell blends back
+into when it leaves the set (instead of a hole).
+
 Add a tileset by extending PACKS, then:  python3 scripts/repack-tileset.py ancient
 """
 
@@ -32,6 +42,19 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _wall(pack: str, short: str, wangset: str, name: str) -> dict:
+    """A raised-platform sheet: its .tsx wangset plus the pack's three rule maps
+    (reset generated tiles → place faces → variations)."""
+    d = f"apps/realmsmith/tilesets/{pack}"
+    return {
+        "png": f"{d}/{short}.png",
+        "tsx": f"{d}/tiled/{short}.tsx",
+        "rules": {wangset: [f"{d}/tiled/{short}-rule{n}.tmx" for n in range(3)]},
+        "names": {wangset: name},
+    }
+
 
 PACKS = {
     "desert": {
@@ -55,6 +78,21 @@ PACKS = {
             {
                 "png": "apps/realmsmith/tilesets/ancient/terrain.png",
                 "tsx": "apps/realmsmith/tilesets/ancient/tiled/terrain.tsx",
+                "fills": {
+                    "light grass": "light grass to transparency",
+                    "mid tone grass": "mid tone grass to transparency",
+                    "dark grass": "dark grass to transparency",
+                    "extra dark grass": "extra dark to transparency",
+                    "stone ground": "stone ground to transparency",
+                },
+                "outside": {
+                    "light grass to mid tone grass": "mid tone grass",
+                    "mid tone grass to light grass": "light grass",
+                    "mid tone grass to dark grass": "dark grass",
+                    "dark grass to mid tone grass": "mid tone grass",
+                    "extra dark grass to dark grass": "dark grass",
+                    "dark grass to extra dark grass": "extra dark grass",
+                },
             },
             {
                 "png": "apps/realmsmith/tilesets/ancient/wall9.png",
@@ -74,6 +112,115 @@ PACKS = {
         "cell": 32,
         "out": "apps/blood-in-the-sand/assets/tilesets/ancient.png",
         "terrainsOut": "apps/realmsmith/src/terrains/ancient.ts",
+    },
+    "dunes": {
+        # "Epic RPG World — Desert" pack (32px; same creator as ancient). Named
+        # `dunes` because `desert` is the live 16px pack under arena-00. Terrain
+        # sheet = sand/dirt/grass/rocky/stone transitions + a 1-tall cliff set
+        # + platform + carpet; the 2- and 3-tall cliff sheets share one band;
+        # props + props2 last. Left out: the oasis water sheets (animated —
+        # tilesets.md keeps animated tiles out of scope) and the tents/houses
+        # sheet (55 rows of buildings; add `props/props-tents-houses.png` here
+        # if an arena wants a town wall).
+        "sheets": [
+            {
+                "png": "apps/realmsmith/tilesets/dunes/terrain.png",
+                "tsx": "apps/realmsmith/tilesets/dunes/tiled/terrain.tsx",
+                "rules": {"Cliff1-1T": ["apps/realmsmith/tilesets/dunes/tiled/cliff1-rule0.tmx"]},
+                # Fill brushes: the plain grounds, taken from the set whose
+                # interior is that ground. Order = palette order.
+                "fills": {
+                    "sand": "sand to transparency",
+                    "dirt": "dirt to sand",
+                    "rocky ground": "rocky ground to sand",
+                    "grass": "grass to transparency",
+                    "stone ground": "stone ground to transparency",
+                },
+                # What each transition blends back into when erased.
+                "outside": {
+                    "rocky ground to sand": "sand",
+                    "dirt to sand": "sand",
+                    "grass to sand": "sand",
+                    "stone ground to sand": "sand",
+                    "grass to rocky ground": "rocky ground",
+                    "grass to dirt": "dirt",
+                    "rocky ground to rocky ground": "rocky ground",
+                },
+                "names": {
+                    "Cliff1-1T": "cliff 1 tall",
+                    "Cliff1-1T-transparency-CTRL+M on walls layer to make it transparent ": "cliff 1 tall (transparent)",
+                    "Rocky ground-to-sand": "rocky ground to sand",
+                    "dirt-to-sand": "dirt to sand",
+                    "grass-to-sand": "grass to sand",
+                    "grass-to-rocky-ground": "grass to rocky ground",
+                    "grass-to-dirt": "grass to dirt",
+                    "stone ground-to-sand": "stone ground to sand",
+                    "rocky ground-to-rocky-ground": "rocky ground to rocky ground",
+                    "sand-to-transparency": "sand to transparency",
+                    "grass-to-transparency": "grass to transparency",
+                    "stone ground-to-transparency": "stone ground to transparency",
+                },
+            },
+            [
+                {
+                    "png": "apps/realmsmith/tilesets/dunes/cliff2.png",
+                    "tsx": "apps/realmsmith/tilesets/dunes/tiled/cliff2.tsx",
+                    "rules": {"Cliff1-2T": [f"apps/realmsmith/tilesets/dunes/tiled/cliff2-rule{n}.tmx" for n in range(3)]},
+                    "names": {"Cliff1-2T": "cliff 2 tall"},
+                },
+                {
+                    "png": "apps/realmsmith/tilesets/dunes/cliff3.png",
+                    "tsx": "apps/realmsmith/tilesets/dunes/tiled/cliff3.tsx",
+                    "rules": {"Cliff1-3T": [f"apps/realmsmith/tilesets/dunes/tiled/cliff3-rule{n}.tmx" for n in range(3)]},
+                    "names": {"Cliff1-3T": "cliff 3 tall"},
+                },
+            ],
+            {"png": "apps/realmsmith/tilesets/dunes/props.png"},
+            {"png": "apps/realmsmith/tilesets/dunes/props2.png"},
+        ],
+        "cell": 32,
+        "out": "apps/blood-in-the-sand/assets/tilesets/dunes.png",
+        "terrainsOut": "apps/realmsmith/src/terrains/dunes.ts",
+    },
+    "highlands": {
+        # "Epic RPG World — Highlands" pack (32px). Terrain sheet = snow, two
+        # leaf-litter grounds, frozen lake, 1-tall platforms; eight raised
+        # platform/fortress sheets (2- and 3-tall, snowy V1–V3 + raw) packed
+        # three per band; props last.
+        "sheets": [
+            {
+                "png": "apps/realmsmith/tilesets/highlands/terrain.png",
+                "tsx": "apps/realmsmith/tilesets/highlands/tiled/terrain.tsx",
+                "fills": {"snow": "snow-ground"},
+                "names": {
+                    "snow-ground-platformV1": "snow ground (platform V1)",
+                    "terrain1": "terrain 1",
+                    "terrain2": "terrain 2",
+                    "snow-ground": "snow ground",
+                    "frozen-lake": "frozen lake",
+                    "platformV2-1tile tall": "platform V2 1 tall",
+                    "platform-raw-1tile tall": "platform raw 1 tall",
+                },
+            },
+            [
+                _wall("highlands", "fortress", "fortress", "fortress 3 tall"),
+                _wall("highlands", "v2-3", "platformV2-3tiles tall", "platform V2 3 tall"),
+                _wall("highlands", "v1-3", "platformV1-3tiles tall", "platform V1 3 tall"),
+            ],
+            [
+                _wall("highlands", "raw3", "platform-raw-3tiles tall", "platform raw 3 tall"),
+                _wall("highlands", "raw2", "platform-raw-2tiles tall", "platform raw 2 tall"),
+                _wall("highlands", "v1-2", "platformV1-2tiles tall", "platform V1 2 tall"),
+            ],
+            [
+                _wall("highlands", "v2-2", "platformV2-2tiles", "platform V2 2 tall"),
+                _wall("highlands", "v3-2", "platformV3-2tiles tall", "platform V3 2 tall"),
+            ],
+            {"png": "apps/realmsmith/tilesets/highlands/props.png"},
+        ],
+        "cell": 32,
+        "out": "apps/blood-in-the-sand/assets/tilesets/highlands.png",
+        "terrainsOut": "apps/realmsmith/src/terrains/highlands.ts",
     },
 }
 
@@ -149,11 +296,13 @@ def plain_fill_candidates(im: Image.Image, cell: int, top: int = 8):
 class Rebase:
     """Local sheet tile id → atlas tile id (1-based), given where the sheet landed."""
 
-    def __init__(self, local_cols: int, row_offset: int, atlas_cols: int):
+    def __init__(self, local_cols: int, row_offset: int, atlas_cols: int, col_offset: int = 0):
         self.local_cols, self.row_offset, self.atlas_cols = local_cols, row_offset, atlas_cols
+        self.col_offset = col_offset
 
     def __call__(self, local: int) -> int:
-        return (self.row_offset + local // self.local_cols) * self.atlas_cols + (local % self.local_cols) + 1
+        row = self.row_offset + local // self.local_cols
+        return row * self.atlas_cols + self.col_offset + (local % self.local_cols) + 1
 
 
 def read_wangsets(tsx_path: Path, rebase: Rebase):
@@ -211,9 +360,12 @@ def read_rule_map(tmx_path: Path, rebase: Rebase):
         sys.exit(f"{tmx_path}: expected one input_* and one output_* layer, got {list(layers)}")
     inp, out = inputs[0], outputs[0]
 
+    # Tiled orders the map's tilesets by first use, so the automap tileset may
+    # come FIRST (then every art gid is above it) — classify by range, never by
+    # "gid ≥ automap firstgid".
     def classify(gid: int):
-        if auto_gid is not None and gid >= auto_gid:
-            return AUTOMAP.get(gid - auto_gid, "?")
+        if auto_gid is not None and auto_gid <= gid < auto_gid + len(AUTOMAP):
+            return AUTOMAP[gid - auto_gid]
         return gid - sheet_gid  # local tile id
 
     # Rule options: rectangles (map px) carrying Probability / Disabled for the rules they touch.
@@ -313,46 +465,89 @@ def main():
     pack = PACKS[name]
     cell = pack["cell"]
 
-    sheets = []
-    for spec in pack["sheets"]:
+    # Every entry is a band: one sheet, or a list of sheets laid side by side.
+    bands = [spec if isinstance(spec, list) else [spec] for spec in pack["sheets"]]
+    images = {}
+    for spec in (s for band in bands for s in band):
         im = Image.open(ROOT / spec["png"]).convert("RGBA")
         # Some packs pad a sheet by a few px; crop down to whole cells (never up).
         cw, ch = (im.width // cell) * cell, (im.height // cell) * cell
         if (cw, ch) != im.size:
             print(f"  {spec['png']} is {im.width}x{im.height} — cropping to {cw}x{ch} (whole {cell}px cells)")
             im = im.crop((0, 0, cw, ch))
-        sheets.append(im)
+        images[spec["png"]] = im
 
-    columns = max(im.width for im in sheets) // cell
-    rows = sum(im.height // cell for im in sheets)
+    columns = max(sum(images[s["png"]].width for s in band) for band in bands) // cell
+    rows = sum(max(images[s["png"]].height for s in band) for band in bands) // cell
     atlas = Image.new("RGBA", (columns * cell, rows * cell), (0, 0, 0, 0))
 
     report = {"name": name, "cellSize": cell, "columns": columns, "rows": rows, "sheets": []}
     terrains = {}
+    outside_requests: list[tuple[str, str]] = []
     row = 0
-    for spec, im in zip(pack["sheets"], sheets):
-        atlas.paste(im, (0, row * cell))
-        report["sheets"].append(
-            {
-                "source": spec["png"],
-                "rowOffset": row,
-                "cells": [im.width // cell, im.height // cell],
-                "plainFill": plain_fill_candidates(im, cell),
-                "sprites": [
-                    {"cells": [x0, y0, x1 - x0, y1 - y0], "atlasRow": y0 + row}
-                    for x0, y0, x1, y1 in sprite_boxes(im, cell)
-                ],
-            }
-        )
-        if "tsx" in spec:
-            rebase = Rebase(im.width // cell, row, columns)
-            found = read_wangsets(ROOT / spec["tsx"], rebase)
-            for tname, rule_files in spec.get("rules", {}).items():
-                if tname not in found:
-                    sys.exit(f"{spec['tsx']}: no wangset named {tname!r} for its rules")
-                found[tname]["passes"] = [read_rule_map(ROOT / f, rebase) for f in rule_files]
-            terrains.update(found)
-        row += im.height // cell
+    for band in bands:
+        col = 0
+        for spec in band:
+            im = images[spec["png"]]
+            atlas.paste(im, (col * cell, row * cell))
+            report["sheets"].append(
+                {
+                    "source": spec["png"],
+                    "rowOffset": row,
+                    "colOffset": col,
+                    "cells": [im.width // cell, im.height // cell],
+                    "plainFill": plain_fill_candidates(im, cell),
+                    "sprites": [
+                        {"cells": [x0 + col, y0 + row, x1 - x0, y1 - y0]}
+                        for x0, y0, x1, y1 in sprite_boxes(im, cell)
+                    ],
+                }
+            )
+            if "tsx" in spec:
+                rebase = Rebase(im.width // cell, row, columns, col)
+                found = read_wangsets(ROOT / spec["tsx"], rebase)
+                for tname, rule_files in spec.get("rules", {}).items():
+                    if tname not in found:
+                        sys.exit(f"{spec['tsx']}: no wangset named {tname!r} for its rules")
+                    found[tname]["passes"] = [read_rule_map(ROOT / f, rebase) for f in rule_files]
+                for old, new in spec.get("names", {}).items():
+                    if old not in found:
+                        sys.exit(f"{spec['tsx']}: no wangset named {old!r} to rename")
+                    found[new] = found.pop(old)
+                # Fills and outsides name sets by their PALETTE (renamed) names.
+                for fname, src_name in spec.get("fills", {}).items():
+                    if src_name not in found:
+                        sys.exit(f"{spec['tsx']}: no wangset named {src_name!r} to build fill {fname!r} from")
+                    full = found[src_name]["corners"].get(15)
+                    if not full:
+                        sys.exit(f"{spec['tsx']}: {src_name!r} has no full-interior tiles for fill {fname!r}")
+                    # icon is patched to the plainest variant once the atlas exists (below).
+                    found[fname] = {"icon": full[0][0], "fill": True, "corners": {15: list(full)}}
+                outside_requests.extend(spec.get("outside", {}).items())
+                for tname in found:
+                    if tname in terrains:
+                        sys.exit(f"{spec['tsx']}: terrain {tname!r} already defined by an earlier sheet")
+                terrains.update(found)
+            col += im.width // cell
+        row += max(images[s["png"]].height for s in band) // cell
+
+    # Fill brushes lead the palette; their icon (and the id transitions blend
+    # back into) is the plainest variant — least colour variance, e.g. bare sand
+    # rather than the pebbled one.
+    def variance(tile_id: int) -> float:
+        k = tile_id - 1
+        box = ((k % columns) * cell, (k // columns) * cell, (k % columns + 1) * cell, (k // columns + 1) * cell)
+        px = list(atlas.crop(box).getdata())
+        n = len(px)
+        return sum(sum((p[ch] - sum(q[ch] for q in px) / n) ** 2 for p in px) / n for ch in range(3))
+    fills = {k: v for k, v in terrains.items() if v.get("fill")}
+    for t in fills.values():
+        t["icon"] = min((i for i, _ in t["corners"][15]), key=variance)
+    terrains = {**fills, **{k: v for k, v in terrains.items() if not v.get("fill")}}
+    for tname, fill in outside_requests:
+        if tname not in terrains or fill not in fills:
+            sys.exit(f"outside: {tname!r} -> {fill!r}: unknown terrain or fill")
+        terrains[tname]["outside"] = fills[fill]["icon"]
 
     # Overlay or base? A terrain with any see-through piece is a decor-layer
     # brush (the editor keeps it off the floor tool, where the void would show).
@@ -383,6 +578,7 @@ def main():
             print(
                 f"  terrain {tname!r}: {len(t['corners'])}/15 masks, "
                 f"{sum(len(v) for v in t['corners'].values())} tiles, {'base' if t['opaque'] else 'OVERLAY'}, "
+                f"{'FILL, ' if t.get('fill') else ''}{'outside ' + str(t['outside']) + ', ' if t.get('outside') else ''}"
                 f"{[len(p['rules']) for p in passes]} rules/pass"
             )
     print(json.dumps(report, indent=2))

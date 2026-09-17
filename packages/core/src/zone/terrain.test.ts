@@ -98,6 +98,38 @@ describe("paintTerrain corner solve", () => {
   });
 });
 
+describe("fill terrains", () => {
+  const SAND: TerrainDef = { icon: 50, fill: true, corners: { 15: [[50, 1], [51, 1]] } };
+  const GRASS: TerrainDef = { ...MASK_TERRAIN, outside: 50 };
+
+  test("paint touches exactly the stroke with a fill variant; no ring", () => {
+    const g = makeGrid(5, 5);
+    paintTerrain(g, SAND, [{ col: 2, row: 2 }], true);
+    for (let r = 0; r < 5; r++)
+      for (let c = 0; c < 5; c++) expect([50, 51].includes(g.get(c, r)), `${c},${r}`).toBe(c === 2 && r === 2);
+  });
+
+  test("erase resets only stroke cells that hold a fill variant", () => {
+    const g = makeGrid(5, 5);
+    g.set(1, 1, 50);
+    g.set(2, 1, 999); // foreign art
+    paintTerrain(g, SAND, [{ col: 1, row: 1 }, { col: 2, row: 1 }], false);
+    expect(g.get(1, 1)).toBe(0);
+    expect(g.get(2, 1)).toBe(999);
+  });
+
+  test("a transition whose outside is the fill's plain tile blends back into it", () => {
+    const g = makeGrid(7, 7);
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) g.set(c, r, 50);
+    paintTerrain(g, GRASS, [{ col: 3, row: 3 }], true);
+    expect(g.get(3, 3)).toBe(15);
+    expect(g.get(2, 2)).toBe(CORNER.br); // ring cell took an edge tile
+    expect(g.get(0, 0)).toBe(50); // untouched sand beyond the ring
+    paintTerrain(g, GRASS, [{ col: 3, row: 3 }], false);
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) expect(g.get(c, r), `${c},${r}`).toBe(50);
+  });
+});
+
 describe("applyRulePasses", () => {
   // The ancient-ruins wall shape: a top-edge tile 66 hangs faces 82/98 below it,
   // unless another wall's top (2) sits two rows down, in which case the lower

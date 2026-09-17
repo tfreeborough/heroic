@@ -48,8 +48,8 @@ export interface EditOverlay {
   pending?: { box: Aabb; valid: boolean } | null;
   /** The selected breakable's box — draws corner resize handles on it. */
   resize?: Aabb | null;
-  /** Authored hidden polygons (the outlines; their half-tile strips already
-   *  draw via `zone.hidden`). Vertices are shown when the collision tool is up. */
+  /** Authored solid/low polygons (the outlines; their quarter-tile strips already
+   *  draw via `zone.solid` / `zone.low`). Vertices are shown when the collision tool is up. */
   polys?: readonly CollisionPolygon[];
   /** The polygon being drawn: its vertices so far, the cursor as the rubber-band end. */
   draft?: { points: readonly Vec2[]; cursor: Vec2 | null } | null;
@@ -68,6 +68,10 @@ const BREAKABLE_WALL_ALPHA = 0.6;
 const CREATURE_MARKER_FILL = "#b388ff";
 const CREATURE_MARKER_EDGE = "rgba(20,12,40,0.85)";
 const CREATURE_LABEL_FILL = "#e9ddff";
+
+// playerSpawn anchors by team (1-based): blue, red, then the Brawl ring's extra
+// four — eight anchors share a BITS map and were one indistinguishable cyan.
+const SPAWN_TEAM_COLOURS = ["#5fd0ff", "#ff6b6b", "#7ee07e", "#ffd84e", "#c89bff", "#ff9f43"];
 
 // A trigger is an invisible region (hidden in-game): drawn here as a dashed amber
 // rectangle with a faint fill and its text labelled, so it reads as a scripted
@@ -92,6 +96,11 @@ const hexRgb = (hex: string): string => {
   const n = parseInt(hex.slice(1), 16);
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 };
+// Editor-only tints for the invisible collision materials (format.ts).
+const SOLID_RGB = "80,140,255";
+const SOLID_HANDLE = "#5fd0ff";
+const LOW_RGB = "70,210,130";
+const LOW_HANDLE = "#7ff0a8";
 const VOID_MIST_RGB = hexRgb(ZONE_PALETTE.voidMist);
 const VOID_WALL_RGB = hexRgb(ZONE_PALETTE.voidWall);
 const VOID_LIP_RGB = hexRgb(ZONE_PALETTE.voidLip);
@@ -348,13 +357,21 @@ export const drawZone = (
   }
 
   // --- Editor overlays (NOT part of the game's depiction) -------------------
-  // Hidden barriers, made visible: invisible in-game (the terrain art is the
-  // visual), translucent blue here so authored fences stay editable.
-  for (const b of zone.hidden) {
-    ctx.fillStyle = "rgba(80,140,255,0.22)";
+  // The invisible materials, made visible (the terrain art is the in-game
+  // visual): solid = translucent blue (blocks feet, shots, lock), low =
+  // translucent green (blocks feet only — shoot over). See format.ts.
+  for (const b of zone.solid) {
+    ctx.fillStyle = `rgba(${SOLID_RGB},0.22)`;
     ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
     ctx.lineWidth = 1 / view.zoom;
-    ctx.strokeStyle = "rgba(80,140,255,0.75)";
+    ctx.strokeStyle = `rgba(${SOLID_RGB},0.75)`;
+    ctx.strokeRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+  }
+  for (const b of zone.low) {
+    ctx.fillStyle = `rgba(${LOW_RGB},0.22)`;
+    ctx.fillRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
+    ctx.lineWidth = 1 / view.zoom;
+    ctx.strokeStyle = `rgba(${LOW_RGB},0.8)`;
     ctx.strokeRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h);
   }
 
@@ -506,7 +523,41 @@ export const drawZone = (
       ctx.textBaseline = "alphabetic";
       continue;
     }
-    ctx.fillStyle = o.kind === "playerSpawn" ? "#5fd0ff" : "#f2c14e";
+    if (o.kind === "playerSpawn") {
+      // A team ANCHOR (the sim lines the team up from it — bits sim.ts
+      // spawnSlotPos), coloured per team so eight of them on one map read at a
+      // glance. Two sets share the map: the team-mode pair is a solid disc, the
+      // Brawl hex ring (`props.brawl`) a hollow one, each tagged T#/B#.
+      const team = Number(o.props.team) || 0;
+      const brawl = Boolean(o.props.brawl);
+      const colour = SPAWN_TEAM_COLOURS[(team - 1) % SPAWN_TEAM_COLOURS.length] ?? "#5fd0ff";
+      const r = 8 / view.zoom + 2;
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, r, 0, Math.PI * 2);
+      if (brawl) {
+        ctx.lineWidth = 3 / view.zoom;
+        ctx.strokeStyle = colour;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = colour;
+        ctx.fill();
+      }
+      const fontPx = 11 / view.zoom;
+      ctx.font = `bold ${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3 / view.zoom;
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      const tag = `${brawl ? "B" : "T"}${team || "?"}`;
+      const ty = o.y - r - fontPx * 0.7;
+      ctx.strokeText(tag, o.x, ty);
+      ctx.fillStyle = colour;
+      ctx.fillText(tag, o.x, ty);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      continue;
+    }
+    ctx.fillStyle = "#f2c14e";
     ctx.beginPath();
     ctx.arc(o.x, o.y, 8 / view.zoom + 2, 0, Math.PI * 2);
     ctx.fill();
@@ -589,21 +640,23 @@ export const drawZone = (
     for (const hx of xs) for (const hy of ys) ctx.fillRect(hx - hs, hy - hs, hs * 2, hs * 2);
   }
 
-  // Hidden polygons: the authored outline over its rasterised strips (which
-  // drew above as ordinary hidden boxes — the staircase IS the real boundary).
+  // Polygons: the authored outline over its rasterised strips (which drew
+  // above as ordinary solid/low boxes — the staircase IS the real boundary),
+  // in the material's colour.
   for (const poly of overlay.polys ?? []) {
     if (poly.points.length < 2) continue;
+    const isLow = poly.material === "low";
     ctx.beginPath();
     poly.points.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
     ctx.closePath();
     ctx.lineWidth = 2 / view.zoom;
-    ctx.strokeStyle = "rgba(120,170,255,0.95)";
+    ctx.strokeStyle = isLow ? `rgba(${LOW_RGB},0.95)` : "rgba(120,170,255,0.95)";
     ctx.stroke();
     if (overlay.polyHandles) {
       for (const pt of poly.points) {
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, 5 / view.zoom, 0, Math.PI * 2);
-        ctx.fillStyle = "#5fd0ff";
+        ctx.fillStyle = isLow ? LOW_HANDLE : SOLID_HANDLE;
         ctx.fill();
       }
     }

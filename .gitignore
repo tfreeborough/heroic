@@ -42,3 +42,6 @@ dev.db*
 # Purchased asset packs: keep the source folders out of git — only the repacked
 # atlases (apps/*/assets/tilesets) and the few sheets the repack reads are committed.
 ancient_tiles/
+# The raw itch packs (Ancient Ruins, Desert, Highlands, Village…) live in /tilesets
+# at the repo root — 90MB+ of mockups, characters and per-sprite PNGs we never load.
+/tilesets/

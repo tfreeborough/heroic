@@ -5,6 +5,7 @@ import {
   type Vec2,
   type BreakableDef,
   type CollisionMaterial,
+  type InvisibleMaterial,
   type ZoneFile,
   type ZoneObject,
   type ZoneObjectKind,
@@ -34,10 +35,10 @@ const uniqueId = (existing: Iterable<string>, base: string): string => {
 
 /**
  * Painted collision lives on a QUARTER-tile grid (`collision.cellSize =
- * tileSize / COLLISION_DIV`) so hidden fences can hug a shape; drawn solids
- * (wall, void) stay tile-grain — they render, and a quarter of a pillar in a
- * floor tile would look wrong — so their edits fill the whole tile's sub-cells.
- * Legacy tile-grain grids are upsampled on first touch.
+ * tileSize / COLLISION_DIV`) so the invisible materials (solid, low) can hug a
+ * shape; drawn solids (wall, void) stay tile-grain — they render, and a quarter
+ * of a pillar in a floor tile would look wrong — so their edits fill the whole
+ * tile's sub-cells. Legacy tile-grain grids are upsampled on first touch.
  */
 export const COLLISION_DIV = 4;
 
@@ -64,8 +65,8 @@ export const setFloor = (z: ZoneFile, col: number, row: number, v: number): bool
   // Floor and *visible* collision are mutually exclusive in a cell (a cell is
   // walkable ground OR a drawn solid, never both): painting ground onto a
   // wall/void cell fills it, so drop that collision. The inverse of
-  // setCollisionCell. Hidden barriers are exempt — they sit ON floor by design
-  // (invisible fence over normal-looking ground), so floor paints leave them.
+  // setCollisionCell. Invisible materials (solid/low) are exempt — they sit ON
+  // floor by design (a fence over normal-looking ground), so floor paints leave them.
   // (Free rects aren't cell-aligned, so those are removed via right-click.)
   if (v !== 0 && z.collision.cells) {
     const cells = z.collision.cells;
@@ -140,8 +141,8 @@ export const setCollisionCell = (z: ZoneFile, col: number, row: number, v: numbe
   // one clears the floor beneath, so there's never hidden ground under a pit or a
   // pillar — the floorless cell renders as the void/pillar it now is. Erasing
   // collision (v=0) leaves the cell floorless (a void via fenceVoid); repaint
-  // floor to reopen it. A `hidden` barrier is the exception: it renders as
-  // nothing, so the floor under it must STAY painted and visible.
+  // floor to reopen it. The invisible materials (solid/low) are the exception:
+  // they render as nothing, so the floor under them must STAY painted and visible.
   // See docs/design/world-representation.md + tilesets.md.
   if (v === COLLISION_CELL.wall || v === COLLISION_CELL.void) {
     const fr = z.layers.floor[row];
@@ -154,9 +155,9 @@ export const setCollisionCell = (z: ZoneFile, col: number, row: number, v: numbe
 };
 
 /**
- * Paint one quarter-tile SUB-cell (`sc`,`sr` in sub-cell units) — the hidden
- * fence brush. Erasing a sub-cell that holds a drawn solid clears that whole
- * tile instead (drawn solids are tile-grain).
+ * Paint one quarter-tile SUB-cell (`sc`,`sr` in sub-cell units) — the brush for
+ * the invisible materials (solid/low). Erasing a sub-cell that holds a drawn
+ * solid clears that whole tile instead (drawn solids are tile-grain).
  */
 export const setCollisionSubCell = (z: ZoneFile, sc: number, sr: number, v: number): boolean => {
   const div = COLLISION_DIV;
@@ -203,9 +204,12 @@ const clearFloorUnderBox = (z: ZoneFile, box: Aabb): void => {
 export const addCollisionRect = (z: ZoneFile, box: Aabb, material: CollisionMaterial): void => {
   z.collision.rects.push(material === "wall" ? { ...box } : { ...box, material });
   // Same floor-or-drawn-solid rule as painted cells: a wall/void rect never sits
-  // over unseen floor. Hidden barriers keep their floor — invisible by design.
-  if (material !== "hidden") clearFloorUnderBox(z, box);
+  // over unseen floor. The invisible materials keep their floor — by design.
+  if (isDrawnMaterial(material)) clearFloorUnderBox(z, box);
 };
+
+/** Wall and void render in-game (and so can't share a cell with floor); solid and low don't. */
+export const isDrawnMaterial = (m: CollisionMaterial): boolean => m === "wall" || m === "void";
 
 /** Index of the free collision rect containing (wx,wy), or -1. */
 export const rectIndexAt = (z: ZoneFile, wx: number, wy: number): number =>
@@ -219,11 +223,11 @@ export const deleteRect = (z: ZoneFile, idx: number): boolean => {
   return true;
 };
 
-// --- Collision polygons (hidden fences; core zone/polygon.ts) -----------------
-/** Append a closed hidden polygon. Returns its index. */
-export const addPolygon = (z: ZoneFile, points: Vec2[]): number => {
+// --- Collision polygons (invisible fences; core zone/polygon.ts) --------------
+/** Append a closed polygon of an invisible material (solid / low). Returns its index. */
+export const addPolygon = (z: ZoneFile, points: Vec2[], material: InvisibleMaterial): number => {
   if (!z.collision.polys) z.collision.polys = [];
-  z.collision.polys.push({ points: points.map((p) => ({ x: p.x, y: p.y })), material: "hidden" });
+  z.collision.polys.push({ points: points.map((p) => ({ x: p.x, y: p.y })), material });
   return z.collision.polys.length - 1;
 };
 

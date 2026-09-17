@@ -197,9 +197,11 @@ export const Palette = ({
                 key={name}
                 className={`terrain-swatch ${brush.kind === "terrain" && brush.name === name ? "on" : ""}`}
                 title={
-                  t.opaque === false
-                    ? `${name} — an overlay: what you paint becomes the raised top, the ring around it the edges/faces. Paint on decor over a floor.`
-                    : `${name} — what you paint becomes the inside, the ring around it blends out.`
+                  t.fill
+                    ? `${name} — a plain fill: paints just the cells you touch (random plain/detail variants), no edges. Lay it first; the "… to ${name}" brushes blend into it.`
+                    : t.opaque === false
+                      ? `${name} — an overlay: what you paint becomes the raised top, the ring around it the edges/faces. Paint on decor over a floor.`
+                      : `${name} — what you paint becomes the inside, the ring around it blends out.`
                 }
                 onClick={() => onPickBrush({ kind: "terrain", name })}
               >

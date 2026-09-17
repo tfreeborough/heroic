@@ -1,4 +1,4 @@
-import type { Aabb, TilesetDef, Zone } from "@heroic/core";
+import type { Aabb, TilesetDef, Zone, ZoneObject } from "@heroic/core";
 
 /**
  * Placement validity against the *derived* world: solids can't overlap, and a
@@ -59,7 +59,8 @@ export const propPlaceable = (
   // Authored solids only — zone.collision would include prop footprints.
   for (const c of zone.walls) if (boxesOverlap(box, c)) return false;
   for (const c of zone.voids) if (boxesOverlap(box, c)) return false;
-  for (const c of zone.hidden) if (boxesOverlap(box, c)) return false;
+  for (const c of zone.solid) if (boxesOverlap(box, c)) return false;
+  for (const c of zone.low) if (boxesOverlap(box, c)) return false;
   for (const b of zone.breakables) if (boxesOverlap(box, b.box)) return false;
   for (const p of zone.props) {
     if (p.id === ignoreId || !p.foot) continue;
@@ -68,18 +69,26 @@ export const propPlaceable = (
   return true;
 };
 
-/** A collision cell may not cover a breakable's footprint or an object. */
+/**
+ * Objects that keep collision off their cell: spawns, triggers, pickups… A
+ * PROP does not — painting solid collision under a footprint-less prop's
+ * feet is exactly how a tileset without registry footprints (ancient) gets
+ * its blockers, so props never gate the collision brush.
+ */
+const blocksCollision = (o: ZoneObject): boolean => o.kind !== "prop";
+
+/** A collision cell may not cover a breakable's footprint or a (non-prop) object. */
 export const cellFreeForCollision = (zone: Zone, col: number, row: number): boolean => {
   const cell = cellBox(zone, col, row);
   for (const b of zone.breakables) if (boxesOverlap(cell, b.box)) return false;
-  for (const o of zone.objects) if (pointInBox(o.x, o.y, cell)) return false;
+  for (const o of zone.objects) if (blocksCollision(o) && pointInBox(o.x, o.y, cell)) return false;
   return true;
 };
 
-/** A free collision rect may overlap other collision freely, but not a breakable or object. */
+/** A free collision rect may overlap other collision freely, but not a breakable or (non-prop) object. */
 export const rectFitsCollision = (zone: Zone, box: Aabb): boolean => {
   for (const b of zone.breakables) if (boxesOverlap(box, b.box)) return false;
-  for (const o of zone.objects) if (pointInBox(o.x, o.y, box)) return false;
+  for (const o of zone.objects) if (blocksCollision(o) && pointInBox(o.x, o.y, box)) return false;
   return true;
 };
 

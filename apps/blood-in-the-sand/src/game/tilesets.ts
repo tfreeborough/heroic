@@ -10,6 +10,8 @@ import { arenaById } from "@heroic/blood-in-the-sand-sim";
 const TILESET_IMAGES: Record<string, number> = {
   desert: require("../../assets/tilesets/desert.png") as number,
   ancient: require("../../assets/tilesets/ancient.png") as number,
+  dunes: require("../../assets/tilesets/dunes.png") as number,
+  highlands: require("../../assets/tilesets/highlands.png") as number,
 };
 
 /** An arena's atlas (by the room's `welcome.zoneId`, bits-arenas.md), decoded

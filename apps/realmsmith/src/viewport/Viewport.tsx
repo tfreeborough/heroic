@@ -19,7 +19,7 @@ interface Props {
   pending: { box: Aabb; valid: boolean } | null;
   /** The selected breakable's box — draws corner handles + enables resize drags. */
   resizeBox: Aabb | null;
-  /** Authored hidden polygons, drawn as outlines (+ vertex handles when editing them). */
+  /** Authored solid/low polygons, drawn as outlines (+ vertex handles when editing them). */
   polys: readonly CollisionPolygon[];
   polyHandles: boolean;
   /** Polygon-in-progress vertices; the viewport supplies the cursor for the rubber band. */

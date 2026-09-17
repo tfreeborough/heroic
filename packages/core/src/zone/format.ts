@@ -99,35 +99,56 @@ export interface ZoneAudio {
  * What a solid *is* — its collision material. The geometry (an `Aabb`) is the same
  * either way; the material decides how it behaves and reads:
  *   - `"wall"` — solid floor-to-ceiling: blocks movement, **and** blocks sight,
- *     projectiles, and targeting. Drawn as a pillar/wall.
+ *     projectiles, and targeting. Drawn as a procedural pillar/wall. The gauntlet's
+ *     placeholder geometry; art-painted zones don't use it (Realmsmith no longer
+ *     offers it — since 2026-09-17 the invisible materials below are the tools).
  *   - `"void"` — a chasm: blocks *movement* only. Sight, projectiles, and ranged
  *     targeting pass straight across it (you can shoot to the far side of a bridge).
  *     Drawn as a dark, drifting-mist pit — the swirling cloud, not a wall.
- *   - `"hidden"` — an invisible barrier: blocks *movement* only and is **never
- *     drawn in-game** — the terrain art (a painted cliff-face tile, a map edge)
- *     is the visual. The editor shows it as a translucent blue box. Unlike
- *     wall/void it coexists with floor in the same cell: the ground under it
- *     stays painted and visible. Same idea as a prop's footprint, but paintable.
+ *   - `"solid"` — an invisible *solid*: a painted rock, column, statue, ruin wall.
+ *     Blocks movement, and — in apps that opt in (BITS does) — shots and target
+ *     lock too. **Never drawn in-game**: the terrain art / prop sprite is the
+ *     visual. The editor shows it as a translucent blue box. Was `"hidden"` until
+ *     2026-09-17; the old tag still loads as this.
+ *   - `"low"` — an invisible *low* blocker: a cliff edge, a chest-high wall, a
+ *     fence, rubble. Blocks movement **only** — sight, shots and target lock pass
+ *     over it, so you can shoot down off a ledge or over a parapet. Never drawn;
+ *     the editor shows it as a translucent green box.
+ * The two invisible materials coexist with floor in the same cell (the ground
+ * under them stays painted and visible), paint at quarter-tile grain, and can be
+ * drawn as polygons. Same idea as a prop's footprint, but paintable.
  * Open to extension (e.g. `"water"`) — add the material, then decide which sets
  * (movement / occluders / a slow field) it joins in `loadZone`.
  */
-export type CollisionMaterial = "wall" | "void" | "hidden";
+export type CollisionMaterial = "wall" | "void" | "solid" | "low";
+
+/** The invisible materials: quarter-tile brush, polygon fence, floor art kept. */
+export type InvisibleMaterial = "solid" | "low";
+
+/** A material tag as it may appear on disk — includes the retired `"hidden"`. */
+export type CollisionMaterialTag = CollisionMaterial | "hidden";
+
+/** Resolve an on-disk tag: absent → `"wall"` (legacy bare `Aabb`s), `"hidden"` → `"solid"`. */
+export const normalizeMaterial = (m: CollisionMaterialTag | undefined): CollisionMaterial =>
+  m === undefined ? "wall" : m === "hidden" ? "solid" : m;
 
 /** A free collision rectangle (centre + size, world px) plus what it's made of. */
 export interface CollisionRect extends Aabb {
   /** Material; absent → `"wall"` (so legacy files of bare `Aabb`s are walls). */
-  material?: CollisionMaterial;
+  material?: CollisionMaterialTag;
 }
 
 /**
  * An authored collision outline (world px, any winding, concave fine). Becomes
- * half-tile box strips at load (`zone/polygon.ts`) — nothing past `loadZone`
- * ever sees a polygon. Only `"hidden"` for now: an invisible fence around the
- * places players mustn't go. (Wall/void polygons would draw as staircases.)
+ * quarter-tile box strips at load (`zone/polygon.ts`) — nothing past `loadZone`
+ * ever sees a polygon. Invisible materials only: a fence around the places
+ * players mustn't go (`"solid"`) or a ledge they can shoot over (`"low"`).
+ * Absent (or the retired `"hidden"`) → `"solid"`. (Wall/void polygons would
+ * draw as staircases.)
  */
 export interface CollisionPolygon {
   points: Vec2[];
-  material?: "hidden";
+  material?: InvisibleMaterial | "hidden";
 }
 
 export interface ZoneCollision {
@@ -137,8 +158,8 @@ export interface ZoneCollision {
   polys?: CollisionPolygon[];
   /**
    * Painted solid cells, `[row][col]` of material codes: `0` empty, `1` wall,
-   * `2` void, `3` hidden. Greedy-meshed per material into rects at load.
-   * (Legacy `0/1` grids stay correct — `1` has always meant a wall.)
+   * `2` void, `3` solid (was "hidden"), `4` low. Greedy-meshed per material into
+   * rects at load. (Legacy `0/1` grids stay correct — `1` has always meant a wall.)
    */
   cells?: number[][];
   /** Px per collision cell — independent of `tileSize`. Defaults to `tileSize`. */
@@ -146,10 +167,19 @@ export interface ZoneCollision {
 }
 
 /** Painted-cell material codes (the non-empty values in `ZoneCollision.cells`). */
-export const COLLISION_CELL = { none: 0, wall: 1, void: 2, hidden: 3 } as const;
+export const COLLISION_CELL = { none: 0, wall: 1, void: 2, solid: 3, low: 4 } as const;
 
-/** Polygon rasterisation resolution: cells per tile side (2 = half tiles). */
-export const POLYGON_CELL_DIV = 2;
+/** Cell code for a paintable material. */
+export const COLLISION_CELL_OF: Record<CollisionMaterial, number> = {
+  wall: COLLISION_CELL.wall,
+  void: COLLISION_CELL.void,
+  solid: COLLISION_CELL.solid,
+  low: COLLISION_CELL.low,
+};
+
+/** Polygon rasterisation resolution: cells per tile side (4 = quarter tiles, matching
+ *  Realmsmith's painted-collision grain so a fence hugs a prop as closely as the brush). */
+export const POLYGON_CELL_DIV = 4;
 
 /** Extra effect run when a breakable is destroyed (it always vanishes regardless). */
 export type BreakEffect =
@@ -236,11 +266,11 @@ export interface Zone {
   /** Row-major: `chunks[cy * chunkCols + cx]`. */
   chunks: ZoneChunk[];
   /**
-   * Everything that blocks **movement**, greedy-meshed — the union of `walls` and
-   * `voids`. This is what Matter / `stepCrowd` / `buildNavGrid` consume (they don't
-   * care what a solid is *made of*, only that it stops a body), so they're fed
-   * exactly as before. For line-of-sight / projectiles / targeting, use `walls`
-   * (void is see-through).
+   * Everything that blocks **movement**, greedy-meshed — the union of `walls`,
+   * `voids`, `solid`, `low` and prop footprints. This is what Matter / `stepCrowd`
+   * / `buildNavGrid` consume (they don't care what a solid is *made of*, only that
+   * it stops a body). For line-of-sight / projectiles / targeting, build your own
+   * set from the typed lists below (void and low are see-through).
    */
   collision: Aabb[];
   /**
@@ -256,12 +286,19 @@ export interface Zone {
    */
   voids: Aabb[];
   /**
-   * The `"hidden"` subset of `collision`: invisible barriers — block movement,
-   * never drawn in-game, never occlude. Renderers ignore this list entirely
-   * (it's already in `collision` for physics/nav); the editor draws it as
-   * translucent blue boxes so authored barriers stay visible while designing.
+   * The `"solid"` subset of `collision` (legacy `"hidden"` lands here too):
+   * invisible solids — painted rocks, columns, ruin walls. Block movement; apps
+   * decide whether they also stop shots / target lock (BITS: yes, like an
+   * occluding prop footprint). Never drawn in-game — the editor shows them as
+   * translucent blue boxes so authored geometry stays visible while designing.
    */
-  hidden: Aabb[];
+  solid: Aabb[];
+  /**
+   * The `"low"` subset of `collision`: invisible low blockers — cliff edges,
+   * chest-high walls, fences. Block movement **only**: never occlude, never stop
+   * a shot, never drawn. The editor shows them as translucent green boxes.
+   */
+  low: Aabb[];
   /** Dynamic, destructible collision — live state, dropped on break. */
   breakables: Breakable[];
   /**

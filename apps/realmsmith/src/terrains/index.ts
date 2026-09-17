@@ -1,5 +1,7 @@
 import type { TerrainDef } from "@heroic/core";
 import { ANCIENT_TERRAINS } from "./ancient";
+import { DUNES_TERRAINS } from "./dunes";
+import { HIGHLANDS_TERRAINS } from "./highlands";
 
 /**
  * Terrain brushes by tileset name (docs/design/tilesets.md § Terrain brushes).
@@ -9,4 +11,6 @@ import { ANCIENT_TERRAINS } from "./ancient";
  */
 export const TERRAINS: Record<string, Record<string, TerrainDef>> = {
   ancient: ANCIENT_TERRAINS,
+  dunes: DUNES_TERRAINS,
+  highlands: HIGHLANDS_TERRAINS,
 };

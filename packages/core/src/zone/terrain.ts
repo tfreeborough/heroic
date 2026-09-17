@@ -70,6 +70,14 @@ export interface TerrainDef {
   corners: Partial<Record<number, TerrainVariant[]>>;
   /** What a cell becomes when it leaves the terrain (mask 0). Default 0 = empty. */
   outside?: number;
+  /**
+   * A plain FILL brush (sand, dirt, a grass tone): no edges, no ring. Paint
+   * writes a `corners[15]` variant on exactly the cells you touch; erase
+   * writes `outside` on exactly the cells you touch that hold one of its
+   * variants. The transition brushes ("grass to sand") name a fill's plain
+   * tile as their `outside`, so leaving one blends back into the fill.
+   */
+  fill?: boolean;
   /** Post-solve rule passes, applied in order after every stroke. */
   passes?: TerrainRulePass[];
 }
@@ -141,6 +149,23 @@ export const terrainMaskIndex = (def: TerrainDef): Map<number, number> => {
 export const paintTerrain = (grid: TileGrid, def: TerrainDef, cells: CellRef[], on: boolean): boolean => {
   if (cells.length === 0) return false;
   const idx = terrainMaskIndex(def);
+  if (def.fill) {
+    // A fill has no edge art to solve: touch exactly the stroke, nothing around it.
+    const variants = def.corners[15] ?? [];
+    let changed = false;
+    for (const { col, row } of cells) {
+      if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) continue;
+      const cur = grid.get(col, row);
+      if (on) {
+        if (variants.length === 0) continue;
+        const id = weightedPick(variants, hash01(col, row, 15, 0x7e44a1));
+        if (id !== cur && grid.set(col, row, id)) changed = true;
+      } else if (idx.has(cur) && grid.set(col, row, def.outside ?? 0)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
   let c0 = Infinity;
   let c1 = -Infinity;
   let r0 = Infinity;

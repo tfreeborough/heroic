@@ -4,10 +4,10 @@
  *
  * Everything downstream of `loadZone` — `stepCrowd`, the nav grid, the PvP
  * server, the wire — understands only axis-aligned boxes, and none of it needs
- * to change: a polygon is rasterised onto a grid (half a tile by default) by
+ * to change: a polygon is rasterised onto a grid (a quarter tile by default) by
  * sampling each cell's centre with an even-odd point-in-polygon test, and the
  * filled cells are greedy-meshed into strips. A diagonal edge becomes a
- * half-tile staircase — invisible for the hidden barriers this exists for.
+ * quarter-tile staircase — invisible for the hidden barriers this exists for.
  */
 import type { Vec2 } from "../math/vec2";
 import type { Aabb } from "../physics/crowd";
