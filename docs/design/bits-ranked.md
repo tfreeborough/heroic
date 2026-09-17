@@ -275,6 +275,22 @@ Tapping the RANKED card opens **RankedScreen** — the ranked home, not a spinne
   Queueing-while-roaming-the-app is future polish.~~ **Reversed 2026-08-25** — the queue
   now follows the player around the app and a match must be ACCEPTED before it seats
   (§ Queue roaming & match accept). Losing the socket still leaves the queue.
+- **Optimistic queue buttons + a local wait clock** *(2026-09-16)*. QUEUE FOR / ALSO
+  QUEUE / CANCEL used to wait on the server's `queueStatus` (two or three DB reads
+  behind a `queueJoin`) before the card changed — "the buttons feel a bit laggy" (Tom).
+  Now `ArenaClient.queuedBrackets` flips on the tap and the server confirms or corrects
+  it after: an exact-set `queueStatus` confirms a join, `queueLeft` a leave, and a
+  `reject` (lockout, sign-in, a live match on the account) backs the join out entirely
+  — which is also the server's truth, since its handler drops every held line before
+  it decides. Inside a short window (8 s join / 3 s leave) a `queueStatus` that
+  disagrees is treated as one the server sent before it saw us (a matcher beat or a
+  queueInfo answer crossing the wire) and leaves the optimistic view alone; past it
+  the server's word is the truth again. The wait timer (`queuedSinceMs`) is a LOCAL
+  clock anchored at the tap — the queue time is relative to the player and never
+  needs a server number to be right — and the server's floored `waitedSec` only ever
+  pulls it BACK (by > 3 s) when a void or an innocent cancel re-queued us with the
+  old earned wait. The anchor survives a summons so an innocent cancel's "back in
+  line" resumes the count instead of restarting at 0:00.
 
 ## The queue & matchmaker
 
@@ -329,6 +345,9 @@ same `Room` machinery, different rules:
 - **Arm deadline:** if either player hasn't armed within 60 s the match is **void** —
   no rating change, no Glory, the armed player is auto-requeued at their old wait
   priority, the idle player gets a **30 s queue lockout** (dodge penalty).
+  *(2026-09-16: the deadline is now visible — a draining bar over the arming views,
+  bits-arm-clock.md. Auto-arming the idler instead was rejected: it would cost an
+  innocent 2v2 teammate rating.)*
 - **Disconnect mid-match:** unchanged from the arena's law — the match never pauses,
   the body idles, the rejoin window stands. If they never return the wipe happens
   naturally and the result **stands as a loss**. Abandoning is losing; no special case.
@@ -730,6 +749,8 @@ of places that assume exactly two people.
 - `ceremony_shift` **NEW 2026-08-02, clip owed**: a soft airy whoosh on the
   ceremony's crossfade from the Glory count to the rating reveal — transition
   texture, not a stinger. On the catalogue (`ceremonyShift`), silent until forged.
+- `arm_clock_tick` **NEW 2026-09-16, clip owed**: a quiet dry tick on the last 5 s of the
+  arm clock (bits-arm-clock.md). On the catalogue (`armClockTick`), silent until forged.
 - ~~Tier badge art ×6~~ **FORGED + wired 2026-08-01** (`badge-bits`, shield anchor + per-tier
   dominant-colour system — asset-forge.md; `RANK_BADGES` in RankedScreen.tsx). Division
   numerals composite client-side. Squint-verified at 28px on the void: the colour ramp names

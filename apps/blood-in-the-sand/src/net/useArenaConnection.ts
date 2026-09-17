@@ -7,7 +7,7 @@
  * layer the "connection lost" page mostly showed STALE deaths: nothing was
  * wrong by the time the player read it.
  *
- * Policy (the seat-preserving rejoin is future work — docs/design/bits-reconnect.md):
+ * Policy (docs/design/bits-reconnect.md):
  *   • QUIET first: the first few failures redial on a short backoff while
  *     the UI shows plain "connecting…" — a blip never becomes an error page.
  *   • VISIBLE after that: the connect screen flips to "can't reach the
@@ -15,14 +15,21 @@
  *     RETRY NOW only accelerates it.
  *   • Foregrounding and re-entering PLAY/RANKED (wake) redial immediately,
  *     turning the stale-death case into an invisible sub-second reconnect.
- *   • A death that cost a SEAT (or a queue spot) can't be resumed yet — the
- *     next open client carries a one-shot lastError so the room list /
- *     ranked home say why the player is back at the gates.
+ *   • AUTO-REJOIN (2026-09-16): every fresh socket that opens while a seat is
+ *     remembered (`./seat` — persisted, so a killed-and-relaunched app counts)
+ *     sends the reclaim BEFORE the UI settles; the manager holds its
+ *     "connecting" face until the server answers, so a redial mid-match
+ *     reads as one continuous "connecting… → the fight", never a glimpse of
+ *     the room list between. A refused reclaim forgets the seat, silently.
+ *   • A death that cost a QUEUE spot (or a seat the reclaim couldn't
+ *     recover) leaves a one-shot lastError on the open client so the room
+ *     list / ranked home say why the player is back at the gates.
  *   • "rejected" (protocol mismatch) never redials — that's the update flow.
  */
 import { useEffect, useReducer, useRef } from "react";
 import { AppState } from "react-native";
 import { ArenaClient, resolveServerUrl } from "./connection";
+import { loadStoredSeat, peekSeat } from "./seat";
 
 export type ConnectState =
   | "connecting" //   quiet dial — reads as a splash, never an error
@@ -55,6 +62,13 @@ const WAKING_AFTER_MS = 5000;
  * ship over OTA, so a plain fetch probe stands in.) */
 const PROBE_URL = "https://clients3.google.com/generate_204";
 const PROBE_TIMEOUT_MS = 4000;
+/** The server answers a reclaim at once (welcome or reject); a socket that
+ * opened but never answers is broken in some way the redial loop should own
+ * — give the reclaim up and let the open stand on its own. */
+const REJOIN_TIMEOUT_MS = 6000;
+/** How long an open socket waits for the remembered-seat read (AsyncStorage,
+ * normally a few ms) before treating "unknown" as "none". */
+const SEAT_LOAD_CAP_MS = 1500;
 
 export class ConnectionManager {
   /** The live client — null while between sockets (redial pending/underway). */
@@ -85,10 +99,29 @@ export class ConnectionManager {
   private dialTimer: ReturnType<typeof setTimeout> | null = null;
   private wakingTimer: ReturnType<typeof setTimeout> | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private rejoinTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The remembered-seat read has landed (or been given up on) — until then
+   * an open socket holds "connecting" rather than decide without it. */
+  private seatKnown = false;
+  /** The client the reclaim was sent on — once per socket, never twice. */
+  private rejoinedOn: ArenaClient | null = null;
 
   constructor(serverInput: string | null) {
     this.url = serverInput ? resolveServerUrl(serverInput) : null;
     this.state = this.url ? "connecting" : "unconfigured";
+    // The persisted seat (cold launch mid-match): normally back well before
+    // the socket opens; if not, the open waits on it — capped.
+    const cap = setTimeout(() => this.seatIsKnown(), SEAT_LOAD_CAP_MS);
+    void loadStoredSeat().finally(() => {
+      clearTimeout(cap);
+      this.seatIsKnown();
+    });
+  }
+
+  private seatIsKnown(): void {
+    if (this.seatKnown) return;
+    this.seatKnown = true;
+    if (this.client !== null) this.watch(this.client);
   }
 
   start = (): void => {
@@ -154,20 +187,39 @@ export class ConnectionManager {
   private watch(c: ArenaClient): void {
     if (c !== this.client) return; // a zombie socket's parting callback
     if (c.status === "open") {
-      if (this.state !== "online") {
-        this.clearAllTimers();
-        this.attempts = 0;
-        this.retryIn = null;
-        this.offline = null;
-        if (this.dropped) {
-          this.dropped = false;
-          // The lost seat can't be resumed yet (bits-reconnect.md) — at least
-          // say why the player is back at the gates. RoomListScreen and
-          // RankedScreen both render lastError.
-          c.lastError = "connection to the arena was lost";
+      if (this.state === "online") return;
+      this.clearDialTimers();
+      this.clearRedial();
+      this.attempts = 0;
+      this.retryIn = null;
+      this.offline = null;
+      // The reclaim rides the open, once per socket — and the UI stays on
+      // "connecting…" until the server has said welcome or no. Decided only
+      // once the remembered seat is actually known (the cold-launch read).
+      if (!this.seatKnown) return;
+      if (this.rejoinedOn !== c) {
+        this.rejoinedOn = c;
+        const seat = peekSeat();
+        if (seat !== null) {
+          c.rejoinSeat(seat);
+          this.rejoinTimer = setTimeout(() => {
+            if (this.client === c) c.abandonRejoin();
+          }, REJOIN_TIMEOUT_MS);
         }
-        this.setState("online");
       }
+      if (c.rejoining !== null) {
+        this.onChange?.();
+        return;
+      }
+      this.clearAllTimers();
+      if (this.dropped) {
+        this.dropped = false;
+        // The death cost a queue spot, or a seat the reclaim couldn't get
+        // back — say why the player is back at the gates. RoomListScreen and
+        // RankedScreen both render lastError. A reclaimed seat owes nothing.
+        if (c.welcome === null) c.lastError = "connection to the arena was lost";
+      }
+      this.setState("online");
     } else if (c.status === "rejected") {
       this.clearAllTimers();
       this.client = null;
@@ -286,6 +338,10 @@ export class ConnectionManager {
     if (this.tickTimer !== null) {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
+    }
+    if (this.rejoinTimer !== null) {
+      clearTimeout(this.rejoinTimer);
+      this.rejoinTimer = null;
     }
   }
 }

@@ -168,6 +168,7 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   match_win: "a great bronze gong struck once with a full low male choir swelling into a bright sustained open chord, vast, very long reverb tail",
   match_loss: "a slow single bass drum hit under a low male choir holding one dark note and sinking into silence, a dirge",
   // ── Ranked ────────────────────────────────────────────────────────────────
+  arm_clock_tick: "a single dry wooden clock tick, tight and slightly hollow, very short, close-miked",
   queue_match_found: "a metal gong struck sharply once, one clang with a fast rising snap, short, close-miked",
   rank_up: "a struck bronze shield ringing under a short bright horn flourish, proud, about two seconds",
   rank_down: "a low muted drum struck once, one soft thud with a short falling breath of air, quiet",
@@ -240,6 +241,7 @@ export const SOUND_DURATIONS: Record<string, number> = {
   round_draw: 2,
   match_win: 6,
   match_loss: 6,
+  arm_clock_tick: 0.3,
   queue_match_found: 1,
   rank_up: 2,
   rank_down: 1,

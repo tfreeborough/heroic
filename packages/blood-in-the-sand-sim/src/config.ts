@@ -794,8 +794,13 @@ export const COUNTDOWN_SECONDS = 3;
  * introduces both sides — names + worn titles — and 3s was too short to read
  * it (Tom, 2026-09-01). Later rounds snap back to COUNTDOWN_SECONDS pace. */
 export const ENTRANCE_COUNTDOWN_SECONDS = 5;
-export const ROUND_END_SECONDS = 2.5;
-export const MATCH_END_SECONDS = 8; // then a fresh match with the same players
+/** Between-rounds plate hold. Was 2.5s — trimmed with the match-end hold
+ * (Tom, 2026-09-16). */
+export const ROUND_END_SECONDS = 2;
+/** The VICTORY/DEFEAT plate + honour roll hold. Was 8s — lingered (Tom,
+ * 2026-09-16). A 4v4 roll finishes landing ~2.6s in, so 4s still leaves a
+ * beat to read it. Then back to the lobby with the same players. */
+export const MATCH_END_SECONDS = 4;
 export const WINS_TO_TAKE_MATCH = 3;
 /** Melee resolves faster: six contenders spread wins out — first-to-3 could
  * run 13 rounds worst case; first-to-2 tops out at 7 and typically lands 2–4

@@ -26,6 +26,7 @@ import {
 import { getActiveAnnouncer } from "../audio/announcer";
 import { getWornTitle } from "../deeds/wornTitle";
 import { grantFromDeedUnlocks } from "../deeds/entitlements";
+import { forgetSeat, peekSeat, rememberSeat, touchSeat, SEAT_TOUCH_INTERVAL_MS, type StoredSeat } from "./seat";
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "rejected";
 
@@ -78,18 +79,40 @@ export const resolveServerUrl = (input: string): string => {
   return port ? `wss://${host}:${port}` : `wss://${host}`;
 };
 
+const sameSet = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((x) => b.includes(x));
+
 /**
- * The seat's rejoin secret (bits-reconnect.md § seat tokens), stamped by
- * every `welcome` and cleared only on DELIBERATE exits (leaveRoom,
- * roomClosed). Module state, not ArenaClient state, on purpose: the client
- * dies with its socket (the silent-redial layer builds a fresh one per dial
- * — useArenaConnection), and the whole point of the token is surviving that
- * death so a rejoin by code can prove the seat is ours. Since protocol v28
- * the server reclaims a disconnected seat ONLY on a matching token — ranked
- * rooms admit nobody without one. Memory-only by design (v1): an app restart
- * forfeits the seat; AsyncStorage persistence is the design doc's "later".
+ * The seat's rejoin secret (bits-reconnect.md § seat tokens) lives in
+ * `./seat` — stamped by every `welcome`, cleared only on DELIBERATE exits
+ * (leaveRoom, roomClosed) and failed reclaims. Outside ArenaClient on
+ * purpose: the client dies with its socket (the silent-redial layer builds
+ * a fresh one per dial — useArenaConnection), and the whole point of the
+ * token is surviving that death — and, since 2026-09-16, an app restart —
+ * so the connection manager can walk the player straight back into the
+ * match (`rejoinSeat`). Since protocol v28 the server reclaims a
+ * disconnected seat ONLY on a matching token — ranked rooms admit nobody
+ * without one.
  */
-let lastSeat: { code: string; seatToken: string } | null = null;
+
+/** How long an optimistic queue flip trusts itself over a crossing
+ * `queueStatus` (bits-ranked.md § the ranked screen, 2026-09-16). The
+ * server's answer to a queueJoin waits on two or three DB reads, and a
+ * matcher-beat status or a queueInfo answer sent BEFORE it processed our
+ * message can land in that window carrying the old truth; inside the window
+ * only an exact confirmation (or a reject) moves the client's view. Past
+ * it, whatever the server says is the truth again — a belt against a reply
+ * that never comes. */
+const QUEUE_OPTIMISM_MS = 8000;
+/** Same idea for the leave: `queueLeft` follows a queueLeave at once unless
+ * the server had already pulled us (a summons in flight), in which case no
+ * reply comes at all — the window keeps that from wedging the flag. */
+const QUEUE_LEAVE_OPTIMISM_MS = 3000;
+/** A wait the server says we've EARNED beyond our local clock by this much
+ * (a void or an innocent cancel re-queued us with the old joinedMs while the
+ * local anchor had reset) re-anchors the timer. Smaller gaps are the
+ * server's floored 2s beat — never a reason to jump the digits. */
+const WAIT_REANCHOR_SEC = 3;
 
 export interface WelcomeInfo {
   playerId: number;
@@ -108,6 +131,10 @@ export interface WelcomeInfo {
   hostId: number;
   zoneId: string;
   config: ArenaClientConfig;
+  /** Ranked arming lobby only (bits-arm-clock.md): when the arm deadline
+   * voids the match, on the performance.now() clock, stamped at receipt —
+   * plus the full window, for the bar's fraction and the first-timer copy. */
+  arm?: { endsAtMs: number; totalSec: number };
 }
 
 export interface RoomStateInfo {
@@ -297,10 +324,42 @@ export class ArenaClient {
 
   // ── ranked (bits-ranked.md) ──────────────────────────────────────────────
   /** Per-bracket queue populations — refreshed by queueInfo and every matcher
-   * beat while queued. RankedScreen renders straight from this. */
+   * beat while queued. RankedScreen renders the COUNTS straight from this;
+   * which lines are ours is `queuedBrackets` (below), never the `waitedSec`
+   * marks here — those are the server's floored, 2s-late view. */
   queueStatus: BracketQueueStatus[] = [];
-  /** True while this socket holds a place in line. */
-  queued = false;
+  /** The brackets this socket is waiting in — the client's view, flipped
+   * OPTIMISTICALLY by queueRanked/queueLeave the instant the player taps
+   * (the QUEUE buttons used to wait a DB-round-trip for the server's word —
+   * Tom, 2026-09-16: "the buttons feel a bit laggy") and confirmed or
+   * corrected by the server's queueStatus / queueLeft / reject after. */
+  queuedBrackets: string[] = [];
+  /** True while this socket holds a place in line (as far as we know). */
+  get queued(): boolean {
+    return this.queuedBrackets.length > 0;
+  }
+  /** Local-clock anchor (performance.now()) for the wait timer: the moment
+   * the player entered the line. Ticks locally — the display never waits on,
+   * or jumps to, the server's floored beat; the server's number only ever
+   * pulls it BACK when it says we've earned more (a re-queue after a void
+   * keeps the old wait). Kept across a summons so an innocent cancel's
+   * "back in line" resumes the count instead of restarting it. Null while
+   * not queued. */
+  queuedSinceMs: number | null = null;
+  /** The bracket set the last queueJoin asked for, while its answer is
+   * outstanding (see QUEUE_OPTIMISM_MS). */
+  private queueJoinPending: { brackets: string[]; atMs: number } | null = null;
+  /** A queueLeave whose queueLeft hasn't landed (see QUEUE_LEAVE_OPTIMISM_MS). */
+  private queueLeaveSentAt: number | null = null;
+  /** The seat an automatic reclaim (rejoinSeat) is in flight for — the
+   * connection manager holds its "connecting" face until this resolves
+   * (welcome or reject) so the player never glimpses the room list between
+   * the redial and the fight. */
+  rejoining: StoredSeat | null = null;
+  /** The name the last create/join/queue claimed — stamped into the
+   * remembered seat so a skirmish reclaim can re-send it. */
+  private claimedName = "";
+  private seatTouchedAt = 0;
   /** The live summons, if any (v30) — App raises the accept sheet over
    * whatever screen the player is roaming while this is set. */
   pendingMatch: PendingMatchInfo | null = null;
@@ -401,10 +460,27 @@ export class ArenaClient {
           hostId: msg.hostId,
           zoneId: msg.zoneId,
           config: msg.config,
+          arm: msg.arm && { endsAtMs: performance.now() + msg.arm.leftSec * 1000, totalSec: msg.arm.totalSec },
         };
-        // Remember how to prove this seat is ours across a socket death — a
-        // later joinRoom on the same code sends it back (see lastSeat).
-        lastSeat = { code: msg.roomCode, seatToken: msg.seatToken };
+        // A reclaim landed: the welcome doesn't say whether the room is
+        // ranked, so the remembered seat does — restoring rankedMatch here
+        // is what routes the rejoin to the ranked flow (App) and makes the
+        // eventual roomClosed read as the settle, not an error.
+        if (this.rejoining !== null) {
+          this.rankedMatch = this.rejoining.ranked;
+          this.claimedName = this.rejoining.playerName;
+          this.rejoining = null;
+        }
+        // Remember how to prove this seat is ours across a socket death AND
+        // an app restart — the connection manager sends it back on its next
+        // fresh socket (rejoinSeat), before the UI settles.
+        rememberSeat({
+          code: msg.roomCode,
+          seatToken: msg.seatToken,
+          playerName: this.claimedName,
+          ranked: this.rankedMatch,
+        });
+        this.seatTouchedAt = performance.now();
         this.roomState = null;
         this.phase = "lobby";
         this.lastError = null;
@@ -441,11 +517,10 @@ export class ArenaClient {
         // § match end), and "match complete" under the settlement plate
         // would read as an error. The plate IS the message there.
         this.welcome = null;
-    this.skirmishDeeds = null;
         this.skirmishDeeds = null; // the lobby that would have shown them is gone
         this.roomState = null;
         this.phase = "lobby";
-        lastSeat = null; // the room is gone — the seat can never be reclaimed
+        forgetSeat(); // the room is gone — the seat can never be reclaimed
         this.lastError = this.rankedMatch && this.rankedResult ? null : msg.reason;
         this.rankedMatch = null;
         this.buffer.reset();
@@ -468,6 +543,12 @@ export class ArenaClient {
       }
       case "snapshot": {
         const now = performance.now();
+        // The remembered seat's last-seen clock, on a slow beat — so a
+        // relaunch knows the seat was live moments ago, not just joined once.
+        if (this.welcome !== null && now - this.seatTouchedAt > SEAT_TOUCH_INTERVAL_MS) {
+          this.seatTouchedAt = now;
+          touchSeat();
+        }
         this.noteSnapshot(msg, now);
         const events = this.buffer.push(msg, now);
         if (events.length > 0) this.onEvents?.(events);
@@ -489,19 +570,43 @@ export class ArenaClient {
         }
         return;
       }
-      case "queueStatus":
+      case "queueStatus": {
         this.queueStatus = msg.brackets;
-        this.queued = msg.brackets.some((b) => b.waitedSec !== undefined);
+        const now = performance.now();
+        const mine = msg.brackets.filter((b) => b.waitedSec !== undefined);
+        const theirs = mine.map((b) => b.bracket);
+        if (this.queueLeaveSentAt !== null && now - this.queueLeaveSentAt < QUEUE_LEAVE_OPTIMISM_MS) {
+          // A beat's status crossing our leave still names us — the
+          // queueLeft behind it is the answer; hold the optimistic "out".
+        } else if (this.queueJoinPending !== null && now - this.queueJoinPending.atMs < QUEUE_OPTIMISM_MS) {
+          // Only the exact set we asked for confirms the join; anything else
+          // in the window is a status the server sent before it saw us.
+          if (sameSet(theirs, this.queueJoinPending.brackets)) {
+            this.queueJoinPending = null;
+            this.applyServerQueue(theirs, mine, now);
+          }
+        } else {
+          this.queueJoinPending = null;
+          this.queueLeaveSentAt = null;
+          this.applyServerQueue(theirs, mine, now);
+        }
         this.onChange?.();
         return;
+      }
       case "queueLeft":
-        this.queued = false;
+        this.queueLeaveSentAt = null;
+        this.queuedBrackets = [];
+        this.queuedSinceMs = null;
         this.onChange?.();
         return;
       case "matchReady":
         // Summoned: the server took us out of the line for the duration —
-        // no queueStatus reaches a pending socket, so clear the flag here.
-        this.queued = false;
+        // no queueStatus reaches a pending socket, so clear the lines here.
+        // The wait anchor STAYS: an innocent cancel puts us straight back in
+        // line with the earned wait, and the timer should read on from it.
+        this.queuedBrackets = [];
+        this.queueJoinPending = null;
+        this.queueLeaveSentAt = null;
         this.pendingMatch = {
           bracket: msg.bracket,
           players: msg.players,
@@ -526,14 +631,16 @@ export class ArenaClient {
         if (msg.dodged) {
           // Out of the line and locked out — RankedScreen's error line
           // explains why the QUEUE button bounces for the next while.
-          this.queued = false;
+          this.queuedBrackets = [];
+          this.queuedSinceMs = null;
           this.lastError = `you missed the match — queue locked for ${msg.lockoutSec ?? 30}s`;
         }
         // Innocent: the server re-queued us and a queueStatus is right behind.
         this.onChange?.();
         return;
       case "matchFound":
-        this.queued = false;
+        this.queuedBrackets = [];
+        this.queuedSinceMs = null;
         this.pendingMatch = null; // everyone's in — the welcome follows
         this.rankedMatch = { bracket: msg.bracket };
         // The server seats us itself — the welcome follows on this socket.
@@ -591,10 +698,44 @@ export class ArenaClient {
           this.status = "rejected";
           this.rejectReason = msg.reason;
           this.ws.close();
+        } else if (this.rejoining !== null) {
+          // The remembered seat is gone (the match ended while we were away,
+          // or the room with it) — forget it, silently: the player asked for
+          // nothing, so there is nothing to apologise for. Any dead-seat
+          // notice the manager set on this open stays as it was.
+          this.rejoining = null;
+          forgetSeat();
+        } else if (this.queueJoinPending !== null) {
+          // The optimistic flip was wrong (lockout, sign-in, a live match on
+          // this account): back out. The server's queueJoin handler had
+          // already dropped every line we held before deciding, so "out of
+          // the queue entirely" is the truth, not just a guess.
+          this.queueJoinPending = null;
+          this.queuedBrackets = [];
+          this.queuedSinceMs = null;
+          this.lastError = msg.reason;
         } else {
           this.lastError = msg.reason; // recoverable: stay on the room list
         }
         this.onChange?.();
+    }
+  }
+
+  /** Take the server's word on which lines are ours. The timer stays on the
+   * local clock: anchored here only if it wasn't already, and pulled BACK
+   * when the server has us waiting longer than we thought (a re-queue that
+   * kept the old joinedMs) — never nudged forward to its floored beat. */
+  private applyServerQueue(theirs: string[], mine: BracketQueueStatus[], now: number): void {
+    this.queuedBrackets = theirs;
+    if (theirs.length === 0) {
+      this.queuedSinceMs = null;
+      return;
+    }
+    const earned = Math.max(...mine.map((b) => b.waitedSec!));
+    if (this.queuedSinceMs === null) {
+      this.queuedSinceMs = now - earned * 1000;
+    } else if (earned - (now - this.queuedSinceMs) / 1000 > WAIT_REANCHOR_SEC) {
+      this.queuedSinceMs = now - earned * 1000;
     }
   }
 
@@ -608,6 +749,16 @@ export class ArenaClient {
     this.rankedResult = null; // a fresh campaign — the old ceremony is done
     this.lastSettlement = null;
     this.deedUnlocks = null;
+    this.claimedName = playerName;
+    // Optimistic: the card flips to SEARCHING and the timer starts on THIS
+    // tap. Adding a line keeps the running clock (one timer for the whole
+    // search — the longest wait); a fresh entry starts it. The server's
+    // queueStatus confirms (or its reject backs it out) a beat later.
+    const wanted = [...new Set(brackets)];
+    this.queuedBrackets = wanted;
+    this.queuedSinceMs ??= performance.now();
+    this.queueJoinPending = { brackets: wanted, atMs: performance.now() };
+    this.queueLeaveSentAt = null;
     this.send({
       t: "queueJoin",
       v: PROTOCOL_VERSION,
@@ -617,10 +768,17 @@ export class ArenaClient {
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
     });
+    this.onChange?.();
   }
 
   queueLeave(): void {
     this.send({ t: "queueLeave" });
+    // Optimistic: out of every line now; queueLeft confirms.
+    this.queuedBrackets = [];
+    this.queuedSinceMs = null;
+    this.queueJoinPending = null;
+    this.queueLeaveSentAt = performance.now();
+    this.onChange?.();
   }
 
   /** Answer the summons. Idempotent; the server's matchPending / matchFound
@@ -656,7 +814,8 @@ export class ArenaClient {
    * verified. Optional — without it the seat plays as before, earns nothing. */
   createRoom(playerName: string, roomName: string, pass: string, teamSize: number, brawl = false, token?: string): void {
     this.lastError = null;
-    this.queued = false; // entering the skirmish flow leaves the queue server-side
+    this.leaveLineLocally(); // entering the skirmish flow leaves the queue server-side
+    this.claimedName = playerName;
     this.skirmishDeeds = null;
     this.send({
       t: "createRoom",
@@ -677,9 +836,11 @@ export class ArenaClient {
 
   joinRoom(playerName: string, code: string, pass: string, token?: string): void {
     this.lastError = null;
-    this.queued = false; // ditto createRoom
+    this.leaveLineLocally(); // ditto createRoom
+    this.claimedName = playerName;
     this.skirmishDeeds = null;
     const normalized = code.trim().toUpperCase();
+    const seat = peekSeat();
     this.send({
       t: "joinRoom",
       v: PROTOCOL_VERSION,
@@ -689,10 +850,53 @@ export class ArenaClient {
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
-      // Rejoining the room we lost a socket in: the seat token proves the
-      // disconnected seat is OURS (any other room gets a plain fresh join).
-      ...(lastSeat?.code === normalized ? { seatToken: lastSeat.seatToken } : {}),
+      // Rejoining the room we lost a socket in by hand: the seat token proves
+      // the disconnected seat is OURS (any other room gets a plain fresh join).
+      ...(seat?.code === normalized ? { seatToken: seat.seatToken } : {}),
     });
+  }
+
+  /**
+   * The AUTOMATIC rejoin (bits-reconnect.md § auto-rejoin, 2026-09-16): the
+   * connection manager calls this on every fresh socket that opens while a
+   * seat is remembered — after a redial AND on a cold launch — before the UI
+   * settles. `reclaimOnly` makes the server answer "no such room" unless the
+   * token reclaims a disconnected seat: a remembered code from yesterday
+   * must never walk the player into a stranger's lobby that reuses it. The
+   * answer is a `welcome` (rankedMatch restored from the seat, the route
+   * follows) or a `reject` (the seat is forgotten, silently).
+   */
+  rejoinSeat(seat: StoredSeat): void {
+    this.rejoining = seat;
+    this.claimedName = seat.playerName;
+    this.send({
+      t: "joinRoom",
+      v: PROTOCOL_VERSION,
+      code: seat.code,
+      playerName: seat.playerName,
+      announcer: getActiveAnnouncer(),
+      title: getWornTitle(),
+      seatToken: seat.seatToken,
+      reclaimOnly: true,
+    });
+    this.onChange?.();
+  }
+
+  /** The manager's give-up on a reclaim the server never answered. */
+  abandonRejoin(): void {
+    if (this.rejoining === null) return;
+    this.rejoining = null;
+    forgetSeat();
+    this.onChange?.();
+  }
+
+  /** Entering a room drops every line server-side (one place at a time) —
+   * mirror it here so no stale SEARCHING survives the hop. */
+  private leaveLineLocally(): void {
+    this.queuedBrackets = [];
+    this.queuedSinceMs = null;
+    this.queueJoinPending = null;
+    this.queueLeaveSentAt = null;
   }
 
   listRooms(): void {
@@ -747,7 +951,7 @@ export class ArenaClient {
 
   leaveRoom(): void {
     this.send({ t: "leaveRoom" });
-    lastSeat = null; // a deliberate leave forfeits the seat — never rejoin it
+    forgetSeat(); // a deliberate leave forfeits the seat — never rejoin it
     this.welcome = null;
     this.skirmishDeeds = null;
     this.roomState = null;

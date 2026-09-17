@@ -68,6 +68,17 @@ export const savePrimerSeen = (seen: boolean): void => {
   void AsyncStorage.setItem(KEY_PRIMER_SEEN, seen ? "1" : "0");
 };
 
+/** How many ranked lobbies have shown the arm clock's first-timer line
+ * (bits-arm-clock.md) — it retires after a few. */
+const KEY_ARM_CLOCK_HINTS = "bits.armClockHints";
+
+export const loadArmClockHints = async (): Promise<number> =>
+  Number(await AsyncStorage.getItem(KEY_ARM_CLOCK_HINTS)) || 0;
+
+export const saveArmClockHints = (count: number): void => {
+  void AsyncStorage.setItem(KEY_ARM_CLOCK_HINTS, String(count));
+};
+
 /** The last loadout a player armed with — the wizard's RUN IT BACK offer.
  * Device-local like everything here; validated against the live roster on
  * load so a removed weapon/ability can never resurrect. */

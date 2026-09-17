@@ -237,6 +237,38 @@ describe("ranked flow", () => {
     expect(a.ws.data.roomCode).toBe(b.ws.data.roomCode);
   });
 
+  test("the arming welcome carries the arm clock; a reclaim gets the true remainder", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    await queueBoth(a, b);
+    internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
+    const arm = a.of("welcome")[0]!["arm"] as { leftSec: number; totalSec: number };
+    expect(arm.totalSec).toBe(ARM_DEADLINE_MS / 1000);
+    expect(arm.leftSec).toBeGreaterThan(ARM_DEADLINE_MS / 1000 - 1);
+    expect(arm.leftSec).toBeLessThanOrEqual(ARM_DEADLINE_MS / 1000);
+
+    // 45s into arming, Alice's wifi blips and her client redials before the
+    // server saw a close (a lobby close frees the seat — this race is the
+    // only arming reclaim): her fresh welcome says ~15s, not a fresh 60.
+    const room = [...internals(manager).rooms.values()][0]!;
+    const code = room.meta.code;
+    (room as unknown as { createdAtMs: number }).createdAtMs -= 45_000;
+    const seatToken = String(a.of("welcome")[0]!["seatToken"]);
+    const back = makeSocket();
+    say(manager, back, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", seatToken, reclaimOnly: true });
+    const left = (back.of("welcome")[0]!["arm"] as { leftSec: number }).leftSec;
+    expect(left).toBeGreaterThan(14);
+    expect(left).toBeLessThanOrEqual(15);
+
+    // Once the match is under way there's no clock to draw.
+    room.sim.state.round.phase = "active";
+    const again = makeSocket();
+    say(manager, again, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", seatToken, reclaimOnly: true });
+    expect(again.of("welcome")).toHaveLength(1);
+    expect(again.of("welcome")[0]!["arm"]).toBeUndefined();
+  });
+
   test("a bad token is rejected, an unknown bracket too", async () => {
     const a = makeSocket();
     say(manager, a, { t: "queueJoin", v: PROTOCOL_VERSION, token: "forged", playerName: "Mallory", brackets: ["1v1"] });
@@ -306,6 +338,109 @@ describe("ranked flow", () => {
     expect(room.sim.state.players[seatId]!.connected).toBe(true);
     expect(room.sim.state.players[seatId]!.name).toBe("Alice");
     expect(room.sim.state.players[seatId]!.title).toBe("");
+  });
+
+  test("a reclaim beats the heartbeat: the token unseats a zombie socket the sweep hasn't caught", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    await queueBoth(a, b);
+    internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
+    const room = [...internals(manager).rooms.values()][0]!;
+    const code = room.meta.code;
+    const seatId = a.ws.data.playerId!;
+    const seatToken = String(a.of("welcome")[0]!["seatToken"]);
+    room.sim.state.round.phase = "active";
+
+    // Alice's wifi drops — NO close frame reaches the server, so her seat
+    // still reads connected. Her client noticed first and is already back
+    // on a fresh socket with the token, inside the heartbeat window.
+    expect(room.sim.state.players[seatId]!.connected).toBe(true);
+    const back = makeSocket();
+    say(manager, back, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", seatToken, reclaimOnly: true });
+    expect(back.of("welcome")).toHaveLength(1);
+    expect(back.ws.data.playerId).toBe(seatId);
+    expect(room.socketOf(seatId)).toBe(back.ws);
+    // The zombie is closed and detached; its late close event must not
+    // drop the seat out from under the rejoiner.
+    expect(a.ws.readyState).toBe(3);
+    expect(a.ws.data.playerId).toBeNull();
+    manager.close(a.ws);
+    expect(room.socketOf(seatId)).toBe(back.ws);
+    expect(room.sim.state.players[seatId]!.connected).toBe(true);
+
+    // A stranger's token still finds nothing — the relaxation is for the
+    // holder of the secret only.
+    const eve = makeSocket();
+    say(manager, eve, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Eve", seatToken: "forged", reclaimOnly: true });
+    expect(eve.of("reject").at(-1)!["reason"]).toBe("no such room");
+  });
+
+  test("a reclaim during the ceremony hold is handed the settlement it missed", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    await queueBoth(a, b);
+    internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
+    const room = [...internals(manager).rooms.values()][0]!;
+    const code = room.meta.code;
+    const seatId = a.ws.data.playerId!;
+    const seatToken = String(a.of("welcome")[0]!["seatToken"]);
+
+    // Alice drops mid-match; the match ends and settles without her.
+    room.sim.state.round.phase = "active";
+    manager.close(a.ws);
+    const winnerTeam = room.sim.state.players[b.ws.data.playerId!]!.team as Team;
+    room.onRankedMatchEnd!(winnerTeam);
+    await until(() => room.ranked!.settled);
+    expect(published.some((m) => m.t === "rankedResult")).toBe(true);
+
+    // She relaunches into the hold: the reclaim lands, and the settle she
+    // missed follows the welcome on her socket.
+    const back = makeSocket();
+    say(manager, back, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", seatToken, reclaimOnly: true });
+    expect(back.of("welcome")).toHaveLength(1);
+    expect(back.ws.data.playerId).toBe(seatId);
+    expect(back.of("rankedResult")).toHaveLength(1);
+    expect(back.of("rankedResult")[0]!["matchId"]).toBe(room.ranked!.matchId);
+  });
+
+  test("a reclaim-only join never fresh-joins: the auto-rejoin's guard", async () => {
+    // A skirmish room with a free lobby seat — the one case where a token
+    // that matches nothing would otherwise be admitted as a NEW player.
+    const host = makeSocket();
+    say(manager, host, { t: "createRoom", v: PROTOCOL_VERSION, playerName: "Host", teamSize: 1 });
+    const code = String(host.of("welcome")[0]!["roomCode"]);
+
+    // The relaunching client remembers a seat from some earlier room that
+    // happened to wear this code: reclaimOnly turns "join the stranger's
+    // lobby" into the same "no such room" a dead room would answer.
+    const stale = makeSocket();
+    say(manager, stale, {
+      t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Ghost", seatToken: "from-yesterday", reclaimOnly: true,
+    });
+    expect(stale.of("reject").at(-1)!["reason"]).toBe("no such room");
+    expect(stale.of("welcome")).toHaveLength(0);
+    expect(stale.ws.data.roomCode).toBeNull();
+
+    // Without the flag the same join is an ordinary fresh join (unchanged).
+    const fresh = makeSocket();
+    say(manager, fresh, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Guest", seatToken: "from-yesterday" });
+    expect(fresh.of("welcome")).toHaveLength(1);
+
+    // And a REAL reclaim passes the flag: the guest drops mid-match and
+    // walks back in with reclaimOnly set.
+    const room = internals(manager).rooms.get(code)!;
+    const seatId = fresh.ws.data.playerId!;
+    const seatToken = String(fresh.of("welcome")[0]!["seatToken"]);
+    room.sim.state.round.phase = "active";
+    manager.close(fresh.ws);
+    expect(room.sim.state.players[seatId]!.connected).toBe(false);
+    const back = makeSocket();
+    say(manager, back, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Guest", seatToken, reclaimOnly: true });
+    expect(back.of("welcome")).toHaveLength(1);
+    expect(back.ws.data.playerId).toBe(seatId);
+    expect(room.sim.state.players[seatId]!.connected).toBe(true);
   });
 
   test("one live ranked seat per account: a second queueJoin waits for the settle", async () => {

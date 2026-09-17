@@ -102,7 +102,7 @@ killer's name 22px foe-red, title beneath at 14.
 
 ## Moment 4 — the roll of honour + the kit reveal (match end)
 
-The match-end plate (RoundBanner `big` variant) holds for 8 sim seconds
+The match-end plate (RoundBanner `big` variant) holds for 4 sim seconds (8 until 2026-09-16)
 (`MATCH_END_SECONDS`) showing title + score over dead air. It becomes the
 victors' stage, **shown to both sides** — the defeat plate listing who
 beat you and what they're called is the actual flex:
@@ -114,7 +114,7 @@ beat you and what they're called is the actual flex:
 
 One row per **winning-team** player: name, title, weapon + three ability
 icons (`LoadoutIcon`, the Forge pixel-art set — never tinted). Rows land
-staggered (~500ms apart) so it reads as a ceremony, not a table. Bots
+staggered (~250ms apart; 450ms until 2026-09-16) so it reads as a ceremony, not a table. Bots
 appear like anyone else. *(Layout rule from Tom's on-device pass,
 2026-09-01: a title NEVER shares a line with the name — the row is an
 identity block (name centre-stacked over title — the EntranceCard seat
@@ -160,7 +160,7 @@ drops **when the match is decided and not before**:
 Ranked settlement stays deliberately ABSENT from this plate
 (bits-ranked.md § ceremony) — the honour roll is names, titles, and arms;
 Glory/rating remains RankedCeremony's beat. The ranked ceremony hold
-(`ceremonyOver`) already guarantees the full 8s window.
+(`ceremonyOver`) already guarantees the full 4s window.
 
 ## What the ambient line loses
 
