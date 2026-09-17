@@ -237,6 +237,38 @@ describe("ranked flow", () => {
     expect(a.ws.data.roomCode).toBe(b.ws.data.roomCode);
   });
 
+  test("the arming welcome carries the arm clock; a reclaim gets the true remainder", async () => {
+    const a = makeSocket();
+    const b = makeSocket();
+    await queueBoth(a, b);
+    internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
+    const arm = a.of("welcome")[0]!["arm"] as { leftSec: number; totalSec: number };
+    expect(arm.totalSec).toBe(ARM_DEADLINE_MS / 1000);
+    expect(arm.leftSec).toBeGreaterThan(ARM_DEADLINE_MS / 1000 - 1);
+    expect(arm.leftSec).toBeLessThanOrEqual(ARM_DEADLINE_MS / 1000);
+
+    // 45s into arming, Alice's wifi blips and her client redials before the
+    // server saw a close (a lobby close frees the seat — this race is the
+    // only arming reclaim): her fresh welcome says ~15s, not a fresh 60.
+    const room = [...internals(manager).rooms.values()][0]!;
+    const code = room.meta.code;
+    (room as unknown as { createdAtMs: number }).createdAtMs -= 45_000;
+    const seatToken = String(a.of("welcome")[0]!["seatToken"]);
+    const back = makeSocket();
+    say(manager, back, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", seatToken, reclaimOnly: true });
+    const left = (back.of("welcome")[0]!["arm"] as { leftSec: number }).leftSec;
+    expect(left).toBeGreaterThan(14);
+    expect(left).toBeLessThanOrEqual(15);
+
+    // Once the match is under way there's no clock to draw.
+    room.sim.state.round.phase = "active";
+    const again = makeSocket();
+    say(manager, again, { t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", seatToken, reclaimOnly: true });
+    expect(again.of("welcome")).toHaveLength(1);
+    expect(again.of("welcome")[0]!["arm"]).toBeUndefined();
+  });
+
   test("a bad token is rejected, an unknown bracket too", async () => {
     const a = makeSocket();
     say(manager, a, { t: "queueJoin", v: PROTOCOL_VERSION, token: "forged", playerName: "Mallory", brackets: ["1v1"] });

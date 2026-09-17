@@ -62,6 +62,7 @@ import {
   type Team,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
+import { ARM_DEADLINE_MS } from "./ranked";
 
 /** Backfill-bot names — distinct from the app's practice roster so "who's a
  * bot" stays legible in mixed rooms even before the roster marker lands. */
@@ -411,6 +412,7 @@ export class Room {
       zoneId: this.sim.zone.id,
       config: makeClientConfig(this.sim.state),
       seatToken: this.seatTokens.get(playerId)!,
+      arm: this.armClock(nowMs),
     });
     this.syncRoomState(nowMs);
     return playerId;
@@ -655,6 +657,14 @@ export class Room {
   /** Every seated socket — the manager's latency probe walks these. */
   seatedSockets(): IterableIterator<Socket> {
     return this.seats.values();
+  }
+
+  /** The arm clock for a welcome (bits-arm-clock.md): ranked, still arming,
+   * counted from construction exactly as the manager's deadline check is. */
+  private armClock(nowMs: number): { leftSec: number; totalSec: number } | undefined {
+    if (!this.ranked || this.ranked.ended || this.sim.state.round.phase !== "lobby") return undefined;
+    const leftMs = Math.max(0, this.createdAtMs + ARM_DEADLINE_MS - nowMs);
+    return { leftSec: leftMs / 1000, totalSec: ARM_DEADLINE_MS / 1000 };
   }
 
   /** Seat ids still short of a full loadout — the arm-deadline's dodgers. */

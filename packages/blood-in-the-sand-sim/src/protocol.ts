@@ -305,6 +305,11 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * room now wears that code. Additive: an old client never sends it, an old
  * server ignores it (and would fresh-join — the one reason to deploy the
  * server first).
+ * 2026-09-16, NO bump: the ARM CLOCK (bits-arm-clock.md) — `welcome` gains
+ * `arm?: { leftSec, totalSec }`, sent only by a ranked room still arming,
+ * so the client can draw the 60 s arm deadline (a rejoin gets the true
+ * remainder). Additive: old clients ignore it; on an old server the bar
+ * simply never shows.
  */
 export const PROTOCOL_VERSION = 33;
 export const DEFAULT_PORT = 7777;
@@ -610,6 +615,10 @@ export type ServerMsg =
        * (bits-reconnect.md § app-restart rejoin, 2026-09-16) so a relaunch
        * mid-match can walk straight back into the fight. */
       seatToken: string;
+      /** Ranked arming lobby only (bits-arm-clock.md): seconds left before
+       * the arm deadline voids the match, as of this send, and the full
+       * window. Absent in skirmish and once the match is under way. */
+      arm?: { leftSec: number; totalSec: number };
     }
   | { t: "rooms"; rooms: RoomListing[] }
   /** Membership/host changes — sent to the room on join/leave/migration. */

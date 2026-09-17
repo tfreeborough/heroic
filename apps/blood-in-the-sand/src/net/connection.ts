@@ -131,6 +131,10 @@ export interface WelcomeInfo {
   hostId: number;
   zoneId: string;
   config: ArenaClientConfig;
+  /** Ranked arming lobby only (bits-arm-clock.md): when the arm deadline
+   * voids the match, on the performance.now() clock, stamped at receipt —
+   * plus the full window, for the bar's fraction and the first-timer copy. */
+  arm?: { endsAtMs: number; totalSec: number };
 }
 
 export interface RoomStateInfo {
@@ -456,6 +460,7 @@ export class ArenaClient {
           hostId: msg.hostId,
           zoneId: msg.zoneId,
           config: msg.config,
+          arm: msg.arm && { endsAtMs: performance.now() + msg.arm.leftSec * 1000, totalSec: msg.arm.totalSec },
         };
         // A reclaim landed: the welcome doesn't say whether the room is
         // ranked, so the remembered seat does — restoring rankedMatch here

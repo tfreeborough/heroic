@@ -50,6 +50,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import type { LobbyClient } from "../net/connection";
 import { DeedReplayOverlay } from "./DeedCards";
+import { ARM_CLOCK_BAND, ArmClock } from "./ArmClock";
 import { BRAWL_TEAM_HEX } from "../game/render";
 import { playStrikeHaptic } from "../game/haptics";
 import { playSound, unlockAudio, warmCombatAudio } from "../audio";
@@ -452,6 +453,10 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
   // the grace clock (the sim clears `forced` on membership changes too).
   const graceKey = forceCond ? `${players.length}:${unarmed.map((p) => p.id).join(",")}` : "";
   if (graceSince.current.key !== graceKey) graceSince.current = { key: graceKey, atMs: performance.now() };
+  // The ranked arm clock (bits-arm-clock.md) gets its own band at the top:
+  // everything below shifts down while it shows, never squeezes under it.
+  const armClock = ranked && welcome.arm && client.phase === "lobby" && !meArmed ? welcome.arm : null;
+  const topPad = insets.top + 18 + (armClock ? ARM_CLOCK_BAND : 0);
   const showForceStart =
     forceCond &&
     (emptySeats > 0 || performance.now() - graceSince.current.atMs > FORCE_START_GRACE_SECONDS * 1000);
@@ -461,7 +466,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
     // children, and Yoga offsets absolute children by parent padding (unlike
     // CSS) — padded, overlays sat off-centre and the fly missed.
     <View ref={rootRef} collapsable={false} style={styles.root}>
-      <View style={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.content, { paddingTop: topPad, paddingBottom: insets.bottom + 8 }]}>
         {/* The room-leave ✕ rides the roster row, clear of everything below.
             Wizard mode hides it — there the stepHead ✕ (close wizard) is the
             only ✕ on screen, so the two never sit stacked. */}
@@ -527,7 +532,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
           pointerEvents={pickerFading ? "none" : "auto"}
           style={[
             styles.pickerOverlay,
-            { opacity: pickerFade, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 8 },
+            { opacity: pickerFade, paddingTop: topPad, paddingBottom: insets.bottom + 8 },
           ]}
         >
           {timer > 0 ? (
@@ -564,8 +569,12 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
       ) : null}
 
       {rib !== null && wizard !== null ? (
-        <RunItBack saved={rib} onYes={() => ribYes(rib)} onChange={ribChange} onLeave={askLeave} />
+        <RunItBack saved={rib} topPad={topPad} onYes={() => ribYes(rib)} onChange={ribChange} onLeave={askLeave} />
       ) : null}
+
+      {/* The ranked arm deadline, made visible (bits-arm-clock.md) — above the
+          war table and SAME ARMS alike, gone the moment we're armed. */}
+      {armClock ? <ArmClock endsAtMs={armClock.endsAtMs} totalSec={armClock.totalSec} /> : null}
 
       {confirmLeave ? (
         <ConfirmLeave
@@ -1066,19 +1075,20 @@ const ConfirmLeave = ({ onStay, onLeave }: { onStay: () => void; onLeave: () => 
 
 const RunItBack = ({
   saved,
+  topPad,
   onYes,
   onChange,
   onLeave,
 }: {
   saved: SavedLoadout;
+  /** Where the ✕ row sits — below the arm clock's band when it shows. */
+  topPad: number;
   onYes: () => void;
   onChange: () => void;
   onLeave: () => void;
-}) => {
-  const insets = useSafeAreaInsets();
-  return (
+}) => (
   <View style={styles.rib}>
-    <LeaveX onPress={onLeave} style={[styles.leaveXFloat, { top: insets.top + 18 }]} />
+    <LeaveX onPress={onLeave} style={[styles.leaveXFloat, { top: topPad }]} />
     <Text style={styles.splashEyebrow}>WELCOME BACK, GLADIATOR</Text>
     <Text style={styles.ribTitle}>TAKE UP THE SAME ARMS?</Text>
     <View style={styles.ribRow}>
@@ -1097,8 +1107,7 @@ const RunItBack = ({
       </Pressable>
     </View>
   </View>
-  );
-};
+);
 
 // ── Lobby (armed) ───────────────────────────────────────────────────────────
 

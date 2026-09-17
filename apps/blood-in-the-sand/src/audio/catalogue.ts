@@ -66,6 +66,7 @@ export type BitsSoundEvent =
   | "roundEnd" //       a round resolves              (qualifier: win|loss|draw)
   | "matchEnd" //       the match resolves            (qualifier: win|loss)
   | "startCancelled" // a bot-filled start vetoed — the veil collapses (bits-bot-backfill.md)
+  | "armClockTick" //   the last 5s of the ranked arm deadline, while unarmed (bits-arm-clock.md)
   // ── Ranked (bits-ranked.md § audio owed) ──────────────────────────────────
   | "queueMatchFound" //the matcher paired you — the summons (the accept sheet's rise)
   | "rankUp" //         the displayed rank climbed (server-computed rankChange)
@@ -293,6 +294,11 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // Owed from the Forge — silent until start_cancelled_1 lands (the missing-
   // manifest rule); a deflating "stand down" beat, not a defeat sting.
   startCancelled: { clips: bank("start_cancelled"), volume: 0.6 },
+  // Owed from the Forge — silent until arm_clock_tick_1 lands: a quiet,
+  // anxious tick on the last 5s of the ranked arm clock (bits-arm-clock.md).
+  // NOT countdownTick — that one means the match is starting; this one means
+  // you're about to be thrown out.
+  armClockTick: { clips: bank("arm_clock_tick"), volume: 0.4 },
 
   // ── Ranked (all four owed from the Forge — silent until their clips land;
   // the settle sounds fire off the server's rankedResult, never client math) ─

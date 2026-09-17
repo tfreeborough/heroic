@@ -345,6 +345,9 @@ same `Room` machinery, different rules:
 - **Arm deadline:** if either player hasn't armed within 60 s the match is **void** —
   no rating change, no Glory, the armed player is auto-requeued at their old wait
   priority, the idle player gets a **30 s queue lockout** (dodge penalty).
+  *(2026-09-16: the deadline is now visible — a draining bar over the arming views,
+  bits-arm-clock.md. Auto-arming the idler instead was rejected: it would cost an
+  innocent 2v2 teammate rating.)*
 - **Disconnect mid-match:** unchanged from the arena's law — the match never pauses,
   the body idles, the rejoin window stands. If they never return the wipe happens
   naturally and the result **stands as a loss**. Abandoning is losing; no special case.
@@ -746,6 +749,8 @@ of places that assume exactly two people.
 - `ceremony_shift` **NEW 2026-08-02, clip owed**: a soft airy whoosh on the
   ceremony's crossfade from the Glory count to the rating reveal — transition
   texture, not a stinger. On the catalogue (`ceremonyShift`), silent until forged.
+- `arm_clock_tick` **NEW 2026-09-16, clip owed**: a quiet dry tick on the last 5 s of the
+  arm clock (bits-arm-clock.md). On the catalogue (`armClockTick`), silent until forged.
 - ~~Tier badge art ×6~~ **FORGED + wired 2026-08-01** (`badge-bits`, shield anchor + per-tier
   dominant-colour system — asset-forge.md; `RANK_BADGES` in RankedScreen.tsx). Division
   numerals composite client-side. Squint-verified at 28px on the void: the colour ramp names
