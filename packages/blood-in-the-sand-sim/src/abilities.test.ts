@@ -435,6 +435,40 @@ describe("mirror guard", () => {
     expect(shot === undefined ? returnHits.length : 1).toBeGreaterThan(0);
     if (returnHits.length > 0) expect(hp(sim, 0)).toBeLessThan(100);
   });
+
+  test("the returned shot hits with the SHOOTER's weapon, not the guard's", () => {
+    // Bow (attack 20) into a fang guard (attack 5): the arrow must come back
+    // bow-hard — 18 base ±15% ⇒ ≥15 — not as a fang nick (≤7 even on a crit).
+    const sim = makeFight({ w0: "bow", w1: "fang", a1: ["mirror-guard", "dash"] });
+    sim.state.players[0]!.mover.pos = { x: 100, y: 400 };
+    sim.state.players[1]!.mover.pos = { x: 300, y: 400 };
+    forceActive(sim.state.players[1]!, "mirror-guard", 999);
+
+    sim.state.projectiles.push({
+      pos: { x: 260, y: 400 },
+      dir: { x: 1, y: 0 },
+      speed: 650,
+      radius: 6,
+      traveled: 0,
+      maxRange: 420,
+      pierceLeft: 0,
+      hitIds: [],
+      turnRate: 0,
+      turnLeft: 0,
+      id: 999,
+      ownerId: 0,
+      kind: "bow",
+      targetId: null,
+    });
+
+    const returnHits = ofType(run(sim, 40), "hit").filter((h) => h.event.targetId === 0);
+    // (alice's own auto-fire bounces back too — every return is a bow hit.)
+    expect(returnHits.length).toBeGreaterThan(0);
+    for (const h of returnHits) {
+      expect(h.event.attackerId).toBe(1); // the guard keeps the credit
+      expect(h.event.damage).toBeGreaterThanOrEqual(15);
+    }
+  });
 });
 
 describe("ironhide", () => {

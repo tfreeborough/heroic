@@ -176,3 +176,52 @@ export const applyMatchAchievements = async (db: Db, input: MatchAchievementsInp
   await db.batch(statements, "write");
   return true;
 };
+
+export interface OwedBounties {
+  /** Ledger rows written (or, on a dry run, that would be). */
+  payments: number;
+  glory: number;
+  players: number;
+}
+
+/**
+ * Pay every deed bounty that was earned but never paid (bits-deed-glory.md
+ * § rollout) — for the day bounties land on deeds players already hold, or
+ * a later pass starts paying a deed that used to pay nothing. Writes the
+ * SAME ledger row the live award writes (same source, same idempotency
+ * key), so it can never pay a deed twice and is safe to run again. It only
+ * ever ADDS missing payments; a bounty that was raised is not topped up.
+ * Takes plain `deedId → Glory` so this package stays blind to definitions.
+ */
+export const payOwedBounties = async (
+  db: Db,
+  bounties: Readonly<Record<string, number>>,
+  opts: { apply: boolean },
+): Promise<OwedBounties> => {
+  const paying = Object.entries(bounties).filter(([, glory]) => glory > 0);
+  const owed = { payments: 0, glory: 0, players: new Set<string>() };
+  for (const [deedId, glory] of paying) {
+    const rows = await db.execute({
+      sql: `SELECT u.player_id FROM achievement_unlocks u
+            WHERE u.achievement_id = ?
+              AND NOT EXISTS (SELECT 1 FROM glory_ledger l
+                              WHERE l.idempotency_key = 'achievement:' || u.player_id || ':' || u.achievement_id)`,
+      args: [deedId],
+    });
+    for (const row of rows.rows) owed.players.add(String(row["player_id"]));
+    owed.payments += rows.rows.length;
+    owed.glory += rows.rows.length * glory;
+  }
+  if (opts.apply && owed.payments > 0) {
+    await db.batch(
+      paying.map(([deedId, glory]) => ({
+        sql: `INSERT OR IGNORE INTO glory_ledger (player_id, amount, source, idempotency_key)
+              SELECT player_id, ?, 'achievement:' || achievement_id, 'achievement:' || player_id || ':' || achievement_id
+              FROM achievement_unlocks WHERE achievement_id = ?`,
+        args: [glory, deedId] as (string | number)[],
+      })),
+      "write",
+    );
+  }
+  return { payments: owed.payments, glory: owed.glory, players: owed.players.size };
+};

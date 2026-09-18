@@ -3,7 +3,7 @@
  * this file holds only what the game deliberately doesn't (US list prices,
  * bits-store.md § S3 — the consoles localise them, HQ estimates in USD).
  */
-import { ABILITIES, WEAPONS, ACHIEVEMENT_DEFS, itemDisplayName } from "@heroic/blood-in-the-sand-sim";
+import { ABILITIES, WEAPONS, ACHIEVEMENT_DEFS, bountyOf, itemDisplayName } from "@heroic/blood-in-the-sand-sim";
 
 export const SEASON = 1;
 export const BRACKETS = ["1v1", "2v2"] as const;
@@ -29,9 +29,16 @@ export interface DeedInfo {
   title: string;
   description: string;
   secret: boolean;
+  /** Glory the deed pays on unlock — 0 for most (bits-deed-glory.md). */
+  bounty: number;
 }
 
 export const deeds = (): DeedInfo[] =>
-  (ACHIEVEMENT_DEFS as readonly { id: string; board: string; title: string; description: string; secret?: boolean }[]).map(
-    (d) => ({ id: d.id, board: d.board, title: d.title, description: d.description, secret: d.secret === true }),
-  );
+  ACHIEVEMENT_DEFS.map((d) => ({
+    id: d.id,
+    board: d.board,
+    title: d.title,
+    description: d.description,
+    secret: d.secret === true,
+    bounty: bountyOf(d),
+  }));

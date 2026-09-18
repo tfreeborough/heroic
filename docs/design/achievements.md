@@ -324,7 +324,9 @@ carry the data; no sim or wire changes. Feats cascade deliberately
 ceremony, not a bug). Thresholds: 7 reflects / 300 damage / 10 crits (reflects+crits
 Tom-tuned 2026-08-08; damage retuned 300 → 750 on 2026-08-25, see below). Each feat needs a forged icon (subjects briefed
 in the style bible; null until the PNG lands) and lives in a codex chapter
-(test-enforced). Rewards deliberately unset — economy/titles pass is Tom's.
+(test-enforced). ~~Rewards deliberately unset — economy/titles pass is Tom's.~~
+**Glory bounties landed 2026-09-18** — bands, rules, budget and the full payout table
+live in [bits-deed-glory.md](./bits-deed-glory.md).
 
 ## First-win ceremony audit *(Tom 2026-08-25: five deeds off one 1v1 win "felt cheap")*
 

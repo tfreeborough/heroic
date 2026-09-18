@@ -72,13 +72,19 @@ no per-capture flags beyond `--seconds`. A take is deterministic (fixed
 seed) — re-shoot after a balance patch and the beat is identical.
 
 **Pushing renders to Google Drive:** `bun run upload` copies every mp4 in
-`out/` to the `blood-in-the-sand/promos` folder of your Drive via rclone
-(only new/changed files transfer — it's a sync, so re-renders re-upload and
-already-current files are skipped). `bun run publish` = render the whole
-roster, then upload. One-time setup: `rclone config create gdrive drive scope=drive.file`
+`out/` to `Heroic/BITS/Promos` in your Drive via rclone (only new/changed
+files transfer — it's a sync, so re-renders re-upload and already-current
+files are skipped). `bun run publish` = render the whole roster, then upload.
+One-time setup: `rclone config create gdrive drive scope=drive.file`
 (opens a browser to sign in; the drive.file scope means rclone can only
-touch files it created, nothing else in your Drive). Change the destination
-folder in package.json's `upload` script.
+touch files it created, nothing else in your Drive).
+
+Because of that scope rclone can't *see* folders you made in the Drive UI,
+so the `upload` script doesn't use a path from the Drive root — it roots
+itself at the `Heroic/BITS` folder by id (`root_folder_id=…`, the id from
+the folder's URL) and writes into `Promos` beneath it. Spelling the path out
+instead (`gdrive:Heroic/BITS/Promos`) would quietly create a second, duplicate
+`Heroic` tree. To retarget — another game, say — swap in that game's folder id.
 
 **Tuning a script without the simulator:** `bun scripts/dry-run.ts --kind
 weapon --id staff` shoots the script headlessly and prints the beat

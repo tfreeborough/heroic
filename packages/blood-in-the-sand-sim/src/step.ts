@@ -632,6 +632,9 @@ const stepProjectiles = (
     const owner = seats[shot.ownerId];
     if (!owner) continue; // seat vanished (lobby edge) — drop the shot
     const weapon = WEAPONS[shot.kind];
+    // Who the damage rolls as: a reflected shot keeps its SHOOTER's stat sheet
+    // (their weapon, their Titan's Draught) — the guard only takes the credit.
+    const striker = (shot.shooterId !== undefined ? seats[shot.shooterId] : null) ?? owner;
 
     // Steer toward the fire-time target while it lives, capped per tick — a
     // low cap is the "slightly homing" feel: real at range, outrunnable close.
@@ -667,7 +670,7 @@ const stepProjectiles = (
       if (isDeployableId(hitId)) {
         const dummy = state.deployables.find((d) => d.id === hitId);
         if (!dummy) continue;
-        const rolled = damageDummy(owner, dummy, sim.rng);
+        const rolled = damageDummy(striker, dummy, sim.rng);
         events.push({
           type: "hit", attackerId: shot.ownerId, targetId: dummy.id, damage: rolled.damage,
           crit: rolled.crit, lethal: false, x: dummy.pos.x, y: dummy.pos.y,
@@ -681,6 +684,7 @@ const stepProjectiles = (
         // The bounce is a field swap, not a new system: ownership flips, the
         // shot turns on its shooter with strong homing and a fresh range
         // budget. hitIds already holds the reflector, so it can't re-hit them.
+        shot.shooterId ??= owner.id;
         shot.ownerId = defender.id;
         shot.targetId = owner.id;
         shot.reflected = true;
@@ -693,7 +697,7 @@ const stepProjectiles = (
         break;
       }
 
-      const rolled = resolvePlayerHit(owner, defender, sim.rng);
+      const rolled = resolvePlayerHit(striker, defender, sim.rng);
       const impulse = projectileKnockback(shot, weapon.attack.knockback ?? 0);
       applyImpulse(defender, impulse.x, impulse.y, 1, owner.id);
       events.push({

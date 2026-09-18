@@ -9,6 +9,7 @@ export {
   type PlayerMatchStats,
   type SkirmishRoomContext,
 } from "./summary";
+export { BOUNTY_BANDS, BOUNTY_BUDGET, bounty, bountyOf, type BountyBand } from "./bounties";
 export { COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
 export {
   ACHIEVEMENT_DEFS_SKIRMISH,

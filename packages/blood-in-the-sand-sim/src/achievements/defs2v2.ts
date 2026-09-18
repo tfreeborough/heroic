@@ -10,15 +10,18 @@
  * milestones read; achievements.md § M4 retired, the crossing trap).
  *
  * Titles are PLACEHOLDERS in the right voice — Tom's naming pass, as ever.
- * Rewards deliberately sparse pending the economy pass; the two joke deeds
- * (Along for the Ride, Nobody's Hero) may only ever carry TITLES — one is a
- * loss and neither is a thing to farm (the loss-streak rule, test-enforced).
+ * Glory bounties landed 2026-09-18 (bits-deed-glory.md — the duo-wins
+ * spine sits a band low because every 2v2 win is also a ranked win on the
+ * Season I spine); the two joke deeds (Along for the Ride, Nobody's Hero)
+ * may only ever carry TITLES — one is a loss and neither is a thing to farm
+ * (the loss-streak rule, test-enforced).
  *
  * Board positions live in their own coordinate space east of the Season I
  * board (x ≥ 1400) — the overlap test is global, and nothing persisted
  * cares about `pos` (the Chronicle replaced the map).
  */
 import { milestoneChain, type BoardDef } from "@heroic/achievements";
+import { bounty } from "./bounties";
 import { COUNTERS } from "./counters";
 import { SWIFT_REVENGE_SEC, summaryTeamOf, wonMatch, type MatchSummary } from "./summary";
 import type { BitsAchievementDef } from "./defs";
@@ -40,7 +43,7 @@ const FIRST_2V2: BitsAchievementDef = {
   title: "Two Blades, One Sand",
   description: "Fight in your first 2v2 ranked match.",
   icon: "deed-two-blades",
-  rewards: [{ kind: "title" }],
+  rewards: [{ kind: "title" }, bounty(10)],
   parent: null,
   pos: { x: OX, y: 0 },
   trigger: { kind: "milestone", counter: COUNTERS.rankedMatchesIn(BRACKET), threshold: 1 },
@@ -56,10 +59,10 @@ const duoWins = milestoneChain<MatchSummary>({
   origin: { x: OX, y: -130 },
   step: { x: 0, y: -115 },
   tiers: [
-    { threshold: 5, title: "Sworn Brothers", description: "Win 5 ranked 2v2 matches." },
-    { threshold: 25, title: "The Twin Lions", description: "Win 25 ranked 2v2 matches." },
-    { threshold: 100, title: "Blood Brothers", description: "Win 100 ranked 2v2 matches.", rewards: [{ kind: "title" }] },
-    { threshold: 250, title: "The Dioscuri", description: "Win 250 ranked 2v2 matches.", rewards: [{ kind: "title" }] },
+    { threshold: 5, title: "Sworn Brothers", description: "Win 5 ranked 2v2 matches.", rewards: [bounty(10)] },
+    { threshold: 25, title: "The Twin Lions", description: "Win 25 ranked 2v2 matches.", rewards: [bounty(25)] },
+    { threshold: 100, title: "Blood Brothers", description: "Win 100 ranked 2v2 matches.", rewards: [{ kind: "title" }, bounty(100)] },
+    { threshold: 250, title: "The Dioscuri", description: "Win 250 ranked 2v2 matches.", rewards: [{ kind: "title" }, bounty(200)] },
   ],
 });
 
@@ -74,9 +77,9 @@ const assists = milestoneChain<MatchSummary>({
   parent: FIRST_2V2.id,
   ...rib(0),
   tiers: [
-    { threshold: 10, title: "Wingman", description: "Soften 10 foes your partner then finishes." },
-    { threshold: 50, title: "The Setup Man", description: "Soften 50 foes your partner then finishes." },
-    { threshold: 250, title: "The Second Blade", description: "Soften 250 foes your partner then finishes.", rewards: [{ kind: "title" }] },
+    { threshold: 10, title: "Wingman", description: "Soften 10 foes your partner then finishes.", rewards: [bounty(5)] },
+    { threshold: 50, title: "The Setup Man", description: "Soften 50 foes your partner then finishes.", rewards: [bounty(25)] },
+    { threshold: 250, title: "The Second Blade", description: "Soften 250 foes your partner then finishes.", rewards: [{ kind: "title" }, bounty(100)] },
   ],
 });
 
@@ -88,9 +91,9 @@ const revenge = milestoneChain<MatchSummary>({
   parent: FIRST_2V2.id,
   ...rib(1),
   tiers: [
-    { threshold: 5, title: "An Eye for an Eye", description: "Slay 5 foes who had just killed your partner." },
-    { threshold: 25, title: "Vendetta", description: "Slay 25 foes who had just killed your partner." },
-    { threshold: 100, title: "Nemesis", description: "Slay 100 foes who had just killed your partner.", rewards: [{ kind: "title" }] },
+    { threshold: 5, title: "An Eye for an Eye", description: "Slay 5 foes who had just killed your partner.", rewards: [bounty(5)] },
+    { threshold: 25, title: "Vendetta", description: "Slay 25 foes who had just killed your partner.", rewards: [bounty(25)] },
+    { threshold: 100, title: "Nemesis", description: "Slay 100 foes who had just killed your partner.", rewards: [{ kind: "title" }, bounty(100)] },
   ],
 });
 
@@ -102,9 +105,9 @@ const clutch = milestoneChain<MatchSummary>({
   parent: FIRST_2V2.id,
   ...rib(2),
   tiers: [
-    { threshold: 1, title: "Against the Odds", description: "Win a round alone against both foes after your partner falls." },
-    { threshold: 10, title: "One Against Two", description: "Win 10 rounds alone against both foes." },
-    { threshold: 50, title: "The Last Man Standing", description: "Win 50 rounds alone against both foes.", rewards: [{ kind: "title" }] },
+    { threshold: 1, title: "Against the Odds", description: "Win a round alone against both foes after your partner falls.", rewards: [bounty(25)] },
+    { threshold: 10, title: "One Against Two", description: "Win 10 rounds alone against both foes.", rewards: [bounty(50)] },
+    { threshold: 50, title: "The Last Man Standing", description: "Win 50 rounds alone against both foes.", rewards: [{ kind: "title" }, bounty(200)] },
   ],
 });
 
@@ -116,9 +119,9 @@ const doubleKills = milestoneChain<MatchSummary>({
   parent: FIRST_2V2.id,
   ...rib(3),
   tiers: [
-    { threshold: 1, title: "Two for One", description: "Strike the killing blow on both foes in a single round." },
-    { threshold: 25, title: "Reaper's Pair", description: "Strike both killing blows in 25 rounds." },
-    { threshold: 100, title: "Both Barrels", description: "Strike both killing blows in 100 rounds.", rewards: [{ kind: "title" }] },
+    { threshold: 1, title: "Two for One", description: "Strike the killing blow on both foes in a single round.", rewards: [bounty(10)] },
+    { threshold: 25, title: "Reaper's Pair", description: "Strike both killing blows in 25 rounds.", rewards: [bounty(25)] },
+    { threshold: 100, title: "Both Barrels", description: "Strike both killing blows in 100 rounds.", rewards: [{ kind: "title" }, bounty(100)] },
   ],
 });
 
@@ -139,6 +142,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "In Concert",
     description: "You and your partner each fell a foe within two seconds of one another.",
     icon: "deed-concert",
+    rewards: [bounty(25)],
     parent: FIRST_2V2.id,
     pos: feat(0, 0),
     trigger: { kind: "feat", test: (s, p) => (s.stats[p]?.concertKills ?? 0) >= 1 },
@@ -149,6 +153,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "The Ambush",
     description: "Strike a killing blow within five seconds of the fight starting.",
     icon: "deed-ambush",
+    rewards: [bounty(25)],
     parent: FIRST_2V2.id,
     pos: feat(1, 0),
     trigger: {
@@ -165,6 +170,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "Swift Vengeance",
     description: `Avenge your fallen partner within ${SWIFT_REVENGE_SEC} seconds.`,
     icon: "deed-swift-vengeance",
+    rewards: [bounty(25)],
     parent: revenge[0]!.id,
     pos: feat(0, 1),
     trigger: { kind: "feat", test: (s, p) => (s.stats[p]?.swiftRevenges ?? 0) >= 1 },
@@ -175,6 +181,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "The Last Word",
     description: "Win the deciding round alone against both foes.",
     icon: "deed-last-word",
+    rewards: [bounty(100)],
     parent: clutch[0]!.id,
     pos: feat(1, 1),
     trigger: {
@@ -193,6 +200,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "Shieldwall",
     description: "Win a ranked 2v2 match in which neither you nor your partner dies.",
     icon: "deed-shieldwall",
+    rewards: [bounty(100)],
     parent: duoWins[0]!.id,
     pos: feat(0, 2),
     trigger: {
@@ -209,6 +217,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "Matching Set",
     description: "Win a ranked 2v2 match wielding the same weapon as your partner.",
     icon: "deed-matching-set",
+    rewards: [bounty(10)],
     parent: duoWins[0]!.id,
     pos: feat(1, 2),
     trigger: {
@@ -227,6 +236,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "Selfless",
     description: "Restore 150 of your partner's health in a single ranked 2v2 match.",
     icon: "deed-selfless",
+    rewards: [bounty(50)],
     parent: FIRST_2V2.id,
     pos: feat(0, 3),
     trigger: { kind: "feat", test: (s, p) => (s.stats[p]?.alliedHealing ?? 0) >= 150 },
@@ -237,6 +247,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     title: "Even Split",
     description: "Win a ranked 2v2 match with you and your partner striking exactly the same number of killing blows — at least two each.",
     icon: "deed-even-split",
+    rewards: [bounty(25)],
     parent: duoWins[0]!.id,
     pos: feat(1, 3),
     trigger: {
@@ -257,7 +268,7 @@ const FEATS_2V2: BitsAchievementDef[] = [
     icon: "deed-meat-shield",
     parent: duoWins[0]!.id,
     pos: feat(0, 4),
-    rewards: [{ kind: "title" }],
+    rewards: [{ kind: "title" }, bounty(25)],
     trigger: {
       kind: "feat",
       test: (s, p) => {

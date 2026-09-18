@@ -11,7 +11,7 @@ import {
   createDb,
   ensureSchema,
   getRating,
-  gloryBalance,
+  gloryEarned,
   registerPlayer,
   type Db,
 } from "@heroic/blood-in-the-sand-persistence";
@@ -537,7 +537,7 @@ describe("ranked flow", () => {
 
     // The ledger and ladder agree.
     const accountA = a.ws.data.accountId!;
-    expect(await gloryBalance(db, accountA)).toBe(23);
+    expect(await gloryEarned(db, accountA)).toBe(23); // match pay alone — deed bounties land on top
     expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1512);
 
     // Settled + ceremony held ⇒ the room closes on the next beat. (A ranked
@@ -919,11 +919,13 @@ describe("ranked bot backfill", () => {
 
     // The DB holds exactly one side of the story.
     const accountA = a.ws.data.accountId!;
-    expect(await gloryBalance(db, accountA)).toBe(23);
+    expect(await gloryEarned(db, accountA)).toBe(23); // match pay alone — deed bounties land on top
     expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1512);
     const ratings = await db.execute("SELECT subject_id FROM ranked_ratings");
     expect(ratings.rows.map((r) => String(r["subject_id"]))).toEqual([accountA]);
-    const glory = await db.execute("SELECT player_id FROM glory_ledger");
+    // DISTINCT: the human's row count grew with deed bounties — the point is
+    // that no bot ever appears, for match pay or a bounty.
+    const glory = await db.execute("SELECT DISTINCT player_id FROM glory_ledger");
     expect(glory.rows.map((r) => String(r["player_id"]))).toEqual([accountA]);
   });
 
@@ -1204,10 +1206,12 @@ describe("2v2 solo queue", () => {
     // The DB holds exactly one player's story — and all four history rows.
     const accountA = a.ws.data.accountId!;
     expect((await getRating(db, accountA, SEASON, "2v2")).rating).toBe(1512);
-    expect(await gloryBalance(db, accountA)).toBe(23);
+    expect(await gloryEarned(db, accountA)).toBe(23); // match pay alone — deed bounties land on top
     const ratings = await db.execute("SELECT subject_id FROM ranked_ratings");
     expect(ratings.rows.map((r) => String(r["subject_id"]))).toEqual([accountA]);
-    const glory = await db.execute("SELECT player_id FROM glory_ledger");
+    // DISTINCT: the human's row count grew with deed bounties — the point is
+    // that no bot ever appears, for match pay or a bounty.
+    const glory = await db.execute("SELECT DISTINCT player_id FROM glory_ledger");
     expect(glory.rows.map((r) => String(r["player_id"]))).toEqual([accountA]);
     const players = await db.execute("SELECT subject_id FROM ranked_match_players");
     expect(players.rows).toHaveLength(4);
@@ -1306,8 +1310,8 @@ describe("2v2 solo queue", () => {
     // Ladder + ledger agree, per member.
     expect((await getRating(db, socks[0]!.ws.data.accountId!, SEASON, "2v2")).rating).toBe(1605);
     expect((await getRating(db, socks[1]!.ws.data.accountId!, SEASON, "2v2")).rating).toBe(1410);
-    expect(await gloryBalance(db, socks[1]!.ws.data.accountId!)).toBe(23);
-    expect(await gloryBalance(db, socks[3]!.ws.data.accountId!)).toBe(5);
+    expect(await gloryEarned(db, socks[1]!.ws.data.accountId!)).toBe(23); // match pay alone — deed bounties land on top
+    expect(await gloryEarned(db, socks[3]!.ws.data.accountId!)).toBe(5);
     const players = await db.execute("SELECT subject_id FROM ranked_match_players");
     expect(players.rows).toHaveLength(4);
   });

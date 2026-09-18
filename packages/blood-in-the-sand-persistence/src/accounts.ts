@@ -46,13 +46,29 @@ export interface LinkInput {
  *
  * Unlock rows are copied WITHOUT their Glory rewards — the source player
  * was already paid when the deed fired, and that payment rides the ledger
- * sum below; re-paying here would double-credit shared deeds.
+ * sum below. A deed BOTH players hold is the exception: each was paid its
+ * bounty, so the source's payment for it is held back from the sum
+ * (bits-deed-glory.md § farming). Without that, a fresh anonymous identity
+ * re-earns the front-loaded early bounties and merges them in, over and
+ * over. Compared against the target's UNLOCK rows, not its ledger — an
+ * earlier merge lands as one aggregate row, so a ledger match would miss
+ * every deed the account only holds by merge. Read before the unlock union
+ * below, and harmless on a retry (the credit's idempotency key no-ops).
  */
 const mergePlayers = async (db: Db, fromId: string, intoId: string): Promise<boolean> => {
-  const [glory, signets] = await Promise.all([
+  const [balance, signets, twicePaid] = await Promise.all([
     gloryBalance(db, fromId),
     signetBalance(db, fromId),
+    db.execute({
+      sql: `SELECT COALESCE(SUM(l.amount), 0) AS glory FROM glory_ledger l
+            WHERE l.player_id = ? AND l.amount > 0 AND l.source LIKE 'achievement:%'
+              AND EXISTS (SELECT 1 FROM achievement_unlocks u
+                          WHERE u.player_id = ? AND 'achievement:' || u.achievement_id = l.source)`,
+      args: [fromId, intoId],
+    }),
   ]);
+  // Never below zero: bounties already spent stay spent.
+  const glory = Math.max(0, balance - Number(twicePaid.rows[0]?.["glory"] ?? 0));
   let moved = false;
   if (glory !== 0) {
     moved =

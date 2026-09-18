@@ -12,7 +12,7 @@
     "render:store": "bun run sync && bun scripts/render-store.ts",
     "capture": "bun run sync && bun scripts/capture.ts",
     "capture:roster": "bun run sync && bun scripts/capture.ts --all",
-    "upload": "rclone copy out gdrive:blood-in-the-sand/promos --include \"*.mp4\" --progress",
+    "upload": "rclone copy out \"gdrive,root_folder_id=1BKUER-5XJJa2kRZZ1NwaTlPl080niB5Q:Promos\" --include \"*.mp4\" --progress",
     "publish": "bun run render:roster && bun run upload",
     "typecheck": "tsc --noEmit"
   },

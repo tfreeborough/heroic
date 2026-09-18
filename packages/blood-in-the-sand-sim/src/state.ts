@@ -277,6 +277,10 @@ export interface ArenaProjectile extends ProjectileState {
   targetId: number | null;
   /** Bounced off a Mirror Guard: ownership flipped, homing hard at the shooter. */
   reflected?: boolean;
+  /** Reflected shots only: the seat that FIRED it. `ownerId` (credit, team)
+   * flips to the guard, but the shot still hits with its shooter's weapon —
+   * "damage unchanged" (pvp-abilities.md). Survives a double bounce. */
+  shooterId?: number;
 }
 
 export type DeployableKind =
