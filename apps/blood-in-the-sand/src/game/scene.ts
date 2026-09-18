@@ -9,7 +9,7 @@
  * arenas when the next room rolls a different one.
  */
 import { Skia, type SkImage, type SkRect } from "@shopify/react-native-skia";
-import { loadZone, TILESETS, type TilesetDef, type Zone } from "@heroic/core";
+import { loadZone, TILESETS, type PlacedProp, type TilesetDef, type Zone } from "@heroic/core";
 import { arenaById } from "@heroic/blood-in-the-sand-sim";
 import { buildCrowd, type Crowd } from "./crowd";
 
@@ -39,7 +39,11 @@ export interface ArenaScene {
   /** The animated pit crowd — a procedural amphitheatre in the void beyond
    *  the sand, revealed by the relaxed camera clamp. */
   crowd: Crowd;
+  /** Standing props only (`ground: false`): the y-sorted walk-behind pass. */
   propsSorted: PropSprite[];
+  /** Ground props (`ground: true`): baked into the floor image under every
+   *  body (render.ts floorImage), never sorted or faded. */
+  groundProps: PropSprite[];
   /** Wall geometry, pre-allocated (two fresh rects per wall per frame was
    *  free GC food — the allocation diet). */
   wallRects: { body: SkRect; top: SkRect }[];
@@ -48,6 +52,17 @@ export interface ArenaScene {
   bakedAtlas: SkImage | null;
   bakedFloor: SkImage | null;
 }
+
+const toSprite = (p: PlacedProp): PropSprite => ({
+  y: p.y,
+  left: p.x - p.w / 2,
+  top: p.y - p.h,
+  w: p.w,
+  h: p.h,
+  src: Skia.XYWHRect(p.src.x, p.src.y, p.src.w, p.src.h),
+  dst: Skia.XYWHRect(p.x - p.w / 2, p.y - p.h, p.w, p.h),
+  fade: 1,
+});
 
 const scenes = new Map<string, ArenaScene>();
 
@@ -67,18 +82,8 @@ export const arenaScene = (zoneId: string): ArenaScene => {
     tileset: TILESETS[zone.tileset],
     floorRect: Skia.XYWHRect(0, 0, worldW, worldH),
     crowd: buildCrowd(worldW, worldH),
-    propsSorted: [...zone.props]
-      .sort((a, b) => a.y - b.y)
-      .map((p) => ({
-        y: p.y,
-        left: p.x - p.w / 2,
-        top: p.y - p.h,
-        w: p.w,
-        h: p.h,
-        src: Skia.XYWHRect(p.src.x, p.src.y, p.src.w, p.src.h),
-        dst: Skia.XYWHRect(p.x - p.w / 2, p.y - p.h, p.w, p.h),
-        fade: 1,
-      })),
+    propsSorted: zone.props.filter((p) => !p.ground).sort((a, b) => a.y - b.y).map(toSprite),
+    groundProps: zone.props.filter((p) => p.ground).map(toSprite),
     wallRects: zone.walls.map((w) => ({
       body: Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 + 6, w.w, w.h),
       top: Skia.XYWHRect(w.x - w.w / 2, w.y - w.h / 2 - 6, w.w, w.h),

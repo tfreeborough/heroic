@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Pressable } from "react-native-gesture-handler";
+import { Pressable, ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ARENAS, ARENA_IDS, DIFFICULTIES, DIFFICULTY_IDS, type DifficultyId } from "@heroic/blood-in-the-sand-sim";
+import { ARENA_IDS, DIFFICULTIES, DIFFICULTY_IDS, type DifficultyId } from "@heroic/blood-in-the-sand-sim";
+import { ArenaPicker } from "../components/ArenaPicker";
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { loadBotDifficulty, saveBotDifficulty } from "../settings";
 import type { PracticeMode } from "../net/practice";
@@ -82,95 +83,87 @@ export const PracticeScreen = ({ onBack, onArmory, onStart }: PracticeScreenProp
     <View style={[styles.root, { paddingTop: insets.top + 16, paddingBottom: insets.bottom }]}>
       <ScreenHeader onBack={onBack} onPurse={onArmory} />
       <ScreenSign title="PRACTICE" />
-      <Text style={styles.hint}>{OPPONENT_HINTS[opponent]}</Text>
+      {/* The body scrolls: with the map cards the column outgrows a small phone. */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+        <Text style={styles.hint}>{OPPONENT_HINTS[opponent]}</Text>
 
-      <Text style={styles.sectionLabel}>OPPONENTS</Text>
-      <View style={styles.sizeRow}>
-        {(["bot", "dummies"] as const).map((o) => (
-          <Pressable key={o} onPress={() => setOpponent(o)} style={[styles.sizeOption, opponent === o && styles.sizeOptionOn]}>
-            <Text style={[styles.sizeText, opponent === o && styles.sizeTextOn]}>
-              {o === "bot" ? "BOTS" : "TARGET DUMMIES"}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* The map: every registered arena, shipped or not — practice is where a
-          new one gets walked. Online rooms roll from the rotation instead. */}
-      <Text style={styles.sectionLabel}>ARENA</Text>
-      <View style={styles.sizeRow}>
-        {[null, ...ARENA_IDS].map((id) => (
-          <Pressable
-            key={id ?? "random"}
-            onPress={() => setArena(id)}
-            style={[styles.sizeOption, arena === id && styles.sizeOptionOn]}
-          >
-            <Text style={[styles.sizeText, arena === id && styles.sizeTextOn]}>
-              {id === null ? "RANDOM" : ARENAS[id]!.name.toUpperCase()}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {/* The range has no knobs — a fixed line of dummies, no size, no tier. */}
-      {opponent === "bot" && (
-        <>
-          <Text style={styles.sectionLabel}>MATCH SIZE</Text>
-          <View style={styles.sizeRow}>
-            {[1, 2, 3, 4].map((n) => (
-              <Pressable
-                key={n}
-                onPress={() => {
-                  setTeamSize(n);
-                  setBrawl(false);
-                }}
-                style={[styles.sizeOption, !brawl && teamSize === n && styles.sizeOptionOn]}
-              >
-                <Text style={[styles.sizeText, !brawl && teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={() => setBrawl(true)}
-              style={[styles.sizeOption, brawl && styles.sizeOptionOn]}
-            >
-              <Text style={[styles.sizeText, brawl && styles.sizeTextOn]}>BRAWL</Text>
+        <Text style={styles.sectionLabel}>OPPONENTS</Text>
+        <View style={styles.sizeRow}>
+          {(["bot", "dummies"] as const).map((o) => (
+            <Pressable key={o} onPress={() => setOpponent(o)} style={[styles.sizeOption, opponent === o && styles.sizeOptionOn]}>
+              <Text style={[styles.sizeText, opponent === o && styles.sizeTextOn]}>
+                {o === "bot" ? "BOTS" : "TARGET DUMMIES"}
+              </Text>
             </Pressable>
-          </View>
-          {brawl ? (
-            <Text style={styles.tierHint}>six enter, every bot for itself — last one standing</Text>
-          ) : null}
+          ))}
+        </View>
 
-          <Text style={styles.sectionLabel}>BOT SKILL</Text>
-          <View style={styles.tierGrid}>
-            {DIFFICULTY_IDS.map((d) => (
+        {/* The map: every registered arena, shipped or not — practice is where a
+            new one gets walked. Online rooms roll from the rotation instead. */}
+        <Text style={styles.sectionLabel}>ARENA</Text>
+        <ArenaPicker ids={ARENA_IDS} value={arena} onChange={setArena} />
+
+        {/* The range has no knobs — a fixed line of dummies, no size, no tier. */}
+        {opponent === "bot" && (
+          <>
+            <Text style={styles.sectionLabel}>MATCH SIZE</Text>
+            <View style={styles.sizeRow}>
+              {[1, 2, 3, 4].map((n) => (
+                <Pressable
+                  key={n}
+                  onPress={() => {
+                    setTeamSize(n);
+                    setBrawl(false);
+                  }}
+                  style={[styles.sizeOption, !brawl && teamSize === n && styles.sizeOptionOn]}
+                >
+                  <Text style={[styles.sizeText, !brawl && teamSize === n && styles.sizeTextOn]}>{`${n}v${n}`}</Text>
+                </Pressable>
+              ))}
               <Pressable
-                key={d}
-                onPress={() => pickDifficulty(d)}
-                style={[styles.tierOption, difficulty === d && styles.tierOptionOn]}
+                onPress={() => setBrawl(true)}
+                style={[styles.sizeOption, brawl && styles.sizeOptionOn]}
               >
-                <Text style={[styles.tierText, difficulty === d && styles.tierTextOn]}>
-                  {DIFFICULTIES[d].name.toUpperCase()}
-                </Text>
+                <Text style={[styles.sizeText, brawl && styles.sizeTextOn]}>BRAWL</Text>
               </Pressable>
-            ))}
-          </View>
-          <Text style={styles.tierHint}>{TIER_HINTS[difficulty]}</Text>
-        </>
-      )}
+            </View>
+            {brawl ? (
+              <Text style={styles.tierHint}>six enter, every bot for itself — last one standing</Text>
+            ) : null}
 
-      <Pressable
-        onPress={() => onStart(name, teamSize, difficulty, opponent, opponent === "bot" && brawl, arena)}
-        style={styles.play}
-      >
-        <Text style={styles.playText}>{opponent === "bot" ? "ARM YOURSELF" : "ENTER THE RANGE"}</Text>
-      </Pressable>
-      <Text style={styles.playingAs}>{`playing as ${name}`}</Text>
+            <Text style={styles.sectionLabel}>BOT SKILL</Text>
+            <View style={styles.tierGrid}>
+              {DIFFICULTY_IDS.map((d) => (
+                <Pressable
+                  key={d}
+                  onPress={() => pickDifficulty(d)}
+                  style={[styles.tierOption, difficulty === d && styles.tierOptionOn]}
+                >
+                  <Text style={[styles.tierText, difficulty === d && styles.tierTextOn]}>
+                    {DIFFICULTIES[d].name.toUpperCase()}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.tierHint}>{TIER_HINTS[difficulty]}</Text>
+          </>
+        )}
+
+        <Pressable
+          onPress={() => onStart(name, teamSize, difficulty, opponent, opponent === "bot" && brawl, arena)}
+          style={styles.play}
+        >
+          <Text style={styles.playText}>{opponent === "bot" ? "ARM YOURSELF" : "ENTER THE RANGE"}</Text>
+        </Pressable>
+        <Text style={styles.playingAs}>{`playing as ${name}`}</Text>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210", paddingTop: 64, paddingHorizontal: 20 },
+  body: { paddingBottom: 24 },
   hint: { color: "#8a7f70", fontSize: 13, marginTop: 10, lineHeight: 19 },
   // Every chip row sits under a sectionLabel now — the label owns the gap.
   sizeRow: { flexDirection: "row", gap: 8 },

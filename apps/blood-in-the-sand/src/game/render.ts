@@ -7,6 +7,7 @@
 import { Platform } from "react-native";
 import {
   BlendMode,
+  BlurStyle,
   ClipOp,
   createPicture,
   FillType,
@@ -14,6 +15,7 @@ import {
   matchFont,
   MipmapMode,
   PaintStyle,
+  PathOp,
   Skia,
   StrokeCap,
   StrokeJoin,
@@ -21,6 +23,7 @@ import {
   vec,
   type SkCanvas,
   type SkImage,
+  type SkPath,
   type SkPicture,
   type SkRect,
   type SkSurface,
@@ -226,6 +229,104 @@ const RANGE_RING_ALPHA = 0.22;
  * image swap rebakes. Ids the atlas doesn't cover fall back to the flat sand
  * fill, so a half-painted zone still reads.
  */
+/**
+ * Contact shadows — the one place the invisible collision materials show.
+ * A painted `solid` (a rock, a column) or `low` (a cliff lip, a parapet) is
+ * never drawn in-game — the terrain art is the visual — so nothing tells you
+ * where its edge is until you walk into it (Tom, 2026-09-17: fine as a
+ * learning curve, awful in a ranked round). So at bake the floor AROUND every
+ * blocker is darkened: an ambient-occlusion halo peaking just outside the
+ * collision boundary and fading both ways. Blended, not cut out (Tom's first
+ * read of a hard-clipped halo: "cut out and stuck back on the map"): the box
+ * union gets its corners rounded (dilate-then-erode through path ops, so the
+ * straight edges stay exactly where the feet stop), the halo is a wide blur of
+ * that shape, and the interior is thinned with a SOFT mask — a tighter blur of
+ * the same shape partly knocked out via DstOut — so the darkness bleeds under
+ * the rock art instead of stopping on a hard line, and the whole footprint
+ * carries a gentler wash of it (`innerKeep`). Height lives in the
+ * shadow: tall blockers (solid, occluding prop footprints) get a deep, wide
+ * halo; low ones (low, walk-only footprints) a thin halo pushed south, a small
+ * step lit from the north. Baked once with the floor → free per frame. Drawn
+ * walls and voids have their own visuals and are skipped. See
+ * docs/design/tilesets.md.
+ */
+const CONTACT_SHADOW = {
+  /** Stops feet, shots, and lock: a rock. Deep and wide. */
+  tall: { sigma: 10, alpha: 0.55, dy: 0, round: 24, inner: 6, innerKeep: 0.45 },
+  /** Stops feet only: a ledge you shoot over. Tight, lighter, cast south. */
+  low: { sigma: 5, alpha: 0.45, dy: 4, round: 16, inner: 4, innerKeep: 0.45 },
+} as const;
+
+interface ContactShadowLook {
+  /** Halo blur radius (world px) — how far the darkness spreads onto the floor. */
+  sigma: number;
+  /** Peak darkness. */
+  alpha: number;
+  /** Southward cast of the halo (world px); 0 = all round. */
+  dy: number;
+  /** Corner radius of the rounded silhouette (world px). */
+  round: number;
+  /** Softness of the interior knock-out (world px) — the bleed under the art. */
+  inner: number;
+  /** How much of the shade the interior KEEPS: 0 = knocked out to bare art,
+   *  1 = the whole box carries the shadow (Tom liked the under-art bleed,
+   *  2026-09-17, so the interior now holds a gentler wash of it). */
+  innerKeep: number;
+}
+
+/** The union of collision boxes as one outline with rounded corners. Dilate
+ *  by r with round joins (convex corners round), then erode by r the same way
+ *  (concave corners round): straight edges land back exactly on the boxes. */
+const roundedUnion = (
+  boxes: readonly { x: number; y: number; w: number; h: number }[],
+  r: number,
+): SkPath => {
+  // One path for the lot: greedy meshing splits a rock into several boxes, and
+  // a single winding-fill path unions them so no seam shows on shared edges.
+  const union = Skia.Path.Make();
+  for (const b of boxes) {
+    union.addRect(Skia.XYWHRect(b.x - b.w / 2, b.y - b.h / 2, b.w, b.h));
+  }
+  union.simplify();
+  const outerRing = union.copy();
+  outerRing.stroke({ width: 2 * r, join: StrokeJoin.Round });
+  const dilated = union.copy();
+  dilated.op(outerRing, PathOp.Union);
+  const innerRing = dilated.copy();
+  innerRing.stroke({ width: 2 * r, join: StrokeJoin.Round });
+  const rounded = dilated.copy();
+  rounded.op(innerRing, PathOp.Difference);
+  return rounded;
+};
+
+const drawContactShadows = (
+  canvas: SkCanvas,
+  boxes: readonly { x: number; y: number; w: number; h: number }[],
+  look: ContactShadowLook,
+): void => {
+  if (boxes.length === 0) return;
+  const shape = roundedUnion(boxes, look.round);
+  const paint = Skia.Paint();
+  // A layer so the knock-out below eats only this halo, never the floor art.
+  canvas.saveLayer();
+  paint.setColor(Skia.Color("#000000"));
+  paint.setAlphaf(look.alpha);
+  paint.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, look.sigma, true));
+  canvas.save();
+  canvas.translate(0, look.dy);
+  canvas.drawPath(shape, paint);
+  canvas.restore();
+  // Soft interior knock-out: DstOut keeps halo × (1 − mask·(1 − innerKeep)),
+  // so the darkness fades in under the art's edge rather than stopping on a
+  // line, and the interior settles at alpha × innerKeep.
+  paint.setColor(Skia.Color("#ffffff"));
+  paint.setAlphaf(1 - look.innerKeep);
+  paint.setBlendMode(BlendMode.DstOut);
+  paint.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, look.inner, true));
+  canvas.drawPath(shape, paint);
+  canvas.restore();
+};
+
 const floorImage = (atlas: SkImage): SkImage | null => {
   if (S.bakedAtlas === atlas) return S.bakedFloor;
   const surface = Skia.Surface.Make(S.worldW, S.worldH);
@@ -266,6 +367,17 @@ const floorImage = (atlas: SkImage): SkImage | null => {
     drawLayer(chunk.floor, true);
     drawLayer(chunk.decor, false);
   }
+  // Ground props (`props.ground`): flat art baked with the floor, in authored
+  // order, under the contact shadows so a rug sits beneath a rock's shade.
+  for (const g of S.groundProps) {
+    canvas.drawImageRectOptions(atlas, g.src, g.dst, FilterMode.Nearest, MipmapMode.None, paint);
+  }
+  // Contact shadows over the finished floor art, under everything that moves.
+  const z = S.zone;
+  const tallFeet = z.props.filter((p) => p.foot && p.occludes).map((p) => p.foot!);
+  const lowFeet = z.props.filter((p) => p.foot && !p.occludes).map((p) => p.foot!);
+  drawContactShadows(canvas, [...z.solid, ...tallFeet], CONTACT_SHADOW.tall);
+  drawContactShadows(canvas, [...z.low, ...lowFeet], CONTACT_SHADOW.low);
   S.bakedFloor = surface.makeImageSnapshot();
   S.bakedAtlas = atlas;
   return S.bakedFloor;
@@ -2479,8 +2591,9 @@ export const recordArena = (r: ArenaRenderInput): SkPicture => {
     drawDeployables(canvas, view.deployables, me?.team ?? 0, r.nowMs);
     drawDrumAuras(canvas, view.players, r.nowMs);
 
-    // Bodies and props in one painter's pass, ordered by baseline (feet) y — a
-    // player north of a cactus draws under it (walks behind); south, over it.
+    // Bodies and STANDING props in one painter's pass, ordered by baseline
+    // (feet) y — a player north of a cactus draws under it (walks behind);
+    // south, over it. Ground props were baked into the floor image above.
     // S.propsSorted is static so only the handful of players sort per frame.
     const byFeet = [...view.players].sort((a, b) => a.y - b.y);
     let pi = 0;

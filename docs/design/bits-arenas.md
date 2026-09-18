@@ -1,6 +1,7 @@
 # Blood in the Sand — arenas: many maps, random rotation, editor workflow
 
-**Status:** designed + built 2026-09-13.
+**Status:** designed + built 2026-09-13. Rotation grown to three maps + picker cards 2026-09-18
+(protocol v35).
 **Owner decisions (Tom):** several arenas, one chosen at random per room rather than the same
 map every time; practice gets a picker; the editor lists and creates arena files itself.
 
@@ -29,11 +30,16 @@ client which registry entry to render.
 
 ### Who picks
 
-- **Online rooms (skirmish, brawl, ranked):** the server picks uniformly from `ARENA_ROTATION`
-  when the room is created. Nothing new in `createRoom`; the room list shows the arena name.
-  Ranked rotates too — every seat sees the same map, so fairness is unaffected.
-- **Practice:** a chip row (Random · each arena by name); Random is the default and draws from
-  the whole registry, rotation or not, so a new arena can be walked before it ships.
+- **Ranked:** the server picks uniformly from `ARENA_ROTATION` when the room is created — always,
+  nobody chooses. Every seat sees the same map, so fairness is unaffected. Since 2026-09-18 the
+  rotation is all three maps: First Blood (`arena-00`), Obelisk (`desert-1`), Ancient Rites
+  (`grasslands`).
+- **Skirmish / brawl:** the host picks on the create sheet (v35: `createRoom.arena?`), Random by
+  default. The server honours a pick only if it is a rotation id (`hostArena`) — anything else is
+  a roll — so a half-built registry arena can never be dealt to strangers. The room list shows the
+  arena name.
+- **Practice:** the same picker over the whole registry, rotation or not, so a new arena can be
+  walked before it ships. Random is the default.
 - **Primer / showcase / server bot script:** stay on `arena-00` (scripted for its layout).
 
 ### Client rendering
@@ -45,6 +51,17 @@ floor-bake cache — built once per arena id and memoised. `ArenaRenderInput` ga
 assignment per frame, no allocation — same idiom as the other per-frame module state there).
 `useArenaAtlas(zoneId)` resolves the atlas from the arena's tileset; the manifest lists every
 atlas any arena uses.
+
+### Picker cards
+
+Skirmish and practice share one `ArenaPicker` (`components/ArenaPicker.tsx`): a sideways row of
+cards, Random first, each arena a fully rendered image of the map over its name. The images are
+not painted — `bun run arena:cards` (in `apps/realmsmith`, `scripts/arena-cards.ts`) renders each
+registry arena through the same zone loader and tileset registry the game uses (floor, decor,
+ground props, contact shadows, standing props by baseline) to `assets/arenas/<id>.png` (512 px),
+and regenerates `game/arenaCards.generated.ts`, the id → `require` map Metro needs. **Re-run it
+after an arena's art changes or a new arena lands.** An arena with no card yet still gets a plain
+named card, so a fresh map is never unpickable. Random wears a strip of every map on offer.
 
 ### Compatibility rule
 
@@ -76,5 +93,7 @@ can do alone" — reading and writing the repo's own content is the dev server's
 ## Not now
 
 - Arena-specific art (each arena is dressed by its tileset; a per-arena crowd/backdrop is later).
-- Weighted rotation, "veto"/vote, host pick. Random uniform is the whole ask.
+- Weighted rotation, "veto"/vote. Random uniform is the whole ask for ranked (host pick for
+  skirmish landed 2026-09-18).
+- Rendering the cards automatically on Realmsmith save — a manual script for now.
 - Deleting/renaming arenas from the editor — a filesystem job, rare.

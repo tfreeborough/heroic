@@ -31,13 +31,22 @@ export const ARENA_IDS: readonly string[] = Object.keys(ARENAS);
  * COMPATIBILITY: a client that doesn't know an id can't render it, and the
  * zone never travels — so adding an id here is a PROTOCOL_VERSION bump.
  */
-export const ARENA_ROTATION: readonly string[] = ["arena-00"];
+export const ARENA_ROTATION: readonly string[] = ["arena-00", "desert-1", "grasslands"];
 
 /** Pick a rotation arena with the caller's rng (Math.random on the server). */
 export const pickArena = (rand: () => number): ZoneFile => {
   const id = ARENA_ROTATION[Math.min(ARENA_ROTATION.length - 1, Math.floor(rand() * ARENA_ROTATION.length))]!;
   return ARENAS[id] ?? ARENA_00;
 };
+
+/**
+ * A skirmish host's map pick (`createRoom.arena`, v35) → the room's zone.
+ * Only rotation ids count — a half-built registry arena is never dealt to
+ * strangers, whoever asks — and anything else (absent, junk, unknown) is the
+ * "random" answer: a fresh roll. Ranked never reads this; it always rolls.
+ */
+export const hostArena = (v: unknown, rand: () => number): ZoneFile =>
+  typeof v === "string" && ARENA_ROTATION.includes(v) ? ARENAS[v]! : pickArena(rand);
 
 /** A registry arena by id; unknown → the default (never throw over a map name). */
 export const arenaById = (id: string | null | undefined): ZoneFile => (id ? (ARENAS[id] ?? ARENA_00) : ARENA_00);

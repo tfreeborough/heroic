@@ -231,7 +231,9 @@ export type ZoneObjectKind =
    *  tileset, placed by its bottom-centre. `props.prop` names a `PropDef` in
    *  the tileset's registry entry, which supplies the sprite region, the
    *  hidden collision footprint, and occlusion. Y-sorted with entities at
-   *  render so players walk behind its top. See docs/design/tilesets.md. */
+   *  render so players walk behind its top — unless `props.ground: true`,
+   *  which bakes it flat with the floor under everyone (a rug, rubble).
+   *  See docs/design/tilesets.md. */
   | "prop";
 
 /** A free-placed entity (world px). `props` carry the kind-specific config. */

@@ -12,6 +12,7 @@ import {
   voidRimBands,
   wallLeanVector,
   type Aabb,
+  type PlacedProp,
   type TilesetDef,
   type Zone,
   type CollisionPolygon,
@@ -188,6 +189,31 @@ const drawVoidPits = (
   ctx.restore();
 };
 
+/** One prop sprite, feet-anchored (docs/design/tilesets.md). Without the atlas
+ *  a dashed stand-in box + name, so layout work isn't blocked on art loading. */
+const drawPropSprite = (
+  ctx: CanvasRenderingContext2D,
+  art: TilesetArt | null,
+  view: View,
+  p: PlacedProp,
+): void => {
+  if (art) {
+    ctx.drawImage(art.image, p.src.x, p.src.y, p.src.w, p.src.h, p.x - p.w / 2, p.y - p.h, p.w, p.h);
+    return;
+  }
+  ctx.lineWidth = 1.5 / view.zoom;
+  ctx.strokeStyle = "rgba(140,220,140,0.8)";
+  ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
+  ctx.strokeRect(p.x - p.w / 2, p.y - p.h, p.w, p.h);
+  ctx.setLineDash([]);
+  const fontPx = 11 / view.zoom;
+  ctx.font = `${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(200,240,200,0.9)";
+  ctx.fillText(p.prop, p.x, p.y - p.h / 2);
+  ctx.textAlign = "left";
+};
+
 /**
  * Draw a loaded zone exactly as the game depicts it — floor checker, static
  * collision, breakables — plus editor-only overlays (bounds, object markers) on
@@ -254,6 +280,12 @@ export const drawZone = (
         }
       }
     }
+  }
+
+  // Ground props (`props.ground`, docs/design/tilesets.md): flat art the game
+  // bakes with the floor — drawn here straight after decor, under everything.
+  for (const p of zone.props) {
+    if (p.ground) drawPropSprite(ctx, art, view, p);
   }
 
   // Void pits: the swirling dark chasm, drawn between floor and walls exactly as the
@@ -339,21 +371,7 @@ export const drawZone = (
   // box + name, so layout work isn't blocked on art loading.
   const sortedProps = [...zone.props].sort((a, b) => a.y - b.y);
   for (const p of sortedProps) {
-    if (art) {
-      ctx.drawImage(art.image, p.src.x, p.src.y, p.src.w, p.src.h, p.x - p.w / 2, p.y - p.h, p.w, p.h);
-    } else {
-      ctx.lineWidth = 1.5 / view.zoom;
-      ctx.strokeStyle = "rgba(140,220,140,0.8)";
-      ctx.setLineDash([6 / view.zoom, 4 / view.zoom]);
-      ctx.strokeRect(p.x - p.w / 2, p.y - p.h, p.w, p.h);
-      ctx.setLineDash([]);
-      const fontPx = 11 / view.zoom;
-      ctx.font = `${fontPx}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(200,240,200,0.9)";
-      ctx.fillText(p.prop, p.x, p.y - p.h / 2);
-      ctx.textAlign = "left";
-    }
+    if (!p.ground) drawPropSprite(ctx, art, view, p);
   }
 
   // --- Editor overlays (NOT part of the game's depiction) -------------------

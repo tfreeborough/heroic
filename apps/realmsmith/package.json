@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "sfx:manifest": "bun run scripts/sfx-manifest.ts"
+    "sfx:manifest": "bun run scripts/sfx-manifest.ts",
+    "arena:cards": "bun run scripts/arena-cards.ts"
   },
   "dependencies": {
     "@heroic/blood-in-the-sand-sim": "workspace:*",

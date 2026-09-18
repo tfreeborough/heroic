@@ -183,6 +183,21 @@ describe("loadZone props", () => {
     }
   });
 
+  test("props.ground marks a prop as floor-baked; absent means standing", () => {
+    const zone = loadZone(
+      makeFile({
+        objects: [
+          propObj("s", "cactus-large", 256, 256),
+          { ...propObj("g", "cactus-large", 320, 320), props: { prop: "cactus-large", ground: true } },
+        ],
+      }),
+    );
+    expect(zone.props.map((p) => [p.id, p.ground])).toEqual([
+      ["s", false],
+      ["g", true],
+    ]);
+  });
+
   test("unknown tileset or prop name degrades to nothing (placeholder philosophy)", () => {
     const unknownSet = loadZone(
       makeFile({ tileset: "placeholder", objects: [propObj("c1", "cactus-large", 256, 256)] }),

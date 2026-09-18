@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { distanceToAabb, loadZone, segmentClear } from "@heroic/core";
-import { PLAYER_RADIUS } from "./config";
+import { BRAWL_TEAM_COUNT, PLAYER_RADIUS } from "./config";
 import { addPlayer, createSim, deriveArenaZone } from "./sim";
-import { ARENA_00 } from "./zone";
+import { ARENA_00, ARENA_ROTATION, ARENAS, hostArena } from "./zone";
 
 // The arena is authored in Realmsmith and changes as it's polished, so these
 // tests derive their expectations from the file (spawn objects, loadZone's
@@ -136,5 +136,35 @@ describe("arena-00", () => {
     expect(b!.team).not.toBe(a!.team); // first two joiners always oppose
     expect(a!.mover.pos).toEqual(authoredSpawn(a!.team));
     expect(b!.mover.pos).toEqual(authoredSpawn(b!.team));
+  });
+});
+
+// Everything the server deals online — ranked included — must be a real,
+// playable map: a registry entry whose duel AND brawl spawn sets resolve, with
+// every spawn standing on open ground (a spawn inside a rock is a lost round).
+describe("the rotation", () => {
+  for (const id of ARENA_ROTATION) {
+    test(`${id} is dealable: registered, both spawn sets, spawns clear of collision`, () => {
+      const file = ARENAS[id]!;
+      expect(file).toBeDefined();
+      expect(file.id).toBe(id);
+      for (const teamCount of [2, BRAWL_TEAM_COUNT]) {
+        const zone = deriveArenaZone(file, teamCount);
+        expect(zone.spawns).toHaveLength(teamCount);
+        for (const spawn of zone.spawns) {
+          for (const box of zone.collision) expect(distanceToAabb(spawn, box)).toBeGreaterThan(PLAYER_RADIUS);
+        }
+      }
+    });
+  }
+
+  test("a host's pick is honoured only for rotation ids; anything else rolls", () => {
+    for (const id of ARENA_ROTATION) expect(hostArena(id, () => 0).id).toBe(id);
+    const first = ARENA_ROTATION[0]!;
+    const last = ARENA_ROTATION[ARENA_ROTATION.length - 1]!;
+    for (const junk of [undefined, null, 7, "", "nowhere", "__proto__"]) {
+      expect(hostArena(junk, () => 0).id).toBe(first);
+      expect(hostArena(junk, () => 0.999).id).toBe(last);
+    }
   });
 });

@@ -76,6 +76,19 @@ split into three role sheets — and the split maps cleanly onto our layer model
   The editor shows them as translucent blue (solid) / green (low) boxes. A prop footprint, but
   paintable: invisible fences, map-edge barriers, tile-art cliffs.
   (Real drawn walls stay procedural; tile-skinned walls remain a later pass.)
+- **Contact shadows (BITS, 2026-09-17).** "Never drawn" turned out to be the problem in ranked:
+  nothing tells you where a rock's edge is until you walk into it. So the BITS floor bake darkens
+  the floor *around* every invisible blocker — an ambient-occlusion halo that peaks just outside
+  the collision boundary and fades both ways. Blended, not clipped: the box union is corner-rounded
+  through path ops (straight edges stay exactly on the boxes) and the interior is only *partly*
+  knocked out with a soft mask (`innerKeep`), so the shade bleeds under the art instead of a hard
+  "cutout" line (Tom's read of the first, hard-clipped version) and the whole footprint carries a
+  gentler wash of it. Height is in the shadow: `solid` (+ occluding footprints) gets a deep wide halo,
+  `low` (+ walk-only footprints) a thin one cast a few px south, a step lit from the north. Baked
+  once with the floor (`render.ts` `CONTACT_SHADOW`), free per frame, no protocol change. Side
+  effect worth wanting: collision painted wider than its art now *shows* as a halo on bare sand —
+  an authoring cue to hug the ground-contact silhouette, not the sprite's bounding box. Tuning is
+  on-device; Realmsmith doesn't preview it yet.
 
 Import repacks all three sheets into one gapless `assets/tilesets/desert.png`
 (`cellSize: 16`), stacked ground (rows 0–27) → wall (28–33) → props (34–52); the paintable
@@ -152,6 +165,15 @@ stops everything. So `hidden` is renamed **`solid`** (feet, shots, lock) and a f
 tile, both draw as polygons, both keep the floor art. The sim keeps a `shotBlockers` list
 (`collision` minus `low`) for projectiles and leaves `low` out of the lock occluders. Drawn `wall`
 comes off the Realmsmith picker (core still loads it for the gauntlet). Protocol v34.
+
+**Ground props (2026-09-18).** Some prop art *lies on* the ground — a rug, rubble, a fallen
+log — and Tom wanted those under the player, not walked behind. A per-placement flag,
+`props.ground: true` (Inspector: "On the ground"), takes that prop out of the y-sorted pass and
+bakes it flat with the floor (BITS: into the floor image after decor, under the contact shadows;
+Realmsmith: straight after decor). Same sprite, same feet anchor, same footprint rules — only the
+draw layer changes, so a prop can be flipped between standing and ground without re-placing it.
+Why a flag on the placement and not the registry: the same rock sprite is a boulder in one spot
+and half-buried in another.
 
 **Rendering** — props leave the baked-chunk path and join the entity pass: cull to viewport,
 merge with players/enemies, sort by baseline y, draw. Prop sprites are static quads

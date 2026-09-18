@@ -320,8 +320,14 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * Same wire shape, but the sim's projectile + lock rules changed and arena
  * files may now carry `low` cells (code 4) / polygons, so an old client
  * would disagree with the server about where a shot dies.
+ * 2026-09-18, v35: THE ROTATION GROWS (bits-arenas.md) — `desert-1` (Obelisk)
+ * and `grasslands` (Ancient Rites) join ARENA_ROTATION, so every online room
+ * — ranked included — now rolls one of three maps. An old client has no zone
+ * for the new ids (the zone never travels), hence the bump. Riding the same
+ * bump: `createRoom` gains `arena?`, a skirmish host's map pick (a rotation
+ * id; absent/unknown = random, which is what ranked always does).
  */
-export const PROTOCOL_VERSION = 34;
+export const PROTOCOL_VERSION = 35;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -348,7 +354,9 @@ export type ClientMsg =
    * secret, OPTIONAL and additive (no bump) — resolved server-side into the
    * seat's account so skirmish deeds can be credited and the worn title
    * verified. Absent = plays as before, earns nothing. Never a claimed id. */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string; token?: string }
+  /** `arena?` (v35, bits-arenas.md): the host's map pick — an ARENA_ROTATION
+   * id. Absent or unknown = the server rolls one (hostArena). */
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; arena?: string; announcer?: string; title?: string; token?: string }
   /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
    * secret the last `welcome` for this room carried. Present and matching a
    * disconnected seat, that exact seat is reclaimed — name, team, body.

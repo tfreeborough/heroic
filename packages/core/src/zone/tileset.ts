@@ -112,6 +112,10 @@ export interface PlacedProp {
   foot?: Aabb;
   /** Whether `foot` also blocks sight (mirrors `PropDef.occludes`). */
   occludes: boolean;
+  /** Placed ON the ground (`props.ground: true`): baked with the floor, under
+   *  every body, never y-sorted — a rug, rubble, a fallen log. Default false =
+   *  a standing prop players walk behind. (Tom, 2026-09-18.) */
+  ground: boolean;
 }
 
 /** Resolve a `"prop"` zone object against its tileset, or null if unknown —
@@ -142,6 +146,7 @@ export const resolveProp = (
     h: def.cells[3] * tileSize,
     ...(foot ? { foot } : {}),
     occludes: (def.occludes ?? false) && foot !== undefined,
+    ground: obj.props.ground === true,
   };
 };
 

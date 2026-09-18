@@ -811,8 +811,18 @@ export class ArenaClient {
 
   /** `token` (bits-skirmish-deeds.md): the persistence bearer secret, so the
    * seat's skirmish deeds credit this account and the worn title is
-   * verified. Optional — without it the seat plays as before, earns nothing. */
-  createRoom(playerName: string, roomName: string, pass: string, teamSize: number, brawl = false, token?: string): void {
+   * verified. Optional — without it the seat plays as before, earns nothing.
+   * `arena` (v35, bits-arenas.md): the host's map pick, a rotation id —
+   * null lets the server roll one. */
+  createRoom(
+    playerName: string,
+    roomName: string,
+    pass: string,
+    teamSize: number,
+    brawl = false,
+    token?: string,
+    arena: string | null = null,
+  ): void {
     this.lastError = null;
     this.leaveLineLocally(); // entering the skirmish flow leaves the queue server-side
     this.claimedName = playerName;
@@ -826,6 +836,7 @@ export class ArenaClient {
       ...(token ? { token } : {}),
       // Brawl (v32): the free-for-all shape — the server ignores teamSize.
       ...(brawl ? { brawl: true } : {}),
+      ...(arena ? { arena } : {}),
       // The cosmetics are claimed at seat time (like the name) — read here
       // rather than passed in, so every screen's create/join carries them.
       announcer: getActiveAnnouncer(),

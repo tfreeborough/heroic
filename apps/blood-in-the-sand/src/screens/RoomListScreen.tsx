@@ -13,8 +13,9 @@ import {
 } from "react-native";
 import { GestureHandlerRootView, Pressable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { RoomListing } from "@heroic/blood-in-the-sand-sim";
+import { ARENA_ROTATION, type RoomListing } from "@heroic/blood-in-the-sand-sim";
 import { playSound, unlockAudio } from "../audio";
+import { ArenaPicker } from "../components/ArenaPicker";
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import type { ArenaClient } from "../net/connection";
 import { ensureIdentity } from "../net/api";
@@ -49,6 +50,8 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
   /** The 6-Way Brawl (bits-brawl.md) is a room SHAPE, not a mode of its own:
    * the fifth chip on the create sheet's size row. */
   const [brawl, setBrawl] = useState(false);
+  /** The host's map (bits-arenas.md) — null lets the server roll one. */
+  const [arena, setArena] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [joinPass, setJoinPass] = useState("");
 
@@ -114,7 +117,7 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
   const create = (): void => {
     playSound("uiConfirm");
     void bearer().then((token) =>
-      client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize, brawl, token),
+      client.createRoom(playerName, roomName.trim() || `${playerName}'s room`, createPass, teamSize, brawl, token, arena),
     );
   };
 
@@ -224,6 +227,8 @@ export const RoomListScreen = ({ client, playerName, onBack, onArmory }: RoomLis
           {brawl ? (
             <Text style={styles.brawlShapeHint}>the 6-way brawl: six enter, one leaves — every seat its own side</Text>
           ) : null}
+          {/* The map: only what the server deals online — the rotation. */}
+          <ArenaPicker ids={ARENA_ROTATION} value={arena} onChange={setArena} />
           {sheetError}
           <Pressable onPress={create} style={styles.sheetButton}>
             <Text style={styles.sheetButtonText}>CREATE</Text>
