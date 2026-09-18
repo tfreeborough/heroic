@@ -64,12 +64,14 @@ export {
   companionsOf,
   entitlementsOf,
   gloryEarned,
+  payOwedBounties,
   type AchievementAward,
   type AchievementUnlockRecord,
   type CompanionDelta,
   type CompanionRecord,
   type EntitlementRecord,
   type MatchAchievementsInput,
+  type OwedBounties,
 } from "./achievements";
 export {
   getRating,

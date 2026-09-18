@@ -6,6 +6,7 @@ import {
   companionsOf,
   entitlementsOf,
   gloryEarned,
+  payOwedBounties,
 } from "./achievements";
 import { createDb, ensureSchema, type Db } from "./db";
 import { gloryBalance, recordGlory } from "./glory";
@@ -141,5 +142,42 @@ describe("skirmish companions (bits-skirmish-deeds.md)", () => {
     expect(await companionsOf(db, playerId)).toEqual([{ otherId: other, withCount: 1, againstCount: 1 }]);
     // Rows are one-directional: the other player's view is written by THEIR apply.
     expect(await companionsOf(db, other)).toEqual([]);
+  });
+});
+
+describe("payOwedBounties", () => {
+  const BOUNTIES = { "ranked-wins-5": 10, flawless: 25, "loss-streak-3": 0 };
+
+  test("pays deeds held from before bounties existed, once, and skips what the live award already paid", async () => {
+    // Unlocked back when nothing paid…
+    await applyMatchAchievements(db, {
+      matchId: "m1",
+      playerId,
+      counters: {},
+      unlocks: [{ id: "ranked-wins-5" }, { id: "loss-streak-3" }],
+    });
+    // …and one the live award paid after bounties landed.
+    await applyMatchAchievements(db, { matchId: "m2", playerId, counters: {}, unlocks: [{ id: "flawless", glory: 25 }] });
+    expect(await gloryBalance(db, playerId)).toBe(25);
+
+    // A dry run reports and writes nothing.
+    expect(await payOwedBounties(db, BOUNTIES, { apply: false })).toEqual({ payments: 1, glory: 10, players: 1 });
+    expect(await gloryBalance(db, playerId)).toBe(25);
+
+    expect(await payOwedBounties(db, BOUNTIES, { apply: true })).toEqual({ payments: 1, glory: 10, players: 1 });
+    expect(await gloryBalance(db, playerId)).toBe(35);
+    // Again: nothing owed, nothing moves.
+    expect(await payOwedBounties(db, BOUNTIES, { apply: true })).toEqual({ payments: 0, glory: 0, players: 0 });
+    expect(await gloryBalance(db, playerId)).toBe(35);
+    // Back pay is deed Glory, not match Glory — the glory-earned ladder ignores it.
+    expect(await gloryEarned(db, playerId)).toBe(0);
+  });
+
+  test("a deed the live award pays later can't pay again on top of back pay", async () => {
+    await applyMatchAchievements(db, { matchId: "m1", playerId, counters: {}, unlocks: [{ id: "ranked-wins-5" }] });
+    await payOwedBounties(db, BOUNTIES, { apply: true });
+    // Same (player, deed) key — a replayed award is a no-op on the ledger.
+    await applyMatchAchievements(db, { matchId: "m9", playerId, counters: {}, unlocks: [{ id: "ranked-wins-5", glory: 10 }] });
+    expect(await gloryBalance(db, playerId)).toBe(10);
   });
 });

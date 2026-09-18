@@ -16,7 +16,9 @@
  * to do. The exception is a `secret` deed, which keeps its description
  * until unlocked and says so in one muted line: the handful whose punchline
  * is the reward. The next earnable tier carries its progress bar; reward
- * marks stay unlocked-only. No ??? rows, no dashed ? wells.
+ * marks stay unlocked-only — except the Glory bounty, which a locked row
+ * shows (bits-deed-glory.md: a bounty is a carrot, not a spoiler; titles
+ * and secret steel stay hidden). No ??? rows, no dashed ? wells.
  *
  * On entry, anything unlocked that this device never celebrated replays the
  * unlock ceremony first — the moment is delayed, never skipped.
@@ -40,6 +42,7 @@ import { Canvas, LinearGradient, RadialGradient, Rect, vec } from "@shopify/reac
 import {
   ACHIEVEMENT_CHAPTERS,
   ACHIEVEMENT_DEFS,
+  bountyOf,
   itemDisplayName,
   type AchievementChapter,
   type BitsAchievementDef,
@@ -136,6 +139,13 @@ const RewardMarks = ({ def }: { def: BitsAchievementDef }) => {
   );
 };
 
+/** A locked row's bounty — the one reward shown before it's earned. Secret
+ * deeds never pay Glory (test-enforced in the sim), so nothing leaks. */
+const BountyMark = ({ def }: { def: BitsAchievementDef }) => {
+  const glory = bountyOf(def);
+  return glory > 0 ? <Text style={styles.bountyLine}>{`Pays ${glory} Glory`}</Text> : null;
+};
+
 /** The equip pill (achievements.md § wearing titles): unlocked deeds that
  * crown a title get WEAR; the worn one shows WORN and taps back to bare. */
 const WearButton = ({ id, worn, onWear }: { id: string; worn: boolean; onWear: (id: string) => void }) => (
@@ -200,6 +210,7 @@ const HeadRow = ({ entry, counters, worn, onWear }: { entry: TierEntry; counters
       <View style={styles.copy}>
         <Text style={styles.titleLocked}>{def.title}</Text>
         <LockedDescription def={def} style={styles.descLocked} />
+        <BountyMark def={def} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -240,6 +251,7 @@ const TierRow = ({ entry, tier, counters, worn, onWear }: { entry: TierEntry; ti
       <View style={[styles.copy, styles.copyLevel]}>
         <Text style={styles.tierTitleLocked}>{def.title}</Text>
         <LockedDescription def={def} style={styles.tierDescLocked} />
+        <BountyMark def={def} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -1013,6 +1025,8 @@ const styles = StyleSheet.create({
   descLocked: { color: "#7a6f60", fontSize: 12, lineHeight: 17 },
   descSecret: { fontStyle: "italic" },
   rewardLine: { color: "#e8c87a", fontSize: 11, fontWeight: "800", letterSpacing: 0.3, marginTop: 3 },
+  // The earned line's gold, banked down to sit with the locked row's inks.
+  bountyLine: { color: "#a08a55", fontSize: 11, fontWeight: "800", letterSpacing: 0.3, marginTop: 3 },
   wearPill: {
     alignSelf: "flex-start",
     marginTop: 7,

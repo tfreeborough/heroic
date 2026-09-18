@@ -16,11 +16,15 @@ export default async function Deeds() {
     .sort((a, b) => b.unlocks - a.unlocks || a.board.localeCompare(b.board) || a.title.localeCompare(b.title));
   const orphans = counts.filter((c) => !known.has(c.achievementId));
   const total = Math.max(1, players.total);
+  // What the deeds have cost so far — unlocks × today's bounty, so it reads
+  // slightly high for unlocks from before bounties landed and never back-paid.
+  const paidOut = rows.reduce((sum, d) => sum + d.unlocks * d.bounty, 0);
   return (
     <>
       <h1>Deeds</h1>
       <p className="sub">
-        How rare each deed is: unlocks over all {n(players.total)} players. {n(counts.reduce((s, c) => s + c.unlocks, 0))} unlocks in total.
+        How rare each deed is: unlocks over all {n(players.total)} players. {n(counts.reduce((s, c) => s + c.unlocks, 0))} unlocks in total,
+        worth {n(paidOut)} Glory in bounties.
       </p>
       <div className="tablewrap">
         <table>
@@ -28,6 +32,7 @@ export default async function Deeds() {
             <tr>
               <th>Deed</th>
               <th>Board</th>
+              <th className="r">Bounty</th>
               <th className="r">Unlocked by</th>
               <th className="r">Share</th>
             </tr>
@@ -40,6 +45,7 @@ export default async function Deeds() {
                   <div className="muted">{d.description}</div>
                 </td>
                 <td className="muted">{d.board}</td>
+                <td className="r num">{d.bounty > 0 ? n(d.bounty) : ""}</td>
                 <td className="r num">{n(d.unlocks)}</td>
                 <td className="r num">{pct(d.unlocks / total, 1)}</td>
               </tr>
@@ -49,6 +55,7 @@ export default async function Deeds() {
                 <td>
                   <span className="mono">{c.achievementId}</span> <span className="pill warn">not in this build's defs</span>
                 </td>
+                <td />
                 <td />
                 <td className="r num">{n(c.unlocks)}</td>
                 <td className="r num">{pct(c.unlocks / total, 1)}</td>

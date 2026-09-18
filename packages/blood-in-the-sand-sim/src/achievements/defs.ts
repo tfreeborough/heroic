@@ -3,9 +3,9 @@
  * sketch): every chain derivable from events the sim already emits. Titles
  * are PLACEHOLDERS in the right voice — Tom owns the titles pass, and each
  * tier is a plain object so title/description/reward edit in place next to
- * their threshold (Tom, 2026-08-03). Rewards are deliberately unset pending
- * the economy pass (glory-economy.md owns amounts); the per-tier `reward`
- * slot is live whenever content wants it.
+ * their threshold (Tom, 2026-08-03). Glory bounties landed with the economy
+ * pass (2026-09-18): bits-deed-glory.md owns the bands, the rules and the
+ * budget; bounties.ts holds the band table.
  *
  * Per-weapon and per-ability chains are HAND-AUTHORED (Tom, 2026-08-04 —
  * split out from table derivation so each gets its own identity ramp, not a
@@ -30,6 +30,9 @@ import {
   type BoardDef,
   type ChainTier,
 } from "@heroic/achievements";
+import type { AbilityId, WeaponId } from "../config";
+import { SIGNET_ABILITIES, SIGNET_WEAPONS } from "../items";
+import { bounty, type BountyBand } from "./bounties";
 import { COUNTERS, UNDYING_STREAK } from "./counters";
 import { summaryTeamOf, wonMatch, type MatchSummary } from "./summary";
 import { ACHIEVEMENT_DEFS_2V2, CHAPTER_2V2, RANKED_2V2_BOARD, RANKED_2V2_BOARD_DEF } from "./defs2v2";
@@ -54,7 +57,7 @@ const FIRST_MATCH: BitsAchievementDef = {
   id: "sworn-to-the-sand",
   board: RANKED_BOARD,
   title: "Christened with blood",
-  rewards: [{ kind: "title" }],
+  rewards: [{ kind: "title" }, bounty(10)],
   description: "Fight in your first ranked match.",
   icon: "deed-first-match",
   parent: null,
@@ -86,13 +89,14 @@ const wins = milestoneChain<MatchSummary>({
     // The Sand snake also pays the game's FIRST gated weapon — the teaching
     // beat (bits-secret-items.md): five wins in, players learn deeds pay
     // steel. Rewards stack: one card, title + trident.
-    { threshold: 5, title: "The Sand snake", description: "Win 5 ranked matches.", rewards: [{ kind: "title" }, { kind: "entitlement", itemId: "weapon:trident" }] },
-    { threshold: 25, title: "The Pit Viper", description: "Win 25 ranked matches." },
-    { threshold: 50, title: "The King Cobra", description: "Win 50 ranked matches.", rewards: [{ kind: "title" }] },
-    { threshold: 100, title: "The Great Constrictor", description: "Win 100 ranked matches." },
-    { threshold: 250, title: "The Basilisk", description: "Win 250 ranked matches." },
-    { threshold: 500, title: "The Elder Wrym", description: "Win 500 ranked matches." },
-    { threshold: 1000, title: "The World Serpent", description: "Win 1000 ranked matches.", rewards: [{ kind: "title" }] },
+    // The spine climbs one bounty band a tier, all the way to the summit.
+    { threshold: 5, title: "The Sand snake", description: "Win 5 ranked matches.", rewards: [{ kind: "title" }, { kind: "entitlement", itemId: "weapon:trident" }, bounty(10)] },
+    { threshold: 25, title: "The Pit Viper", description: "Win 25 ranked matches.", rewards: [bounty(25)] },
+    { threshold: 50, title: "The King Cobra", description: "Win 50 ranked matches.", rewards: [{ kind: "title" }, bounty(50)] },
+    { threshold: 100, title: "The Great Constrictor", description: "Win 100 ranked matches.", rewards: [bounty(100)] },
+    { threshold: 250, title: "The Basilisk", description: "Win 250 ranked matches.", rewards: [bounty(200)] },
+    { threshold: 500, title: "The Elder Wrym", description: "Win 500 ranked matches.", rewards: [bounty(400)] },
+    { threshold: 1000, title: "The World Serpent", description: "Win 1000 ranked matches.", rewards: [{ kind: "title" }, bounty(800)] },
   ],
 });
 
@@ -107,14 +111,35 @@ const kills = milestoneChain<MatchSummary>({
   tiers: [
     // 1 → 5 (Tom, 2026-08-25 — first-win audit): a first-blood tier popped
     // in every first match next to Christened; five kills is a second win.
-    { threshold: 5, title: "Lights Out", description: "Strike 5 killing blows." },
-    { threshold: 25, title: "Gravedigger", description: "Strike 25 killing blows." },
-    { threshold: 100, title: "Judge, Jury and Executioner", description: "Strike 100 killing blows." },
-    { threshold: 500, title: "Sudden Death", description: "Strike 500 killing blows." },
-    { threshold: 1250, title: "The Fourth Horseman", description: "Strike 1250 killing blows.", rewards: [{ kind: "title" }] },
-    { threshold: 9001, title: "It's Over 9000", description: "Strike 9001 killing blows." },
+    // Kills climb alongside wins (three a 1v1 win), so the ladder sits a
+    // band under the spine's — the same hours mustn't pay twice over.
+    { threshold: 5, title: "Lights Out", description: "Strike 5 killing blows.", rewards: [bounty(5)] },
+    { threshold: 25, title: "Gravedigger", description: "Strike 25 killing blows.", rewards: [bounty(10)] },
+    { threshold: 100, title: "Judge, Jury and Executioner", description: "Strike 100 killing blows.", rewards: [bounty(25)] },
+    { threshold: 500, title: "Sudden Death", description: "Strike 500 killing blows.", rewards: [bounty(50)] },
+    { threshold: 1250, title: "The Fourth Horseman", description: "Strike 1250 killing blows.", rewards: [{ kind: "title" }, bounty(100)] },
+    { threshold: 9001, title: "It's Over 9000", description: "Strike 9001 killing blows.", rewards: [bounty(400)] },
   ],
 });
+
+/** The weapon and spell ladders all pay the same bounty rung for rung, so
+ * the family's ladder is laid over the authored tiers here rather than
+ * repeated on forty-odd lines (titles and any other rewards stay as
+ * written). SIGNET arms and spells are skipped: a deed on a bought item
+ * paying currency is a soft pay-for-Glory loop (Tom, 2026-08-14 —
+ * bits-writ-deeds.md), so a new Armory item is unpaid by construction and
+ * a new free or deed-gated one is paid by construction. Test-enforced. */
+const withBounties = (tiers: readonly ChainTier[], ladder: readonly BountyBand[]): ChainTier[] =>
+  tiers.map((tier, i) => {
+    const amount = ladder[i];
+    return amount === undefined ? tier : { ...tier, rewards: [...(tier.rewards ?? []), bounty(amount)] };
+  });
+
+/** 15 / 150 / 600 rounds — the top rung is ~25 hours with one weapon. */
+const WEAPON_BOUNTIES: readonly BountyBand[] = [10, 25, 100];
+/** Three spells tick at once and charges refill every round, so these
+ * ladders climb fast — they sit low on purpose. */
+const CAST_BOUNTIES: readonly BountyBand[] = [5, 10, 25];
 
 /** Per-weapon round chains — four EAST ribs off the south trunk. */
 const weaponChain = (weapon: string, row: number, tiers: readonly ChainTier[]) =>
@@ -126,7 +151,7 @@ const weaponChain = (weapon: string, row: number, tiers: readonly ChainTier[]) =
     parent: FIRST_MATCH.id,
     origin: { x: 140, y: 185 + row * 115 },
     step: { x: 115, y: 0 },
-    tiers,
+    tiers: SIGNET_WEAPONS.has(weapon as WeaponId) ? tiers : withBounties(tiers, WEAPON_BOUNTIES),
   });
 
 const weaponRounds = [
@@ -202,7 +227,7 @@ const abilityChain = (ability: string, row: number, tiers: readonly ChainTier[])
     parent: FIRST_MATCH.id,
     origin: { x: -140, y: abilityRowY(row) },
     step: { x: -115, y: 0 },
-    tiers,
+    tiers: SIGNET_ABILITIES.has(ability as AbilityId) ? tiers : withBounties(tiers, CAST_BOUNTIES),
   });
 
 const abilityCasts = [
@@ -298,10 +323,12 @@ const winStreaks = milestoneChain<MatchSummary>({
   origin: { x: 140, y: -280 },
   step: { x: 115, y: 0 },
   tiers: [
-    { threshold: 3, title: "Hot Sand", description: "Win 3 ranked matches in a row." },
-    { threshold: 5, title: "Heat Haze", description: "Win 5 ranked matches in a row." },
-    { threshold: 10, title: "Scorched Earth", description: "Win 10 ranked matches in a row." },
-    { threshold: 25, title: "Seas of Molten Glass", description: "Win 25 ranked matches in a row." },
+    // Streaks are skill, not hours — ten straight is rare, twenty-five is
+    // the other summit.
+    { threshold: 3, title: "Hot Sand", description: "Win 3 ranked matches in a row.", rewards: [bounty(25)] },
+    { threshold: 5, title: "Heat Haze", description: "Win 5 ranked matches in a row.", rewards: [bounty(50)] },
+    { threshold: 10, title: "Scorched Earth", description: "Win 10 ranked matches in a row.", rewards: [bounty(200)] },
+    { threshold: 25, title: "Seas of Molten Glass", description: "Win 25 ranked matches in a row.", rewards: [bounty(800)] },
   ],
 });
 
@@ -338,13 +365,17 @@ const glory = milestoneChain<MatchSummary>({
   origin: { x: 140, y: 1320 },
   step: { x: 115, y: 0 },
   tiers: [
-    { threshold: 100, title: "I can go the distance", description: "Earn 100 lifetime Glory from ranked matches" },
-    { threshold: 500, title: "Zero to Hero", description: "Earn 500 lifetime Glory from ranked matches" },
-    { threshold: 2500, title: "Hall of Fame", description: "Earn 2500 lifetime Glory from ranked matches" },
-    { threshold: 5000, title: "Living Legend", description: "Earn 5000 lifetime Glory from ranked matches", rewards: [{ kind: "title" }]  },
-    { threshold: 8500, title: "Demigod", description: "Earn 8500 lifetime Glory from ranked matches", rewards: [{ kind: "title" }]  },
-    { threshold: 15000, title: "The Thirteenth Labour", description: "Earn 15000 lifetime Glory from ranked matches" },
-    { threshold: 25000, title: "A Star Is Born", description: "Earn 25000 lifetime Glory from ranked matches" },
+    // Glory from matches tracks wins almost exactly, so this ladder sits a
+    // band under the spine's. Its counter reads `ranked:` ledger rows only
+    // (persistence gloryEarned) — a bounty can never feed the chain that
+    // paid it.
+    { threshold: 100, title: "I can go the distance", description: "Earn 100 lifetime Glory from ranked matches", rewards: [bounty(5)] },
+    { threshold: 500, title: "Zero to Hero", description: "Earn 500 lifetime Glory from ranked matches", rewards: [bounty(10)] },
+    { threshold: 2500, title: "Hall of Fame", description: "Earn 2500 lifetime Glory from ranked matches", rewards: [bounty(25)] },
+    { threshold: 5000, title: "Living Legend", description: "Earn 5000 lifetime Glory from ranked matches", rewards: [{ kind: "title" }, bounty(50)]  },
+    { threshold: 8500, title: "Demigod", description: "Earn 8500 lifetime Glory from ranked matches", rewards: [{ kind: "title" }, bounty(100)]  },
+    { threshold: 15000, title: "The Thirteenth Labour", description: "Earn 15000 lifetime Glory from ranked matches", rewards: [bounty(200)] },
+    { threshold: 25000, title: "A Star Is Born", description: "Earn 25000 lifetime Glory from ranked matches", rewards: [bounty(400)] },
   ],
 });
 
@@ -358,11 +389,11 @@ const damage = milestoneChain<MatchSummary>({
   origin: { x: 370, y: -140 },
   step: { x: 115, y: 0 },
   tiers: [
-    { threshold: 500, title: "Bloodletter", description: "Deal 500 damage to your foes." },
-    { threshold: 2500, title: "Crimson Rain", description: "Deal 2500 damage to your foes." },
-    { threshold: 10000, title: "Bloodbath", description: "Deal 10000 damage to your foes." },
-    { threshold: 25000, title: "Red Tide", description: "Deal 25000 damage to your foes." },
-    { threshold: 100000, title: "Hemoclysm", description: "Deal 100000 damage to your foes." },
+    { threshold: 500, title: "Bloodletter", description: "Deal 500 damage to your foes.", rewards: [bounty(5)] },
+    { threshold: 2500, title: "Crimson Rain", description: "Deal 2500 damage to your foes.", rewards: [bounty(10)] },
+    { threshold: 10000, title: "Bloodbath", description: "Deal 10000 damage to your foes.", rewards: [bounty(25)] },
+    { threshold: 25000, title: "Red Tide", description: "Deal 25000 damage to your foes.", rewards: [bounty(50)] },
+    { threshold: 100000, title: "Hemoclysm", description: "Deal 100000 damage to your foes.", rewards: [bounty(100)] },
   ],
 });
 
@@ -375,11 +406,11 @@ const healing = milestoneChain<MatchSummary>({
   origin: { x: 140, y: 1535 },
   step: { x: 115, y: 0 },
   tiers: [
-    { threshold: 500, title: "Medic", description: "Restore 500 health.", rewards: [{ kind: "title" }]  },
-    { threshold: 2500, title: "Field Surgeon", description: "Restore 2500 health.", rewards: [{ kind: "title" }]  },
-    { threshold: 10000, title: "Lifeline", description: "Restore 10000 health." },
-    { threshold: 25000, title: "Guardian Angel", description: "Restore 25000 health.", rewards: [{ kind: "title" }]  },
-    { threshold: 100000, title: "Panacea", description: "Restore 100000 health." },
+    { threshold: 500, title: "Medic", description: "Restore 500 health.", rewards: [{ kind: "title" }, bounty(5)]  },
+    { threshold: 2500, title: "Field Surgeon", description: "Restore 2500 health.", rewards: [{ kind: "title" }, bounty(10)]  },
+    { threshold: 10000, title: "Lifeline", description: "Restore 10000 health.", rewards: [bounty(25)] },
+    { threshold: 25000, title: "Guardian Angel", description: "Restore 25000 health.", rewards: [{ kind: "title" }, bounty(50)]  },
+    { threshold: 100000, title: "Panacea", description: "Restore 100000 health.", rewards: [bounty(100)] },
   ],
 });
 
@@ -395,6 +426,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "Not a Scratch",
     description: "Win a ranked match without taking a single point of damage.",
     icon: "deed-untouched",
+    rewards: [bounty(100)],
     parent: wins[0]!.id,
     pos: { x: -150, y: -130 },
     trigger: {
@@ -410,6 +442,7 @@ const FEATS: BitsAchievementDef[] = [
     // (identical in 1v1 self-heals; correct once team heals exist).
     description: "Restore 200 health in a single ranked match.",
     icon: "deed-lifeblood",
+    rewards: [bounty(25)],
     parent: healing[0]!.id,
     pos: { x: 45, y: 1650 },
     trigger: {
@@ -423,6 +456,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "By a Thread",
     description: "Take a ranked match to the final round and win it with a sliver of health.",
     icon: "deed-thread",
+    rewards: [bounty(50)],
     parent: wins[0]!.id,
     pos: { x: -265, y: -130 },
     trigger: {
@@ -442,6 +476,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "Return to Sender",
     description: "Turn seven shots back with Mirror Guard in a single ranked match.",
     icon: "deed-reflect",
+    rewards: [bounty(50)],
     parent: "casts-mirror-guard-45",
     pos: { x: -25, y: 745 },
     trigger: {
@@ -460,6 +495,7 @@ const FEATS: BitsAchievementDef[] = [
     // `undying_streak_best` (counters.ts). Same id, icon and board slot.
     description: "Win three ranked matches in a row without dying once.",
     icon: "deed-standing",
+    rewards: [bounty(100)],
     parent: wins[0]!.id,
     pos: { x: -150, y: -245 },
     trigger: { kind: "milestone", counter: `${UNDYING_STREAK}_best`, threshold: 3 },
@@ -470,6 +506,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "Flawless",
     description: "Win a ranked match without dropping a single round.",
     icon: "deed-flawless",
+    rewards: [bounty(25)],
     parent: wins[0]!.id,
     pos: { x: -265, y: -245 },
     trigger: {
@@ -491,6 +528,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "The Old Ways",
     description: "Win a ranked match without casting a single ability.",
     icon: "deed-old-ways",
+    rewards: [bounty(50)],
     parent: FIRST_MATCH.id,
     pos: { x: -265, y: -15 },
     trigger: {
@@ -511,6 +549,7 @@ const FEATS: BitsAchievementDef[] = [
     // down in 1v1.
     description: "Deal 750 damage in a single ranked match.",
     icon: "deed-carnage",
+    rewards: [bounty(50)],
     parent: damage[0]!.id,
     pos: { x: 255, y: -140 },
     trigger: {
@@ -524,6 +563,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "Killer Instinct",
     description: "Land ten critical hits in a single ranked match.",
     icon: "deed-crits",
+    rewards: [bounty(25)],
     parent: kills[0]!.id,
     pos: { x: 140, y: -115 },
     trigger: {
@@ -537,6 +577,7 @@ const FEATS: BitsAchievementDef[] = [
     title: "Never Doubted",
     description: "Lose the opening round, then win the ranked match.",
     icon: "deed-comeback",
+    rewards: [bounty(25)],
     parent: wins[0]!.id,
     pos: { x: -150, y: -15 },
     trigger: {
@@ -565,6 +606,7 @@ const tideHorn: BitsAchievementDef = {
   title: "The Horn Sounds",
   description: "Fight in a ranked round where the Blood Tide rises.",
   icon: "deed-tide-horn",
+  rewards: [bounty(10)],
   parent: FIRST_MATCH.id,
   pos: { x: 0, y: TIDE_Y },
   trigger: { kind: "milestone", counter: COUNTERS.sandsRounds, threshold: 1 },
@@ -579,9 +621,9 @@ const tideKills = milestoneChain<MatchSummary>({
   origin: { x: 150, y: TIDE_Y },
   step: { x: 115, y: 0 },
   tiers: [
-    { threshold: 10, title: "High Tide", description: "Land 10 killing blows after the Blood Tide has risen." },
-    { threshold: 60, title: "Spring Tide", description: "Land 60 killing blows after the Blood Tide has risen." },
-    { threshold: 250, title: "Red Deluge", description: "Land 250 killing blows after the Blood Tide has risen." },
+    { threshold: 10, title: "High Tide", description: "Land 10 killing blows after the Blood Tide has risen.", rewards: [bounty(10)] },
+    { threshold: 60, title: "Spring Tide", description: "Land 60 killing blows after the Blood Tide has risen.", rewards: [bounty(25)] },
+    { threshold: 250, title: "Red Deluge", description: "Land 250 killing blows after the Blood Tide has risen.", rewards: [bounty(100)] },
   ],
 });
 
@@ -593,7 +635,7 @@ const tideFeat = (
   icon: string,
   pos: { x: number; y: number },
   test: (s: MatchSummary, p: number) => boolean,
-  secret = false,
+  opts: { secret?: boolean; bounty?: BountyBand } = {},
 ): BitsAchievementDef => ({
   id,
   board: RANKED_BOARD,
@@ -603,7 +645,8 @@ const tideFeat = (
   parent: tideHorn.id,
   pos,
   trigger: { kind: "feat", test },
-  ...(secret ? { secret: true } : {}),
+  ...(opts.bounty !== undefined ? { rewards: [bounty(opts.bounty)] } : {}),
+  ...(opts.secret ? { secret: true } : {}),
 });
 
 const tideFeats: BitsAchievementDef[] = [
@@ -614,6 +657,7 @@ const tideFeats: BitsAchievementDef[] = [
     "deed-baptism",
     { x: -150, y: TIDE_Y + 115 },
     (s, p) => (s.stats[p]?.baptisms ?? 0) > 0,
+    { bounty: 50 },
   ),
   tideFeat(
     "waist-deep",
@@ -622,6 +666,7 @@ const tideFeats: BitsAchievementDef[] = [
     "deed-waist-deep",
     { x: -265, y: TIDE_Y + 115 },
     (s, p) => (s.stats[p]?.waistDeepWins ?? 0) > 0,
+    { bounty: 50 },
   ),
   tideFeat(
     "let-the-tide-decide",
@@ -630,6 +675,7 @@ const tideFeats: BitsAchievementDef[] = [
     "deed-tide-decided",
     { x: -380, y: TIDE_Y + 115 },
     (s, p) => (s.stats[p]?.tideDecidedWins ?? 0) > 0,
+    { bounty: 25 },
   ),
   tideFeat(
     "quicksand",
@@ -641,6 +687,7 @@ const tideFeats: BitsAchievementDef[] = [
       const st = s.stats[p];
       return wonMatch(s, p) && st !== undefined && st.longestRoundSec !== null && st.longestRoundSec < 10;
     },
+    { bounty: 100 },
   ),
   tideFeat(
     "the-last-grain",
@@ -649,6 +696,7 @@ const tideFeats: BitsAchievementDef[] = [
     "deed-last-grain",
     { x: -265, y: TIDE_Y + 230 },
     (s, p) => (s.stats[p]?.lastGrainWins ?? 0) > 0,
+    { bounty: 50 },
   ),
   tideFeat(
     "undertow",
@@ -657,10 +705,12 @@ const tideFeats: BitsAchievementDef[] = [
     "deed-undertow",
     { x: -380, y: TIDE_Y + 230 },
     (s, p) => (s.stats[p]?.undertows ?? 0) > 0,
+    { bounty: 50 },
   ),
 ];
 
-/** The jokes: never Tidecaller requisites, never pay Glory or items. */
+/** The jokes: never Tidecaller requisites, never pay Glory or items —
+ * so no bounty on any of them. */
 const tideJokes: BitsAchievementDef[] = [
   {
     ...tideFeat(
@@ -681,7 +731,7 @@ const tideJokes: BitsAchievementDef[] = [
     "deed-taken-by-tide",
     { x: -265, y: TIDE_Y + 345 },
     (s, p) => (s.stats[p]?.tideDeaths ?? 0) >= 3,
-    true,
+    { secret: true },
   ),
   tideFeat(
     "watching-the-sand-fall",
@@ -706,7 +756,7 @@ export const TIDECALLER: BitsAchievementDef = {
   icon: "deed-tidecaller",
   parent: tideKills[tideKills.length - 1]!.id,
   pos: { x: 150 + 115 * tideKills.length, y: TIDE_Y },
-  rewards: [{ kind: "title" }, { kind: "entitlement", itemId: "ability:call-the-tide" }],
+  rewards: [{ kind: "title" }, { kind: "entitlement", itemId: "ability:call-the-tide" }, bounty(200)],
   trigger: {
     kind: "capstone",
     requires: [...tideFeats.map((d) => d.id), tideKills[tideKills.length - 1]!.id],

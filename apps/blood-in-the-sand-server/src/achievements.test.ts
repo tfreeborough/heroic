@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Server } from "bun";
-import { PROTOCOL_VERSION, type ArenaEvent, type Team } from "@heroic/blood-in-the-sand-sim";
+import { ACHIEVEMENT_DEFS, PROTOCOL_VERSION, bountyOf, type ArenaEvent, type Team } from "@heroic/blood-in-the-sand-sim";
 import {
   achievementCounters,
   achievementUnlocks,
@@ -14,6 +14,8 @@ import {
   createDb,
   ensureSchema,
   entitlementsOf,
+  gloryBalance,
+  gloryEarned,
   registerPlayer,
   type Db,
 } from "@heroic/blood-in-the-sand-persistence";
@@ -167,6 +169,15 @@ describe("achievement awards at settle", () => {
     expect(counters["undying_streak_best"]).toBe(1);
     // Lifetime Glory rode the ledger into the counter set.
     expect(counters["glory_earned"]).toBeGreaterThan(0);
+
+    // Deeds pay their bounties (bits-deed-glory.md): one `achievement:` row
+    // a paying deed, on top of the match pay — and the glory-earned counter
+    // above reads match pay alone, so a bounty never feeds its own ladder.
+    const byId = new Map(ACHIEVEMENT_DEFS.map((d) => [d.id, d]));
+    const owed = aUnlocks.reduce((sum, id) => sum + bountyOf(byId.get(id)!), 0);
+    expect(owed).toBeGreaterThanOrEqual(10); // the first-match deed at the least
+    expect(await gloryBalance(db, accountA)).toBe((await gloryEarned(db, accountA)) + owed);
+    expect(counters["glory_earned"]).toBe(await gloryEarned(db, accountA));
   });
 
   test("counters accumulate across matches and streaks track results", async () => {

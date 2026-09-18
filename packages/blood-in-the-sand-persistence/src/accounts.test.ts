@@ -152,6 +152,26 @@ describe("linkAccount", () => {
     ]);
   });
 
+  test("a deed both players hold pays its bounty once — the merge holds back the second payment", async () => {
+    await linkAccount(db, { playerId: player, clerkUserId: CLERK_USER });
+    const second = await registerPlayer(db);
+    const pay = (playerId: string, deedId: string, amount: number) =>
+      recordGlory(db, { playerId, amount, source: `achievement:${deedId}`, idempotencyKey: `achievement:${playerId}:${deedId}` });
+    await unlock(player, "ranked-wins-5", 100);
+    await pay(player, "ranked-wins-5", 10);
+    // The fresh identity re-earns the shared deed, plus one of its own and
+    // some honest match pay.
+    await unlock(second.playerId, "ranked-wins-5", 200);
+    await pay(second.playerId, "ranked-wins-5", 10);
+    await unlock(second.playerId, "flawless", 210);
+    await pay(second.playerId, "flawless", 25);
+    await giveGlory(second.playerId, 40);
+
+    const outcome = await linkAccount(db, { playerId: second.playerId, clerkUserId: CLERK_USER });
+    if (outcome.result !== "restored") throw new Error(`expected restored, got ${outcome.result}`);
+    expect(await gloryBalance(db, player)).toBe(10 + 25 + 40);
+  });
+
   test("merge takes the higher of each lifetime counter, never the sum", async () => {
     await linkAccount(db, { playerId: player, clerkUserId: CLERK_USER });
     const second = await registerPlayer(db);

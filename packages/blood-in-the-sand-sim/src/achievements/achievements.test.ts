@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { evaluate, streakUpdates } from "@heroic/achievements";
 import { ABILITY_IDS, WEAPON_IDS } from "../config";
 import type { ArenaEvent } from "../events";
+import { SIGNET_ABILITIES, SIGNET_WEAPONS } from "../items";
+import { BOUNTY_BANDS, BOUNTY_BUDGET, bountyOf } from "./bounties";
 import { COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
 import { ACHIEVEMENT_BOARDS, ACHIEVEMENT_DEFS, RANKED_BOARD } from "./defs";
 import { ACHIEVEMENT_DEFS_2V2, RANKED_2V2_BOARD, TITLE_ONLY_2V2 } from "./defs2v2";
@@ -824,7 +826,7 @@ describe("the Blood Tide stats", () => {
     expect(s2.stats[0]!.tideDecidedWins).toBe(1); // still the tide's kill, and alice stayed dry
   });
 
-  test("Tidecaller: every skill feat + the chain top, never a joke; pays the title and the spell — and the jokes pay titles or nothing", () => {
+  test("Tidecaller: every skill feat + the chain top, never a joke; pays the title, the spell and a capstone bounty — and the jokes pay titles or nothing", () => {
     expect(TIDECALLER.trigger.kind).toBe("capstone");
     if (TIDECALLER.trigger.kind !== "capstone") return;
     const req = new Set(TIDECALLER.trigger.requires);
@@ -832,7 +834,11 @@ describe("the Blood Tide stats", () => {
       expect(req.has(id)).toBe(true);
     }
     for (const joke of TIDE_JOKE_IDS) expect(req.has(joke)).toBe(false);
-    expect(TIDECALLER.rewards).toEqual([{ kind: "title" }, { kind: "entitlement", itemId: "ability:call-the-tide" }]);
+    expect(TIDECALLER.rewards).toEqual([
+      { kind: "title" },
+      { kind: "entitlement", itemId: "ability:call-the-tide" },
+      { kind: "glory", amount: 200 },
+    ]);
     for (const joke of TIDE_JOKE_IDS) {
       const def = ACHIEVEMENT_DEFS.find((d) => d.id === joke)!;
       expect((def.rewards ?? []).every((r) => r.kind === "title")).toBe(true);
@@ -1053,5 +1059,57 @@ describe("the skirmish board", () => {
       unlocked: new Set(["well-met"]),
     }).map((d) => d.id);
     expect(after).toContain("regulars-5");
+  });
+});
+
+// ── Deed bounties (bits-deed-glory.md, 2026-09-18) ─────────────────────────
+
+describe("deed bounties", () => {
+  const paying = ACHIEVEMENT_DEFS.filter((d) => bountyOf(d) > 0);
+
+  test("every bounty sits on a band, one Glory entry a deed", () => {
+    for (const def of paying) {
+      expect((def.rewards ?? []).filter((r) => r.kind === "glory")).toHaveLength(1);
+      expect(BOUNTY_BANDS as readonly number[]).toContain(bountyOf(def));
+    }
+  });
+
+  test("a secret deed never pays Glory — they are consolations, and a bounty nobody can read is no carrot", () => {
+    for (const def of ACHIEVEMENT_DEFS) if (def.secret) expect(bountyOf(def)).toBe(0);
+  });
+
+  test("SIGNET arms and spells never pay Glory; every free and deed-gated ladder does", () => {
+    // A deed on a bought item paying currency is a soft pay-for-Glory loop
+    // (Tom, 2026-08-14). The other half guards the opposite slip: a new
+    // free weapon whose ladder silently pays nothing.
+    const ladder = (idBase: string) => ACHIEVEMENT_DEFS.filter((d) => d.id.startsWith(`${idBase}-`));
+    for (const weapon of WEAPON_IDS) {
+      for (const def of ladder(`rounds-${weapon}`)) {
+        expect(bountyOf(def) > 0).toBe(!SIGNET_WEAPONS.has(weapon));
+      }
+    }
+    for (const ability of ABILITY_IDS) {
+      for (const def of ladder(`casts-${ability}`)) {
+        expect(bountyOf(def) > 0).toBe(!SIGNET_ABILITIES.has(ability));
+      }
+    }
+  });
+
+  test("a ladder pays more the higher it climbs", () => {
+    const ladders = new Map<string, typeof paying>();
+    for (const def of paying) {
+      if (def.trigger.kind !== "milestone") continue;
+      const key = `${def.board}:${def.trigger.counter}`;
+      ladders.set(key, [...(ladders.get(key) ?? []), def]);
+    }
+    const thresholdOf = (d: (typeof paying)[number]) => (d.trigger.kind === "milestone" ? d.trigger.threshold : 0);
+    for (const rungs of ladders.values()) {
+      const climbing = [...rungs].sort((a, b) => thresholdOf(a) - thresholdOf(b)).map(bountyOf);
+      for (let i = 1; i < climbing.length; i++) expect(climbing[i]!).toBeGreaterThan(climbing[i - 1]!);
+    }
+  });
+
+  test("the whole board stays inside the budget", () => {
+    expect(paying.reduce((sum, d) => sum + bountyOf(d), 0)).toBeLessThanOrEqual(BOUNTY_BUDGET);
   });
 });
