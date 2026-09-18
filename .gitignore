@@ -38,3 +38,5 @@ dev.db*
 
 # bun
 # (bun.lock is committed; lockb binary is also fine to commit)
+
+tilesets
