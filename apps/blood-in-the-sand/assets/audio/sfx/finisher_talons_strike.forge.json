@@ -1,0 +1,23 @@
+{
+  "type": "sfx-bits",
+  "subject": "a heavy cloth flapped hard, slow",
+  "prompt": "a heavy cloth flapped hard, slow. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.45,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_talons_strike_1.mp3",
+    "finisher_talons_strike_2.mp3"
+  ],
+  "takeEngines": {
+    "finisher_talons_strike_1.mp3": "elevenlabs",
+    "finisher_talons_strike_2.mp3": "elevenlabs"
+  },
+  "created": "2026-09-20T22:45:51.748Z",
+  "updated": "2026-09-20T22:45:51.748Z"
+}

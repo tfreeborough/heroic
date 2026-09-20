@@ -2,7 +2,7 @@
  * Finishers — the killer's flourish over a kill (bits-cosmetics.md).
  * PROTOTYPES, worn from the dev menu: Butterflies and Smite live
  * here; the later ones are each their own file behind the FinisherShow
- * interface — constellation.ts, medusa.ts, snuffed.ts.
+ * interface — constellation.ts, medusa.ts, snuffed.ts, talons.ts, scarabs.ts.
  *
  * The slot rule: AIR BELONGS TO THE KILLER, FLOOR BELONGS TO THE VICTIM. A
  * finisher plays in the air over the body; the victim's own blood still hits
@@ -46,7 +46,9 @@ import {
 import { Constellation, CONSTELLATION_LIFE_MS } from "./constellation";
 import type { FinisherId } from "./cosmeticIds";
 import { Medusa, MEDUSA_LIFE_MS } from "./medusa";
+import { Scarabs, SCARABS_LIFE_MS } from "./scarabs";
 import { Snuffed, SNUFFED_LIFE_MS } from "./snuffed";
+import { Talons, TALONS_LIFE_MS } from "./talons";
 
 /** A finisher that lives in its own file: a closed-form little show, asked
  *  to draw itself at an age. A show that leaves a floor mark also says how
@@ -56,9 +58,17 @@ export interface FinisherShow {
   drawAir(canvas: SkCanvas, age: number): void;
   markAlpha?(age: number): number;
   stampMark?(canvas: SkCanvas, alpha: number): void;
+  /** The show TAKES the corpse at this age (Talons carries it off, Scarabs
+   *  eat it): from then on the renderer stops drawing the dead body and the
+   *  show draws whatever is left of it. */
+  readonly hidesBodyFromMs?: number;
 }
 
 const MAX_LIVE = 3;
+/** Corpses taken this round (hidesBody) — a round has at most a team's worth. */
+const MAX_TAKEN = 12;
+/** A dead body's drawn position can sit a hair off the hit event's. */
+const TAKEN_SLOP = 30;
 const TAU = Math.PI * 2;
 
 // ── Butterflies ─────────────────────────────────────────────────────────────
@@ -159,8 +169,13 @@ const SPARK_MS = 480;
 const SPARK_COUNT = 16;
 /** The scorch glows this long, then settles and bakes into the splat map. */
 const SCORCH_HOT_MS = 2600;
-/** Without a splat surface marks can't bake — cap the live list instead. */
-const MAX_MARKS = 10;
+/** Without a splat surface marks can't bake — cap the live list instead.
+ *  (Marks also stay live until their kill's blood has baked, ~20s — a cap
+ *  hit drops the oldest unbaked, so it sits well above a round's deaths.) */
+const MAX_MARKS = 16;
+/** A kill's last flung drop has landed — become a decal — by this long after
+ *  it (blood.ts flight times, with room). */
+const KILL_BLOOD_MS = 1500;
 
 const C_BOLT_CORE = Skia.Color("#ffffff");
 const C_BOLT_MID = Skia.Color("#dfe6ff");
@@ -348,9 +363,12 @@ export const stampFinisherMark = (canvas: SkCanvas, m: FinisherMark): void => {
 export class FinisherField {
   private readonly live: LiveFinisher[] = [];
   private readonly marks: FinisherMark[] = [];
+  private readonly taken: { x: number; y: number; fromMs: number }[] = [];
 
-  /** A kill landed and the KILLER wears `id`. (x, y) is the victim. */
-  spawn(id: FinisherId, x: number, y: number, nowMs: number): void {
+  /** A kill landed and the KILLER wears `id`. (x, y) is the victim;
+   *  (dirX, dirY) is the unit killer → victim line, for the shows that
+   *  arrive along it (Talons) — omitted, they roll their own. */
+  spawn(id: FinisherId, x: number, y: number, nowMs: number, dirX?: number, dirY?: number): void {
     if (id === "none") return;
     if (this.live.length >= MAX_LIVE) this.live.shift();
     const f: LiveFinisher = { id, x, y, bornMs: nowMs, lifeMs: 0 };
@@ -374,10 +392,31 @@ export class FinisherField {
         });
       }
     } else if (id !== "smite") {
-      f.show =
-        id === "constellation" ? new Constellation(x, y) : id === "medusa" ? new Medusa(x, y) : new Snuffed(x, y);
-      f.lifeMs =
-        id === "constellation" ? CONSTELLATION_LIFE_MS : id === "medusa" ? MEDUSA_LIFE_MS : SNUFFED_LIFE_MS;
+      switch (id) {
+        case "constellation":
+          f.show = new Constellation(x, y);
+          f.lifeMs = CONSTELLATION_LIFE_MS;
+          break;
+        case "medusa":
+          f.show = new Medusa(x, y);
+          f.lifeMs = MEDUSA_LIFE_MS;
+          break;
+        case "talons":
+          f.show = new Talons(x, y, dirX, dirY);
+          f.lifeMs = TALONS_LIFE_MS;
+          break;
+        case "scarabs":
+          f.show = new Scarabs(x, y);
+          f.lifeMs = SCARABS_LIFE_MS;
+          break;
+        default:
+          f.show = new Snuffed(x, y);
+          f.lifeMs = SNUFFED_LIFE_MS;
+      }
+      if (f.show.hidesBodyFromMs !== undefined) {
+        if (this.taken.length >= MAX_TAKEN) this.taken.shift();
+        this.taken.push({ x, y, fromMs: nowMs + f.show.hidesBodyFromMs });
+      }
       if (f.show.stampMark) {
         this.marks.push({ kind: "show", x, y, bornMs: nowMs, coldMs: f.lifeMs, show: f.show });
       }
@@ -412,16 +451,44 @@ export class FinisherField {
     }
   }
 
-  /** Splice out marks that have gone cold, for the splat-map bake. Only
-   *  called when the surface exists (render.ts scarLayer). */
-  harvestMarks(nowMs: number): FinisherMark[] {
+  /** Has a finisher taken the corpse lying at (x, y)? render.ts asks before
+   *  drawing a dead body. */
+  hidesBody(x: number, y: number, nowMs: number): boolean {
+    for (const t of this.taken) {
+      if (nowMs >= t.fromMs && Math.abs(t.x - x) <= TAKEN_SLOP && Math.abs(t.y - y) <= TAKEN_SLOP) return true;
+    }
+    return false;
+  }
+
+  /** A new round: the fallen are back on their feet, so every claim on a
+   *  corpse is stale — left alone, it would hide the next body to drop there. */
+  clearTaken(): void {
+    this.taken.length = 0;
+  }
+
+  /** Splice out marks that are ready for the splat-map bake. Only called
+   *  when the surface exists (render.ts scarLayer).
+   *
+   *  Ready = cold AND its own kill's blood has already baked. The splat
+   *  surface is chronological and sits UNDER the live wet blood, so a mark
+   *  baked while the victim's pool was still wet (16s) dropped beneath it on
+   *  the spot, and the pool then dried ON TOP of it for good — Scarabs'
+   *  skeleton sank into the decals a second and a half after it appeared
+   *  (Tom, 2026-09-20). Live marks draw above all blood, so a mark simply
+   *  stays live until the kill's blood is down, then stamps over it.
+   *  `oldestWetBloodMs` is the birth of the oldest decal not yet baked
+   *  (decals are birth-ordered and harvested from the front; none → ∞). */
+  harvestMarks(nowMs: number, oldestWetBloodMs = Number.POSITIVE_INFINITY): FinisherMark[] {
     // Marks go cold at different ages (a scorch outlasts nothing; an etching
     // waits for its show), so this is a filter, not a prefix — the list is
     // capped at MAX_MARKS, the walk is nothing.
     const m = this.marks;
     const out: FinisherMark[] = [];
     for (let i = m.length - 1; i >= 0; i--) {
-      if (nowMs - m[i]!.bornMs >= m[i]!.coldMs) out.unshift(...m.splice(i, 1));
+      const mark = m[i]!;
+      if (nowMs - mark.bornMs < mark.coldMs) continue;
+      if (oldestWetBloodMs <= mark.bornMs + KILL_BLOOD_MS) continue;
+      out.unshift(...m.splice(i, 1));
     }
     return out;
   }

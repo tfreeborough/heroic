@@ -71,6 +71,8 @@ export const FINISHER_IDS = [
   "smite",
   "constellation",
   "medusa",
+  "talons",
+  "scarabs",
   "snuffed",
 ] as const;
 export type FinisherId = (typeof FINISHER_IDS)[number];
@@ -81,6 +83,8 @@ export const SIGNET_FINISHERS: ReadonlySet<OwnableFinisherId> = new Set<OwnableF
   "smite",
   "constellation",
   "medusa",
+  "talons",
+  "scarabs",
 ]);
 /** Earned, never sold — Snuffed rides the Gravedigger deed. */
 export const DEED_FINISHERS: ReadonlySet<OwnableFinisherId> = new Set<OwnableFinisherId>(["snuffed"]);
@@ -143,6 +147,8 @@ export const ITEM_NAMES: Record<string, string> = {
   "finisher:smite": "Smite",
   "finisher:constellation": "Among the Stars",
   "finisher:medusa": "Medusa",
+  "finisher:talons": "Talons",
+  "finisher:scarabs": "Scarabs",
   "finisher:snuffed": "Snuffed",
 };
 

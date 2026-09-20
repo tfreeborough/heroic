@@ -157,7 +157,7 @@ perf row (`devFlags.cosmetics`), read live by the next match's loop — any
 match, practice included:
 
 - **FINISHER** ○ NONE → BUTTERFLIES → SMITE → CONSTELLATION → MEDUSA →
-  SNUFFED — plays over YOUR kills. Since finishers went on the wire
+  TALONS → SCARABS → SNUFFED — plays over YOUR kills. Since finishers went on the wire
   (2026-09-20) this is a LOCAL OVERRIDE of the real thing: only this device
   sees it, and it's how finishers nobody owns yet get iterated.
 - **WORN (WIRE)** *(2026-09-20)* — the REAL worn finisher (`bits.finisher`,

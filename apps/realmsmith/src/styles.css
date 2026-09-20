@@ -679,6 +679,7 @@ body {
 /* Blood in the Sand sound-manifest categories (reuses .icon-cat layout). */
 .forge .sound-cat-combat { color: #d94141; }
 .forge .sound-cat-ability { color: #d99a41; }
+.forge .sound-cat-finisher { color: #8a7be0; }
 .forge .sound-cat-flow { color: #b39763; }
 .forge .sound-cat-ui { color: #8aa0b0; }
 

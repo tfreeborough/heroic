@@ -22,11 +22,12 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
 import { BloodField } from "../game/blood";
+import { FinisherCues } from "../game/finisherCues";
 import { FinisherField } from "../game/finishers";
 import { TrailField, type TrailWear } from "../game/trails";
 import { TarField } from "../game/tar";
 import { CrackField } from "../game/cracks";
-import { playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
+import { playHaptic, playStrikeHaptic, WEAPON_HAPTIC } from "../game/haptics";
 import {
   asAnnouncerPack,
   playAnnouncement,
@@ -238,6 +239,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
   const finishersRef = useRef<FinisherField | null>(null);
   finishersRef.current ??= new FinisherField();
   const finishers = finishersRef.current;
+  // The finishers' kill stings + the killer's haptics, walked off the same
+  // frame clock the shows are drawn on (game/finisherCues.ts).
+  const finisherCuesRef = useRef<FinisherCues | null>(null);
+  finisherCuesRef.current ??= new FinisherCues();
+  const finisherCues = finisherCuesRef.current;
   const trailsRef = useRef<TrailField | null>(null);
   trailsRef.current ??= new TrailField();
   const trails = trailsRef.current;
@@ -555,7 +561,9 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             // air belongs to the killer, floor to the victim). Never for a
             // straw man, a suicide, or the weather's unattributed kills.
             if (!isDeployableId(e.targetId) && e.attackerId >= 0 && e.attackerId !== e.targetId) {
-              finishers.spawn(finisherOf(e.attackerId), e.x, e.y, now);
+              const worn = finisherOf(e.attackerId);
+              finishers.spawn(worn, e.x, e.y, now, dx / len, dy / len);
+              if (worn !== "none") finisherCues.start(worn, now, gainAt(e.x, e.y), e.attackerId === myId);
             }
             // Kill shake: every kill in view jolts the camera along the
             // spray (render decides "in view"). Straw men too — it's the
@@ -791,6 +799,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           });
           playSound("heal", undefined, undefined, gainAt(e.x, e.y));
         } else if (e.type === "roundStart") {
+          finishers.clearTaken();
           playSound("roundStart");
         } else if (e.type === "fightStart") {
           fightBannerUntil.current = now + FIGHT_BANNER_TTL;
@@ -885,6 +894,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           blood.update(view.players, now);
           tar.update(view.players, view.deployables, now);
           finishers.update(now);
+          finisherCues.update(now, (sound, gain) => playSound("finisher", sound, undefined, gain), playHaptic);
           trails.update(view.players, now, trailWearOf);
           // Titan footfalls (Tom, 2026-08-11 — the "oh crap, run away"
           // read): while the draught is up, the ground FRACTURES under the

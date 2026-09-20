@@ -55,6 +55,8 @@ export type BitsSoundEvent =
   | "harpoonWhip" //    the chain snaps out
   | "quakeRumble" //    tremor's 4s earthquake bed (rolls under the cast stomp)
   | "heal" //           a blood-font tick lands
+  // ── Finishers (bits-cosmetics.md § cue sheet) ─────────────────────────────
+  | "finisher" //       a kill sting beat             (qualifier: finisherCues.ts `sound`)
   // ── Announcer (booming VO — user-supplied clips, not Forge-generated) ──────
   | "firstBlood" //     the match's first kill
   | "multiKill" //      a continuous kill chain       (qualifier: MultiKillTier)
@@ -113,6 +115,26 @@ const STRIKE_VARIANTS: Record<WeaponId, SoundBank> = {
   // hit event ever carries this weapon, so the bank is deliberately empty.
   // Its audio IS the heal event's own tick (heal_tick_1), already wired.
   lifeline: { clips: [] },
+};
+
+/** The finishers' kill stings — one bank per BEAT (the Forge makes one sound
+ * per brief), keyed by the cue sheet's `sound` (game/finisherCues.ts): bank
+ * `finisher_<key>`. Mixed about an ability cast's weight, under the
+ * announcer; they play over a hit, a death gasp and a crowd roar, so the
+ * loud ones aren't shy. Snuffed is the earned one and stays small. */
+const FINISHER_VARIANTS: Record<string, SoundBank> = {
+  butterflies: { clips: bank("finisher_butterflies"), volume: 0.85 },
+  smite: { clips: bank("finisher_smite") },
+  constellation: { clips: bank("finisher_constellation"), volume: 0.8 },
+  constellation_rise: { clips: bank("finisher_constellation_rise"), volume: 0.85 },
+  medusa: { clips: bank("finisher_medusa"), volume: 0.9 },
+  medusa_stone: { clips: bank("finisher_medusa_stone"), volume: 0.9 },
+  medusa_crumble: { clips: bank("finisher_medusa_crumble") },
+  talons: { clips: bank("finisher_talons"), volume: 0.9 },
+  talons_strike: { clips: bank("finisher_talons_strike") },
+  scarabs: { clips: bank("finisher_scarabs"), volume: 0.9 },
+  scarabs_feed: { clips: bank("finisher_scarabs_feed"), volume: 0.8 },
+  snuffed: { clips: bank("finisher_snuffed"), volume: 0.6 },
 };
 
 /** Per-weapon RELEASE banks (the bow twang / staff cast whoosh), played on the
@@ -255,6 +277,10 @@ export const SOUND_CATALOGUE: SoundCatalogue<BitsSoundEvent> = {
   // A blood-font heal tick. Ticks every 0.5s inside the circle — a soft drip,
   // the default throttle keeps overlapping fonts from stacking into a drone.
   heal: { clips: bank("heal_tick"), volume: 0.55 },
+  // A finisher's kill sting, beat by beat. No base clips: an unknown beat is
+  // silent. Two of the same finisher inside the default throttle share one
+  // sting — a double kill doesn't double the bolt.
+  finisher: { variants: FINISHER_VARIANTS },
 
   // ── Announcer (a booming voice — clips you record/supply yourself, dropped
   // into assets/audio/sfx like any other; no pitch variance on speech) ──────

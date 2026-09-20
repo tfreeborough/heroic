@@ -148,6 +148,8 @@ for (const [id, times] of [
   ["constellation", [90, 260, 450, 700, 950, 1150, 1400]],
   ["medusa", [50, 150, 240, 290, 360, 650, 900, 1000, 1150]],
   ["snuffed", [60, 250, 440, 700, 1100, 1600]],
+  ["talons", [60, 150, 225, 275, 360, 450, 560, 700, 900, 1300]],
+  ["scarabs", [70, 200, 340, 440, 540, 700, 900, 1020, 1120, 1300, 1600]],
 ] as const) {
   sheet(
     `finisher-${id}`,
@@ -156,10 +158,11 @@ for (const [id, times] of [
     times.map((age) => (canvas: any) =>
       withDice(diceFor(2), () => {
         const f = new FinisherField();
-        f.spawn(id, 260, 300, 0);
+        // The kill line runs killer → victim, as a match hands it over.
+        f.spawn(id, 260, 300, 0, 55 / Math.hypot(55, 30), -30 / Math.hypot(55, 30));
         f.update(age);
         f.drawGround(canvas, age);
-        body(canvas, 260, 300, "#d94141", true);
+        if (!f.hidesBody(260, 300, age)) body(canvas, 260, 300, "#d94141", true);
         body(canvas, 205, 330, "#4d7fd9");
         f.drawAir(canvas, age);
       }),
@@ -216,3 +219,21 @@ sheet("trails", 400, 260, [
   trailCell("comet", 0, 0),
   trailCell("comet", 0, 400),
 ]);
+
+// ── The shop window (bits-cosmetics.md § F2/F3): the SAME stage the wardrobe
+//    and the Armory draw for their TILES — NONE first, then every finisher at
+//    its signature moment over a real death splatter. Cells are in POINTS at
+//    3 device px, so the sheet is the phone's pixels. (The LIVE previews are
+//    a real scripted match — finisherScene.ts — and need the device.) ────────
+const { FINISHER_CATALOGUE, FinisherStage, STAGE_LEAD_MS, STAGE_TILE_ZOOM } = await import("../src/game/finisherStage");
+const SHOP_IDS = ["none", ...Object.keys(FINISHER_CATALOGUE)] as ("none" | keyof typeof FINISHER_CATALOGUE)[];
+const STORE_TILE = { w: 110, h: 78, zoom: STAGE_TILE_ZOOM };
+sheet(
+  "store-tiles",
+  STORE_TILE.w,
+  STORE_TILE.h,
+  SHOP_IDS.map((id) => (canvas: any) =>
+    new FinisherStage(id, 2).draw(canvas, STORE_TILE.w, STORE_TILE.h, STAGE_LEAD_MS + (id === "none" ? 600 : FINISHER_CATALOGUE[id].stillAtMs), STORE_TILE.zoom, false),
+  ),
+  3,
+);

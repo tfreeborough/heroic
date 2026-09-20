@@ -76,7 +76,7 @@ const get = async <T,>(url: string): Promise<T> => {
 };
 
 const CATEGORY_ORDER = ["weapon", "offensive", "defensive", "support", "currency"] as const;
-const SOUND_CATEGORY_ORDER: readonly SoundCategory[] = ["combat", "ability", "flow", "ui"];
+const SOUND_CATEGORY_ORDER: readonly SoundCategory[] = ["combat", "ability", "finisher", "flow", "ui"];
 
 export const ForgePanel = ({ onClose }: Props) => {
   const [status, setStatus] = useState<ForgeStatus | null>(null);

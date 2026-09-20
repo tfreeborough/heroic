@@ -7,8 +7,13 @@ approved, **Ichor CUT** (replaced by Starblood, rebuilt as v2), trails retuned
 prototyped (Among the Stars — "looking pretty good"; wreath swapped for
 Scorpion + Eagle, sky made ragged) · five finishers approved · **Finishers v1
 F1 BUILT 2026-09-20** (wire + entitlements + server grant in ranked AND
-skirmish, plus F4's reward/mark/back-grant — § Finishers v1) · owed: the
-wardrobe (F2), the Armory trade (F3), sound (F5) · Applies to: **Blood in the Sand**
+skirmish, plus F4's reward/mark/back-grant — § Finishers v1) · **F2 wardrobe +
+F3 Armory trade BUILT 2026-09-20**, reworked the same day on Tom's first look
+(door → mode-select half card; previews → a real scripted match with full
+death splatter) · **shelf row two — TALONS + SCARABS — built 2026-09-20**
+(§ Shelf row two; six to buy now, device look owed) · owed: the wardrobe
+card's art, a second device look, sound (F5), Tom's names · Applies to:
+**Blood in the Sand**
 
 > A third thing to sell in the Armory beside arms ([bits-store.md](./bits-store.md))
 > and announcer packs. Builds on the blood system ([bits-blood.md](./bits-blood.md))
@@ -110,10 +115,13 @@ on the shelf. They have to feel worth £1.99 and cost nothing in frame rate.
    gone within ~1.2s (so nobody chases them as pickups). Fits the Signet fiction.
 7. **Roses from the Stands** — petals arc in from the crowd onto the kill site and
    stay. The only finisher that moves inward: the crowd reacting to you.
-8. **Carrion** — big bird shadows sweep the whole arena floor and circle the
-   corpse for ~2s. A top-down-only trick; 3–5 low-alpha silhouettes.
-9. **Dragged Under** — spectral hands rise from the sand and pull the body down;
-   the sand closes. Dark, mythic, ties to the game's name.
+8. ~~**Carrion** — big bird shadows sweep the whole arena floor and circle the
+   corpse for ~2s.~~ Arena-wide for 2s breaks the tempo rule → re-cut as
+   **Talons** (11).
+9. ~~**Dragged Under** — spectral hands rise from the sand and pull the body
+   down; the sand closes.~~ **DEAD (2026-09-20):** the Sinkhole (an umber
+   vortex in the sand) and the Sandtrap already own "the sand swallows you" —
+   it would read as an ability. Hands are also thin fingers, sand on sand.
 10. **Among the Stars** (id `constellation`; Tom's brief, 2026-09-19) —
     catasterism, the Greeks' word for a fallen hero being set among the stars. A
     disc of night opens in the sand under the body; stars ignite one by one from
@@ -125,6 +133,12 @@ on the shelf. They have to feel worth £1.99 and cost nothing in frame rate.
     Gladiator (an Orion with a raised sword and a shield), the Gladius, the
     Scorpion, the Eagle. **Prototyped 2026-09-19** (§ The Constellation
     finisher).
+11. **Talons** (2026-09-20) — a roc (a vulture the size of a cart) stoops along the kill line,
+    strikes, and carries the body off. The only finisher where the corpse
+    LEAVES. § Shelf row two.
+12. **Scarabs** (2026-09-20) — beetles surface round the body, wind in on it
+    in a whirlpool, strip it and spin off to burrow; a skeleton is left.
+    § Shelf row two.
 
 ## Blood
 
@@ -568,13 +582,134 @@ quick, like Smite." **The rule: a finisher is over in ~1.5s or less.**
 alias. Names want to be understood instantly by someone who's never read a
 myth; "Among the Stars" and "Snuffed" pass, "Jove" didn't.
 
+## Shelf row two: Talons + Scarabs (built 2026-09-20)
+
+Tom: four to buy fills a row and a bit — design two more "really nice and
+premium" ones so the shelf is two full rows of three. Picked by MOTION, the
+rule the first roster was picked by: we had out (Butterflies), down (Smite),
+up (Among the Stars) and held (Medusa). The two verbs left were ACROSS and
+IN. The shelf is now Butterflies · Smite · Among the Stars / Medusa · Talons
+· Scarabs — six different verbs. Both are in `SIGNET_FINISHERS`, so they're
+ON SALE on this branch (Armory, wardrobe, dev-menu rows all derive from the
+id lists); if either fails the device look, pulling it is one line in sim
+`items.ts`.
+
+**Thrown out on the way, against the ability roster** ("nothing may look like
+an ability"): Dragged Under (Sinkhole / Sandtrap), a gladiator's hook and
+chain dragging the body out (Harpoon), a rain of javelins (reads as an
+attack), anything that drifts away as dust (Sandstorm). Ferryman's Due fails
+the "who's Jove?" name test and puts gold on the floor; Roses from the Stands
+waits for the Garden set. Still on the bench: **Paid in Full** re-cut so the
+coins fly TO THE KILLER (the only idea that points at the buyer — but gold on
+this sand, and it may read as a heal) and a **Chariot** (on-theme, great
+sound; horses read worse than a bird from above and it covers more fight).
+
+### Talons (`game/talons.ts`, 1.1s) — across
+
+| at | beat |
+| --- | --- |
+| 0.00s | THE STOOP — wings folded, in fast along the kill line FROM THE KILLER'S SIDE (it passes over the buyer's shoulder), ease-out. Bird and shadow start apart and converge: the closing gap is how a dive reads from above |
+| 0.21s | THE FLARE — wings thrown wide and forward to brake |
+| 0.26s | THE STRIKE — scale punch, nine dark dust puffs, talon rakes; the corpse is TAKEN; dead still for 0.11s (snaps and stillness, the Medusa lesson) |
+| 0.37s | THE LIFT — a heavy downbeat, then away along the same line on an ease-in, growing 1 → 1.6× toward the camera and fading over the last half; the shadow peels off and thins |
+
+Leaves the rakes and three dark feathers that rock down and lie where they
+land (baked).
+
+**The bird is a ROC — a giant vulture (v2).** v1 was a white-headed sea-eagle;
+Tom on the preview: "pretty good, I think the bird needs to look more like a
+vulture or a roc rather than an eagle". Right twice over: a carrion bird is
+the bird for a corpse, and a noble eagle isn't frightening. What says VULTURE
+from straight above: huge SQUARE plank wings ending in seven long splayed
+fingers, a short dark wedge of a tail, a deep hunched chest — and a small
+bald raw-red head on a bare neck poking out of a pale scalloped RUFF (the
+ruff is the tell; without it it's a crow). Bone beak dipped in black, heavy
+angled brows. Bigger too: ~275 world px across at the flare (~135pt, a third
+of a phone's width), and the wingbeat slowed 70 → 90ms a pose — a thing that
+size rows the air, a quick beat makes it a pigeon. The red head is the one
+warm colour that survives this sand (blood proves it). PERF: one atlas baked
+once — four wing poses (from above a wingbeat is the span changing, the
+Butterflies trick) at 1.25× plus their silhouettes at 0.5× for the shadow —
+so the bird is ONE sprite: a drawAtlas in the air, one on the ground, ≤9 dust
+discs for 0.4s, three feather paths. Preview lessons: wings drawn as blades
+read as a gull — a big raptor's wing is a plank; under the eagle's long white
+tail fan the carried body was invisible — the vulture's stubby tail lets it
+show either side and out past the end.
+
+### Scarabs (`game/scarabs.ts`, 1.48s) — in
+
+| at | beat |
+| --- | --- |
+| 0.00s | THEY SURFACE — 60 beetles out of their own dust puffs, laid along three SPIRAL ARMS 95–215px out (so never a clean ring: circles on this floor mean danger), inner ends first |
+| 0.06s | THE SPIRAL — they wind inward like water down a drain, ease-in on radius and on angle: the nearer the body, the faster round. Outer ones go ~1 turn, inner ~½ |
+| 0.45s | THE MOUND — the corpse is TAKEN; the heap keeps CHURNING the same way round (middle faster than rim) in a pool of dark that SINKS (1 → 0.74, ease-out) as there's less to eat |
+| 1.00s | THE SCATTER — the whirlpool unwinds: out and round on an ease-out, then they BURROW: shrink into a puff, never fade (a fading beetle is a ghost). One straggler leaves at 1.1s |
+
+**v2 — one motion, a whirlpool.** v1 rushed straight in from a ragged band
+and sat in a fidgeting heap; Tom: "a little bit underwhelming, it would be
+nice if they could swarm around in a spiral, the skeleton needs to look a bit
+better too". Now every beetle turns the SAME way all show long (the way is
+rolled per kill) and the whole show is one closed form, `place(b, age)` — a
+heading is just two samples of it. The arms come from making the surfacing
+radius a sawtooth of the surfacing angle. Watch on device that it doesn't
+read as the Sinkhole (also a vortex — but that's an umber stroke in the
+sand, this is sixty teal sprites).
+
+Leaves a skeleton, pale inside a dark rim, lying in the victim's own blood
+(baked) — v2 has MASS: a skull with a jaw, sockets, nose and teeth, a
+ribcage, and limbs as long bones with a knob at every joint (the knobs are
+what make a line a bone). Shells are near-black teal + indigo thorax (two
+masses, not one bean) with one cold glint — the best palette this sand has.
+It is ALL in the ground pass, under every living body: the one finisher that
+can't hide a fight. (That bends "air belongs to the killer" the way Medusa's
+dark does.) PERF: beetles and dust share one atlas → ONE drawAtlas a frame
+(~65 sprites), two circles, prebuilt bone paths. Preview lessons: skeleton
+arms thrown UP read as antlers on a dancing stick man; a jaw jammed against
+the collar bones vanishes and the skull is a ball again; beetles dead on an
+arm's line march nose to tail and the arm reads as one long caterpillar —
+rough them up across it.
+
+### What the two needed from the plumbing
+
+- **A finisher can TAKE the corpse.** `FinisherShow.hidesBodyFromMs` →
+  `FinisherField.hidesBody(x, y, now)`; render.ts skips a dead body a show
+  has claimed (both bodies-and-props draw sites go through one `drawBody`),
+  the shop-window stage and the preview script ask the same question. Claims
+  are cleared on `roundStart` (`clearTaken`) — left alone they'd hide the
+  next corpse to drop on that spot. The shop window builds a fresh field
+  every loop.
+- **A mark bakes AFTER its kill's blood (fixed 2026-09-20).** Tom: "the
+  skeleton ends up behind the decals after a short while". The splat surface
+  is chronological and draws UNDER the live wet blood; marks used to bake the
+  moment they went cold (1.5s for the bones) while the victim's pool was
+  still wet for 16s — so the mark dropped beneath the pool on the spot, and
+  the pool then dried on top of it for good. It was true of EVERY finisher
+  mark (scorch, etching, rubble); the pale skeleton dead-centre in the pool
+  was just the first one where it showed. Now `harvestMarks(now,
+  oldestWetBloodMs)` holds a mark live (live marks draw above all blood)
+  until no decal born before kill + 1.5s is left unbaked, and scarLayer
+  stamps marks AFTER that beat's dried blood. Checked headlessly: blood bakes
+  at ~16.4s, the mark on the same beat, over it. Cost: a mark is a few
+  prebuilt paths a frame for ~20s instead of ~2s; `MAX_MARKS` 10 → 16 so a
+  busy round can't push an unbaked one out.
+- **The kill line.** `FinisherField.spawn(id, x, y, now, dirX?, dirY?)` — the
+  unit killer → victim vector both callers had already computed for the
+  blood. Omitted, Talons rolls a heading.
+- `cosmetics:preview` gained `finisher-talons` / `finisher-scarabs` strips;
+  both appear in `store-tiles` and `store-live-<id>` by themselves.
+
+**Owed:** Tom's device look at both (the bar is Butterflies/Smite: "super
+premium"); sound with the rest of F5 — the briefs for all seven finishers
+are written (§ Finisher sound briefs + cue sheet).
+
 ## Finishers v1 — shipping design (drafted 2026-09-19; F1 + most of F4 BUILT 2026-09-20)
 
 Branch `feat/finishers-v1`. Grounded in a survey of the code as it stands; file
 references are to that survey. Five milestones, each shippable on its own.
 
 **The shelf.** To buy, 1 Signet each: **Butterflies, Smite, Among the
-Stars, Medusa**. To earn: **Snuffed** (Gravedigger). Default for everyone: none.
+Stars, Medusa** — plus **Talons** and **Scarabs** since 2026-09-20 (§ Shelf
+row two). To earn: **Snuffed** (Gravedigger). Default for everyone: none.
 
 **The precedent to clone is the worn TITLE, not the announcer pack.** Titles
 already ride createRoom / joinRoom / queueJoin / the automatic rejoin, land on
@@ -674,6 +809,97 @@ other two simply aren't drawn until they ship (no "coming soon").
 - A reusable `FinisherPreview` component (`loop` for hero/sheet, `frozenAtMs`
   for a still) — F3 reuses it everywhere.
 
+**F2 AS BUILT (2026-09-20)** — `screens/WardrobeScreen.tsx`, route
+`wardrobe`, door = a fourth glyph in the home icon dock (a four-point star
+flourish, drawn by hand in the finishers' own star shape). As designed, plus:
+
+- **The shop window is one pure module**, `game/finisherStage.ts`: the client
+  catalogue (`FINISHER_CATALOGUE` — name, pitch, band colour, `stillAtMs`,
+  `showMs`) and `FinisherStage`, which plays the REAL `FinisherField` on a
+  patch of sand in a loop (0.45s alive → the kill → the show → 0.9s held on
+  whatever it left; a restart swaps in a fresh field so marks never pile up).
+  `components/FinisherPreview.tsx` wraps it: live loop (GameScreen's picture
+  idiom — record per frame into a shared value, dispose late), `once`,
+  `paused`, and `still` (seeded dice, so a tile is the same picture on every
+  mount). `components/FinisherTile.tsx` is ItemTile's sibling with a still
+  for art.
+- **Judged off-device first:** `cosmetics:preview` now writes `store-tiles`
+  and `store-hero-<id>` sheets from the same stage, in points at 3 device px.
+  What they decided: the hero camera is **0.75, not the match's 0.495** (at
+  true scale a 358pt hero was mostly empty sand), tiles are 0.36, and the
+  blue killer is drawn in heroes only, stood well clear (on a tile it sat on
+  the constellation and under Medusa's eye).
+- Tap a tile = wear it (persisted, next room). A worn finisher the local
+  cache doesn't vouch for still shows, so it can always be taken off. Locked
+  Snuffed names its deed and opens Deeds; Deeds' back now retraces to
+  whichever door opened it (`deedsFrom`, the `armoryFrom` pattern).
+- The dev menu's WORN (WIRE) row stays: it's still the only way to claim an
+  UNOWNED finisher and watch the server deny it.
+
+**F2/F3 REWORK (Tom's first look, 2026-09-20)** — three notes, all acted on
+the same day. The "as built" notes around this one describe the first cut;
+where they disagree, THIS is what's in the code.
+
+1. *"Having the icon on the homepage isn't useful… most players won't see
+   it."* The dock glyph is gone. The door is a **half card on mode select**:
+   DEEDS shrank to a half and WARDROBE sits beside it (the Skirmish/Practice
+   row's twin — the two "yours" cards). **ART OWED:** `wardrobe` is in the
+   Forge's `MODE_KEYS` with a brief in `MODE_SUBJECTS` (a champion's dressing
+   cell: crested helm, blood-red cloak and gilded laurel on a stand, by
+   lamplight; one bold silhouette because a half card crops hard; no flowers).
+   **Art forged + wired 2026-09-21.** One catch worth keeping: a half card is
+   roughly square, and the card's dumb centre `cover` crop of a 5:2 keeps only
+   its middle — for this piece, the doorway; the dressed stand sits far right
+   and vanished. So the card wears a derived cut, `assets/modes/
+   wardrobe-half.png` = the forged source's right 5:4 (x 450–900), exact
+   pixels, no resampling; `wardrobe.png` + its sidecar stay as the Forge's
+   source of truth. Re-forge → re-cut the same way. Deeds / Skirmish / Practice
+   were checked the same day (PIL mock at the real card size and 40% art
+   opacity) and survive the centre crop as they are. For any FUTURE half
+   card: brief the subject dead-centre, or plan on a cut.
+2. *"The previews don't do them any favours… if I was looking at that it
+   wouldn't make me want to buy it. They should look more like an actual
+   match (zoomed out to match height, one player shooting another as they
+   advance)."* The live preview is no longer a body on a sand swatch — it's
+   **a real scripted match**: `game/finisherScene.ts` (`FINISHER_KILL_SCENE`)
+   run by the Primer's rig (`primer/scenario.ts` + `PrimerArena`: real sim,
+   real `recordArena`). You hold the top of the lane with a bow; a hammer
+   walks up at you, takes an arrow, takes a second, falls mid-frame — and the
+   finisher plays over the body at the match's own zoom (`FOLLOW_ZOOM`
+   clamped to the longest range ring, render.ts's formula), range ring, HP
+   bars, arrow and all. The floor is wiped each loop and the restart hides
+   under a dip to black. Shown as a **poster** (`components/FinisherPoster`):
+   the match fills the card, a scrim rises from the bottom, name + pitch in
+   the finisher's colour over it — the wardrobe's hero (tall: a match is a
+   portrait thing), the Armory's featured card and its sheet.
+3. *"We don't do the full death splatter on the previews, which makes NONE
+   look pointless and broken."* The live scene gets it for free (the rig
+   already calls `blood.splatter` + `deathBurst`; the shop window adds the
+   kill shake). The STILLS now make the same two BloodField calls under the
+   finisher, and NONE's tile is a still of the plain death, not an empty
+   swatch.
+
+Things learned doing it:
+
+- **ONE live preview at a time.** The renderer's scar cache and splat
+  surface are module singletons keyed to one BloodField, so two mounted
+  arenas would show each other's floor. The Armory therefore runs exactly
+  one: the featured poster drops to its still under a sheet, the sheet's
+  under the forge/packs, the ceremony's is alone by construction.
+- **The scene was tuned by running it headlessly** (it's pure sim): arrows
+  land 15–21, crits ~31, so the foe has 33 HP (never a one-shot, nearly
+  always the second arrow); he walks at 0.42 pace and halts 200px out so the
+  hammer never swings; the kill lands at y≈740 at t=3.0s, and the camera is
+  centred THERE, not on the archer. Loop ≈ 5.7s.
+- **`ROUND_END_SECONDS` (2s since the snappier-rounds change) was under every
+  scene's hold**, so the sim respawned the fallen before the scene restarted
+  — the corpse blinked away. `ScenarioRunner` now holds the sim in roundEnd
+  for the scene's own hold. That fixes the Primer's kill scenes too.
+- `cosmetics:preview` now also runs `scripts/finisher-scene-preview.ts`:
+  `store-live-<id>.png`, six moments of the live scene through the real
+  renderer at the wardrobe hero's exact size (no tileset headlessly — flat
+  floor, no props, no name tags; judge staging, scale, blood and finisher).
+
 ### F3 — the Armory trade
 
 - `ArmoryItem` grows a `kind: "weapon" | "ability" | "finisher"` discriminator
@@ -692,6 +918,18 @@ other two simply aren't drawn until they ship (no "coming soon").
 - The footnote "every arm is free to try in practice" stays true for arms; the
   finisher section carries none.
 
+**F3 AS BUILT (2026-09-20)** — as designed. `ArmoryItem` is a discriminated
+union on `kind`; the third section is **SPECTACLE** (working name — one
+constant, `FINISHER_TRADE`); tiles are stills, the sheet's body is the
+finisher playing (no codex, no practice note — "plays over every kill you
+make — everyone in the arena sees it" instead), the featured hero's right
+half is a live window when the day's pick is a finisher, and the seal-break
+plays it once in a landscape stage with **WEAR IT NOW** under it. Only one
+preview records at a time: the featured loop pauses under any sheet. The
+arms' "free to try in practice" footnote moved up under the arms so it can't
+be read as covering finishers. No API change — the shelf ids were already in
+`SIGNET_ITEM_IDS` (F1).
+
 ### F4 — Snuffed on Gravedigger, shown
 
 - `killing-blows-25` gains `{ kind: "entitlement", itemId: "finisher:snuffed" }`
@@ -706,23 +944,164 @@ other two simply aren't drawn until they ship (no "coming soon").
 
 ### F5 — sound, hardening, launch
 
-- A kill sting per finisher through the Forge (five briefs), one sound event
-  each, played positionally by every client at spawn; the killer gets a
-  matching haptic. **Launch-blocking** — they're silent today.
+- A kill sting per finisher through the Forge, played positionally by every
+  client; the killer gets a matching haptic. **Launch-blocking** — they're
+  silent today. **BRIEFS WRITTEN 2026-09-20** (§ Finisher sound briefs,
+  below): twelve banks on the Forge's sound checklist under a new FINISHER
+  group. **Forged by Tom and WIRED 2026-09-21**; on-device listen owed.
 - Off-screen cull; worst-case perf pass on a weak Android (six-way brawl, WEAR
   EVERYONE, perf overlay); a long-room check of mark bakes.
 - Store listing / promo clips via `bits-promos` once it's real.
+
+#### Finisher sound briefs + cue sheet (written 2026-09-20)
+
+The briefs themselves live where every BITS sound brief lives —
+`SOUND_SUBJECTS` / `SOUND_DURATIONS` in `apps/realmsmith/forge/styleBible.ts`,
+listed for the panel in `src/forge/soundSet.ts` (new **finisher** group, so
+the checklist reads "N of M" with them in it). This is the cue sheet that
+goes with them.
+
+**Why twelve banks for seven finishers.** Stable Audio gives ONE sound per
+brief — "followed by" / "then" comes out as its first half (the 2026-09-06
+rewrite's rule). So a finisher with several beats is several banks and the
+app plays each on its cue. `finisher_<id>` opens the show at the kill;
+`finisher_<id>_<beat>` follows. (The catalogue's bank matcher is
+`^<id>_\d+$`, so `finisher_medusa` never swallows `finisher_medusa_stone_1`.)
+
+| Finisher | Bank | at | what it is | killer's haptic |
+| --- | --- | --- | --- | --- |
+| Butterflies | `finisher_butterflies` | 0 | a papery rush of wings, out and thinning | one soft tap |
+| Smite | `finisher_smite` | 0 | a dry tearing crack + short thump, no rolling tail | one heavy thud |
+| Among the Stars | `finisher_constellation` | 0.06s | a short sparkler fizz and crackle — the stars igniting | — |
+| | `finisher_constellation_rise` | 0.80s | a fast whoosh rising in pitch — the ascent | one light tap |
+| Medusa | `finisher_medusa` | 0 | a sudden hard layered hiss that holds — the snakes rear | — |
+| | `finisher_medusa_stone` | 0.33s | a fast ice-forming crackle onto a stony clack — the turning | one rigid tap |
+| | `finisher_medusa_crumble` | 1.15s | rock cracks into a short tumble of rubble | one heavy thud |
+| Talons | `finisher_talons` | 0 | a hoarse rasping shriek falling in pitch — the stoop | — |
+| | `finisher_talons_strike` | 0.24s | heavy leathery wingbeats, first loudest, moving away | one heavy thud |
+| Scarabs | `finisher_scarabs` | 0 | a dense chitinous skitter: in, swell, away | a short buzz that ramps |
+| | `finisher_scarabs_feed` | 0.55s | a fast dry brittle crunch — the meal | — |
+| Snuffed | `finisher_snuffed` | 0.38s | a flame pinched out: a soft hiss and a puff | one soft tap |
+
+Cues land a few tens of ms AHEAD of the picture where the sound has an
+attack to it (the strike, the pinch) — a transient that's late reads as lag,
+one that's early reads as impact.
+
+**BRIEFS v2 — SIMPLIFIED (2026-09-20).** Tom forged Butterflies and Smite
+off the first briefs and fought every other bank: "the briefs are too
+descriptive and it's throwing off the generation, we need them more
+pragmatic and simpler". Right — the model learnt from sound-LIBRARY
+metadata, so a brief should read like a library entry: a real thing you
+could point a mic at, one action, two or three plain words of character.
+Ten briefs went from ~30 words to under ten (Butterflies and Smite are
+forged — untouched). What v1 got wrong, so it isn't repeated:
+
+- **similes** — "like ice forming across glass";
+- **processes nobody can record** — "a wet surface freezing solid";
+- **choreography** — "rushes in, swells, then scatters away" (shape the
+  envelope in playback — a fade in/out on the clip — not in the prompt);
+- **two sources in one brief** — "a ping with a whoosh under it", "landing
+  hard AND beating its wings";
+- **a rare source where a common one does** — a vulture's shriek → a hawk
+  (the clean-cry worry matters less than getting a usable take: pick the
+  harshest of the six, and it plays under a whump anyway); a crystal bowl →
+  bar chimes; a rack of glass chimes → wind chimes.
+
+| Bank | brief (v2) | if it still fights, try |
+| --- | --- | --- |
+| `finisher_constellation` | a sparkler fizzing and crackling, short *(v3)* | "a match being struck" / "electric sparks crackling, short" |
+| `finisher_constellation_rise` | a fast whoosh rising in pitch *(v3)* | "a firework rocket launching upward" / "a reverse cymbal swell" |
+| `finisher_medusa` | a snake hissing, loud and close | "a cat hissing, long" / "steam hissing, short burst" |
+| `finisher_medusa_stone` | a rock cracking in half, one sharp crack | "ice cracking, one sharp crack" |
+| `finisher_medusa_crumble` | rocks and rubble falling on the ground, short | "a small rockslide" |
+| `finisher_talons` | a hawk screeching once, loud and harsh | "an eagle cry" / "a crow cawing, loud, harsh" |
+| `finisher_talons_strike` | large bird wings flapping, heavy and slow, close | "a heavy cloth flapped hard, slow" |
+| `finisher_scarabs` | a swarm of insects crawling, skittering and clicking | "cockroaches scuttling" / "crab legs clicking on rock" |
+| `finisher_scarabs_feed` | dry twigs and leaves crunching, short | "celery crunching" / "bones crunching" |
+| `finisher_snuffed` | a candle flame snuffed out, one short soft hiss | "a match dropped in water, short hiss" |
+
+**Among the Stars — chimes are OUT (v3, same day).** Tom: "the
+constellation sounds need changing, it's too hard to get the effect we want
+using either 11L or local models". Anything chime-like comes back as a long
+tuneful wind-chime ambience, never a short controlled shimmer — "twinkly" is
+a designed sound, and designed sounds are where these models are weakest. So
+the concept changed, not the wording: the stars IGNITE (a sparkler's fizz
+and crackle under the quick ripple of stars lighting), then the figure GOES
+UP (a rising whoosh at the flare). Fizz and whoosh are the two things these
+models do best, neither is tuned, and both are midrange. If the pair still
+won't come, the show also works on ONE bank: a "reverse cymbal swell" from
+0s, 1s long, cresting on the flare at 0.8s — drop `_rise`.
+
+The fallbacks are the foley trick: ask for the everyday thing that MAKES the
+sound (celery for bone, flapped cloth for wings), not the thing on screen.
+If `finisher_medusa_stone` or `finisher_scarabs_feed` won't come, both are
+the optional middle beat of their show — ship without them.
+
+**Rules the briefs were written to:**
+
+- **Phone speaker first.** A kill already fires the hit, the death gasp, the
+  crowd roar and maybe the announcer, over the score. The sting has to cut
+  through that on a small driver, so each one's identity is MIDRANGE texture
+  — crack, hiss, flutter, click, crunch — never sub-bass (the Titan's Draught
+  lesson, 2026-08-14).
+- **Nothing tuned.** The battle music is in every key (bits-music.md) — a
+  struck NOTE would clash with two songs in three. (Another reason the
+  Stars' chimes went: fizz and whoosh have no pitch to clash.)
+- **One sound, a real source + one action + a few plain words** (v2 — see
+  above; v1's long source-action-production sentences were too much).
+- **Snuffed stays small on purpose** — it's the earned one and mustn't
+  upstage the paid ones, in sound either.
+- **Talons wants the harshest take.** The bird is a vulture, but a vulture's
+  voice isn't something the model knows — the brief asks for a hawk, and the
+  pick is the hoarsest, least "majestic" take of the batch.
+
+**Mix (for the wiring step):** positional like every combat sound
+(`gainAt(e.x, e.y)`), so a finisher across the pit is quiet; about the
+volume of an ability cast, under the announcer. At most three finishers live
+at once (`MAX_LIVE`), so at most three stings overlap. The Armory's and
+wardrobe's live previews should play them too — sound is half the pitch.
+
+**WIRED 2026-09-21** (all twelve banks forged by Tom first; typecheck green,
+cue player checked headlessly; ON-DEVICE LISTEN OWED — levels are a first
+guess):
+
+- `game/finisherCues.ts` — the cue sheet above as data (`FINISHER_CUES`) and
+  `FinisherCues`, the player that walks it. Pure. Cues fire off the FRAME
+  clock the show is drawn on, never timers; one that comes due more than
+  300ms late is dropped (checked: a 2s stall mid-Medusa plays the hiss and
+  the turning, and skips the crumble rather than playing it over nothing).
+- Catalogue: a `finisher` event, qualifier = the cue's `sound`, variants →
+  `bank("finisher_<sound>")`. Levels: most 0.8–1.0, Snuffed 0.6. Two of the
+  same finisher inside the default throttle share one sting.
+- `GameScreen`: a kill that spawns a finisher starts its cues with the
+  kill's positional gain (held for the show) and `mine` = the local player
+  struck the blow; the frame loop walks them beside `finishers.update`.
+- Haptics: `playHaptic(weight | "rigid")` in `game/haptics.ts`, sharing the
+  strikes' 90ms floor. The killer only. Cue haptics all sit AFTER 0 — the
+  kill's own heavy pulse lands at 0 and would swallow them — and "heavy"
+  stays reserved for the kill itself (the crumble and the roc's strike are
+  "medium"). Scarabs' ramp is three pulses, soft → light → medium.
+- **Previews play them too — for two loops.** `PrimerArena sound` →
+  `FinisherPreview sound` → `FinisherPoster sound`: the sting plays for the
+  first 2 kills after mount or a change of finisher, at 0.8 gain, then the
+  preview loops on in silence (left looping it would screech every six
+  seconds). ON for the wardrobe hero, the Armory item sheet and the
+  seal-break ceremony; OFF for the Armory's featured card — nobody asked to
+  see that one. No haptics in previews. (The preview's arrow, hit and death
+  are still silent — only the finisher speaks. If that feels odd on device,
+  the same prop can carry them.)
 
 **Build order:** F1 → F2 → F4 → F3 → F5. After F1+F2+F4 Snuffed is earnable
 and wearable end to end with no store work; F3 then sells the other four.
 
 **Open for Tom:**
-1. Names — the wardrobe area, and the Armory's third trade.
-2. The wardrobe's door — a fourth glyph in the home screen's icon dock
-   (recommended: cheap, and "set and forget" suits a small door) vs a card on
-   mode select (owes forged card art).
-3. Tile art — stills rendered from the effect itself (recommended) vs forged
-   icons.
+1. Names — the wardrobe area, and the Armory's third trade. *Built under
+   working names WARDROBE (`WARDROBE_NAME`) and SPECTACLE (`FINISHER_TRADE`),
+   one constant each.*
+2. ~~The wardrobe's door~~ — the dock glyph was built and REJECTED on sight
+   (2026-09-20: nobody would find it); it's a mode-select half card beside
+   Deeds. Card art owed (brief in the Forge).
+3. ~~Tile art~~ — built as the recommended stills from the effect itself.
 4. While in `claimSkirmishSeat`: flip TITLES to the same default-deny? Today a
    skirmish join with no token wears any title unchecked. Small, same code.
 

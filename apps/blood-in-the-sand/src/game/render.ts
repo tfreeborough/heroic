@@ -1797,8 +1797,10 @@ const scarLayer = (
     const settled = cracks.harvestSettled(nowMs);
     const dried = blood.harvestDried(nowMs);
     // Finisher marks gone cold (Smite's scorch-star) — same handoff as the
-    // settled webs: stamped exactly as the live pass last drew them.
-    const marks = finishers?.harvestMarks(nowMs) ?? [];
+    // settled webs: stamped exactly as the live pass last drew them. A mark
+    // waits for its own kill's blood to bake first (harvested just above, so
+    // the oldest decal left is the oldest still wet) and stamps OVER it.
+    const marks = finishers?.harvestMarks(nowMs, blood.decals[0]?.bornMs) ?? [];
     if (settled.length > 0 || dried.length > 0 || marks.length > 0) {
       // The anti-saturation wash rides a bake that's happening anyway — a
       // standalone wash beat paid the snapshot + texture upload for an
@@ -1812,10 +1814,11 @@ const scarLayer = (
       // the live pass last drew them with — the handoff is invisible
       // (bits-blood.md §7). Before this beat's blood: chronological surface.
       for (const c of settled) drawWebRevealed(canvas, c, CRACK_SETTLE_ALPHA, nowMs);
-      for (const m of marks) stampFinisherMark(canvas, m);
       // Each decal stamps at the instant it finished drying — the exact
       // appearance the live pass last drew (wetness 0, fade not started).
       for (const d of dried) drawBlood(canvas, [d], d.bornMs + BLOOD_DRY_MS);
+      // Marks last: what's drying on this beat was shed 16s ago, before them.
+      for (const m of marks) stampFinisherMark(canvas, m);
       splatImage = splatSurface.makeImageSnapshot();
     }
   }
@@ -2327,13 +2330,19 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     // player north of a cactus draws under it (walks behind); south, over it.
     // PROPS_SORTED is static so only the handful of players sort per frame.
     const byFeet = [...view.players].sort((a, b) => a.y - b.y);
+    // A corpse a finisher has TAKEN (Talons carries it off, Scarabs eat it)
+    // isn't drawn — the show draws what's left of it.
+    const drawBody = (p: PlayerSnapshot): void => {
+      if (!p.alive && r.finishers?.hidesBody(p.x, p.y, r.nowMs)) return;
+      drawPlayer(canvas, p, config, me?.team ?? 0, r.brawl === true, r.pulses, r.nowMs);
+    };
     let pi = 0;
     for (const prop of PROPS_SORTED) {
       while (
         pi < byFeet.length &&
         byFeet[pi]!.y + config.playerRadius <= prop.y
       ) {
-        drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.brawl === true, r.pulses, r.nowMs);
+        drawBody(byFeet[pi]!);
         pi++;
       }
       if (r.atlas) {
@@ -2357,8 +2366,7 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
         );
       }
     }
-    for (; pi < byFeet.length; pi++)
-      drawPlayer(canvas, byFeet[pi]!, config, me?.team ?? 0, r.brawl === true, r.pulses, r.nowMs);
+    for (; pi < byFeet.length; pi++) drawBody(byFeet[pi]!);
 
     drawProjectiles(canvas, view.projectiles);
     drawShells(canvas, view.shells);

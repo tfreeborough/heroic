@@ -24,7 +24,7 @@ import {
 import { SOUND_DURATIONS, SOUND_SUBJECTS } from "../../forge/styleBible";
 
 /** Display grouping in the panel (not saved anywhere — purely how rows cluster). */
-export type SoundCategory = "combat" | "ability" | "flow" | "ui";
+export type SoundCategory = "combat" | "ability" | "finisher" | "flow" | "ui";
 
 export interface SoundSetEntry {
   /** Bank base name — files save as `<id>_1.mp3`, `<id>_2.mp3`, … */
@@ -73,6 +73,21 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "harpoon_whip", label: "Harpoon — chain whip", category: "ability" },
   { id: "quake_rumble", label: "Tremor — quake rumble", category: "ability" },
   { id: "heal_tick", label: "Blood Font — heal tick", category: "ability" },
+  // finishers — the kill stings (bits-cosmetics.md § F5). One SOUND per
+  // bank, so a finisher with several beats is several banks; the app plays
+  // each on its cue. Ids: `finisher_<id>` opens the show, `_<beat>` follows.
+  { id: "finisher_butterflies", label: "Butterflies — the burst of wings", category: "finisher" },
+  { id: "finisher_smite", label: "Smite — the bolt lands", category: "finisher" },
+  { id: "finisher_constellation", label: "Among the Stars — the stars ignite (sparkler fizz)", category: "finisher" },
+  { id: "finisher_constellation_rise", label: "Among the Stars — the figure rises (rising whoosh, at 0.8s)", category: "finisher" },
+  { id: "finisher_medusa", label: "Medusa — the snakes hiss", category: "finisher" },
+  { id: "finisher_medusa_stone", label: "Medusa — turned to stone (at 0.33s)", category: "finisher" },
+  { id: "finisher_medusa_crumble", label: "Medusa — the statue crumbles (at 1.15s)", category: "finisher" },
+  { id: "finisher_talons", label: "Talons — the roc's diving shriek", category: "finisher" },
+  { id: "finisher_talons_strike", label: "Talons — strike + heavy wingbeats away (at 0.24s)", category: "finisher" },
+  { id: "finisher_scarabs", label: "Scarabs — the swarm (skitter in, swell, away)", category: "finisher" },
+  { id: "finisher_scarabs_feed", label: "Scarabs — the feeding crunch (at 0.55s)", category: "finisher" },
+  { id: "finisher_snuffed", label: "Snuffed — the flame pinched out (at 0.38s)", category: "finisher" },
   // match flow
   { id: "countdown_tick", label: "Countdown tick", category: "flow" },
   { id: "round_start", label: "Round start", category: "flow" },
@@ -128,6 +143,6 @@ export const buildSoundSet = (): SoundSetEntry[] => {
   const statics = STATIC.map((s) => entry(s.id, s.label, s.category));
   // Interleave so combat rows (weapon hits + static combat) sit together, etc.
   const all = [...weaponHits, ...weaponFires, ...casts, ...detonates, ...statics];
-  const order: SoundCategory[] = ["combat", "ability", "flow", "ui"];
+  const order: SoundCategory[] = ["combat", "ability", "finisher", "flow", "ui"];
   return order.flatMap((cat) => all.filter((e) => e.category === cat));
 };

@@ -1,0 +1,25 @@
+{
+  "type": "sfx-bits",
+  "subject": "rocks and rubble falling on the ground, short",
+  "prompt": "rocks and rubble falling on the ground, short. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.8,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_medusa_crumble_1.mp3",
+    "finisher_medusa_crumble_2.mp3",
+    "finisher_medusa_crumble_3.mp3"
+  ],
+  "takeEngines": {
+    "finisher_medusa_crumble_1.mp3": "elevenlabs",
+    "finisher_medusa_crumble_2.mp3": "elevenlabs",
+    "finisher_medusa_crumble_3.mp3": "elevenlabs"
+  },
+  "created": "2026-09-20T22:41:15.736Z",
+  "updated": "2026-09-20T22:41:15.736Z"
+}
