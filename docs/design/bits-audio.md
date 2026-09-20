@@ -310,6 +310,17 @@ loudness-normalize, sidecars) but with:
   and the catalogue derives banks from it (asset-forge.md § Sound banks,
   2026-09-06) — no manifest line to paste, no catalogue edit.
 
+## Finisher kill stings (briefs written 2026-09-20)
+
+Twelve `finisher_*` banks for the seven finishers, in their own **finisher**
+group on the Forge checklist. One sound per bank (the Stable Audio rule), so
+multi-beat finishers are several banks played on cues — the cue sheet, the
+haptics and the rules the briefs obey (phone-speaker midrange, nothing
+tuned) are in [bits-cosmetics.md](./bits-cosmetics.md) § Finisher sound
+briefs + cue sheet. **Wired 2026-09-21:** a `finisher` catalogue event
+(qualifier = the beat) driven by `game/finisherCues.ts` off the frame clock;
+live store previews play them for their first two loops.
+
 ## Out of scope (v1)
 
 - **Music beds** — none yet; the director's music decks sit idle. Seamless loops

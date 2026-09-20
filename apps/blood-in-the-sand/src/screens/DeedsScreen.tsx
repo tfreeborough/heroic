@@ -146,6 +146,20 @@ const BountyMark = ({ def }: { def: BitsAchievementDef }) => {
   return glory > 0 ? <Text style={styles.bountyLine}>{`Pays ${glory} Glory`}</Text> : null;
 };
 
+/** A locked row's EARNABLE cosmetic (bits-cosmetics.md § F4): a `finisher:`
+ * reward is never a secret — the row names it, so free players can see
+ * there's one to earn. Weapons and abilities stay hidden until owned
+ * (bits-secret-items.md); only RewardMarks, on an unlocked row, names those. */
+const EarnableMark = ({ def }: { def: BitsAchievementDef }) => (
+  <>
+    {(def.rewards ?? []).map((r, i) =>
+      r.kind === "entitlement" && r.itemId.startsWith("finisher:") ? (
+        <Text key={i} style={styles.bountyLine}>{`Unlocks the “${itemDisplayName(r.itemId)}” finisher`}</Text>
+      ) : null,
+    )}
+  </>
+);
+
 /** The equip pill (achievements.md § wearing titles): unlocked deeds that
  * crown a title get WEAR; the worn one shows WORN and taps back to bare. */
 const WearButton = ({ id, worn, onWear }: { id: string; worn: boolean; onWear: (id: string) => void }) => (
@@ -211,6 +225,7 @@ const HeadRow = ({ entry, counters, worn, onWear }: { entry: TierEntry; counters
         <Text style={styles.titleLocked}>{def.title}</Text>
         <LockedDescription def={def} style={styles.descLocked} />
         <BountyMark def={def} />
+        <EarnableMark def={def} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>
@@ -252,6 +267,7 @@ const TierRow = ({ entry, tier, counters, worn, onWear }: { entry: TierEntry; ti
         <Text style={styles.tierTitleLocked}>{def.title}</Text>
         <LockedDescription def={def} style={styles.tierDescLocked} />
         <BountyMark def={def} />
+        <EarnableMark def={def} />
         {state === "frontier" && <ProgressBar def={def} counters={counters} />}
       </View>
     </View>

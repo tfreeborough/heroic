@@ -65,6 +65,7 @@ export {
   entitlementsOf,
   gloryEarned,
   payOwedBounties,
+  grantOwedEntitlements,
   type AchievementAward,
   type AchievementUnlockRecord,
   type CompanionDelta,

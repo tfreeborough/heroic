@@ -310,6 +310,17 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * so the client can draw the 60 s arm deadline (a rejoin gets the true
  * remainder). Additive: old clients ignore it; on an old server the bar
  * simply never shows.
+ * 2026-09-20, NO bump: KILL FINISHERS (bits-cosmetics.md § Finishers v1) —
+ * `createRoom`/`joinRoom`/`queueJoin` gain `finisher?` (the sender's worn
+ * finisher id) and RoomStatePlayer carries `finisher` PUBLICLY: finishers
+ * are client-derived from the shared event stream, every client playing the
+ * KILLER's row value over the body. Unlike a title the claim is DEFAULT-
+ * DENY: a seat always starts "none" and the server GRANTS the finisher only
+ * after an ownership read (`finisher:<id>`) — ranked at queue time, skirmish
+ * off the optional bearer `token` (no token, no finisher). Additive: an old
+ * client never sends one and ignores the row field; an old server ignores
+ * the claim; unknown ids are "none" on both sides, so new finishers never
+ * need a bump either.
  */
 export const PROTOCOL_VERSION = 33;
 export const DEFAULT_PORT = 7777;
@@ -338,7 +349,7 @@ export type ClientMsg =
    * secret, OPTIONAL and additive (no bump) — resolved server-side into the
    * seat's account so skirmish deeds can be credited and the worn title
    * verified. Absent = plays as before, earns nothing. Never a claimed id. */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string; token?: string }
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string; finisher?: string; token?: string }
   /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
    * secret the last `welcome` for this room carried. Present and matching a
    * disconnected seat, that exact seat is reclaimed — name, team, body.
@@ -348,7 +359,7 @@ export type ClientMsg =
    * this token answers "no such room" even with a free lobby seat. Room
    * codes are reused, so a remembered seat from yesterday must never walk a
    * relaunching player into a stranger's lobby. */
-  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; seatToken?: string; token?: string; reclaimOnly?: boolean }
+  | { t: "joinRoom"; v: number; code: string; playerName: string; pass?: string; announcer?: string; title?: string; finisher?: string; seatToken?: string; token?: string; reclaimOnly?: boolean }
   | { t: "listRooms" }
   /** Spectate without taking a seat (debug tooling now; bench-viewing later). */
   | { t: "watchRoom"; code: string }
@@ -382,7 +393,7 @@ export type ClientMsg =
    * (or an unreachable DB) rejects, ranked being the one honestly
    * connectivity-gated mode. `brackets` is the set to wait in at once —
    * first match found wins, the rest are auto-left (multi-queue). */
-  | { t: "queueJoin"; v: number; token: string; playerName: string; brackets: string[]; announcer?: string; title?: string }
+  | { t: "queueJoin"; v: number; token: string; playerName: string; brackets: string[]; announcer?: string; title?: string; finisher?: string }
   | { t: "queueLeave" }
   /** Unauthenticated queue-size read — the ranked screen's population display
    * before the player commits to queueing. Answered with `queueStatus`. */
@@ -513,6 +524,11 @@ export interface RoomStatePlayer {
    * `announcer`. Clients resolve the display string from ACHIEVEMENT_DEFS;
    * unknown ids render bare (achievements.md § wearing titles). */
   title: string;
+  /** This player's worn kill finisher (`"none"` = bare) — PUBLIC, and only
+   * ever a value the SERVER granted after an ownership read (bits-
+   * cosmetics.md § Finishers v1). Absent from an older server; clients
+   * treat absent/unknown as none (`ownableFinisher`). */
+  finisher: string;
 }
 
 /** A live shot, projected for rendering (the client lerps x/y/angle by id). */

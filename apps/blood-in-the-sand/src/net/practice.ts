@@ -59,6 +59,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
 import { getWornTitle } from "../deeds/wornTitle";
+import { getOwnedWornFinisher } from "../deeds/wornFinisher";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
 import type { ShowcaseScript } from "./showcaseScripts";
 
@@ -218,6 +219,9 @@ export class PracticeClient implements LobbyClient {
     // for the worn title: it shows on your own name tag offline.
     me.announcer = getActiveAnnouncer();
     me.title = getWornTitle();
+    // The worn finisher too — but only an OWNED one (no try-before-buy for
+    // cosmetics, bits-cosmetics.md); here the client is its own server.
+    me.finisher = getOwnedWornFinisher();
     if (showcase) {
       // The star arms now; the cast arms on the lobby's first tick.
       setPlayerWeapon(this.sim, me.id, showcase.seats[0]!.weapon);

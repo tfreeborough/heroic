@@ -1,0 +1,23 @@
+{
+  "type": "sfx-bits",
+  "subject": "a dense flock of small paper-winged insects bursting into flight all at once, one soft dry papery flutter that rushes outward and thins away to nothing, very close-miked, dead room",
+  "prompt": "a dense flock of small paper-winged insects bursting into flight all at once, one soft dry papery flutter that rushes outward and thins away to nothing, very close-miked, dead room. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.5,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_butterflies_1.mp3",
+    "finisher_butterflies_2.mp3"
+  ],
+  "takeEngines": {
+    "finisher_butterflies_1.mp3": "stable-audio",
+    "finisher_butterflies_2.mp3": "stable-audio"
+  },
+  "created": "2026-09-20T22:28:35.515Z",
+  "updated": "2026-09-20T22:28:35.515Z"
+}

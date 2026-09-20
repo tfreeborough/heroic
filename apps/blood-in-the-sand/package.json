@@ -52,7 +52,8 @@
     "ship:ios": "eas build --platform ios --profile production --auto-submit",
     "ship:android": "eas build --platform android --profile production --auto-submit",
     "update:ota": "if [ -f .env.local ]; then echo 'refusing to publish: .env.local overrides .env.production during export and would bake local-dev URLs into the OTA bundle — move it aside first (or just push to master; CI publishes)'; exit 1; fi; eas update --channel production",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cosmetics:preview": "bun run scripts/cosmetics-preview.ts && bun run scripts/finisher-scene-preview.ts"
   },
   "private": true
 }

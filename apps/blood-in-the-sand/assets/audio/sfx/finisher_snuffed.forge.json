@@ -1,0 +1,21 @@
+{
+  "type": "sfx-bits",
+  "subject": "a candle flame snuffed out, one short soft hiss",
+  "prompt": "a candle flame snuffed out, one short soft hiss. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.45,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_snuffed_1.mp3"
+  ],
+  "takeEngines": {
+    "finisher_snuffed_1.mp3": "stable-audio"
+  },
+  "created": "2026-09-20T22:49:22.810Z",
+  "updated": "2026-09-20T22:49:22.810Z"
+}

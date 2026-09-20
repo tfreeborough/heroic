@@ -31,10 +31,13 @@ import {
   ABILITIES,
   WEAPONS,
   SIGNET_ABILITIES,
+  SIGNET_FINISHERS,
   SIGNET_WEAPONS,
   abilityEntitlement,
+  finisherEntitlement,
   weaponEntitlement,
   type AbilityId,
+  type OwnableFinisherId,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import { playSound, unlockAudio } from "../audio";
@@ -62,6 +65,11 @@ import {
 } from "../net/iap";
 import { SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
 import { getEntitlements, grantEntitlement } from "../deeds/entitlements";
+import { setWornFinisher } from "../deeds/wornFinisher";
+import { FinisherPoster } from "../components/FinisherPoster";
+import { FinisherPreview } from "../components/FinisherPreview";
+import { FinisherTile } from "../components/FinisherTile";
+import { FINISHER_CATALOGUE } from "../game/finisherStage";
 import { AccountSheet } from "../components/AccountSheet";
 import { RedeemCodeSheet } from "../components/RedeemCodeSheet";
 import { HeaderDoor, ScreenHeader } from "../components/ScreenHeader";
@@ -96,22 +104,46 @@ const MOCK_PACK_PRICES: Readonly<Record<string, string>> = {
   signet_pack_6: "$7.99",
 };
 
-interface ArmoryItem {
-  id: IconId;
-  isWeapon: boolean;
-  /** `weapon:<id>` / `ability:<id>` — the ledger's name for it. */
-  entitlementId: string;
-}
+/** One thing on the shelf. Three trades (bits-cosmetics.md § F3): steel and
+ * sorcery are ARMS — a forged icon, the War Table's codex, free to try in
+ * practice; a finisher is a COSMETIC — its art is the effect itself, played
+ * live, and the preview is the whole pitch (never usable in practice).
+ * `entitlementId` is the ledger's name: `weapon:` / `ability:` / `finisher:`. */
+type ArmoryItem =
+  | { kind: "weapon"; id: WeaponId; entitlementId: string }
+  | { kind: "ability"; id: AbilityId; entitlementId: string }
+  | { kind: "finisher"; id: OwnableFinisherId; entitlementId: string };
 
-/** Band colour: category colour for spells, gold for steel (War Table rule). */
+/** The third trade's sign — a working name, Tom's pass (bits-cosmetics.md
+ * § open questions). STEEL · SORCERY · SPECTACLE. */
+const FINISHER_TRADE = "SPECTACLE";
+const FINISHER_PROMISE = "Any kill you make will invoke your finisher.";
+
+/** Band colour: category colour for spells, gold for steel (War Table rule),
+ * the catalogue's own for a finisher. */
 const bandColor = (item: ArmoryItem, alpha: string): string =>
-  `${item.isWeapon ? C_GOLD : CATEGORY_META[categoryOf(item.id as AbilityId)].color}${alpha}`;
+  `${
+    item.kind === "weapon"
+      ? C_GOLD
+      : item.kind === "ability"
+        ? CATEGORY_META[categoryOf(item.id)].color
+        : FINISHER_CATALOGUE[item.id].color
+  }${alpha}`;
 
 const nameOf = (item: ArmoryItem): string =>
-  (item.isWeapon ? WEAPONS[item.id as WeaponId].name : ABILITIES[item.id as AbilityId].name).toUpperCase();
+  (item.kind === "weapon"
+    ? WEAPONS[item.id].name
+    : item.kind === "ability"
+      ? ABILITIES[item.id].name
+      : FINISHER_CATALOGUE[item.id].name
+  ).toUpperCase();
 
 const hintOf = (item: ArmoryItem): string =>
-  item.isWeapon ? WEAPON_CODEX[item.id as WeaponId].hint : ABILITY_CODEX[item.id as AbilityId].hint;
+  item.kind === "weapon"
+    ? WEAPON_CODEX[item.id].hint
+    : item.kind === "ability"
+      ? ABILITY_CODEX[item.id].hint
+      : FINISHER_CATALOGUE[item.id].pitch;
 
 export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
   const insets = useSafeAreaInsets();
@@ -238,19 +270,24 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
 
   // ── The stock: signet items you don't own yet. Nothing else is for sale,
   //    so nothing else appears — a storefront, not a codex. ────────────────
-  const { steel, sorcery } = useMemo(() => {
+  const { steel, sorcery, spectacle } = useMemo(() => {
     const entitled = getEntitlements();
     return {
       steel: [...SIGNET_WEAPONS]
         .filter((id) => !entitled.has(weaponEntitlement(id)))
-        .map((id): ArmoryItem => ({ id, isWeapon: true, entitlementId: weaponEntitlement(id) })),
+        .map((id): ArmoryItem => ({ kind: "weapon", id, entitlementId: weaponEntitlement(id) })),
       sorcery: [...SIGNET_ABILITIES]
         .filter((id) => !entitled.has(abilityEntitlement(id)))
-        .map((id): ArmoryItem => ({ id, isWeapon: false, entitlementId: abilityEntitlement(id) })),
+        .map((id): ArmoryItem => ({ kind: "ability", id, entitlementId: abilityEntitlement(id) })),
+      // The earned finisher (Snuffed) is never here — deeds pay it, the
+      // wardrobe advertises it (SIGNET_FINISHERS holds only what's sold).
+      spectacle: [...SIGNET_FINISHERS]
+        .filter((id) => !entitled.has(finisherEntitlement(id)))
+        .map((id): ArmoryItem => ({ kind: "finisher", id, entitlementId: finisherEntitlement(id) })),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entitledStamp]);
-  const stock = useMemo(() => [...steel, ...sorcery], [steel, sorcery]);
+  const stock = useMemo(() => [...steel, ...sorcery, ...spectacle], [steel, sorcery, spectacle]);
 
   // Featured hero — ONE item, pinned for the whole day (settings.ts pin).
   // The old positional day-hash re-pointed whenever the stock shifted (a
@@ -459,17 +496,26 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
 
   const renderStock = (items: ArmoryItem[]) => (
     <View style={styles.grid}>
-      {items.map((item) => (
-        <ItemTile
-          key={item.entitlementId}
-          id={item.id}
-          width={tileW}
-          onPress={() => openSheet(item)}
-          sub={<Text style={tileTextStyles.price}>1 SIGNET</Text>}
-        />
-      ))}
+      {items.map((item) => {
+        const tile = {
+          width: tileW,
+          onPress: () => openSheet(item),
+          sub: <Text style={tileTextStyles.price}>1 SIGNET</Text>,
+        };
+        return item.kind === "finisher" ? (
+          <FinisherTile key={item.entitlementId} id={item.id} {...tile} />
+        ) : (
+          <ItemTile key={item.entitlementId} id={item.id} {...tile} />
+        );
+      })}
     </View>
   );
+  // Only ONE finisher preview may be live at a time (the renderer's blood
+  // cache is a singleton — FinisherPreview): the featured poster drops to
+  // its still while a sheet or ceremony — each with its own — sits over it.
+  const heroCovered = sheet !== null || ceremony !== null || forgeOpen || packsOpen;
+  const heroW = width - 32;
+  const heroH = Math.round(heroW * 0.42);
 
   return (
     // Safe-area padding lives on the ROOT, not the scroll content — content
@@ -561,10 +607,31 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
           ) : null}
         </Animated.View>
 
-        {/* The featured hero — one item, full width, rotated daily. */}
-        {featured !== null ? (
+        {/* The featured hero — one item, full width, rotated daily. An arm
+            is its icon card; a finisher is a POSTER with the real match
+            playing in it (the pitch — it can't be tried in practice). */}
+        {featured !== null && featured.kind === "finisher" ? (
           <Animated.View style={rise(0.1, 0.5)}>
-            <Pressable onPress={() => openSheet(featured)} style={[styles.hero, { height: Math.round((width - 32) * 0.42) }]}>
+            <Pressable onPress={() => openSheet(featured)}>
+              <FinisherPoster
+                id={featured.id}
+                width={heroW}
+                height={Math.round(heroW * 0.78)}
+                // The renderer allows ONE live preview: under a sheet or a
+                // ceremony this poster rests on its still.
+                live={!heroCovered}
+                eyebrow="FEATURED"
+              >
+                <View style={styles.heroPrice}>
+                  <View style={styles.signetSeal} />
+                  <Text style={styles.heroPriceText}>1 SIGNET</Text>
+                </View>
+              </FinisherPoster>
+            </Pressable>
+          </Animated.View>
+        ) : featured !== null ? (
+          <Animated.View style={rise(0.1, 0.5)}>
+            <Pressable onPress={() => openSheet(featured)} style={[styles.hero, { height: heroH }]}>
               <View style={[styles.heroGlow, { backgroundColor: bandColor(featured, "14") }]} />
               <View style={styles.heroText}>
                 <Text style={[styles.heroEyebrow, { color: bandColor(featured, "ff") }]}>FEATURED</Text>
@@ -580,7 +647,7 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
                 </View>
               </View>
               <View style={styles.heroIcon}>
-                <LoadoutIcon id={featured.id} size={Math.round((width - 32) * 0.3)} />
+                <LoadoutIcon id={featured.id} size={Math.round(heroW * 0.3)} />
               </View>
             </Pressable>
           </Animated.View>
@@ -599,22 +666,33 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
             {renderStock(sorcery)}
           </Animated.View>
         ) : null}
+        {/* The arms' promise sits under the ARMS — finishers make a different
+            one (never usable in practice; the preview is the pitch). */}
+        {steel.length + sorcery.length > 0 ? (
+          <Animated.Text style={[styles.footNote, rise(0.45, 0.85)]}>
+            EVERY ARM IS FREE TO TRY IN PRACTICE — A SIGNET UNLOCKS MATCHMADE USE, FOREVER.
+          </Animated.Text>
+        ) : null}
+        {spectacle.length > 0 ? (
+          <Animated.View style={rise(0.5, 0.9)}>
+            <Text style={styles.sectionTitle}>{FINISHER_TRADE}</Text>
+            {renderStock(spectacle)}
+            <Text style={[styles.footNote, styles.footNoteUnder]}>{FINISHER_PROMISE}</Text>
+          </Animated.View>
+        ) : null}
         {stock.length === 0 ? (
           <Animated.View style={[styles.clearedBox, rise(0.25, 0.65)]}>
             <Text style={styles.cleared}>EVERY SEAL BROKEN — NOTHING LEFT TO SELL YOU.</Text>
             <Text style={styles.clearedSub}>NEW ARMS REACH THE PIT WITH EVERY SEASON.</Text>
           </Animated.View>
         ) : null}
-
-        <Animated.Text style={[styles.footNote, rise(0.5, 0.9)]}>
-          EVERY ARM IS FREE TO TRY IN PRACTICE — A SIGNET UNLOCKS MATCHMADE USE, FOREVER.
-        </Animated.Text>
       </ScrollView>
 
       {/* ── The codex sheet, armory-tongued. ── */}
       {sheet !== null ? (
         <ArmorySheet
           item={sheet}
+          live={ceremony === null && !forgeOpen && !packsOpen}
           wallet={wallet}
           notice={notice}
           sheetT={sheetT}
@@ -708,6 +786,8 @@ export const ArmoryScreen = ({ onBack }: { onBack: () => void }) => {
 
 interface ArmorySheetProps {
   item: ArmoryItem;
+  /** A finisher's poster plays live — false while something covers the sheet. */
+  live: boolean;
   wallet: Wallet | null;
   notice: string | null;
   sheetT: Animated.Value;
@@ -719,13 +799,13 @@ interface ArmorySheetProps {
   onGone: () => void;
 }
 
-const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismiss, onGone }: ArmorySheetProps) => {
+const ArmorySheet = ({ item, live, wallet, notice, sheetT, onUnlock, onForge, onDismiss, onGone }: ArmorySheetProps) => {
   const insets = useSafeAreaInsets();
   // Android back closes the sheet, never navigates; the handle drags for real.
   useBackClose(onDismiss);
   const { dragY, panHandlers } = useSheetDrag(onGone);
-  const meta = item.isWeapon ? null : CATEGORY_META[categoryOf(item.id as AbilityId)];
-  const charges = item.isWeapon ? 0 : ABILITIES[item.id as AbilityId].charges;
+  const { width } = useWindowDimensions();
+  const meta = item.kind === "ability" ? CATEGORY_META[categoryOf(item.id)] : null;
   // The one CTA — and it speaks SIGNETS ONLY (Tom, 2026-08-15): Glory never
   // appears on an item; a signetless player is sent to the forge, where the
   // two currencies are allowed to meet.
@@ -747,7 +827,8 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
           { paddingBottom: insets.bottom + 18 },
           {
             transform: [
-              { translateY: sheetT.interpolate({ inputRange: [0, 1], outputRange: [440, 0] }) },
+              // A finisher's sheet is taller (the poster) — it starts further down.
+              { translateY: sheetT.interpolate({ inputRange: [0, 1], outputRange: [item.kind === "finisher" ? 660 : 440, 0] }) },
               // Sequential translateYs compose additively — the live drag
               // rides on top of the open/close animation.
               { translateY: dragY },
@@ -759,19 +840,23 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
         <View {...panHandlers}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetTop}>
-            <LoadoutIcon id={item.id} size={64} />
+            {item.kind !== "finisher" ? <LoadoutIcon id={item.id} size={64} /> : null}
             <View style={styles.sheetHeadText}>
               <Text style={styles.sheetName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                 {nameOf(item)}
               </Text>
-              {meta !== null ? (
+              {item.kind === "ability" && meta !== null ? (
                 <Text
                   style={[styles.sheetMeta, { color: meta.color }]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.75}
                 >
-                  {`${meta.label} · CD ${ABILITIES[item.id as AbilityId].cooldown}S · ${charges} / ROUND`}
+                  {`${meta.label} · CD ${ABILITIES[item.id].cooldown}S · ${ABILITIES[item.id].charges} / ROUND`}
+                </Text>
+              ) : item.kind === "finisher" ? (
+                <Text style={[styles.sheetMeta, { color: bandColor(item, "ff") }]} numberOfLines={1}>
+                  KILL FINISHER
                 </Text>
               ) : null}
             </View>
@@ -783,8 +868,21 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
             ) : null}
           </View>
         </View>
-        <CodexBody id={item.id} isWeapon={item.isWeapon} />
-        <Text style={styles.practiceNote}>FREE TO TRY IN PRACTICE — THE SIGNET UNLOCKS MATCHMADE USE.</Text>
+        {item.kind === "finisher" ? (
+          // No codex, no practice: the sheet's body IS the finisher, playing
+          // in a real match. Live unless the forge/packs sheet is over it.
+          <>
+            <View style={styles.sheetStage}>
+              <FinisherPoster id={item.id} width={width - 40} height={Math.round((width - 40) * 0.86)} live={live} sound title={false} />
+            </View>
+            <Text style={styles.practiceNote}>{FINISHER_PROMISE}</Text>
+          </>
+        ) : (
+          <>
+            <CodexBody id={item.id} isWeapon={item.kind === "weapon"} />
+            <Text style={styles.practiceNote}>FREE TO TRY IN PRACTICE — THE SIGNET UNLOCKS MATCHMADE USE.</Text>
+          </>
+        )}
         {notice !== null ? <Text style={styles.notice}>{notice}</Text> : null}
         <Pressable
           onPress={() => {
@@ -813,6 +911,8 @@ const ArmorySheet = ({ item, wallet, notice, sheetT, onUnlock, onForge, onDismis
  * Tap mid-reveal snaps to done (the DeedCards rule); a min dwell keeps the
  * sting from being skipped by the purchase tap's own bounce. */
 const CEREMONY_MIN_DWELL_MS = 1100;
+const CEREMONY_STAGE_W = 310;
+const CEREMONY_STAGE_H = 260;
 
 const SignetCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void }) => {
   const reveal = useRef(new Animated.Value(0)).current;
@@ -825,12 +925,23 @@ const SignetCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void
   }, [reveal, item]);
   const slice = (from: number, to: number, outputRange: [number, number]) =>
     reveal.interpolate({ inputRange: [from, to], outputRange, extrapolate: "clamp" });
+  /** True while the reveal is still landing — the tap that arrives then
+   * only snaps it (the purchase tap's own bounce must not skip the moment). */
+  const snapIfEarly = (): boolean => {
+    if (Date.now() - bornAt.current >= CEREMONY_MIN_DWELL_MS) return false;
+    reveal.stopAnimation();
+    reveal.setValue(1);
+    return true;
+  };
   const tap = (): void => {
-    if (Date.now() - bornAt.current < CEREMONY_MIN_DWELL_MS) {
-      reveal.stopAnimation();
-      reveal.setValue(1);
-      return;
-    }
+    if (!snapIfEarly()) onDone();
+  };
+  /** One tap from purchase to equipped (bits-cosmetics.md § F3). */
+  const wearNow = (): void => {
+    if (item.kind !== "finisher" || snapIfEarly()) return;
+    setWornFinisher(item.id);
+    playSound("uiConfirm");
+    playStrikeHaptic("soft");
     onDone();
   };
   // Back behaves like a tap — snaps the reveal, then continues. Never
@@ -841,7 +952,7 @@ const SignetCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void
       <Animated.Text style={[styles.ceremonyEyebrow, { opacity: slice(0, 0.25, [0, 1]) }]}>
         THE SEAL BREAKS
       </Animated.Text>
-      <View style={styles.sealStage}>
+      <View style={[styles.sealStage, item.kind === "finisher" && styles.sealStageWide]}>
         {/* The wax halves part as the item comes through. */}
         <Animated.View
           style={[
@@ -875,7 +986,16 @@ const SignetCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void
             transform: [{ scale: slice(0.2, 0.65, [1.25, 1]) }],
           }}
         >
-          <LoadoutIcon id={item.id} size={104} />
+          {item.kind === "finisher" ? (
+            // Where an arm's icon pops through, a finisher simply PLAYS —
+            // the same real kill, yours now. (The sheet is gone and the
+            // featured poster is on its still: this is the one live preview.)
+            <View style={styles.ceremonyStage}>
+              <FinisherPreview id={item.id} width={CEREMONY_STAGE_W - 2} height={CEREMONY_STAGE_H - 2} radius={13} sound />
+            </View>
+          ) : (
+            <LoadoutIcon id={item.id} size={104} />
+          )}
         </Animated.View>
       </View>
       <Animated.Text style={[styles.ceremonyName, { opacity: slice(0.4, 0.7, [0, 1]) }]}>
@@ -887,8 +1007,17 @@ const SignetCeremony = ({ item, onDone }: { item: ArmoryItem; onDone: () => void
           { opacity: slice(0.55, 0.9, [0, 1]), transform: [{ translateY: slice(0.55, 0.9, [10, 0]) }] },
         ]}
       >
-        YOURS, FOREVER — IT WAITS ON THE WAR TABLE.
+        {item.kind === "finisher"
+          ? "YOURS, FOREVER — IT WAITS IN YOUR WARDROBE."
+          : "YOURS, FOREVER — IT WAITS ON THE WAR TABLE."}
       </Animated.Text>
+      {item.kind === "finisher" ? (
+        <Animated.View style={{ opacity: slice(0.7, 1, [0, 1]) }}>
+          <Pressable onPress={wearNow} style={styles.ceremonyWear}>
+            <Text style={styles.ceremonyWearText}>WEAR IT NOW</Text>
+          </Pressable>
+        </Animated.View>
+      ) : null}
       <Animated.Text style={[styles.ceremonyContinue, { opacity: slice(0.85, 1, [0, 1]) }]}>
         TAP TO CONTINUE
       </Animated.Text>
@@ -980,6 +1109,7 @@ const styles = StyleSheet.create({
   cleared: { color: C_BONE, fontSize: 11, fontWeight: "900", letterSpacing: 1.5, textAlign: "center" },
   clearedSub: { color: C_MUTED, fontSize: 9, fontWeight: "800", letterSpacing: 1.2, textAlign: "center" },
   footNote: { color: "#8a8071", fontSize: 9, fontWeight: "800", letterSpacing: 1, textAlign: "center", lineHeight: 14 },
+  footNoteUnder: { marginTop: 12 },
 
   sheetScrim: {
     position: "absolute",
@@ -1013,6 +1143,7 @@ const styles = StyleSheet.create({
   sheetPurse: { alignItems: "center", gap: 3 },
   sheetPurseText: { color: C_MUTED, fontSize: 8, fontWeight: "800", letterSpacing: 1, fontVariant: ["tabular-nums"] },
 
+  sheetStage: { marginTop: 12 },
   practiceNote: { color: "#8a8071", fontSize: 9, fontWeight: "800", letterSpacing: 0.8, lineHeight: 13, marginTop: 10 },
   notice: { color: "#c96a4a", fontSize: 9.5, fontWeight: "800", letterSpacing: 0.8, marginTop: 6, lineHeight: 14 },
 
@@ -1043,6 +1174,9 @@ const styles = StyleSheet.create({
   },
   ceremonyEyebrow: { color: C_MUTED, fontSize: 10, fontWeight: "900", letterSpacing: 4, marginRight: -4 },
   sealStage: { width: 150, height: 150, alignItems: "center", justifyContent: "center" },
+  // A finisher's stage is a landscape window, not an icon — the wax halves
+  // still part from its centre.
+  sealStageWide: { width: CEREMONY_STAGE_W, height: CEREMONY_STAGE_H },
   sealHalf: {
     position: "absolute",
     width: 84,
@@ -1056,5 +1190,14 @@ const styles = StyleSheet.create({
   sealRight: { right: 33 },
   ceremonyName: { color: C_BONE, fontSize: 26, letterSpacing: 3, fontFamily: DISPLAY_FONT, textAlign: "center" },
   ceremonyLine: { color: "#c9bfae", fontSize: 11, fontWeight: "700", letterSpacing: 1.5, textAlign: "center" },
+  ceremonyStage: { borderRadius: 14, borderWidth: 1, borderColor: "#5a4a2c", overflow: "hidden" },
+  ceremonyWear: {
+    marginTop: 18,
+    borderRadius: 13,
+    paddingVertical: 13,
+    paddingHorizontal: 34,
+    backgroundColor: C_GOLD,
+  },
+  ceremonyWearText: { color: "#241a0c", fontSize: 12, fontWeight: "900", letterSpacing: 2.5 },
   ceremonyContinue: { color: C_MUTED, fontSize: 9, fontWeight: "900", letterSpacing: 3, marginTop: 18 },
 });

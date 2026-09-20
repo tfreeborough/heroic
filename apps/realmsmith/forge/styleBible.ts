@@ -178,6 +178,40 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   signet_unlock: "a thick disc of brittle wax snapping in half, one sharp dry crack like ceramic breaking, close-miked",
   signet_purchase: "a small stack of stiff parchment dropped onto a wooden counter, a few quick heavy paper thumps, close-miked",
   reflect: "a projectile ricocheting off a mirror shield, one bright glassy metallic ting with a fast whip away, sharp, very short",
+  // ── Finishers (bits-cosmetics.md § F5 — the kill stings) ──────────────────
+  // ONE sound per bank, so a finisher with several beats is several banks and
+  // the app plays each on its cue (the cue sheet is in the design doc).
+  //
+  // v2, 2026-09-20 — SIMPLIFIED. Tom forged Butterflies and Smite off v1 but
+  // fought every other bank: "the briefs are too descriptive and it's
+  // throwing off the generation". The model was trained on sound-LIBRARY
+  // metadata, so a brief should read like a library entry: a REAL thing
+  // someone could point a mic at, one action, two or three plain words of
+  // character. What v1 got wrong, for next time: similes ("like ice forming
+  // across glass"), processes nobody can record ("a wet surface freezing
+  // solid"), choreography ("rushes in, swells, then scatters away"), two
+  // sources in one brief ("a ping with a whoosh under it"), and rare sources
+  // (a vulture's shriek, a crystal bowl) where a common one does the job (a
+  // hawk, wind chimes). Shape the envelope in playback, not in the prompt.
+  // Butterflies and Smite are v1's and FORGED — leave them be.
+  finisher_butterflies: "a dense flock of small paper-winged insects bursting into flight all at once, one soft dry papery flutter that rushes outward and thins away to nothing, very close-miked, dead room",
+  finisher_smite: "a lightning bolt striking the ground a few feet away, one violent dry tearing crack with a hard midrange snap and a short deep thump, no rain, no rolling thunder, abrupt tail",
+  // v3 for these two (2026-09-20): CHIMES ARE OUT. Tom couldn't get the
+  // tinkle on either engine — SFX models turn anything chime-like into a
+  // long tuneful wind-chime ambience, never a short controlled shimmer. So
+  // the stars stop being "twinkly" and become what they are: things that
+  // IGNITE, then something that goes UP. Fizz and whoosh are the two sounds
+  // these models are best at, and neither is tuned.
+  finisher_constellation: "a sparkler fizzing and crackling, short",
+  finisher_constellation_rise: "a fast whoosh rising in pitch",
+  finisher_medusa: "a snake hissing, loud and close",
+  finisher_medusa_stone: "a rock cracking in half, one sharp crack",
+  finisher_medusa_crumble: "rocks and rubble falling on the ground, short",
+  finisher_talons: "a hawk screeching once, loud and harsh",
+  finisher_talons_strike: "large bird wings flapping, heavy and slow, close",
+  finisher_scarabs: "a swarm of insects crawling, skittering and clicking",
+  finisher_scarabs_feed: "dry twigs and leaves crunching, short",
+  finisher_snuffed: "a candle flame snuffed out, one short soft hiss",
   // ── UI ────────────────────────────────────────────────────────────────────
   ui_tap: "a fingertip tapping the cover of a leather-bound book, one quick muted tick, close-miked, no reverb",
   ui_confirm: "a heavy iron latch dropping into a stone slot, one clean short clunk, close-miked, no reverb",
@@ -251,6 +285,19 @@ export const SOUND_DURATIONS: Record<string, number> = {
   signet_unlock: 1,
   signet_purchase: 1,
   reflect: 0.5,
+  // Finishers: each bank is about as long as the beat it covers.
+  finisher_butterflies: 1.5,
+  finisher_smite: 1.5,
+  finisher_constellation: 1,
+  finisher_constellation_rise: 1.2,
+  finisher_medusa: 1.2,
+  finisher_medusa_stone: 0.7,
+  finisher_medusa_crumble: 1.2,
+  finisher_talons: 0.8,
+  finisher_talons_strike: 1.5,
+  finisher_scarabs: 1.5,
+  finisher_scarabs_feed: 0.7,
+  finisher_snuffed: 0.8,
   ui_tap: 0.5,
   ui_confirm: 0.5,
   ui_back: 0.5,
@@ -535,7 +582,7 @@ export const SPRITE: SpriteSpec = {
  * different paste target: BRACKET_ART in RankedScreen.tsx). modeSet.ts
  * derives the checklist from this — a future mode or bracket appears there
  * by adding a key + subject. */
-export const MODE_KEYS = ["ranked", "skirmish", "practice", "story", "deeds", "bracket-1v1", "bracket-2v2"] as const;
+export const MODE_KEYS = ["ranked", "skirmish", "practice", "story", "deeds", "wardrobe", "bracket-1v1", "bracket-2v2"] as const;
 
 /**
  * Art subjects per mode card. Each brief owns the PLACE and the LIGHT (the
@@ -554,6 +601,18 @@ export const MODE_SUBJECTS: Record<string, string> = {
     "parchment dense with inked deeds on the right, wax seals and small gold-leaf " +
     "medallions linked by drawn lines like a constellation, a quill at rest, warm candle " +
     "glow; the left side is quiet shadowed stone in deep amber dark",
+  // The wardrobe (bits-cosmetics.md § F2) — a HALF card beside Deeds, so the
+  // subject must read in the right ~half of a narrow crop: one bold
+  // silhouette (the dressed stand), not a room full of detail. Candle-lit
+  // like Deeds so the pair reads as the two "yours" cards under the modes.
+  // No flowers anywhere (the no-poppies rule — don't invite the model to).
+  wardrobe:
+    "a champion's dressing cell beneath the arena by lamplight — on the right a single " +
+    "wooden armour stand dressed like a victor: a tall crested helm with a swept horsehair " +
+    "plume, a heavy blood-red cloak falling in folds, a gilded laurel wreath hung on one " +
+    "arm of the stand, a polished bronze mirror catching the flame behind it, a shaft of " +
+    "dusty daylight from a grate above; the left side is quiet shadowed stone wall in deep " +
+    "amber dark",
   skirmish:
     "a gladiators' camp at dusk outside the arena walls — fighters at ease around a " +
     "crackling campfire on the right, one pair lazily sparring behind them, weapon racks " +

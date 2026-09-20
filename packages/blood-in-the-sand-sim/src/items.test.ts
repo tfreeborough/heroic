@@ -15,15 +15,21 @@ import {
 } from "./config";
 import {
   DEED_ABILITIES,
+  DEED_FINISHERS,
   DEED_WEAPONS,
+  FINISHER_IDS,
   GATED_ABILITIES,
   GATED_WEAPONS,
   ITEM_NAMES,
   SIGNET_ABILITIES,
+  SIGNET_FINISHERS,
   SIGNET_ITEM_IDS,
   SIGNET_WEAPONS,
   abilityEntitlement,
+  finisherEntitlement,
+  grantedFinisher,
   itemDisplayName,
+  ownableFinisher,
   weaponEntitlement,
 } from "./items";
 import { ACHIEVEMENT_DEFS } from "./achievements/defs";
@@ -103,6 +109,47 @@ describe("gated items", () => {
     for (const w of DEED_WEAPONS) {
       expect(ACHIEVEMENT_DEFS.some((d) => d.id.startsWith(`rounds-${w}-`))).toBe(true);
     }
+  });
+
+  // ── kill finishers (bits-cosmetics.md § Finishers v1) ────────────────────
+  test("every finisher but \"none\" has exactly one gate kind — there is no free finisher", () => {
+    for (const f of FINISHER_IDS) {
+      if (f === "none") continue;
+      expect(DEED_FINISHERS.has(f) !== SIGNET_FINISHERS.has(f)).toBe(true);
+      expect(ITEM_NAMES[finisherEntitlement(f)]).toBeDefined();
+    }
+    for (const f of [...DEED_FINISHERS, ...SIGNET_FINISHERS]) expect(FINISHER_IDS).toContain(f);
+  });
+
+  test("the shelf sells every signet finisher and no deed finisher; no deed pays a signet finisher", () => {
+    for (const f of SIGNET_FINISHERS) {
+      expect(SIGNET_ITEM_IDS).toContain(finisherEntitlement(f));
+      const payers = ACHIEVEMENT_DEFS.filter((d) =>
+        (d.rewards ?? []).some((r) => r.kind === "entitlement" && r.itemId === finisherEntitlement(f)),
+      );
+      expect(payers.length).toBe(0);
+    }
+    for (const f of DEED_FINISHERS) expect(SIGNET_ITEM_IDS).not.toContain(finisherEntitlement(f));
+  });
+
+  test("every deed finisher is paid out by exactly one deed", () => {
+    for (const f of DEED_FINISHERS) {
+      const payers = ACHIEVEMENT_DEFS.filter((d) =>
+        (d.rewards ?? []).some((r) => r.kind === "entitlement" && r.itemId === finisherEntitlement(f)),
+      );
+      expect(payers.length).toBe(1);
+    }
+  });
+
+  test("a finisher is granted only against its own entitlement — default-deny", () => {
+    expect(grantedFinisher("medusa", ["finisher:medusa"])).toBe("medusa");
+    expect(grantedFinisher("medusa", ["finisher:butterflies", "weapon:fang"])).toBe("none");
+    expect(grantedFinisher("medusa", [])).toBe("none");
+    expect(grantedFinisher("none", ["finisher:none"])).toBe("none");
+    expect(grantedFinisher("free-lunch", ["finisher:free-lunch"])).toBe("none"); // unknown ids never dress a seat
+    expect(grantedFinisher(undefined, ["finisher:medusa"])).toBe("none");
+    expect(ownableFinisher("snuffed")).toBe("snuffed");
+    expect(ownableFinisher(42)).toBeNull();
   });
 
   test("itemDisplayName falls back to Title Case for unknown ids", () => {

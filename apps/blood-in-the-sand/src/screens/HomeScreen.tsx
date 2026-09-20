@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Image, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { Pressable } from "react-native-gesture-handler";
+import { Pressable, ScrollView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Blur, Canvas, Fill, Group, Oval, Path, Picture, Rect, RoundedRect, Shader, Skia, useClock } from "@shopify/react-native-skia";
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
@@ -8,9 +8,11 @@ import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type Anno
 import { QueuePill } from "../components/QueueContext";
 import { IconDock } from "../components/IconDock";
 import { DEV_MENU_ENABLED, devFlags } from "../dev";
+import { BLOOD_IDS, FINISHER_IDS, TRAIL_COLOUR_PRESETS, TRAIL_IDS, TRAIL_LENGTH_STEPS, TRAIL_OPACITY_STEPS, type FinisherId } from "../game/cosmeticIds";
 import { devResetDeeds, devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
 import { forgetCelebratedDeeds } from "../deeds/celebrated";
-import { setEntitlements } from "../deeds/entitlements";
+import { getEntitlements, setEntitlements } from "../deeds/entitlements";
+import { getWornFinisher, setWornFinisher } from "../deeds/wornFinisher";
 import { DevDeedPicker } from "./DevDeedPicker";
 import { loadAnnouncerPack, saveAnnouncerPack } from "../settings";
 import type { RankedResultRow } from "../net/connection";
@@ -362,6 +364,8 @@ export const HomeScreen = ({
   const [playBox, setPlayBox] = useState<{ w: number; h: number } | null>(null);
   // Mirror devFlags so the toggle labels re-render on tap.
   const [perfOverlay, setPerfOverlay] = useState(devFlags.perfOverlay);
+  // Cosmetic prototypes (bits-cosmetics.md): session-only like the perf row.
+  const [cosmetics, setCosmetics] = useState({ ...devFlags.cosmetics });
   // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
   // session-only devFlags rows — App.tsx applies it on launch; this label
   // just needs the same stored value.
@@ -421,6 +425,35 @@ export const HomeScreen = ({
     devFlags.perfOverlay = !devFlags.perfOverlay;
     setPerfOverlay(devFlags.perfOverlay);
   };
+
+  // Step one cosmetic slot to its next option (or flip WEAR) — written
+  // straight onto devFlags, where the next match's loop reads it.
+  const cycle = <T,>(ids: readonly T[], current: T): T => ids[(ids.indexOf(current) + 1) % ids.length]!;
+  const onCosmetic = (slot: "finisher" | "blood" | "trail" | "colours" | "opacity" | "length" | "everyone"): void => {
+    const c = devFlags.cosmetics;
+    if (slot === "finisher") c.finisher = cycle(FINISHER_IDS, c.finisher);
+    else if (slot === "blood") c.blood = cycle(BLOOD_IDS, c.blood);
+    else if (slot === "trail") c.trail = cycle(TRAIL_IDS, c.trail);
+    else if (slot === "colours") c.colours = (c.colours + 1) % TRAIL_COLOUR_PRESETS.length;
+    else if (slot === "opacity") c.trailOpacity = cycle<number>(TRAIL_OPACITY_STEPS, c.trailOpacity);
+    else if (slot === "length") c.trailLengthMs = cycle<number>(TRAIL_LENGTH_STEPS, c.trailLengthMs);
+    else c.everyone = !c.everyone;
+    setCosmetics({ ...c });
+  };
+  // The REAL worn finisher (bits-cosmetics.md § Finishers v1) — the claim
+  // that rides create/join/queue, persisted like the title. A stand-in for
+  // the wardrobe screen (F2) so the wire can be tested on device: it cycles
+  // every id, owned or not, and the SERVER decides — an unowned claim must
+  // come out bare in ranked and skirmish alike. (Grant Gravedigger below to
+  // own Snuffed.)
+  const [worn, setWorn] = useState<FinisherId>(getWornFinisher());
+  const onCycleWornFinisher = (): void => {
+    const next = cycle(FINISHER_IDS, worn);
+    setWornFinisher(next);
+    setWorn(next);
+  };
+  const cosmeticLabel = (id: string): string =>
+    id === "none" || id === "default" ? `○ ${id.toUpperCase()}` : `◉ ${id.replace(/-/g, " ").toUpperCase()}`;
 
   // Cycle the announcer voice — applied live + persisted, then the new pack's
   // FIRST BLOOD line plays so you hear who you just hired (the same
@@ -612,6 +645,13 @@ export const HomeScreen = ({
               <Text style={styles.devClose}>✕</Text>
             </Pressable>
           </View>
+          {/* The rows scroll — the cosmetics block (2026-09-19) took the
+              column past a small phone's height. */}
+          <ScrollView
+            style={{ maxHeight: height - insets.top - insets.bottom - 120 }}
+            contentContainerStyle={styles.devRows}
+            showsVerticalScrollIndicator={false}
+          >
           <Pressable onPress={withTap("uiTap", onTogglePerf)} style={styles.devButton}>
             <Text style={styles.devButtonText}>PERF OVERLAY {perfOverlay ? "◉ ON" : "○ OFF"}</Text>
           </Pressable>
@@ -621,6 +661,43 @@ export const HomeScreen = ({
             <Text style={styles.devButtonText}>
               ANNOUNCER {announcer === "default" ? "○ DEFAULT" : `◉ ${announcer.replace(/_/g, " ").toUpperCase()}`}
             </Text>
+          </Pressable>
+          {/* Cosmetic prototypes (bits-cosmetics.md) — what you wear in the
+              next match, local only. WEAR EVERYONE dresses every fighter,
+              bots included: the worst-case perf read, and the quick way to
+              see blood and finishers without waiting to bleed or kill. */}
+          <Pressable onPress={withTap("uiTap", () => onCosmetic("finisher"))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>FINISHER {cosmeticLabel(cosmetics.finisher)}</Text>
+          </Pressable>
+          <Pressable onPress={withTap("uiTap", onCycleWornFinisher)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              WORN (WIRE) {cosmeticLabel(worn)}
+              {worn !== "none" && !getEntitlements().has(`finisher:${worn}`) ? " · UNOWNED" : ""}
+            </Text>
+          </Pressable>
+          <Pressable onPress={withTap("uiTap", () => onCosmetic("blood"))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>BLOOD {cosmeticLabel(cosmetics.blood)}</Text>
+          </Pressable>
+          <Pressable onPress={withTap("uiTap", () => onCosmetic("trail"))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>TRAIL {cosmeticLabel(cosmetics.trail)}</Text>
+          </Pressable>
+          {cosmetics.trail === "your-colours" ? (
+            <Pressable onPress={withTap("uiTap", () => onCosmetic("colours"))} style={styles.devButton}>
+              <Text style={styles.devButtonText}>COLOURS ◉ {TRAIL_COLOUR_PRESETS[cosmetics.colours]!.name}</Text>
+            </Pressable>
+          ) : null}
+          {cosmetics.trail !== "none" ? (
+            <Pressable onPress={withTap("uiTap", () => onCosmetic("opacity"))} style={styles.devButton}>
+              <Text style={styles.devButtonText}>TRAIL OPACITY {Math.round(cosmetics.trailOpacity * 100)}%</Text>
+            </Pressable>
+          ) : null}
+          {cosmetics.trail !== "none" ? (
+            <Pressable onPress={withTap("uiTap", () => onCosmetic("length"))} style={styles.devButton}>
+              <Text style={styles.devButtonText}>TRAIL LENGTH {(cosmetics.trailLengthMs / 1000).toFixed(1)}s</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={withTap("uiTap", () => onCosmetic("everyone"))} style={styles.devButton}>
+            <Text style={styles.devButtonText}>WEAR {cosmetics.everyone ? "◉ EVERYONE" : "○ JUST ME"}</Text>
           </Pressable>
           {/* Ceremony feel-testing without earning anything (achievements.md
               § unlock ceremony) — plays every beat on fake data. */}
@@ -675,6 +752,7 @@ export const HomeScreen = ({
           >
             <Text style={styles.devButtonText}>RESET DEEDS</Text>
           </Pressable>
+          </ScrollView>
         </View>
       )}
 
@@ -827,6 +905,7 @@ const styles = StyleSheet.create({
   devHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   devTitle: { color: "#6b6257", fontSize: 11, fontWeight: "800", letterSpacing: 2 },
   devClose: { color: "#6b6257", fontSize: 12, fontWeight: "800" },
+  devRows: { gap: 8 },
   devButton: { backgroundColor: "#3a332a", borderRadius: 6, paddingVertical: 10, paddingHorizontal: 14 },
   devButtonText: { color: "#f5ede0", fontWeight: "800", letterSpacing: 1, fontSize: 12 },
 });

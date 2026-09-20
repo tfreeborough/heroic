@@ -1,0 +1,21 @@
+{
+  "type": "sfx-bits",
+  "subject": "a rock cracking in half, one sharp crack",
+  "prompt": "a rock cracking in half, one sharp crack. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.8,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_medusa_stone_1.mp3"
+  ],
+  "takeEngines": {
+    "finisher_medusa_stone_1.mp3": "elevenlabs"
+  },
+  "created": "2026-09-20T22:40:38.861Z",
+  "updated": "2026-09-20T22:40:38.861Z"
+}
