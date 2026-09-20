@@ -272,6 +272,49 @@ describe("achievement awards at settle", () => {
     expect(roster.find((p) => p.id === a.ws.data.playerId)?.title).toBe("sworn-to-the-sand");
   });
 
+  test("ranked grants the kill finisher only when owned — and a rejoin can't claim a new one", async () => {
+    // Alice BOUGHT Medusa; Bob claims Butterflies he never paid for.
+    await db.execute({
+      sql: "INSERT INTO entitlements (player_id, item_id, source) VALUES (?, ?, ?)",
+      args: [accountA, "finisher:medusa", "signet"],
+    });
+    const a = makeSocket();
+    const b = makeSocket();
+    say(manager, a, {
+      t: "queueJoin", v: PROTOCOL_VERSION, token: tokenA, playerName: "Alice",
+      brackets: ["1v1"], finisher: "medusa",
+    });
+    say(manager, b, {
+      t: "queueJoin", v: PROTOCOL_VERSION, token: tokenB, playerName: "Bob",
+      brackets: ["1v1"], finisher: "butterflies",
+    });
+    await until(() => a.of("queueStatus").length > 0 && b.of("queueStatus").length > 0);
+    internals(manager).rankedBeat();
+    acceptAll(manager, a, b);
+    const room = [...internals(manager).rooms.values()][0]!;
+    const seatA = a.ws.data.playerId!;
+
+    expect(room.sim.state.players[seatA]!.finisher).toBe("medusa");
+    expect(room.sim.state.players[b.ws.data.playerId!]!.finisher).toBe("none"); // denied, but Bob still got his match
+    // The grant reaches the roster both sides see — every client plays the KILLER's.
+    const roster = b.of("roomState").at(-1)!["players"] as { id: number; finisher: string }[];
+    expect(roster.find((p) => p.id === seatA)?.finisher).toBe("medusa");
+    expect(roster.find((p) => p.id === b.ws.data.playerId)?.finisher).toBe("none");
+
+    // A mid-match rejoin resumes the verified seat — its fresh claim is ignored.
+    const code = room.meta.code;
+    const seatToken = String(a.of("welcome")[0]!["seatToken"]);
+    room.sim.state.round.phase = "active";
+    manager.close(a.ws);
+    const back = makeSocket();
+    say(manager, back, {
+      t: "joinRoom", v: PROTOCOL_VERSION, code, playerName: "Alice", finisher: "smite", seatToken, token: tokenA,
+    });
+    expect(back.ws.data.playerId).toBe(seatA);
+    await Bun.sleep(20); // no async lookup may overwrite it either
+    expect(room.sim.state.players[seatA]!.finisher).toBe("medusa");
+  });
+
   test("ranked gates the trident — owned picks stick, unowned are silently ignored", async () => {
     // Alice EARNED the trident; Bob just claims one.
     await db.execute({
@@ -358,6 +401,78 @@ describe("skirmish deed awards", () => {
     await until(() => room.skirmish.matchIndex !== indexBefore);
     return matchId;
   };
+
+
+  // ── kill finishers (bits-cosmetics.md § Finishers v1 — default-deny) ─────
+  const own = (account: string, itemId: string) =>
+    db.execute({
+      sql: "INSERT INTO entitlements (player_id, item_id, source) VALUES (?, ?, ?)",
+      args: [account, itemId, "signet"],
+    });
+  const finisherOf = (room: import("./room").Room, seat: number): string => room.sim.state.players[seat]!.finisher;
+
+  test("skirmish grants a finisher only after the ownership read — unowned, tokenless and unknown claims stay bare", async () => {
+    await own(accountA, "finisher:medusa");
+    const a = makeSocket();
+    const b = makeSocket();
+    const c = makeSocket();
+    const d = makeSocket();
+    say(manager, a, { t: "createRoom", v: PROTOCOL_VERSION, playerName: "Alice", teamSize: 2, token: tokenA, finisher: "medusa" });
+    const room = [...internals(manager).rooms.values()][0]!;
+    const join = (s: FakeSocket, name: string, extra: object) =>
+      say(manager, s, { t: "joinRoom", v: PROTOCOL_VERSION, code: room.meta.code, playerName: name, ...extra });
+    join(b, "Bob", { token: tokenB, finisher: "butterflies" }); // has an account, never bought it
+    join(c, "Carol", { finisher: "medusa" }); // no token — nothing to verify against
+    join(d, "Dave", { token: tokenB, finisher: "free-lunch" }); // not a finisher at all
+    const [seatA, seatB, seatC, seatD] = [a, b, c, d].map((s) => s.ws.data.playerId!);
+
+    // DEFAULT-DENY: nobody is dressed on the claim alone, not even the owner.
+    for (const seat of [seatA, seatB, seatC, seatD]) expect(finisherOf(room, seat!)).toBe("none");
+
+    await until(() => finisherOf(room, seatA!) === "medusa");
+    await until(() => room.accounts.size === 3);
+    await Bun.sleep(20);
+    expect(finisherOf(room, seatB!)).toBe("none");
+    expect(finisherOf(room, seatC!)).toBe("none");
+    expect(finisherOf(room, seatD!)).toBe("none");
+    // The grant is broadcast — a guest's roster carries the host's finisher.
+    const roster = b.of("roomState").at(-1)!["players"] as { id: number; finisher: string }[];
+    expect(roster.find((p) => p.id === seatA)?.finisher).toBe("medusa");
+    expect(roster.find((p) => p.id === seatB)?.finisher).toBe("none");
+  });
+
+  test("a skirmish rejoin keeps the seat's granted finisher — the automatic rejoin carries no token or claim", async () => {
+    await own(accountA, "finisher:medusa");
+    const a = makeSocket();
+    const b = makeSocket();
+    say(manager, a, { t: "createRoom", v: PROTOCOL_VERSION, playerName: "Alice", teamSize: 1, token: tokenA, finisher: "medusa" });
+    const room = [...internals(manager).rooms.values()][0]!;
+    say(manager, b, { t: "joinRoom", v: PROTOCOL_VERSION, code: room.meta.code, playerName: "Bob", token: tokenB });
+    const seatA = a.ws.data.playerId!;
+    const seatB = b.ws.data.playerId!;
+    await until(() => finisherOf(room, seatA) === "medusa");
+    const rejoin = (from: FakeSocket, name: string, extra: object): FakeSocket => {
+      const seatToken = String(from.of("welcome")[0]!["seatToken"]);
+      const seat = from.ws.data.playerId!;
+      manager.close(from.ws);
+      const s = makeSocket();
+      say(manager, s, { t: "joinRoom", v: PROTOCOL_VERSION, code: room.meta.code, playerName: name, seatToken, reclaimOnly: true, ...extra });
+      expect(s.ws.data.playerId).toBe(seat);
+      return s;
+    };
+
+    // The cold-launch shape: no bearer token, worn finisher not loaded yet.
+    room.sim.state.round.phase = "active";
+    rejoin(a, "Alice", {});
+    await Bun.sleep(20);
+    expect(finisherOf(room, seatA)).toBe("medusa");
+
+    // A rejoin is no back door: Bob's bare seat stays bare whatever he claims.
+    const bobBack = rejoin(b, "Bob", { finisher: "medusa" });
+    rejoin(bobBack, "Bob", { token: tokenB, finisher: "medusa" });
+    await Bun.sleep(20);
+    expect(finisherOf(room, seatB)).toBe("none");
+  });
 
   test("two humans, tokens on the door: Well Met for both, counters namespaced, per-socket unlock, companions written", async () => {
     const a = makeSocket();

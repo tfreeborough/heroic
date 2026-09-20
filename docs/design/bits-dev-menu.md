@@ -1,7 +1,7 @@
 # Blood in the Sand — Dev Menu & the Target-Dummy Range
 
 Status: **BUILT 2026-07-16** (perf overlay added 2026-07-17; pruned 2026-08-25;
-locked out of production builds 2026-09-11) ·
+locked out of production builds 2026-09-11; cosmetic prototypes 2026-09-19) ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-09-11
 
@@ -148,6 +148,42 @@ the tap is a silent no-op).
 
 Requisites are NOT granted with a capstone (a granted Tidecaller sits over
 six silhouettes) — grant them too if the codex view matters for the test.
+
+## Tool 8 — cosmetic prototypes *(2026-09-19)*
+
+Seven rows for the cosmetics shelf prototypes
+([bits-cosmetics.md](./bits-cosmetics.md) § Prototypes), session-only like the
+perf row (`devFlags.cosmetics`), read live by the next match's loop — any
+match, practice included:
+
+- **FINISHER** ○ NONE → BUTTERFLIES → SMITE → CONSTELLATION → MEDUSA →
+  SNUFFED — plays over YOUR kills. Since finishers went on the wire
+  (2026-09-20) this is a LOCAL OVERRIDE of the real thing: only this device
+  sees it, and it's how finishers nobody owns yet get iterated.
+- **WORN (WIRE)** *(2026-09-20)* — the REAL worn finisher (`bits.finisher`,
+  persisted), the claim that rides create / join / queue. A stand-in for the
+  wardrobe screen until F2 is built. It cycles every id, owned or not, and
+  tags unowned ones `· UNOWNED` off the local entitlement cache — on purpose:
+  the SERVER decides, so an unowned claim must come out bare in ranked and
+  skirmish alike (that's the test). To own one locally, grant **Gravedigger**
+  (Tool 7's deed picker) — it pays Snuffed.
+- **BLOOD** ○ DEFAULT → STARBLOOD → ROSES — what YOU bleed. (Ichor was here
+  until it was cut on device, 2026-09-19.)
+- **TRAIL** ○ NONE → YOUR COLOURS → COMET — and, while Your Colours is on, a
+  **COLOURS** row cycling the four presets that stand in for the real picker.
+- **TRAIL OPACITY** 20 / 30 / 40 / 55 / 70% (default 40) — shown while a
+  trail is on; the dial for finding how subtle a trail has to be in a real
+  fight (Tom's device pass 1: the first cut was far too loud).
+- **TRAIL LENGTH** 0.5 / 0.8 / 1.0 / 1.3s (default 1.3 — Tom's pick) — how long the wake
+  lingers, same idea.
+- **WEAR** ○ JUST ME / ◉ EVERYONE — EVERYONE dresses every fighter the same
+  way, bots included (trail colours step by seat). It's the worst-case perf
+  read with the overlay on, and the quick way to see blood and finishers
+  without waiting to bleed or kill. A dev preview only — in the product bots
+  never wear cosmetics.
+
+Purely local, WORN (WIRE) aside: nothing else rides the wire, other players
+see nothing. The panel's rows now scroll (the column outgrew a small phone).
 
 ## Retired rows *(2026-08-25)*
 

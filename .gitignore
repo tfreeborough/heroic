@@ -40,3 +40,5 @@ dev.db*
 # (bun.lock is committed; lockb binary is also fine to commit)
 
 tilesets
+# bun run cosmetics:preview — off-device contact sheets (bits-cosmetics.md)
+apps/blood-in-the-sand/cosmetics-preview/

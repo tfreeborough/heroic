@@ -48,15 +48,8 @@ import {
   type SandsSnapshot,
   type ShellSnapshot,
 } from "@heroic/blood-in-the-sand-sim";
-import {
-  BLOOD_DRY_MS,
-  decalAlpha,
-  POOL_MIN_R,
-  poolGrowth,
-  type BloodDecal,
-  type BloodField,
-  type FlyingDrop,
-} from "./blood";
+import { BLOOD_DRY_MS, type BloodField } from "./blood";
+import { drawBlood, drawBloomingBlood, drawFlyingBlood } from "./bloodMaterials";
 import {
   CRACK_SETTLE_ALPHA,
   crackAlpha,
@@ -65,8 +58,10 @@ import {
   type CrackField,
 } from "./cracks";
 import { buildCrowd, CROWD_REVEAL } from "./crowd";
+import { stampFinisherMark, type FinisherField } from "./finishers";
 import type { StatusPulses } from "./statusRings";
 import type { TarField } from "./tar";
+import type { TrailField } from "./trails";
 
 // Zone geometry is static — derive once at module scope (loadZone is pure).
 const ZONE = loadZone(ARENA_00);
@@ -214,14 +209,6 @@ const C_ARROW_EDGE = Skia.Color("rgba(0, 0, 0, 0.55)");
 const fill = Skia.Paint();
 const stroke = Skia.Paint();
 stroke.setStyle(PaintStyle.Stroke);
-
-// Dedicated blood paints — the premium decal renderer swaps shaders and stroke
-// widths per decal; a dedicated pair keeps that churn out of the shared paints.
-const bloodFill = Skia.Paint();
-const bloodStroke = Skia.Paint();
-bloodStroke.setStyle(PaintStyle.Stroke);
-bloodStroke.setStrokeJoin(StrokeJoin.Round);
-bloodStroke.setStrokeCap(StrokeCap.Round); // flying-droplet motion tails
 
 // Dedicated paint so the dash effect never leaks into the shared stroke.
 const rangeStroke = Skia.Paint();
@@ -406,6 +393,12 @@ export interface ArenaRenderInput {
    *  world centre + zoom, bypassing follow/fit entirely. Matches never set
    *  this — the arena camera stays the one every player shares. */
   camera?: { cx: number; cy: number; zoom: number };
+  /** Cosmetic prototypes (bits-cosmetics.md) — both optional, so the Primer
+   *  and anything else that doesn't dress its fighters passes neither.
+   *  Finishers play over a kill (air pass) and may leave a floor mark that
+   *  bakes into the splat map; trails draw under the bodies. */
+  finishers?: FinisherField;
+  trails?: TrailField;
   /** Kill kicks (bits-blood.md §8a): a lethal hit in view nudges the camera
    *  a few px along the spray line for KILL_KICK_MS. The caller prunes. */
   kicks?: readonly KillKick[];
@@ -427,145 +420,6 @@ export interface KillKick {
 export const KILL_KICK_PX = 13;
 export const KILL_KICK_MS = 320;
 const KILL_KICK_CYCLES = 2.2;
-
-// ── Premium blood material ──────────────────────────────────────────────────
-// Blood reads as gore, not paint, from three things flat circles never had:
-// an irregular silhouette (no circular edge anywhere), tonal depth (near-black
-// core → oxblood → wet arterial edge), and AGE — a spill sets over ~16s then
-// holds, so a still-wet trail means someone bled here seconds ago (a readable
-// freshness signal in a one-life arena, not just eye-candy). All of it is a
-// pure function of data the decal already carries — position, radius, birth,
-// seed — so it costs nothing on the wire and rebuilds inside the same cached
-// scar picture; per-frame cost stays one drawPicture. Silhouette paths are
-// baked at birth in blood.ts (the cracks.ts lesson); a rebuild here only
-// re-samples colours and alphas.
-/** Premium marks sit a touch more solid than the old flat alpha (which was
- *  tuned for cheap overlapping circles). */
-const BLOOD_ALPHA_BOOST = 1.5;
-const C_SHEEN = Skia.Color("#ffb4aa"); // wet specular, fresh pools only
-
-/** wetness 1 (fresh, bright + wet) → 0 (set, dark + matte). Smoothstep in so it
- *  looks wet a beat before it starts drying, then holds at 0. */
-const bloodWetness = (ageMs: number): number => {
-  const t = Math.min(1, Math.max(0, ageMs / BLOOD_DRY_MS));
-  return 1 - t * t * (3 - 2 * t);
-};
-
-// Colour ramps baked once (fresh → dried), sampled by wetness — never restring
-// rgba per decal (that floods Skia's colour cache; see the palette note above).
-const RAMP_N = 10;
-const buildRamp = (
-  fresh: readonly [number, number, number],
-  dried: readonly [number, number, number],
-): Float32Array[] => {
-  const out: Float32Array[] = [];
-  for (let i = 0; i < RAMP_N; i++) {
-    const t = i / (RAMP_N - 1);
-    const r = Math.round(fresh[0] + (dried[0] - fresh[0]) * t);
-    const g = Math.round(fresh[1] + (dried[1] - fresh[1]) * t);
-    const b = Math.round(fresh[2] + (dried[2] - fresh[2]) * t);
-    out.push(Skia.Color(`rgb(${r}, ${g}, ${b})`));
-  }
-  return out;
-};
-const RAMP_CORE = buildRamp([42, 6, 4], [24, 8, 5]); // near-black centre
-const RAMP_BODY = buildRamp([104, 18, 12], [52, 15, 9]); // oxblood
-const RAMP_EDGE = buildRamp([158, 32, 22], [74, 27, 19]); // wet arterial rim
-const RAMP_RIM = buildRamp([24, 6, 5], [30, 10, 6]); // coagulated coffee-ring
-const RAMP_CLOT = buildRamp([30, 8, 6], [14, 5, 4]); // tacky centre clot
-/** dryness (1 - wetness) → ramp index. */
-const rampIdx = (w: number): number =>
-  Math.min(RAMP_N - 1, Math.max(0, Math.round((1 - w) * (RAMP_N - 1))));
-
-// One pool gradient per ramp step, built once at UNIT radius — pools draw
-// their unit-baked path under translate+scale, so these fit every pool at any
-// size. A rebuild used to allocate a fresh native radial gradient PER POOL
-// (hundreds each pass): a big slice of the weak-device `rec` spike.
-const POOL_GRADIENTS = Array.from({ length: RAMP_N }, (_, i) =>
-  Skia.Shader.MakeRadialGradient(
-    vec(-0.15, -0.15),
-    1.1,
-    [RAMP_CORE[i]!, RAMP_BODY[i]!, RAMP_EDGE[i]!],
-    [0, 0.55, 1],
-    TileMode.Clamp,
-  ),
-);
-
-/**
- * Floor blood. Small drops and flung spray are cheap solid-colour shapes (the
- * bulk — a kill throws ~90); only the few big pools pay for a tonal radial
- * gradient, a coagulated rim, a drying clot and a wet sheen. Recorded into the
- * cached scar picture, not per frame — no viewport cull here (the cache is
- * camera-independent; raster quick-rejects offscreen ops by bounds).
- */
-const drawBlood = (
-  canvas: SkCanvas,
-  blood: readonly BloodDecal[],
-  nowMs: number,
-): void => {
-  for (const d of blood) {
-    const life = decalAlpha(d, nowMs) / d.alpha; // fade curve, 1 → 0 at ttl
-    if (life <= 0) continue;
-    const w = bloodWetness(nowMs - d.bornMs);
-    const idx = rampIdx(w);
-    const alpha = Math.min(1, d.alpha * BLOOD_ALPHA_BOOST) * life;
-
-    // Drops + flung spray → the world-coord baked path, single solid fill.
-    if (d.r < POOL_MIN_R || d.dx !== undefined) {
-      bloodFill.setColor(RAMP_BODY[idx]!);
-      bloodFill.setAlphaf(alpha);
-      canvas.drawPath(d.path, bloodFill);
-      continue;
-    }
-
-    // Pools → the full treatment. The path is baked at unit radius, so draw
-    // in decal-local space: translate+scale places it AND makes the cached
-    // unit gradient land exactly where the per-pool one used to. Death pools
-    // additionally SEEP — the scale rides poolGrowth, spreading the stain to
-    // POOL_GROWTH× over POOL_GROW_MS (bits-blood.md §5).
-    const dry = 1 - w;
-    const g = poolGrowth(d, nowMs);
-    canvas.save();
-    canvas.translate(d.x, d.y);
-    canvas.scale(d.r * g, d.r * g);
-    bloodFill.setShader(POOL_GRADIENTS[idx]!);
-    bloodFill.setAlphaf(alpha);
-    canvas.drawPath(d.path, bloodFill);
-    bloodFill.setShader(null);
-
-    // Tacky clot sets in the centre as it dries. It stays at BIRTH scale —
-    // the thick core doesn't ride the thinning seep edge outward.
-    if (dry > 0.05 && d.clotPath) {
-      bloodFill.setColor(RAMP_CLOT[idx]!);
-      bloodFill.setAlphaf(Math.min(1, 0.42 * dry) * life);
-      canvas.save();
-      canvas.scale(1 / g, 1 / g);
-      canvas.drawPath(d.clotPath, bloodFill);
-      canvas.restore();
-    }
-
-    // Coffee-ring rim thickens and darkens with age. Widths are in local
-    // units (×d.r on screen): same numbers as the old world-space
-    // max(1, r * (0.09 + 0.14 * dry)).
-    if (d.r >= 8) {
-      bloodStroke.setColor(RAMP_RIM[idx]!);
-      bloodStroke.setAlphaf(Math.min(1, 0.45 + 0.4 * dry) * life);
-      bloodStroke.setStrokeWidth(Math.max(1 / d.r, 0.09 + 0.14 * dry));
-      canvas.drawPath(d.path, bloodStroke);
-    }
-
-    // Wet specular sheen — fresh pools only, dies as it sets.
-    if (w > 0.3) {
-      bloodFill.setColor(C_SHEEN);
-      bloodFill.setAlphaf(0.24 * w * life);
-      canvas.drawCircle(-0.34, -0.44, 0.6, bloodFill);
-    }
-    canvas.restore();
-  }
-  bloodFill.setShader(null);
-  bloodFill.setAlphaf(1);
-  bloodStroke.setAlphaf(1);
-};
 
 /**
  * A faint dashed circle at YOUR OWN strike range — get an enemy inside it and
@@ -1909,12 +1763,14 @@ const scarLayer = (
   cracks: CrackField,
   epoch: number,
   nowMs: number,
+  finishers?: FinisherField,
 ): SkPicture => {
   if (scarPicture) {
     // Seeping death pools hold the fresh cadence — growth stepping at the
-    // 1Hz fade beat would pop, not spread.
+    // 1Hz fade beat would pop, not spread. So do opening roses: the cache
+    // must adopt each flower promptly once its per-frame bloom is done.
     const wait =
-      epoch !== scarBuiltEpoch || blood.hasGrowingPool(nowMs)
+      epoch !== scarBuiltEpoch || blood.hasGrowingPool(nowMs) || blood.hasBlooming(nowMs)
         ? SCAR_FRESH_MS
         : SCAR_FADE_MS;
     if (nowMs - scarBuiltMs < wait) return scarPicture;
@@ -1940,7 +1796,10 @@ const scarLayer = (
     const canvas = splatSurface.getCanvas();
     const settled = cracks.harvestSettled(nowMs);
     const dried = blood.harvestDried(nowMs);
-    if (settled.length > 0 || dried.length > 0) {
+    // Finisher marks gone cold (Smite's scorch-star) — same handoff as the
+    // settled webs: stamped exactly as the live pass last drew them.
+    const marks = finishers?.harvestMarks(nowMs) ?? [];
+    if (settled.length > 0 || dried.length > 0 || marks.length > 0) {
       // The anti-saturation wash rides a bake that's happening anyway — a
       // standalone wash beat paid the snapshot + texture upload for an
       // invisible 1% fade (one of the Android hitch sources). Applied before
@@ -1953,6 +1812,7 @@ const scarLayer = (
       // the live pass last drew them with — the handoff is invisible
       // (bits-blood.md §7). Before this beat's blood: chronological surface.
       for (const c of settled) drawWebRevealed(canvas, c, CRACK_SETTLE_ALPHA, nowMs);
+      for (const m of marks) stampFinisherMark(canvas, m);
       // Each decal stamps at the instant it finished drying — the exact
       // appearance the live pass last drew (wetness 0, fade not started).
       for (const d of dried) drawBlood(canvas, [d], d.bornMs + BLOOD_DRY_MS);
@@ -1978,50 +1838,6 @@ const scarLayer = (
     drawBlood(canvas, blood.decals, nowMs);
   }, FLOOR_RECT);
   return scarPicture;
-};
-
-/**
- * Death-spray droplets still in the air (bits-blood.md §2) — drawn per frame
- * OVER the bodies (they're flying, not floor), easing out from the corpse to
- * the landing point where BloodField.update will stamp the decal. Fresh
- * arterial bright with a short motion tail that shrinks as the drop
- * decelerates; ≤~100 tiny shapes for a quarter second per kill — per-frame
- * recording noise.
- */
-const drawFlyingBlood = (
-  canvas: SkCanvas,
-  flying: readonly FlyingDrop[],
-  nowMs: number,
-): void => {
-  for (const drop of flying) {
-    const t = Math.min(1, (nowMs - drop.bornMs) / (drop.landMs - drop.bornMs));
-    const ease = 1 - (1 - t) * (1 - t); // launched fast, settles in
-    const px = drop.x0 + (drop.tx - drop.x0) * ease;
-    const py = drop.y0 + (drop.ty - drop.y0) * ease;
-    // v3 (bits-blood.md §8a): airborne drops draw BIGGER than they land —
-    // the old ≤2.4px clamp made the flight beat invisible on a phone. The
-    // floor decal is still the small droplet it always was.
-    const air = Math.min(drop.r * 1.6, 5.5) * (1 - 0.25 * t);
-    bloodFill.setColor(RAMP_EDGE[0]!); // airborne blood catches the light
-    bloodFill.setAlphaf(0.9);
-    canvas.drawCircle(px, py, air, bloodFill);
-    const tail = 14 * (1 - t);
-    if (tail > 1.5) {
-      const len = Math.hypot(drop.tx - drop.x0, drop.ty - drop.y0) || 1;
-      bloodStroke.setColor(RAMP_EDGE[0]!);
-      bloodStroke.setAlphaf(0.45);
-      bloodStroke.setStrokeWidth(Math.min(air, 3) * 0.8);
-      canvas.drawLine(
-        px,
-        py,
-        px - ((drop.tx - drop.x0) / len) * tail,
-        py - ((drop.ty - drop.y0) / len) * tail,
-        bloodStroke,
-      );
-    }
-  }
-  bloodFill.setAlphaf(1);
-  bloodStroke.setAlphaf(1);
 };
 
 /** Live harpoon chains — taut from each rooted puller to whoever they're
@@ -2476,12 +2292,17 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
 
     // Ground scars: the cached world-space picture (splat bake under live wet
     // blood), rebuilt on scarLayer's slow beat — one replayed op per frame.
-    canvas.drawPicture(scarLayer(r.blood, r.cracks, r.scarEpoch, r.nowMs));
+    canvas.drawPicture(scarLayer(r.blood, r.cracks, r.scarEpoch, r.nowMs, r.finishers));
+    // Marks still animating (roses opening) — the only blood drawn per
+    // frame; a no-op walk of an empty tail otherwise.
+    drawBloomingBlood(canvas, r.blood.decals, r.nowMs, scarBuiltMs);
     // Live quake webs ride per frame (expanding reveal), outside the cache.
     drawLiveCracks(canvas, r.cracks.decals, r.nowMs);
     // The tar trail: sticky ground grime over the blood scars, under
     // everything that stands or is placed on the sand.
     r.tar.draw(canvas, r.nowMs);
+    // Finisher floor pass: marks still hot, and the butterflies' shadows.
+    r.finishers?.drawGround(canvas, r.nowMs);
 
     // Walls (Aabbs are centre + full size). ZONE.walls, not .collision — the
     // collision list also folds in prop footprints, which are hidden geometry:
@@ -2499,6 +2320,8 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     // Spectators (no seat) get the enemy-faint sandtrap view of BOTH teams.
     drawDeployables(canvas, view.deployables, me?.team ?? 0, r.nowMs);
     drawDrumAuras(canvas, view.players, r.nowMs);
+    // Cosmetic trails: under every body, over everything on the sand.
+    r.trails?.draw(canvas, r.nowMs);
 
     // Bodies and props in one painter's pass, ordered by baseline (feet) y — a
     // player north of a cactus draws under it (walks behind); south, over it.
@@ -2542,6 +2365,8 @@ export const recordArena = (r: ArenaRenderInput): SkPicture =>
     drawBeams(canvas, view.players, r.nowMs);
     drawReelChains(canvas, view.players);
     drawFlyingBlood(canvas, r.blood.flying, r.nowMs);
+    // The killer's finisher plays in the air over the body.
+    r.finishers?.drawAir(canvas, r.nowMs);
     // The storm's swirling body sits OVER bodies and shots — it obscures.
     drawSandstormOverlays(canvas, view.deployables, r.nowMs);
     // The Closing Sands' blood tide, over bodies too (the sandstorm rule) but

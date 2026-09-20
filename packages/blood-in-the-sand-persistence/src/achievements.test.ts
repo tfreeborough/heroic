@@ -6,6 +6,7 @@ import {
   companionsOf,
   entitlementsOf,
   gloryEarned,
+  grantOwedEntitlements,
   payOwedBounties,
 } from "./achievements";
 import { createDb, ensureSchema, type Db } from "./db";
@@ -179,5 +180,32 @@ describe("payOwedBounties", () => {
     // Same (player, deed) key — a replayed award is a no-op on the ledger.
     await applyMatchAchievements(db, { matchId: "m9", playerId, counters: {}, unlocks: [{ id: "ranked-wins-5", glory: 10 }] });
     expect(await gloryBalance(db, playerId)).toBe(10);
+  });
+});
+
+describe("grantOwedEntitlements", () => {
+  const REWARDS = { "killing-blows-25": ["finisher:snuffed"], "ranked-wins-5": ["weapon:trident", "title:ranked-wins-5"] };
+
+  test("grants items a held deed started paying later, once, under the live award's source", async () => {
+    // Gravedigger earned before it paid a finisher; the trident deed was paid live.
+    await applyMatchAchievements(db, {
+      matchId: "m1",
+      playerId,
+      counters: {},
+      unlocks: [{ id: "killing-blows-25" }, { id: "ranked-wins-5", entitlements: ["weapon:trident", "title:ranked-wins-5"] }],
+    });
+    const bystander = (await registerPlayer(db)).playerId; // holds neither deed
+
+    // A dry run reports and writes nothing.
+    expect(await grantOwedEntitlements(db, REWARDS, { apply: false })).toEqual({ grants: 1, players: 1 });
+    expect((await entitlementsOf(db, playerId)).map((e) => e.itemId)).not.toContain("finisher:snuffed");
+
+    expect(await grantOwedEntitlements(db, REWARDS, { apply: true })).toEqual({ grants: 1, players: 1 });
+    const snuffed = (await entitlementsOf(db, playerId)).find((e) => e.itemId === "finisher:snuffed");
+    expect(snuffed?.source).toBe("achievement:killing-blows-25");
+    expect(await entitlementsOf(db, bystander)).toEqual([]);
+    // Again: nothing owed, nothing moves.
+    expect(await grantOwedEntitlements(db, REWARDS, { apply: true })).toEqual({ grants: 0, players: 0 });
+    expect((await entitlementsOf(db, playerId)).length).toBe(3);
   });
 });

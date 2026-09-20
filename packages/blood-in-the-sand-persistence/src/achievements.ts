@@ -225,3 +225,51 @@ export const payOwedBounties = async (
   }
   return { payments: owed.payments, glory: owed.glory, players: owed.players.size };
 };
+
+export interface OwedEntitlements {
+  /** Entitlement rows that are (dry run) or were (apply) missing. */
+  grants: number;
+  players: number;
+}
+
+/**
+ * Grant every deed-paid entitlement that was earned but never granted
+ * (bits-cosmetics.md § F4) — for the day a deed players already hold starts
+ * paying an item (Gravedigger → the Snuffed finisher): the live award only
+ * fires at unlock time, so earlier holders would otherwise never get it.
+ * Writes the SAME row the live award writes (same `achievement:<deed>`
+ * source, the (player, item) primary key as the idempotency root), so it
+ * only ever ADDS what's missing and is safe to run again. Takes plain
+ * `deedId → itemIds` so this package stays blind to definitions.
+ */
+export const grantOwedEntitlements = async (
+  db: Db,
+  rewards: Readonly<Record<string, readonly string[]>>,
+  opts: { apply: boolean },
+): Promise<OwedEntitlements> => {
+  const pairs = Object.entries(rewards).flatMap(([deedId, itemIds]) => itemIds.map((itemId) => [deedId, itemId] as const));
+  const owed = { grants: 0, players: new Set<string>() };
+  for (const [deedId, itemId] of pairs) {
+    const rows = await db.execute({
+      sql: `SELECT u.player_id FROM achievement_unlocks u
+            WHERE u.achievement_id = ?
+              AND NOT EXISTS (SELECT 1 FROM entitlements e
+                              WHERE e.player_id = u.player_id AND e.item_id = ?)`,
+      args: [deedId, itemId],
+    });
+    for (const row of rows.rows) owed.players.add(String(row["player_id"]));
+    owed.grants += rows.rows.length;
+  }
+  if (opts.apply && owed.grants > 0) {
+    await db.batch(
+      pairs.map(([deedId, itemId]) => ({
+        sql: `INSERT OR IGNORE INTO entitlements (player_id, item_id, source)
+              SELECT player_id, ?, 'achievement:' || achievement_id
+              FROM achievement_unlocks WHERE achievement_id = ?`,
+        args: [itemId, deedId] as string[],
+      })),
+      "write",
+    );
+  }
+  return { grants: owed.grants, players: owed.players.size };
+};

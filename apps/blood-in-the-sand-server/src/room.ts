@@ -116,6 +116,9 @@ export interface RankedSeatAccount {
   announcer: string;
   /** Worn title (deed id, "" = bare) — entitlement-verified at queue time. */
   title: string;
+  /** Worn kill finisher ("none" = bare) — GRANTED at queue time, only if
+   * owned (bits-cosmetics.md § Finishers v1); rides a void's re-queue. */
+  finisher: string;
   /** Owned gated-item entitlements — the manager's pick validation reads
    * these (bits-secret-items.md); bots own nothing gated, ever. */
   items: string[];
@@ -374,6 +377,9 @@ export class Room {
     // The cosmetics ride both non-ranked-reclaim paths — a rejoiner's picks
     // land like a joiner's (reconnectPlayer refreshes name; these are its
     // cosmetic siblings). A ranked reclaim keeps the seat's own (see above).
+    // The FINISHER is deliberately not among them: it is never seated as
+    // claimed — a fresh seat is born "none" and the manager grants one only
+    // after an ownership read (setFinisher; bits-cosmetics.md § default-deny).
     if (!resumeIdentity) {
       this.sim.state.players[playerId]!.announcer = announcer;
       this.sim.state.players[playerId]!.title = title;
@@ -443,6 +449,22 @@ export class Room {
     const p = this.sim.state.players[playerId];
     if (!p || p.title === title) return;
     p.title = title;
+    this.syncRoomState(nowMs);
+  }
+
+  /** The kill finisher a seat wears ("none" = bare). */
+  finisherOf(playerId: number): string {
+    return this.sim.state.players[playerId]?.finisher ?? "none";
+  }
+
+  /** Grant (or strip) a seat's kill finisher. The ONLY writer: the manager
+   * calls it with a value it has already checked against the account's
+   * entitlements — ranked at seating, skirmish when the token lookup lands
+   * (bits-cosmetics.md § Finishers v1). Bots are never passed here. */
+  setFinisher(playerId: number, finisher: string, nowMs: number): void {
+    const p = this.sim.state.players[playerId];
+    if (!p || p.bot || p.finisher === finisher) return;
+    p.finisher = finisher;
     this.syncRoomState(nowMs);
   }
 
@@ -859,7 +881,7 @@ export class Room {
     // the room topic any more (pvp-pick-ceremony.md).
     const key = JSON.stringify([
       seatedPlayers(this.sim.state).map((p) => [
-        p.id, p.name, p.team, p.connected, p.weapon, p.abilities, p.title,
+        p.id, p.name, p.team, p.connected, p.weapon, p.abilities, p.title, p.finisher,
       ]),
       this.meta.hostId,
       // The matchEnd kit reveal changes every viewer's VIEW without the

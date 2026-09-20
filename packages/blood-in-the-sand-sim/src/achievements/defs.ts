@@ -114,7 +114,9 @@ const kills = milestoneChain<MatchSummary>({
     // Kills climb alongside wins (three a 1v1 win), so the ladder sits a
     // band under the spine's — the same hours mustn't pay twice over.
     { threshold: 5, title: "Lights Out", description: "Strike 5 killing blows.", rewards: [bounty(5)] },
-    { threshold: 25, title: "Gravedigger", description: "Strike 25 killing blows.", rewards: [bounty(10)] },
+    // Gravedigger also pays the one EARNED kill finisher (bits-cosmetics.md
+    // § Finishers v1 — Tom, 2026-09-19): reachable for most, not instant.
+    { threshold: 25, title: "Gravedigger", description: "Strike 25 killing blows.", rewards: [{ kind: "entitlement", itemId: "finisher:snuffed" }, bounty(10)] },
     { threshold: 100, title: "Judge, Jury and Executioner", description: "Strike 100 killing blows.", rewards: [bounty(25)] },
     { threshold: 500, title: "Sudden Death", description: "Strike 500 killing blows.", rewards: [bounty(50)] },
     { threshold: 1250, title: "The Fourth Horseman", description: "Strike 1250 killing blows.", rewards: [{ kind: "title" }, bounty(100)] },
