@@ -48,7 +48,10 @@ const { CrackField } = await import("../src/game/cracks");
 const { TarField } = await import("../src/game/tar");
 const { StatusPulses } = await import("../src/game/statusRings");
 const { FinisherField } = await import("../src/game/finishers");
-const { FINISHER_IDS, TICK_DT } = await import("@heroic/blood-in-the-sand-sim");
+const { arenaScene } = await import("../src/game/scene");
+const { ARENA_00, FINISHER_IDS, TICK_DT } = await import("@heroic/blood-in-the-sand-sim");
+// The kill scene runs on the Primer rig — scripted against arena-00.
+const scene = arenaScene(ARENA_00.id);
 
 const out = process.argv[2] ?? "cosmetics-preview";
 mkdirSync(out, { recursive: true });
@@ -99,7 +102,7 @@ for (const id of FINISHER_IDS) {
     pulses.update(view.players, now);
     if (!due) continue;
     const picture = recordArena({
-      view, config: runner.config, myId: runner.youId, screenW: W, screenH: H, fx: [], blood, cracks, tar,
+      scene, view, config: runner.config, myId: runner.youId, screenW: W, screenH: H, fx: [], blood, cracks, tar,
       scarEpoch: blood.epoch, pulses, nowMs: now + 250 * shot, atlas: null, abilityIcons: {}, finishers,
       camera: runner.camera(view, W, H),
     });

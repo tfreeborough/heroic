@@ -22,6 +22,7 @@ import {
   WEAPONS,
   type AbilityId,
 } from "./config";
+import { THREAT_KINDS } from "./botThreats";
 import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot } from "./protocol";
 
 /**
@@ -64,8 +65,13 @@ export const rangedWeapon = (p: PlayerSnapshot): boolean =>
  */
 export const threatRange = (enemy: PlayerSnapshot): number => {
   if (enemy.weapon === null) return 160;
+  // A shell's telegraph is its landing ring, a beam never hurts — neither
+  // windup is a thing to answer (v4: the bombard used to read as a 360px
+  // MELEE weapon here, and bots panic-dashed at it from across the sand).
+  const kind = THREAT_KINDS[enemy.weapon];
+  if (kind === "shell" || kind === "beam") return 0;
   const w = WEAPONS[enemy.weapon];
-  return w.projectile ? 220 : w.attack.reach + 50;
+  return kind === "shot" ? 220 : w.attack.reach + 50;
 };
 
 /** My own weapon's auto-acquisition edge — past it, my swings can't start. */
@@ -84,7 +90,8 @@ export const windupThreat = (me: PlayerSnapshot, players: PlayerSnapshot[]): Pla
   for (const p of players) {
     if (p.team === me.team || !p.alive || p.atk !== "windup") continue;
     const dist = Math.hypot(p.x - me.x, p.y - me.y);
-    if (dist < threatRange(p) + 40 && nearestEnemy(p, players)?.id === me.id) return p;
+    const range = threatRange(p);
+    if (range > 0 && dist < range + 40 && nearestEnemy(p, players)?.id === me.id) return p;
   }
   return null;
 };
@@ -154,8 +161,13 @@ export const dashDown = (p: PlayerSnapshot): boolean =>
  * cast-pacing hold: reactive rules ignore it (a reflex doesn't queue),
  * proactive ones wait their beat. `allowReactive` is the difficulty layer's
  * per-swing dodge roll — a tier that failed the roll eats this telegraph
- * with its buttons too, not just its feet. Priority is survival-first —
- * answer the telegraph, then peel/heal, then offence, then utility.
+ * with its buttons too, not just its feet. `reactLead` is v4's late
+ * commitment: a reactive button waits until the blow is this many seconds
+ * out (a windup whose lock breaks cancels for FREE — answer at the start
+ * and every defensive cooldown can be feinted out of the hand; Infinity =
+ * the old press-on-sight, which the dumb tiers keep). Priority is
+ * survival-first — answer the telegraph, then peel/heal, then offence,
+ * then utility.
  */
 export const decideCasts = (
   me: PlayerSnapshot,
@@ -164,9 +176,11 @@ export const decideCasts = (
   deployables: DeployableSnapshot[],
   allowPaced: boolean,
   allowReactive = true,
+  reactLead = Infinity,
 ): AbilityId | null => {
   const dist = Math.hypot(enemy.x - me.x, enemy.y - me.y);
-  const threat = allowReactive ? windupThreat(me, players) : null;
+  const seen = allowReactive ? windupThreat(me, players) : null;
+  const threat = seen !== null && seen.atkLeft <= reactLead ? seen : null;
 
   // ── Reactive: answers to a live telegraph ─────────────────────────────────
   // Mirror Guard: their shot is winding up at me — put the mirror between us.
@@ -187,15 +201,32 @@ export const decideCasts = (
   if (!allowPaced) return null;
 
   // ── Paced: proactive plays, one per pacing beat ───────────────────────────
-  // Warding Shout: hurt with an enemy in the cone — hurl them off me.
-  if (dist < WARDING_SHOUT.range - 20 && hpFrac(me) < 0.6 && slotReady(me, "warding-shout")) {
+  // v4 stage 5 — the hands protect the TEAM, not just the self (Tom,
+  // 2026-09-21: "they don't protect each other"): a teammate in trouble at
+  // my elbow counts as me being in trouble for the peel and the pour.
+  const mateInTrouble = (within: number, below: number): boolean =>
+    players.some(
+      (p) =>
+        p.id !== me.id &&
+        p.team === me.team &&
+        p.alive &&
+        hpFrac(p) < below &&
+        Math.hypot(p.x - me.x, p.y - me.y) < within,
+    );
+  // Warding Shout: hurt — me, or the ally beside me — with an enemy in the
+  // cone: hurl them off us.
+  if (
+    dist < WARDING_SHOUT.range - 20 &&
+    (hpFrac(me) < 0.6 || mateInTrouble(WARDING_SHOUT.range, 0.5)) &&
+    slotReady(me, "warding-shout")
+  ) {
     return "warding-shout";
   }
   // Blood Font: one pour per round, so only when truly low AND the ground is
   // worth standing on — never under an enemy quake/storm, never point-blank
   // (the gate stays low: a melee bot lives at arm's length, and a pour it can
   // fight on top of beats a pour it never makes).
-  if (hpFrac(me) < 0.4 && dist > 120 && slotReady(me, "blood-font")) {
+  if ((hpFrac(me) < 0.4 || mateInTrouble(BLOOD_FONT.radius - 25, 0.4)) && dist > 120 && slotReady(me, "blood-font")) {
     const fouled = deployables.some(
       (d) =>
         d.team !== me.team &&

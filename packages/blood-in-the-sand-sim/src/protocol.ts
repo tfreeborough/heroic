@@ -298,6 +298,10 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the skirmish board is sealed and pays nothing material; see the doc for
  * why both original objections hold). `deedUnlocks` may now follow a
  * skirmish matchEnd too, carrying that match's server-minted id.
+ * 2026-09-13, NO bump: arenas (bits-arenas.md) — the server deals a map per
+ * room from ARENA_ROTATION; `welcome.zoneId` (always sent) is now what the
+ * client renders from, and `RoomListing.arena?` names it. Same-shape wire.
+ * The bump rule lives on ARENA_ROTATION: adding an id there is a bump.
  * 2026-09-16, NO bump: AUTO-REJOIN (bits-reconnect.md § R1 + app-restart
  * rejoin) — `joinRoom` gains `reclaimOnly?: true`: the client's automatic
  * seat reclaim on every fresh socket (redial AND cold launch) sets it so a
@@ -310,6 +314,18 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * so the client can draw the 60 s arm deadline (a rejoin gets the true
  * remainder). Additive: old clients ignore it; on an old server the bar
  * simply never shows.
+ * 2026-09-17, v34: COLLISION MATERIALS (bits-arenas.md) — `hidden` becomes
+ * `solid` (blocks feet, shots AND target lock) and a new `low` material
+ * (cliff edge, chest-high wall) blocks feet only: shots and lock pass over.
+ * Same wire shape, but the sim's projectile + lock rules changed and arena
+ * files may now carry `low` cells (code 4) / polygons, so an old client
+ * would disagree with the server about where a shot dies.
+ * 2026-09-18, v35: THE ROTATION GROWS (bits-arenas.md) — `desert-1` (Obelisk)
+ * and `grasslands` (Ancient Rites) join ARENA_ROTATION, so every online room
+ * — ranked included — now rolls one of three maps. An old client has no zone
+ * for the new ids (the zone never travels), hence the bump. Riding the same
+ * bump: `createRoom` gains `arena?`, a skirmish host's map pick (a rotation
+ * id; absent/unknown = random, which is what ranked always does).
  * 2026-09-20, NO bump: KILL FINISHERS (bits-cosmetics.md § Finishers v1) —
  * `createRoom`/`joinRoom`/`queueJoin` gain `finisher?` (the sender's worn
  * finisher id) and RoomStatePlayer carries `finisher` PUBLICLY: finishers
@@ -322,7 +338,7 @@ import type { DeployableKind, ProjectileKind, RoundPhase, Team } from "./state";
  * the claim; unknown ids are "none" on both sides, so new finishers never
  * need a bump either.
  */
-export const PROTOCOL_VERSION = 33;
+export const PROTOCOL_VERSION = 35;
 export const DEFAULT_PORT = 7777;
 
 /** The ranked formats (bits-ranked.md § brackets). A bracket key names a
@@ -349,7 +365,9 @@ export type ClientMsg =
    * secret, OPTIONAL and additive (no bump) — resolved server-side into the
    * seat's account so skirmish deeds can be credited and the worn title
    * verified. Absent = plays as before, earns nothing. Never a claimed id. */
-  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; announcer?: string; title?: string; finisher?: string; token?: string }
+  /** `arena?` (v35, bits-arenas.md): the host's map pick — an ARENA_ROTATION
+   * id. Absent or unknown = the server rolls one (hostArena). */
+  | { t: "createRoom"; v: number; playerName: string; roomName?: string; pass?: string; teamSize?: number; brawl?: boolean; arena?: string; announcer?: string; title?: string; finisher?: string; token?: string }
   /** `seatToken` is the rejoin proof (bits-reconnect.md § seat tokens): the
    * secret the last `welcome` for this room carried. Present and matching a
    * disconnected seat, that exact seat is reclaimed — name, team, body.
@@ -588,6 +606,9 @@ export interface RoomListing {
   phase: "lobby" | "in-match";
   /** v32: a free-for-all room (6 seats reads ambiguous next to 3v3 without it). */
   brawl: boolean;
+  /** The arena's display name (bits-arenas.md) — rooms roll a map from the
+   *  rotation, so the directory says which. Additive; old clients ignore it. */
+  arena?: string;
 }
 
 export interface SnapshotMsg {

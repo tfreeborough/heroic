@@ -37,6 +37,7 @@ import {
   sanitizePasscode,
   sanitizeRoomName,
   sanitizeTeamSize,
+  hostArena,
   seatedPlayers,
   shouldCollect,
   weaponEntitlement,
@@ -453,6 +454,9 @@ export class RoomManager {
       teamSize,
       performance.now(),
       brawl ? BRAWL_TEAM_COUNT : 2,
+      // The host's map pick (v35) — a rotation id, or a roll. Ranked rooms
+      // never pass one: the constructor's default always rolls.
+      hostArena(msg.arena, Math.random),
     );
     room.onSkirmishMatchEnd = (winnerTeam) => void this.settleSkirmish(room, winnerTeam);
     this.rooms.set(code, room);

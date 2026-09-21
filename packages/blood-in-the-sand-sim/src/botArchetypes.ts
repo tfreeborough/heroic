@@ -227,20 +227,54 @@ export const resolveBand = (
  * `weakest` hunts the lowest hp fraction (distance breaks ties); `protect`
  * hunts whoever is closest to my most-hurt living teammate — which, blended
  * with the anchor leash, IS the peel: the bodyguard moves at the diver.
- * `focusFire` (the top difficulty tiers) upgrades `nearest` to `weakest` so
- * a bot TEAM concentrates its kills — protect keeps its ward.
+ * `focusFire` (the sharp tiers) replaces nearest/weakest with a TEAM score
+ * (v4 stage 5 — Tom, 2026-09-21: "they don't protect each other and most of
+ * the time won't gang up on one player"). The old upgrade was a bare
+ * `weakest`, which ignored distance entirely: a bot would jog past the
+ * full-hp enemy hitting it to chase a scratch across the arena. The score
+ * is built from TEAM-level terms (distance to the team's centroid, hp, who
+ * is on our wounded, who is healing them) so every bot on a side computes
+ * nearly the same ranking and they converge on one body without any
+ * messaging; a small personal-distance term and a sticky bonus for the
+ * current mark (`stickyId`) keep it from flip-flopping. Protect keeps its
+ * ward.
  */
 export const focusTarget = (
   preset: ArchetypePreset,
   me: PlayerSnapshot,
   players: PlayerSnapshot[],
   focusFire = false,
+  stickyId: number | null = null,
 ): PlayerSnapshot | undefined => {
   const enemies = players.filter((p) => p.team !== me.team && p.alive);
   if (enemies.length === 0) return undefined;
   const distTo = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
     Math.hypot(a.x - b.x, a.y - b.y);
-  const focus = focusFire && preset.focus === "nearest" ? "weakest" : preset.focus;
+  const focus = preset.focus;
+
+  // Only the plain `nearest` hunters join the team score — the opportunist's
+  // `weakest` and the bodyguard's `protect` ARE those brains' identities.
+  if (focusFire && focus === "nearest" && enemies.length > 1) {
+    const mates = players.filter((p) => p.team === me.team && p.alive);
+    const cx = mates.reduce((a, p) => a + p.x, 0) / mates.length;
+    const cy = mates.reduce((a, p) => a + p.y, 0) / mates.length;
+    const wounded = mates.filter((p) => p.hp / Math.max(1, p.maxHp) < 0.5);
+    let best = enemies[0]!;
+    let bestScore = -Infinity;
+    for (const e of enemies) {
+      let score = (1 - e.hp / Math.max(1, e.maxHp)) * 1.2; // finishable
+      score -= Math.hypot(e.x - cx, e.y - cy) / 450; // near US, not just me
+      score -= distTo(me, e) / 1400; // …with a personal tie-break
+      if (e.beamTargetId !== null) score += 0.8; // a live heal-link: kill the body
+      if (wounded.some((m) => distTo(m, e) < 220)) score += 0.6; // the peel: whoever is on our hurt
+      if (e.id === stickyId) score += 0.25;
+      if (score > bestScore) {
+        best = e;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
 
   if (focus === "weakest") {
     let best = enemies[0]!;

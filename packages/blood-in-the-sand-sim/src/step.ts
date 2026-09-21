@@ -713,10 +713,11 @@ const stepProjectiles = (
       if (rolled.lethal) killPlayer(defender, events);
     }
 
-    // Walls stop shots (core leaves level geometry to the caller).
+    // Level geometry stops shots (core leaves it to the caller) — everything
+    // but `low` blockers, which a shot flies over (sim.ts `shotBlockers`).
     let expired = result.expired && !reflected;
     if (!expired) {
-      for (const wall of zone.collision) {
+      for (const wall of zone.shotBlockers) {
         if (distanceToAabb(shot.pos, wall) <= shot.radius) {
           expired = true;
           break;

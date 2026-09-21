@@ -39,6 +39,11 @@ dev.db*
 # bun
 # (bun.lock is committed; lockb binary is also fine to commit)
 
-tilesets
+# Purchased asset packs: keep the source folders out of git — only the repacked
+# atlases (apps/*/assets/tilesets) and the few sheets the repack reads are committed.
+ancient_tiles/
+# The raw itch packs (Ancient Ruins, Desert, Highlands, Village…) live in /tilesets
+# at the repo root — 90MB+ of mockups, characters and per-sprite PNGs we never load.
+/tilesets/
 # bun run cosmetics:preview — off-device contact sheets (bits-cosmetics.md)
 apps/blood-in-the-sand/cosmetics-preview/

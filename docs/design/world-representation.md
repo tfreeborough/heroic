@@ -121,28 +121,42 @@ one rect). So everything downstream receives the format it already eats today, w
 - **Navigation** — `buildNavGrid` rasterises the rects (`inInflatedRect`).
 - **Line-of-sight** — `rectEdges` → `VisionSegment[]`, fed to `computeVisibility` / `segmentClear`.
 
-### Collision materials — wall vs void
+### Collision materials — wall, void, solid, low
 
-A solid's *geometry* is an `Aabb`; its **material** decides how it behaves. Two today, open to more (e.g.
+A solid's *geometry* is an `Aabb`; its **material** decides how it behaves. Four today, open to more (e.g.
 `water`):
 
 - **`wall`** — solid floor-to-ceiling. Blocks movement, **and** occludes (sight, projectiles, targeting).
-  Drawn as a pillar. The default — a free rect with no `material`, or a `1` in the painted-cell grid.
+  Drawn as a procedural pillar. The default — a free rect with no `material`, or a `1` in the painted-cell
+  grid. The gauntlet's placeholder geometry; art-painted zones don't use it, and since 2026-09-17 Realmsmith
+  no longer offers it (the black pillar was only ever a trap under painted cliff art).
 - **`void`** — a chasm. Blocks **movement only**: sight, projectiles, and ranged targeting pass straight
   across, so you can shoot to the far side of a bridge. Drawn as a dark, drifting-mist **pit** (the same fog
   swirl, dimmer and always visible — `renderCombat`), *not* a wall. A `2` in the painted-cell grid, or a free
   rect tagged `material: "void"`. (Realmsmith can't run the shader, so it paints a static foggy stand-in.)
+- **`solid`** — an *invisible* solid: a painted rock, column, statue, ruin wall — the tile art or prop sprite
+  is the visual. Blocks movement; apps decide whether it also stops shots and target lock (BITS: yes, like an
+  occluding prop footprint; the gauntlet: movement only). A `3` in the grid, `material: "solid"` on a rect
+  or polygon. Called `hidden` until 2026-09-17 — the old tag still loads as `solid`. Blue in the editor.
+- **`low`** — an *invisible* low blocker: a cliff edge, a chest-high wall, a fence, rubble. Blocks
+  **movement only**, everywhere: sight, shots and target lock pass over it, so you can shoot down off a
+  ledge or over a parapet. A `4` in the grid, `material: "low"`. Green in the editor.
+
+`solid` and `low` are the **invisible materials**: they coexist with painted floor (the art underneath stays),
+paint at **quarter-tile** grain, and can be authored as polygons (§ Polygons). Wall and void are *drawn*, so
+they stay tile-grain and clear the floor beneath them.
 
 The split is purely *which downstream sets a solid joins*. `loadZone` meshes each material separately and the
-runtime `Zone` exposes both — `walls` (drawn + occluders) and `voids` (movement only) — plus their union
-`collision`:
+runtime `Zone` exposes them all — `walls`, `voids`, `solid`, `low` — plus their union `collision`:
 
 - **Movement** (Matter blockers, `stepCrowd`, `buildNavGrid`) consumes `collision` — it doesn't care what a
   solid is *made of*, only that it stops a body. Unchanged from before.
-- **Occluders** (line-of-sight / projectiles / targeting) are built from `walls` **alone**. Void is absent,
-  so it's see- and shoot-through.
+- **Occluders** (line-of-sight / targeting) are built app-side from `walls` (+ occluding prop footprints, +
+  `solid` in BITS). Void and low are absent, so they're see-through.
+- **Shot blockers** (BITS `ArenaZone.shotBlockers`) are `collision` minus `low` — a shot dies on a rock or a
+  pit edge but sails over a ledge.
 
-The collision layer is thus *typed*, exactly as a designer expects ("this area is a chasm, not a wall"), and
+The collision layer is thus *typed*, exactly as a designer expects ("this is a cliff, not a wall"), and
 adding `water` later is: mesh it, then choose its membership in movement / occluders / (new) a slow-field set.
 
 ### Depth — 2.5D edge extrusion (camera-relative)
@@ -190,6 +204,25 @@ Realmsmith could let you draw rotated rects or polygons, but we deliberately **d
   segment-based** (`computeVisibility` works on arbitrary edges) and **Matter handles oriented boxes
   natively** — so the only real work would be `resolveCircleAabb` → circle-vs-oriented-box for the enemy
   crowd, plus a point-in-polygon cell test in `buildNavGrid`.
+
+### Polygons — authored outlines, box collision (built 2026-09-13)
+
+The v1 argument above still holds: the *runtime* never sees an angle. What arrived is the authoring
+half: a **polygon fence** you draw in Realmsmith (`ZoneCollision.polys`, world-px points, the invisible
+materials only — `"solid"` or `"low"`, absent/legacy `"hidden"` → solid) that `loadZone` rasterises to
+**quarter-tile** boxes (`POLYGON_CELL_DIV = 4`, `zone/polygon.ts`: even-odd centre sampling, then the same
+greedy mesher as painted cells) and pours into that material's channel. Physics, nav, the PvP server and the wire are untouched; a diagonal is a
+quarter-tile staircase nobody feels. (Half-tile until 2026-09-17; raised to match the painted grain
+once polygons started standing in for prop footprints — see tilesets.md § Footprint-less packs.) The ask (Tom): fence off no-go areas whose shape isn't a rect and
+isn't a prop. The editor draws the outline over the strips it became, so the real boundary is never
+a surprise. Wall/void polygons stay deferred — they'd *draw* as staircases.
+
+**Quarter-tile painting (2026-09-16).** Realmsmith's painted collision grid is now
+`tileSize / 4` per cell (`collision.cellSize`, which the format always allowed) so invisible fences can
+hug a shape: the solid/low brush paints sub-cells (with ¼-tile snap and a quarter-size hover box);
+wall/void — they *draw* — stay tile-grain, filling all sixteen sub-cells, and erasing a sub-cell
+under a drawn solid clears its whole tile. Legacy tile-grain grids are upsampled on first touch;
+the game's `loadZone` never cared (it meshes at whatever `cellSize` says).
 
 ## Zone shape (irregular & outdoor zones)
 

@@ -15,9 +15,13 @@
 import type { Vec2 } from "../math/vec2";
 import type { Aabb } from "../physics/crowd";
 import { greedyMesh } from "./mesh";
+import { rasterizePolygon } from "./polygon";
 import { TILESETS, resolveProp, type PlacedProp } from "./tileset";
 import {
   COLLISION_CELL,
+  normalizeMaterial,
+  type CollisionMaterial,
+  POLYGON_CELL_DIV,
   ZONE_FORMAT_VERSION,
   type Breakable,
   type BreakableDef,
@@ -95,14 +99,26 @@ export const loadZone = (file: ZoneFile): Zone => {
   // whose rects are bare `Aabb`s, stay walls.)
   const cellSize = file.collision.cellSize ?? tileSize;
   const rects = file.collision.rects ?? [];
-  const walls: Aabb[] = rects.filter((r) => (r.material ?? "wall") === "wall").map(toAabb);
-  const voids: Aabb[] = rects.filter((r) => r.material === "void").map(toAabb);
-  const hidden: Aabb[] = rects.filter((r) => r.material === "hidden").map(toAabb);
+  const ofMaterial = (m: CollisionMaterial): Aabb[] =>
+    rects.filter((r) => normalizeMaterial(r.material) === m).map(toAabb);
+  const walls: Aabb[] = ofMaterial("wall");
+  const voids: Aabb[] = ofMaterial("void");
+  // The two invisible materials (format.ts): `solid` (legacy "hidden") and `low`.
+  const solid: Aabb[] = ofMaterial("solid");
+  const low: Aabb[] = ofMaterial("low");
   const cells = file.collision.cells;
   if (cells && cells.length > 0) {
     walls.push(...meshMaterial(cells, cellSize, COLLISION_CELL.wall));
     voids.push(...meshMaterial(cells, cellSize, COLLISION_CELL.void));
-    hidden.push(...meshMaterial(cells, cellSize, COLLISION_CELL.hidden));
+    solid.push(...meshMaterial(cells, cellSize, COLLISION_CELL.solid));
+    low.push(...meshMaterial(cells, cellSize, COLLISION_CELL.low));
+  }
+  // 1a. Authored polygons → quarter-tile box strips (zone/polygon.ts). Invisible
+  // materials only, so they join the same channel as their painted cells.
+  const polyCell = tileSize / POLYGON_CELL_DIV;
+  for (const poly of file.collision.polys ?? []) {
+    const into = poly.material === "low" ? low : solid;
+    into.push(...rasterizePolygon(poly.points, polyCell, cols * POLYGON_CELL_DIV, rows * POLYGON_CELL_DIV));
   }
 
   // 1b. Fence the void: floorless cells (floor id 0) are outside the painted shape,
@@ -144,10 +160,11 @@ export const loadZone = (file: ZoneFile): Zone => {
     if (placed.occludes) propOccluders.push(placed.foot);
   }
 
-  // Movement collision = every solid, regardless of material (walls first, to match
-  // authored order). Occluders are built from `walls` (+ `propOccluders`) app-side;
-  // hidden barriers and footprints block movement only and are never drawn.
-  const collision: Aabb[] = [...walls, ...voids, ...hidden, ...footprints];
+  // Movement collision = every blocker, regardless of material (walls first, to
+  // match authored order). Occluders are built app-side from `walls` (+
+  // `propOccluders`, + `solid` where the app wants painted rocks to stop shots);
+  // `low` and footprints block movement only, and none of these are drawn.
+  const collision: Aabb[] = [...walls, ...voids, ...solid, ...low, ...footprints];
 
   // 2. Slice visual layers into chunks (row-major: chunks[cy * chunkCols + cx]).
   const chunkCols = Math.ceil(cols / chunkTiles);
@@ -191,7 +208,8 @@ export const loadZone = (file: ZoneFile): Zone => {
     collision,
     walls,
     voids,
-    hidden,
+    solid,
+    low,
     breakables,
     props,
     propOccluders,

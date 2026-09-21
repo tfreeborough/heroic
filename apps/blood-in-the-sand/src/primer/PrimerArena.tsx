@@ -24,7 +24,7 @@ import { StyleSheet, View } from "react-native";
 import { Canvas, Group, Picture, rect, rrect, type SkPicture } from "@shopify/react-native-skia";
 import { useSharedValue } from "react-native-reanimated";
 import { useGameLoop } from "@heroic/engine";
-import { TICK_DT, type FinisherId, type InterpolatedView } from "@heroic/blood-in-the-sand-sim";
+import { ARENA_00, TICK_DT, type FinisherId, type InterpolatedView } from "@heroic/blood-in-the-sand-sim";
 import { BloodField } from "../game/blood";
 import { playSound } from "../audio";
 import { FinisherCues } from "../game/finisherCues";
@@ -33,6 +33,7 @@ import { CrackField } from "../game/cracks";
 import { TarField } from "../game/tar";
 import { StatusPulses } from "../game/statusRings";
 import { useArenaAtlas } from "../game/tilesets";
+import { arenaScene } from "../game/scene";
 import { useAbilityIconImages } from "../game/abilityIcons";
 import { EMPTY_ARENA_PICTURE, KILL_KICK_MS, recordArena, type FxItem, type KillKick } from "../game/render";
 import { ScenarioRunner, type Scenario } from "./scenario";
@@ -90,7 +91,9 @@ export const PrimerArena = ({
   onLoop,
   cornerRadius = 0,
 }: PrimerArenaProps) => {
-  const atlas = useArenaAtlas();
+  // The Primer is scripted against arena-00's layout — always that map.
+  const atlas = useArenaAtlas(ARENA_00.id);
+  const scene = arenaScene(ARENA_00.id);
   const abilityIcons = useAbilityIconImages();
   const picture = useSharedValue<SkPicture>(EMPTY_ARENA_PICTURE);
   const retired = useRef<SkPicture[]>([]);
@@ -225,6 +228,7 @@ export const PrimerArena = ({
         pulses.update(view.players, now);
         const prev = picture.value;
         picture.value = recordArena({
+          scene,
           view,
           config: runner.config,
           myId: runner.youId,

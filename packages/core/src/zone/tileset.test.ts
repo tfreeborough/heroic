@@ -26,17 +26,29 @@ describe("tileSourceRect", () => {
   });
 });
 
-describe("desert registry", () => {
-  const desert = TILESETS["desert"]!;
-
-  test("every prop's sprite region lies inside the atlas", () => {
-    const rows = desert.tileCount / desert.columns;
-    for (const [name, def] of Object.entries(desert.props)) {
-      const [col, row, cols, rws] = def.cells;
-      expect(col + cols, name).toBeLessThanOrEqual(desert.columns);
-      expect(row + rws, name).toBeLessThanOrEqual(rows);
+describe("every registered tileset", () => {
+  test("has a whole number of atlas rows", () => {
+    for (const [name, set] of Object.entries(TILESETS)) {
+      expect(set.tileCount % set.columns, name).toBe(0);
     }
   });
+
+  test("every prop's sprite region lies inside the atlas", () => {
+    for (const [setName, set] of Object.entries(TILESETS)) {
+      const rows = set.tileCount / set.columns;
+      for (const [name, def] of Object.entries(set.props)) {
+        const [col, row, cols, rws] = def.cells;
+        expect(cols, `${setName}/${name}`).toBeGreaterThan(0);
+        expect(rws, `${setName}/${name}`).toBeGreaterThan(0);
+        expect(col + cols, `${setName}/${name}`).toBeLessThanOrEqual(set.columns);
+        expect(row + rws, `${setName}/${name}`).toBeLessThanOrEqual(rows);
+      }
+    }
+  });
+});
+
+describe("desert registry", () => {
+  const desert = TILESETS["desert"]!;
 
   test("footprints fit within their sprite's width", () => {
     for (const [name, def] of Object.entries(desert.props)) {
@@ -110,11 +122,11 @@ describe("loadZone props", () => {
     expect(withTuft.collision).toEqual(loadZone(base).collision);
   });
 
-  test("hidden collision blocks movement but is neither drawn geometry nor an occluder", () => {
+  test("solid collision blocks movement but is neither drawn geometry nor a wall", () => {
     const zone = loadZone(
       makeFile({
         collision: {
-          rects: [{ x: 100, y: 100, w: 64, h: 64, material: "hidden" }],
+          rects: [{ x: 100, y: 100, w: 64, h: 64, material: "solid" }],
           cells: [
             [0, 3, 3],
             [0, 0, 0],
@@ -123,18 +135,67 @@ describe("loadZone props", () => {
         },
       }),
     );
-    // The free rect and the meshed pair of painted cells both land in `hidden`…
-    expect(zone.hidden).toEqual([
+    // The free rect and the meshed pair of painted cells both land in `solid`…
+    expect(zone.solid).toEqual([
       { x: 100, y: 100, w: 64, h: 64 },
       { x: 128, y: 32, w: 128, h: 64 },
     ]);
     // …and in movement collision, but never in the drawn/occluding walls or the
     // mist-pit voids.
-    for (const h of zone.hidden) {
+    for (const h of zone.solid) {
       expect(zone.collision).toContainEqual(h);
       expect(zone.walls).not.toContainEqual(h);
       expect(zone.voids).not.toContainEqual(h);
+      expect(zone.low).not.toContainEqual(h);
     }
+  });
+
+  test("the retired \"hidden\" tag loads as solid", () => {
+    const zone = loadZone(
+      makeFile({ collision: { rects: [{ x: 100, y: 100, w: 64, h: 64, material: "hidden" }] } }),
+    );
+    expect(zone.solid).toEqual([{ x: 100, y: 100, w: 64, h: 64 }]);
+    expect(zone.low).toEqual([]);
+  });
+
+  test("low collision blocks movement only and lives in its own channel", () => {
+    const zone = loadZone(
+      makeFile({
+        collision: {
+          rects: [{ x: 100, y: 100, w: 64, h: 64, material: "low" }],
+          cells: [
+            [0, 4, 4],
+            [0, 0, 0],
+          ],
+          cellSize: 64,
+        },
+      }),
+    );
+    expect(zone.low).toEqual([
+      { x: 100, y: 100, w: 64, h: 64 },
+      { x: 128, y: 32, w: 128, h: 64 },
+    ]);
+    for (const b of zone.low) {
+      expect(zone.collision).toContainEqual(b);
+      expect(zone.walls).not.toContainEqual(b);
+      expect(zone.voids).not.toContainEqual(b);
+      expect(zone.solid).not.toContainEqual(b);
+    }
+  });
+
+  test("props.ground marks a prop as floor-baked; absent means standing", () => {
+    const zone = loadZone(
+      makeFile({
+        objects: [
+          propObj("s", "cactus-large", 256, 256),
+          { ...propObj("g", "cactus-large", 320, 320), props: { prop: "cactus-large", ground: true } },
+        ],
+      }),
+    );
+    expect(zone.props.map((p) => [p.id, p.ground])).toEqual([
+      ["s", false],
+      ["g", true],
+    ]);
   });
 
   test("unknown tileset or prop name degrades to nothing (placeholder philosophy)", () => {

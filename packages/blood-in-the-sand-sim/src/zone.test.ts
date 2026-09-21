@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { distanceToAabb, loadZone, segmentClear } from "@heroic/core";
-import { PLAYER_RADIUS } from "./config";
+import { BRAWL_TEAM_COUNT, PLAYER_RADIUS } from "./config";
 import { addPlayer, createSim, deriveArenaZone } from "./sim";
-import { ARENA_00 } from "./zone";
+import { ARENA_00, ARENA_ROTATION, ARENAS, hostArena } from "./zone";
 
 // The arena is authored in Realmsmith and changes as it's polished, so these
 // tests derive their expectations from the file (spawn objects, loadZone's
@@ -26,10 +26,79 @@ describe("arena-00", () => {
     });
     expect(zone.spawns[0]).toEqual(authoredSpawn(1));
     expect(zone.spawns[1]).toEqual(authoredSpawn(2));
-    // Movement collision is loadZone's union (walls ∪ voids ∪ hidden ∪ prop
-    // footprints); sight comes from walls + occluding footprints only, 4 edges each.
+    // Movement collision is loadZone's union (walls ∪ voids ∪ solid ∪ low ∪
+    // prop footprints); sight comes from walls + occluding footprints + solid
+    // (never voids or low), 4 edges each.
     expect(zone.collision).toEqual(full.collision);
-    expect(zone.occluders.length).toBe((full.walls.length + full.propOccluders.length) * 4);
+    expect(zone.occluders.length).toBe(
+      (full.walls.length + full.propOccluders.length + full.solid.length) * 4,
+    );
+  });
+
+  test("a solid barrier breaks target-lock line of sight (a shot would die on it)", () => {
+    const open = deriveArenaZone(ARENA_00);
+    // Find a short east–west stretch the stock arena sees across (the layout is
+    // the designer's; scan a coarse grid rather than assume the centre is clear).
+    const t = ARENA_00.tileSize;
+    let mid: { x: number; y: number } | null = null;
+    for (let y = t * 1.5; y < open.size.y && !mid; y += t) {
+      for (let x = t * 2.5; x < open.size.x - t * 2; x += t) {
+        if (segmentClear({ x: x - 96, y }, { x: x + 96, y }, open.occluders)) {
+          mid = { x, y };
+          break;
+        }
+      }
+    }
+    expect(mid).not.toBeNull();
+    const a = { x: mid!.x - 96, y: mid!.y };
+    const b = { x: mid!.x + 96, y: mid!.y };
+    const fenced = deriveArenaZone({
+      ...ARENA_00,
+      collision: {
+        ...ARENA_00.collision,
+        rects: [...(ARENA_00.collision.rects ?? []), { ...mid!, w: 64, h: 64, material: "solid" }],
+      },
+    });
+    expect(segmentClear(a, b, fenced.occluders)).toBe(false);
+    expect(fenced.shotBlockers).toContainEqual({ ...mid!, w: 64, h: 64 });
+    // The retired "hidden" tag is the same thing on disk.
+    const legacy = deriveArenaZone({
+      ...ARENA_00,
+      collision: {
+        ...ARENA_00.collision,
+        rects: [...(ARENA_00.collision.rects ?? []), { ...mid!, w: 64, h: 64, material: "hidden" }],
+      },
+    });
+    expect(segmentClear(a, b, legacy.occluders)).toBe(false);
+  });
+
+  test("a low blocker stops feet but neither the lock nor a shot", () => {
+    const open = deriveArenaZone(ARENA_00);
+    const t = ARENA_00.tileSize;
+    let mid: { x: number; y: number } | null = null;
+    for (let y = t * 1.5; y < open.size.y && !mid; y += t) {
+      for (let x = t * 2.5; x < open.size.x - t * 2; x += t) {
+        if (segmentClear({ x: x - 96, y }, { x: x + 96, y }, open.occluders)) {
+          mid = { x, y };
+          break;
+        }
+      }
+    }
+    expect(mid).not.toBeNull();
+    const box = { ...mid!, w: 64, h: 64 };
+    const ledge = deriveArenaZone({
+      ...ARENA_00,
+      collision: {
+        ...ARENA_00.collision,
+        rects: [...(ARENA_00.collision.rects ?? []), { ...box, material: "low" }],
+      },
+    });
+    // Feet: it's in movement collision…
+    expect(ledge.collision).toContainEqual(box);
+    // …but a shot flies over it and a lock sees across it.
+    expect(ledge.shotBlockers).not.toContainEqual(box);
+    expect(ledge.occluders.length).toBe(open.occluders.length);
+    expect(segmentClear({ x: mid!.x - 96, y: mid!.y }, { x: mid!.x + 96, y: mid!.y }, ledge.occluders)).toBe(true);
   });
 
   test("spawns don't intersect collision", () => {
@@ -67,5 +136,35 @@ describe("arena-00", () => {
     expect(b!.team).not.toBe(a!.team); // first two joiners always oppose
     expect(a!.mover.pos).toEqual(authoredSpawn(a!.team));
     expect(b!.mover.pos).toEqual(authoredSpawn(b!.team));
+  });
+});
+
+// Everything the server deals online — ranked included — must be a real,
+// playable map: a registry entry whose duel AND brawl spawn sets resolve, with
+// every spawn standing on open ground (a spawn inside a rock is a lost round).
+describe("the rotation", () => {
+  for (const id of ARENA_ROTATION) {
+    test(`${id} is dealable: registered, both spawn sets, spawns clear of collision`, () => {
+      const file = ARENAS[id]!;
+      expect(file).toBeDefined();
+      expect(file.id).toBe(id);
+      for (const teamCount of [2, BRAWL_TEAM_COUNT]) {
+        const zone = deriveArenaZone(file, teamCount);
+        expect(zone.spawns).toHaveLength(teamCount);
+        for (const spawn of zone.spawns) {
+          for (const box of zone.collision) expect(distanceToAabb(spawn, box)).toBeGreaterThan(PLAYER_RADIUS);
+        }
+      }
+    });
+  }
+
+  test("a host's pick is honoured only for rotation ids; anything else rolls", () => {
+    for (const id of ARENA_ROTATION) expect(hostArena(id, () => 0).id).toBe(id);
+    const first = ARENA_ROTATION[0]!;
+    const last = ARENA_ROTATION[ARENA_ROTATION.length - 1]!;
+    for (const junk of [undefined, null, 7, "", "nowhere", "__proto__"]) {
+      expect(hostArena(junk, () => 0).id).toBe(first);
+      expect(hostArena(junk, () => 0.999).id).toBe(last);
+    }
   });
 });

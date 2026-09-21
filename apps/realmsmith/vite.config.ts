@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { forgePlugin } from "./forge/plugin";
 import { tilesetServerPlugin } from "./tilesetServer/plugin";
+import { zonesServerPlugin } from "./zonesServer/plugin";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -14,7 +15,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   // forgePlugin: the Asset Forge's dev-only endpoints (docs/design/asset-forge.md).
   // tilesetServerPlugin: serves atlas PNGs from the games' asset folders (tilesets.md).
-  plugins: [react(), forgePlugin(), tilesetServerPlugin()],
+  // zonesServerPlugin: lists/reads/writes the repo's zone files + "New arena" (bits-arenas.md).
+  plugins: [react(), forgePlugin(), tilesetServerPlugin(), zonesServerPlugin()],
   resolve: {
     alias: {
       "@heroic/core": resolve(here, "../../packages/core/src/index.ts"),

@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   COLLISION_CELL,
+  COLLISION_CELL_OF,
   CREATURE_IDS,
   TILESETS,
+  lineCells,
   loadZone,
+  paintTerrain,
   type Aabb,
   type CollisionMaterial,
+  type InvisibleMaterial,
   type CreatureId,
+  type Vec2,
   type Zone,
   type ZoneFile,
   type ZoneObjectKind,
@@ -17,6 +22,16 @@ import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
 import { ForgePanel } from "./forge/ForgePanel";
 import { loadAtlas } from "./tiles/atlas";
+import {
+  createProjectZone,
+  listProjectZones,
+  readProjectZone,
+  slugify,
+  writeProjectZone,
+  type ProjectZone,
+} from "./fs/zonesApi";
+import { TERRAINS } from "./terrains";
+import { layerGrid, type Brush } from "./edit/brush";
 import type { EditPointer, Selection, Tool } from "./edit/types";
 import {
   BREAKABLE_KINDS,
@@ -30,6 +45,7 @@ import {
   deleteBreakable,
   deleteObject,
   addCollisionRect,
+  isDrawnMaterial,
   deleteRect,
   duplicateBreakable,
   duplicateObject,
@@ -40,8 +56,13 @@ import {
   placeObject,
   rectIndexAt,
   setCollisionCell,
-  setDecor,
-  setFloor,
+  setCollisionSubCell,
+  COLLISION_DIV,
+  addPolygon,
+  deletePolygon,
+  movePolygonVertex,
+  polygonIndexAt,
+  polygonVertexAt,
 } from "./edit/zoneEdits";
 import {
   breakableAt,
@@ -80,11 +101,17 @@ const rectFromPoints = (x0: number, y0: number, x1: number, y1: number): Aabb =>
 export const App = () => {
   const zoneRef = useRef<ZoneFile | null>(null);
   const handleRef = useRef<FileSystemFileHandle | null>(null);
+  // Where the open zone came from: a project file (dev server, bits-arenas.md)
+  // is saved back by path; anything else is a picked handle (fileAccess.ts).
+  const projectPathRef = useRef<string | null>(null);
   const dragRef = useRef<Selection | null>(null);
   const rectDragRef = useRef<{ x0: number; y0: number } | null>(null);
   // Which left-drag gesture is in progress for breakable/object tools.
   const strokeKindRef = useRef<"move" | "place" | null>(null);
   const lastCellRef = useRef<{ col: number; row: number } | null>(null);
+  // Previous cell of a tile-brush stroke, so a fast drag paints the line between
+  // pointer events instead of the scattered cells the events happened to land on.
+  const brushCellRef = useRef<{ col: number; row: number } | null>(null);
   // World point where the current stroke went down — so we can tell a click (a
   // single placement) from a deliberate drag (stamp one per cell). Without this a
   // click that micro-drags across a tile boundary stamps a second breakable/object.
@@ -104,16 +131,38 @@ export const App = () => {
   const [dirty, setDirty] = useState(false);
   const [zoneName, setZoneName] = useState("");
   const [canReopen, setCanReopen] = useState(false);
+  // The repo's zone files (zonesServer/plugin.ts): the landing list + toolbar switcher.
+  const [projectZones, setProjectZones] = useState<ProjectZone[]>([]);
+  const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [newArenaName, setNewArenaName] = useState("");
+  const [newArenaFrom, setNewArenaFrom] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [tool, setTool] = useState<Tool>("floor");
-  const [collisionMaterial, setCollisionMaterial] = useState<CollisionMaterial>("wall");
+  // Drawn `wall` is deliberately NOT offered: art-painted zones use the invisible
+  // materials (solid / low) under their tile art; the black pillar only ever
+  // trapped a cliff (Tom, 2026-09-17). Core still loads it for the gauntlet.
+  const [collisionMaterial, setCollisionMaterial] = useState<CollisionMaterial>("solid");
+  // Polygons are for the invisible materials only (a void staircase would draw).
+  const polygonMaterial: InvisibleMaterial = collisionMaterial === "low" ? "low" : "solid";
+  // Mirrored in a ref for the keydown effect (Enter closes a polygon) so it
+  // doesn't re-bind on every picker change.
+  const polygonMaterialRef = useRef<InvisibleMaterial>(polygonMaterial);
+  polygonMaterialRef.current = polygonMaterial;
+  // Collision tool shape: paint cells / drag rects, or draw a solid/low polygon
+  // (bits-arenas.md § fences) — click vertices, click the first one to close.
+  const [collisionShape, setCollisionShape] = useState<"paint" | "polygon">("paint");
+  const [draft, setDraft] = useState<Vec2[] | null>(null);
+  const draftRef = useRef<Vec2[] | null>(null);
+  // A polygon vertex being dragged (collision tool, polygon shape).
+  const vertexDragRef = useRef<{ poly: number; vertex: number } | null>(null);
   const [breakableKind, setBreakableKind] = useState<BreakableKind>("barrel");
   const [objectKind, setObjectKind] = useState<ZoneObjectKind>("playerSpawn");
   // What the tile brushes paint (picked in the palette; floor and decor remember
-  // their own last pick) and which standing prop the object tool places.
-  const [floorTileId, setFloorTileId] = useState(1);
-  const [decorTileId, setDecorTileId] = useState(1);
+  // their own last pick — an explicit id or a terrain) and which standing prop
+  // the object tool places.
+  const [floorBrush, setFloorBrush] = useState<Brush>({ kind: "tile", id: 1 });
+  const [decorBrush, setDecorBrush] = useState<Brush>({ kind: "tile", id: 1 });
   const [propName, setPropName] = useState("");
   // The zone's tileset atlas image, resolved by name from the dev server.
   const [atlas, setAtlas] = useState<HTMLImageElement | null>(null);
@@ -122,7 +171,7 @@ export const App = () => {
   const [creatureId, setCreatureId] = useState<CreatureId>(CREATURE_IDS[0]!);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [showGrid, setShowGrid] = useState(true);
-  const [snapMode, setSnapMode] = useState<"half" | "off">("half");
+  const [snapMode, setSnapMode] = useState<"half" | "quarter" | "off">("half");
   const [showIssues, setShowIssues] = useState(false);
   const [showForge, setShowForge] = useState(false);
   const [focus, setFocus] = useState<{ x: number; y: number } | null>(null);
@@ -157,6 +206,7 @@ export const App = () => {
     };
   }, [tilesetName, tilesetDef]);
   const art: TilesetArt | null = tilesetDef && atlas ? { def: tilesetDef, image: atlas } : null;
+  const terrains = TERRAINS[tilesetName];
 
   // Keep the prop pick valid for the current tileset (first prop as the default).
   useEffect(() => {
@@ -223,26 +273,80 @@ export const App = () => {
       .catch(() => {});
   }, []);
 
-  const adopt = useCallback(
-    async (handle: FileSystemFileHandle) => {
+  /** Make `file` the open zone (from either source); the caller records where it came from. */
+  const install = useCallback(
+    (file: ZoneFile, label: string) => {
       // Normalize the authored grids to the declared size on open, so a hand-edited
       // (or drifted) `size` loads cleanly and is paintable instead of throwing.
-      zoneRef.current = normalizeZoneFile(await readZone(handle));
-      handleRef.current = handle;
+      zoneRef.current = normalizeZoneFile(file);
       undoRef.current = [];
       redoRef.current = [];
-      setZoneName(handle.name);
+      setZoneName(label);
       setLoaded(true);
       setDirty(false);
-      setCanReopen(false);
       setSelection(null);
       setFitToken((t) => t + 1);
       setHistVer((h) => h + 1);
       bump();
-      persistHandle(handle).catch(() => {});
     },
     [bump],
   );
+
+  const adopt = useCallback(
+    async (handle: FileSystemFileHandle) => {
+      install(await readZone(handle), handle.name);
+      handleRef.current = handle;
+      projectPathRef.current = null;
+      setProjectPath(null);
+      setCanReopen(false);
+      persistHandle(handle).catch(() => {});
+    },
+    [install],
+  );
+
+  const refreshProjectZones = useCallback(async () => {
+    const zones = await listProjectZones();
+    setProjectZones(zones);
+    // Default "New arena" template: the first zone whose folder has a registry
+    // (the BITS arenas) — the one place a new file reaches the game unaided.
+    setNewArenaFrom((cur) => (zones.some((z) => z.path === cur) ? cur : (zones.find((z) => z.registry)?.path ?? "")));
+  }, []);
+  useEffect(() => {
+    void refreshProjectZones();
+  }, [refreshProjectZones]);
+
+  /** Open one of the repo's zone files through the dev server — no picker, no prompt. */
+  const openProject = useCallback(
+    async (path: string) => {
+      if (dirty) return setError("Unsaved changes — save first (⌘S), then switch.");
+      setError(null);
+      try {
+        install(await readProjectZone(path), path.split("/").pop() ?? path);
+        handleRef.current = null;
+        projectPathRef.current = path;
+        setProjectPath(path);
+      } catch (e) {
+        setError(`Open failed: ${String(e)}`);
+      }
+    },
+    [install, dirty],
+  );
+
+  /** Clone the chosen template as a new arena and open it (bits-arenas.md). */
+  const createArena = useCallback(async () => {
+    const name = newArenaName.trim();
+    const id = slugify(name);
+    if (!name || !id || !newArenaFrom) return;
+    setError(null);
+    try {
+      const made = await createProjectZone(newArenaFrom, id, name);
+      setNewArenaName("");
+      await refreshProjectZones();
+      await openProject(made.path);
+    } catch (e) {
+      setError(`New arena failed: ${String(e)}`);
+    }
+  }, [newArenaName, newArenaFrom, refreshProjectZones, openProject]);
 
   const openZone = useCallback(async () => {
     setError(null);
@@ -269,13 +373,19 @@ export const App = () => {
   }, [adopt]);
 
   const save = useCallback(async () => {
-    const handle = handleRef.current;
     const z = zoneRef.current;
-    if (!handle || !z) return;
+    if (!z) return;
     setError(null);
     try {
-      if (!(await ensurePermission(handle, "readwrite"))) return setError("Permission denied.");
-      await writeZone(handle, z);
+      const path = projectPathRef.current;
+      if (path) {
+        await writeProjectZone(path, z);
+      } else {
+        const handle = handleRef.current;
+        if (!handle) return;
+        if (!(await ensurePermission(handle, "readwrite"))) return setError("Permission denied.");
+        await writeZone(handle, z);
+      }
       setDirty(false);
     } catch (e) {
       setError(`Save failed: ${String(e)}`);
@@ -287,8 +397,9 @@ export const App = () => {
       const z = zoneRef.current;
       if (!z || !zone) return;
       const t = z.tileSize;
-      // Snap placement to the half-tile grid, or free when snap is off.
-      const snap = (w: number): number => (snapMode === "off" ? w : Math.round(w / (t / 2)) * (t / 2));
+      // Snap placement to the half- or quarter-tile grid, or free when snap is off.
+      const snapStep = snapMode === "half" ? t / 2 : t / 4;
+      const snap = (w: number): number => (snapMode === "off" ? w : Math.round(w / snapStep) * snapStep);
       const sx = snap(e.wx);
       const sy = snap(e.wy);
       const left = e.button === "left";
@@ -315,10 +426,73 @@ export const App = () => {
       }
 
       let changed = false;
-      if (tool === "floor") {
-        if (e.phase !== "up") changed = setFloor(z, e.col, e.row, left ? floorTileId : 0);
-      } else if (tool === "decor") {
-        if (e.phase !== "up") changed = setDecor(z, e.col, e.row, left ? decorTileId : 0);
+      if (tool === "floor" || tool === "decor") {
+        if (e.phase !== "up") {
+          // Every cell from the previous event's cell to this one — a stroke, not a
+          // scatter. Cells outside the zone are dropped (a terrain solve near the
+          // edge must never see them as painted).
+          const prev = e.phase === "drag" ? brushCellRef.current : null;
+          brushCellRef.current = { col: e.col, row: e.row };
+          const cells = (prev ? lineCells(prev, e).slice(1) : [{ col: e.col, row: e.row }]).filter(
+            (c) => c.col >= 0 && c.row >= 0 && c.col < z.size.cols && c.row < z.size.rows,
+          );
+          const brush = tool === "floor" ? floorBrush : decorBrush;
+          const grid = layerGrid(z, tool);
+          if (brush.kind === "tile") {
+            for (const c of cells) if (grid.set(c.col, c.row, left ? brush.id : 0)) changed = true;
+          } else {
+            const def = terrains?.[brush.name];
+            if (def) changed = paintTerrain(grid, def, cells, left);
+          }
+        }
+      } else if (tool === "collision" && collisionShape === "polygon") {
+        // Vertices snap like everything else (quarter-tile snap matches the
+        // rasteriser's own resolution, so what you draw is what blocks).
+        if (left) {
+          if (e.phase === "down") {
+            const cur = draftRef.current;
+            if (cur) {
+              const first = cur[0]!;
+              // Clicking within ~a third of a tile of the first vertex closes the outline.
+              if (cur.length >= 3 && Math.hypot(e.wx - first.x, e.wy - first.y) <= t * 0.3) {
+                addPolygon(z, cur, polygonMaterial);
+                draftRef.current = null;
+                setDraft(null);
+                changed = true;
+              } else {
+                const next = [...cur, { x: sx, y: sy }];
+                draftRef.current = next;
+                setDraft(next);
+              }
+            } else {
+              // No draft: grab an existing vertex to drag, else start a new outline.
+              const hit = polygonVertexAt(z, e.wx, e.wy, t * 0.3);
+              if (hit) {
+                vertexDragRef.current = hit;
+              } else {
+                const next = [{ x: sx, y: sy }];
+                draftRef.current = next;
+                setDraft(next);
+              }
+            }
+          } else if (e.phase === "drag" && vertexDragRef.current) {
+            const v = vertexDragRef.current;
+            changed = movePolygonVertex(z, v.poly, v.vertex, sx, sy);
+          } else if (e.phase === "up") {
+            vertexDragRef.current = null;
+          }
+        } else if (e.phase === "down") {
+          const cur = draftRef.current;
+          if (cur) {
+            // Right-click while drawing: back out the last vertex (or the draft).
+            const next = cur.slice(0, -1);
+            draftRef.current = next.length ? next : null;
+            setDraft(next.length ? next : null);
+          } else {
+            const hit = polygonIndexAt(z, e.wx, e.wy);
+            if (hit >= 0) changed = deletePolygon(z, hit);
+          }
+        }
       } else if (tool === "collision") {
         if (left && snapMode === "off") {
           // Free-rect: drag a box → a free collision rect (with live dashed preview).
@@ -337,20 +511,34 @@ export const App = () => {
               changed = true;
             }
           }
-        } else if (left) {
-          const code =
-            collisionMaterial === "void"
-              ? COLLISION_CELL.void
-              : collisionMaterial === "hidden"
-                ? COLLISION_CELL.hidden
-                : COLLISION_CELL.wall;
-          if (e.phase !== "up" && cellFreeForCollision(zone, e.col, e.row))
-            changed = setCollisionCell(z, e.col, e.row, code);
-        } else if (e.phase === "down") {
-          const ri = rectIndexAt(z, e.wx, e.wy);
-          changed = ri >= 0 ? deleteRect(z, ri) : setCollisionCell(z, e.col, e.row, 0);
-        } else if (e.phase === "drag") {
-          changed = setCollisionCell(z, e.col, e.row, 0);
+        } else if (e.phase !== "up") {
+          // Painted collision: the invisible materials (solid/low) brush QUARTER-tile
+          // sub-cells; drawn void and erase-over-a-drawn-solid work whole tiles (zoneEdits).
+          // Right-click erases (a free rect under the cursor first, then cells).
+          if (!left && e.phase === "down") {
+            const ri = rectIndexAt(z, e.wx, e.wy);
+            if (ri >= 0) {
+              changed = deleteRect(z, ri);
+              brushCellRef.current = null;
+            }
+          }
+          if (!changed) {
+            const fine = left ? !isDrawnMaterial(collisionMaterial) : true;
+            const div = fine ? COLLISION_DIV : 1;
+            const sub = t / div;
+            const here = { col: Math.floor(e.wx / sub), row: Math.floor(e.wy / sub) };
+            const prev = e.phase === "drag" ? brushCellRef.current : null;
+            brushCellRef.current = here;
+            const cells = prev ? lineCells(prev, here).slice(1) : [here];
+            const code = left ? COLLISION_CELL_OF[collisionMaterial] : COLLISION_CELL.none;
+            for (const c of cells) {
+              const tc = Math.floor(c.col / div);
+              const tr = Math.floor(c.row / div);
+              if (left && !cellFreeForCollision(zone, tc, tr)) continue;
+              const did = fine ? setCollisionSubCell(z, c.col, c.row, code) : setCollisionCell(z, tc, tr, code);
+              if (did) changed = true;
+            }
+          }
         }
       } else if (tool === "breakable") {
         const placeFits = () => breakableFits(zone, breakableDefaults(breakableKind, sx, sy, t).box);
@@ -515,6 +703,7 @@ export const App = () => {
         dragRef.current = null;
         strokeKindRef.current = null;
         lastCellRef.current = null;
+        brushCellRef.current = null;
         resizeAnchorRef.current = null;
         if (strokeChangedRef.current && strokePreRef.current) {
           undoRef.current.push(strokePreRef.current);
@@ -525,7 +714,7 @@ export const App = () => {
         strokePreRef.current = null;
       }
     },
-    [tool, collisionMaterial, breakableKind, objectKind, creatureId, floorTileId, decorTileId, propName, tilesetDef, snapMode, selection, zone, bump],
+    [tool, collisionMaterial, polygonMaterial, collisionShape, breakableKind, objectKind, creatureId, floorBrush, decorBrush, terrains, propName, tilesetDef, snapMode, selection, zone, bump],
   );
 
   // Clicking a validation issue: select the offending entity + centre the camera.
@@ -545,7 +734,7 @@ export const App = () => {
       const cx = col * t + t / 2;
       const cy = row * t + t / 2;
       // In free-rect mode the cell tint doesn't apply (you drag a box, see its preview).
-      if (tool === "collision") return snapMode === "off" ? true : cellFreeForCollision(zone, col, row);
+      if (tool === "collision") return collisionShape === "polygon" || snapMode === "off" ? true : cellFreeForCollision(zone, col, row);
       if (tool === "breakable")
         return (
           breakableAt(zone, cx, cy) ||
@@ -555,7 +744,7 @@ export const App = () => {
         return objectAt(zone, cx, cy, t * 0.5) || propPlaceable(zone, tilesetDef, propName, cx, cy);
       return objectAt(zone, cx, cy, t * 0.5) || objectPlaceable(zone, cx, cy);
     },
-    [zone, tool, breakableKind, objectKind, propName, tilesetDef, snapMode],
+    [zone, tool, collisionShape, breakableKind, objectKind, propName, tilesetDef, snapMode],
   );
 
   const deleteSelection = useCallback(() => {
@@ -617,6 +806,8 @@ export const App = () => {
   const pickTool = useCallback((next: Tool) => {
     setTool(next);
     setSelection(null);
+    draftRef.current = null;
+    setDraft(null);
   }, []);
 
   useEffect(() => {
@@ -649,11 +840,20 @@ export const App = () => {
         duplicateSelection();
       } else if (e.key === "Escape") {
         setSelection(null);
+        draftRef.current = null;
+        setDraft(null);
+      } else if (e.key === "Enter" && draftRef.current && draftRef.current.length >= 3 && zoneRef.current) {
+        // Close the polygon from the keyboard (one undo step).
+        pushUndo();
+        addPolygon(zoneRef.current, draftRef.current, polygonMaterialRef.current);
+        draftRef.current = null;
+        setDraft(null);
+        commitEdit();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [save, deleteSelection, duplicateSelection, undo, redo]);
+  }, [save, deleteSelection, duplicateSelection, undo, redo, pushUndo, commitEdit]);
 
   // Corner handles in the viewport: a selected breakable's box (breakable tool),
   // or a selected region object's rect (a trigger, object tool). Both drag-resize
@@ -688,21 +888,58 @@ export const App = () => {
             <span className="spacer" />
             <div className="tools">
               {TOOLS.map((tl) => (
-                <button key={tl} className={tool === tl ? "on" : ""} onClick={() => pickTool(tl)}>
+                <button
+                  key={tl}
+                  className={tool === tl && !(tl === "object" && objectKind === "prop") ? "on" : ""}
+                  onClick={() => {
+                    pickTool(tl);
+                    // "Object" means markers; the standing-art placement has its own button.
+                    if (tl === "object" && objectKind === "prop") setObjectKind("playerSpawn");
+                  }}
+                >
                   {tl[0]!.toUpperCase() + tl.slice(1)}
                 </button>
               ))}
+              {/* Standing art from the tileset (trees, statues, walls) — the object
+                  tool's "prop" kind, surfaced as its own button so it's findable. */}
+              <button
+                className={tool === "object" && objectKind === "prop" ? "on" : ""}
+                onClick={() => {
+                  pickTool("object");
+                  setObjectKind("prop");
+                }}
+                title="Place standing props from the tileset (they y-sort with players and can block)"
+              >
+                Prop
+              </button>
             </div>
             {tool === "collision" && (
               <select
                 value={collisionMaterial}
                 onChange={(e) => setCollisionMaterial(e.target.value as CollisionMaterial)}
-                title="Collision material: wall (solid, blocks sight), void (chasm — blocks movement only), or hidden (invisible barrier — blocks movement, renders as nothing in-game)"
+                title="Collision material — solid: invisible, blocks walking, shots and target lock (a painted rock, column, ruin wall; blue in the editor). low: invisible, blocks walking ONLY — shoot and aim over it (a cliff edge, chest-high wall, fence; green). void: the drawn mist chasm — blocks walking, see/shoot across. Solid and low paint at quarter tiles and keep the floor art; both can be polygons."
               >
-                <option value="wall">wall</option>
+                <option value="solid">solid</option>
+                <option value="low">low</option>
                 <option value="void">void</option>
-                <option value="hidden">hidden</option>
               </select>
+            )}
+            {tool === "collision" && (
+              <select
+                value={collisionShape}
+                onChange={(e) => {
+                  setCollisionShape(e.target.value as "paint" | "polygon");
+                  draftRef.current = null;
+                  setDraft(null);
+                }}
+                title="Shape: paint cells / drag rects, or draw a polygon of the chosen invisible material (solid or low) — click to drop vertices, click the first one (or Enter) to close, right-click to back up, drag a vertex to move it, right-click inside to delete. Becomes quarter-tile boxes in the game."
+              >
+                <option value="paint">paint / rect</option>
+                <option value="polygon">polygon</option>
+              </select>
+            )}
+            {tool === "collision" && collisionShape === "polygon" && draft && (
+              <span className="muted">{draft.length < 3 ? `${draft.length} pt` : "click the first point or Enter to close"}</span>
             )}
             {tool === "breakable" && (
               <select
@@ -751,10 +988,11 @@ export const App = () => {
             </button>
             <select
               value={snapMode}
-              onChange={(e) => setSnapMode(e.target.value as "half" | "off")}
-              title="Placement snap"
+              onChange={(e) => setSnapMode(e.target.value as "half" | "quarter" | "off")}
+              title="Placement snap (off = the collision tool drags free rects)"
             >
               <option value="half">Snap: ½ tile</option>
+              <option value="quarter">Snap: ¼ tile</option>
               <option value="off">Snap: off</option>
             </select>
             <label
@@ -798,6 +1036,21 @@ export const App = () => {
             <button onClick={redo} disabled={redoRef.current.length === 0} title="Redo (⌘⇧Z)">
               ↷
             </button>
+            {projectZones.length > 0 && (
+              <select
+                className="zone-switch"
+                value={projectPath ?? ""}
+                onChange={(e) => void openProject(e.target.value)}
+                title="Switch between the repo's zone files (saves go straight back to the file)"
+              >
+                {projectPath === null && <option value="">— picked file —</option>}
+                {projectZones.map((z) => (
+                  <option key={z.path} value={z.path}>
+                    {z.owner} · {z.name} ({z.id})
+                  </option>
+                ))}
+              </select>
+            )}
             <button onClick={openZone}>Open…</button>
             <button onClick={save} disabled={!dirty}>
               Save{dirty ? " •" : ""}
@@ -858,8 +1111,10 @@ export const App = () => {
               def={tilesetDef}
               atlas={atlas}
               mode={tool === "object" ? "props" : "tiles"}
-              selectedTile={tool === "decor" ? decorTileId : floorTileId}
-              onPickTile={tool === "decor" ? setDecorTileId : setFloorTileId}
+              layer={tool === "decor" ? "decor" : "floor"}
+              terrains={terrains}
+              brush={tool === "decor" ? decorBrush : floorBrush}
+              onPickBrush={tool === "decor" ? setDecorBrush : setFloorBrush}
               selectedProp={propName}
               onPickProp={setPropName}
             />
@@ -873,6 +1128,14 @@ export const App = () => {
             focus={focus}
             pending={pending}
             resizeBox={resizeBox}
+            polys={zoneRef.current.collision.polys ?? []}
+            polyHandles={tool === "collision" && collisionShape === "polygon"}
+            draft={draft}
+            hoverDiv={
+              tool === "collision" && collisionShape === "paint" && !isDrawnMaterial(collisionMaterial) && snapMode !== "off"
+                ? COLLISION_DIV
+                : 1
+            }
             onPointer={onPointer}
             validateHover={validateHover}
           />
@@ -889,16 +1152,57 @@ export const App = () => {
         </div>
       ) : (
         <div className="empty">
-          {fsSupported ? (
-            <div>
-              <p>
-                Open <code>apps/enter-the-gauntlet/assets/zones/realm-00.json</code> to begin.
+          <div className="zone-picker">
+            <h2>Project zones</h2>
+            {projectZones.length === 0 ? (
+              <p className="muted">No zone files found — the list comes from the dev server, run from the repo.</p>
+            ) : (
+              [...new Set(projectZones.map((z) => z.owner))].map((owner) => (
+                <div key={owner} className="zone-group">
+                  <div className="zone-owner">{owner}</div>
+                  {projectZones
+                    .filter((z) => z.owner === owner)
+                    .map((z) => (
+                      <button key={z.path} className="zone-row" onClick={() => void openProject(z.path)} title={z.path}>
+                        <span className="zone-name">{z.name}</span>
+                        <span className="muted">{z.id}</span>
+                      </button>
+                    ))}
+                </div>
+              ))
+            )}
+            {newArenaFrom && (
+              <div className="new-arena">
+                <input
+                  placeholder="New arena name"
+                  value={newArenaName}
+                  onChange={(e) => setNewArenaName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void createArena();
+                  }}
+                />
+                <select value={newArenaFrom} onChange={(e) => setNewArenaFrom(e.target.value)} title="Copy this arena as the starting point">
+                  {projectZones
+                    .filter((z) => z.registry)
+                    .map((z) => (
+                      <option key={z.path} value={z.path}>
+                        from {z.name}
+                      </option>
+                    ))}
+                </select>
+                <button onClick={() => void createArena()} disabled={!slugify(newArenaName)}>
+                  New arena{slugify(newArenaName) ? ` · ${slugify(newArenaName)}` : ""}
+                </button>
+              </div>
+            )}
+            {fsSupported ? (
+              <p className="muted">
+                …or <em>Open zone…</em> for a file outside the repo{canReopen ? ", or reopen the last one" : ""}.
               </p>
-              {canReopen && <p className="muted">…or reopen the last file you edited.</p>}
-            </div>
-          ) : (
-            <p>Realmsmith needs the File System Access API — use Chrome, Edge, Arc, or Brave.</p>
-          )}
+            ) : (
+              <p className="muted">Files outside the repo need the File System Access API — Chrome, Edge, Arc, or Brave.</p>
+            )}
+          </div>
         </div>
       )}
 

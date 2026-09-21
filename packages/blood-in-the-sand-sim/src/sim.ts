@@ -45,9 +45,14 @@ const GRID_CELL = 64;
 export interface ArenaZone {
   id: string;
   size: Vec2;
-  /** Every movement blocker (walls ∪ voids) → stepCrowd's walls. */
+  /** Every movement blocker (walls ∪ voids ∪ solid ∪ low ∪ footprints) → stepCrowd's walls. */
   collision: Aabb[];
-  /** LOS occluders: the edges of sight-blocking walls only. */
+  /**
+   * Every box a projectile dies on: `collision` minus the `low` blockers — a
+   * shot flies over a cliff edge or a chest-high wall (docs/design/tilesets.md).
+   */
+  shotBlockers: Aabb[];
+  /** LOS occluders: the edges of everything that blocks target lock. */
   occluders: VisionSegment[];
   /** Team spawn points, indexed team − 1 (length = the room's teamCount). */
   spawns: Vec2[];
@@ -93,9 +98,20 @@ export const deriveArenaZone = (file: ZoneFile, teamCount = 2): ArenaZone => {
     id: zone.id,
     size: zone.size,
     collision: zone.collision,
-    // Sight-blockers: drawn walls plus occluding prop footprints (solid rocks —
-    // hidden collision whose sprite is the visual; docs/design/tilesets.md).
-    occluders: [...zone.walls, ...zone.propOccluders].flatMap((w) => rectEdges(w.x, w.y, w.w, w.h)),
+    // Shots die on everything a body can't cross EXCEPT `low` blockers (a
+    // cliff edge, a parapet): those stop feet only, so a shot sails over.
+    // Filtered by identity — `collision` is built from these very boxes.
+    shotBlockers: zone.collision.filter((b) => !zone.low.includes(b)),
+    // Sight-blockers: drawn walls, occluding prop footprints (rocks whose
+    // sprite is the visual; docs/design/tilesets.md), AND painted `solid`
+    // collision. Core treats solid as movement-only, but here a shot dies on
+    // it, so a target-lock through one is a lock you can't fire at —
+    // confusing on the stick. Since 2026-09-17 painted solid IS the prop
+    // footprint for the ancient pack, so it blocks the lock like a rock does.
+    // `low` is deliberately absent: lock and shoot over it, like a void.
+    occluders: [...zone.walls, ...zone.propOccluders, ...zone.solid].flatMap((w) =>
+      rectEdges(w.x, w.y, w.w, w.h),
+    ),
     spawns: Array.from({ length: teamCount }, (_, i) => spawnOf(i + 1)),
   };
 };

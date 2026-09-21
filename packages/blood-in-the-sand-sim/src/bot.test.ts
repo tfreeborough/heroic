@@ -493,8 +493,10 @@ describe("difficulty", () => {
     const players = [me, strongNear, weakFar];
     const godlike = botThink(createBotMemory(), me, w(players), nav, { difficulty: "godlike" });
     expect(godlike.sx).toBeGreaterThan(0); // toward the kill at +x
-    const skilled = botThink(createBotMemory(), me, w(players), nav, { difficulty: "skilled" });
-    expect(skilled.sx).toBeLessThan(0); // dogpiles the nearest at -x
+    // Team focus reaches down to Skilled since v4; below it, bots tunnel on
+    // the nearest body the way new players do.
+    const green = botThink(createBotMemory(), me, w(players), nav, { difficulty: "experienced" });
+    expect(green.sx).toBeLessThan(0); // dogpiles the nearest at -x
   });
 
   test("dash economy: the last hop is never spent gap-closing a shooter", () => {
@@ -619,8 +621,11 @@ describe("humanization (bot-humanization.md)", () => {
       const trail = walk(createBotMemory(5), { x: 150, y: 300 }, (me) => w([me, enemy], [trap]), 90, loadout);
       return Math.min(...trail.map((p) => Math.hypot(p.x - 375, p.y - 300)));
     };
-    expect(minZd(30)).toBeLessThan(115); // diving: through the trap
+    expect(minZd(20)).toBeLessThan(115); // the kill is THERE: through the trap
     expect(minZd(100)).toBeGreaterThan(120); // healthy mark: around it
+    // v4: a sharp tier's greed needs a mark one hit from dead — merely
+    // "weak enough to dive" is not worth 30 damage and a launch.
+    expect(minZd(40)).toBeGreaterThan(138);
   });
 
   test("M4: band flips need a real overshoot, not a pixel", () => {

@@ -25,7 +25,8 @@ import {
   FREE_ABILITY_IDS,
   addDummy,
   addPlayer,
-  ARENA_00,
+  ARENA_IDS,
+  arenaById,
   configureSafeCircle,
   botThink,
   createBotMemory,
@@ -186,16 +187,23 @@ export class PracticeClient implements LobbyClient {
     difficulty: DifficultyId = DEFAULT_DIFFICULTY,
     showcase: ShowcaseScript | null = null,
     brawl = false,
+    /** The map (bits-arenas.md): a registry id, or null = any registered
+     *  arena at random — rotation or not, so a new map can be walked before
+     *  it ships online. A showcase always shoots on arena-00. */
+    arena: string | null = null,
   ) {
     this.mode = mode;
     this.showcase = showcase;
+    const zoneFile = arenaById(
+      showcase ? "arena-00" : (arena ?? ARENA_IDS[Math.floor(Math.random() * ARENA_IDS.length)]),
+    );
     if (showcase) teamSize = showcase.teamSize;
     if (brawl) teamSize = 1; // the free-for-all shape is fixed: six teams of one
     // Practice needn't be replayable — wall-clock seeding is fine here. The
     // practice flag lifts the per-round charge budget (cooldown-only casts).
     // A showcase seeds FIXED so a take is re-shootable identically.
     this.sim = createSim(
-      ARENA_00,
+      zoneFile,
       showcase ? 7 : Date.now() >>> 0,
       teamSize,
       mode === "dummies",
@@ -272,7 +280,7 @@ export class PracticeClient implements LobbyClient {
               ? `practice vs ${this.sim.state.players[1]!.name}`
               : `practice ${teamSize}v${teamSize}`,
       hostId: 0,
-      zoneId: ARENA_00.id,
+      zoneId: this.sim.zone.id,
       config: makeClientConfig(this.sim.state),
     };
     this.refreshRoomState();

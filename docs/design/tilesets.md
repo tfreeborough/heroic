@@ -68,12 +68,27 @@ split into three role sheets — and the split maps cleanly onto our layer model
   single-cell grass tufts and pebbles.
 - **`wall_tile.png`** (10×6 cells) → **paintable floor/decor tiles**, not blocking geometry:
   cliff/ledge art that gives Pokémon-style visual height and dimension. Paint them where you
-  want the *look* of a rise; where the terrain should actually block, pair with the **hidden
-  collision material** — the third `CollisionMaterial` (`"hidden"`, cell code 3): blocks
-  movement, never draws in-game (the tile art is the visual), never occludes, and — unlike
-  wall/void — coexists with painted floor. The editor shows it as a translucent blue box.
-  It's a prop footprint, but paintable: invisible fences, map-edge barriers, tile-art cliffs.
+  want the *look* of a rise; where the terrain should actually block, pair with an **invisible
+  collision material** (world-representation.md § Collision materials): **`low`** (cell code 4)
+  for a cliff edge or chest-high wall — blocks movement only, shots and target lock pass over it —
+  or **`solid`** (code 3, was `hidden`) for a rock or column that stops shots too. Neither draws
+  in-game (the tile art is the visual) and both — unlike wall/void — coexist with painted floor.
+  The editor shows them as translucent blue (solid) / green (low) boxes. A prop footprint, but
+  paintable: invisible fences, map-edge barriers, tile-art cliffs.
   (Real drawn walls stay procedural; tile-skinned walls remain a later pass.)
+- **Contact shadows (BITS, 2026-09-17).** "Never drawn" turned out to be the problem in ranked:
+  nothing tells you where a rock's edge is until you walk into it. So the BITS floor bake darkens
+  the floor *around* every invisible blocker — an ambient-occlusion halo that peaks just outside
+  the collision boundary and fades both ways. Blended, not clipped: the box union is corner-rounded
+  through path ops (straight edges stay exactly on the boxes) and the interior is only *partly*
+  knocked out with a soft mask (`innerKeep`), so the shade bleeds under the art instead of a hard
+  "cutout" line (Tom's read of the first, hard-clipped version) and the whole footprint carries a
+  gentler wash of it. Height is in the shadow: `solid` (+ occluding footprints) gets a deep wide halo,
+  `low` (+ walk-only footprints) a thin one cast a few px south, a step lit from the north. Baked
+  once with the floor (`render.ts` `CONTACT_SHADOW`), free per frame, no protocol change. Side
+  effect worth wanting: collision painted wider than its art now *shows* as a halo on bare sand —
+  an authoring cue to hug the ground-contact silhouette, not the sprite's bounding box. Tuning is
+  on-device; Realmsmith doesn't preview it yet.
 
 Import repacks all three sheets into one gapless `assets/tilesets/desert.png`
 (`cellSize: 16`), stacked ground (rows 0–27) → wall (28–33) → props (34–52); the paintable
@@ -129,6 +144,37 @@ stay out of the procedural wall/void drawing (they'd double-render otherwise). `
 additionally joins the sight-blocking set. Realmsmith *does* draw footprints (a translucent
 overlay on the placed prop) — hidden in game, visible to the author.
 
+**Footprint-less packs (2026-09-17).** A registry footprint is one size for every placement,
+and Realmsmith refuses a prop whose footprint overlaps another's — which fought the *ancient* pack,
+whose props want to cluster (rocks against ruin walls, trees in copses). Decision: the ancient
+registry carries **no footprints at all**; every prop is walk-through, and the arena author paints
+the blocking geometry by hand with the invisible tools (¼-tile brush cells, or a polygon fence,
+which now rasterises at ¼ tile too). Collision under a prop's feet is allowed for that reason —
+props never gate the collision brush (other object kinds still do). Occlusion goes with the
+material: in BITS, `solid` (then still called `hidden`) already stopped **projectiles** (the sim
+expires shots against `zone.collision`, not just walls), and since the same day it also joins the
+sim's **target-lock occluders** (`deriveArenaZone`) — a lock through a barrier you can't shoot
+past played as broken. Core's own "solid = movement only" contract is unchanged; the gauntlet
+still sees through it. *Desert keeps its footprints:* that arena is live.
+
+**Solid vs low (2026-09-17, later the same day).** Tom's first cliff: he reached for `wall` and
+got the black pillar drawn over his cliff art. What a cliff needs is *walk-blocked, shoot-over* —
+and nothing was that: `hidden` had just become shot-stopping for the ancient rocks, and `wall`
+stops everything. So `hidden` is renamed **`solid`** (feet, shots, lock) and a fourth material,
+**`low`** (feet only), joins it: cliff edges, chest-high walls, fences, rubble. Both paint at ¼
+tile, both draw as polygons, both keep the floor art. The sim keeps a `shotBlockers` list
+(`collision` minus `low`) for projectiles and leaves `low` out of the lock occluders. Drawn `wall`
+comes off the Realmsmith picker (core still loads it for the gauntlet). Protocol v34.
+
+**Ground props (2026-09-18).** Some prop art *lies on* the ground — a rug, rubble, a fallen
+log — and Tom wanted those under the player, not walked behind. A per-placement flag,
+`props.ground: true` (Inspector: "On the ground"), takes that prop out of the y-sorted pass and
+bakes it flat with the floor (BITS: into the floor image after decor, under the contact shadows;
+Realmsmith: straight after decor). Same sprite, same feet anchor, same footprint rules — only the
+draw layer changes, so a prop can be flipped between standing and ground without re-placing it.
+Why a flag on the placement and not the registry: the same rock sprite is a boulder in one spot
+and half-buried in another.
+
 **Rendering** — props leave the baked-chunk path and join the entity pass: cull to viewport,
 merge with players/enemies, sort by baseline y, draw. Prop sprites are static quads
 (`drawImageRect` from the atlas), so the per-frame cost is a sort of a small visible set —
@@ -139,12 +185,100 @@ collides against them with zero new netcode — props never move, nothing new go
 An `occludes` boulder becomes gameplay (it breaks auto-targeting like the pillar does); a cactus
 (`occludes: false`) is cover for your body but not your target-lock.
 
+## Terrain brushes (autotiling) — built 2026-09-13
+
+Painting the first arena by hand — picking every edge and corner piece by eye — was the slowest
+part of the whole tileset job. A *terrain brush* fixes that: you paint "this cell is wall" and the
+editor picks the tiles. As promised in v1, the saved format is untouched: the brush writes the same
+ordinary ids into the same `floor`/`decor` layers, and the games never know it existed.
+
+**Two stages, both pure, in `@heroic/core` `zone/terrain.ts` (unit-tested):**
+
+1. **Corner solve.** The convention purchased packs use (Tiled's "corner" Wang set, the 16-tile
+   blob): every tile is tagged with which of its four *corners* are inside the terrain, so the
+   right tile for a cell is a 4-bit lookup with weighted art variants per entry. Membership is
+   per **cell** — the cell you paint is solid interior, the ring around it becomes edges — and it
+   is *derived from the ids already in the layer* (a cell is a member iff it holds the terrain's
+   full-interior tile), so nothing new is stored and a hand-painted wall solves like a brushed
+   one. Cell membership rather than Tiled's vertex model keeps paint/erase symmetric: erasing B
+   after painting A+B leaves exactly what painting A alone would.
+2. **Rule passes.** A port of Tiled automapping (the pack's `.tmx` rule maps): box patterns of
+   "if these tiles sit here, write those there", with Tiled's special matchers (Empty, NonEmpty,
+   Other, Ignore), `MatchInOrder`, per-rule `Probability`. The ancient-ruins walls need it: the
+   corner solve produces the parapet *top edge*; the rules hang the two rows of wall *face*
+   under it and sprinkle cracked variants. Passes run over the painted cells ± `RULE_MARGIN`
+   (8, ≥ 2× the tallest rule, so the region is self-contained and re-solving is idempotent).
+
+All randomness is hashed from cell position — extending a wall never reshuffles its neighbours.
+
+**Where the tables come from.** Nobody hand-types a corner map. `scripts/repack-tileset.py`
+reads the pack's Tiled `.tsx` (its `<wangsets>`, with per-tile `probability` as variant weight —
+weight 0 = "never auto-pick", the pack's template/rule-only tiles) and rule `.tmx` files, rebases
+local tile ids to atlas ids, and emits `apps/realmsmith/src/terrains/<name>.ts`. The tables are
+**editor-side**: `TERRAINS[tilesetName]` in Realmsmith, never in the game bundles. A tileset with
+no Tiled metadata (the desert pack) simply offers no terrains; a 16-entry table could be authored
+by hand for it later.
+
+**In the editor.** The palette shows terrains as 3×3 blob swatches above the raw tile grid; a
+swatch makes the current layer's brush a terrain, a raw tile makes it a plain id again. Floor and
+decor each keep their own brush — walls go on **decor** (the face rows overwrite what's below
+them; erased decor shows the floor again, exactly like Tiled's separate wall layer), grass tones on
+floor. Left paints, right erases. Strokes now interpolate between pointer events (`lineCells`),
+which also fixed the plain brush's skipped cells on fast drags.
+
+**Base vs overlay (found the hard way, same day).** Half the pack's sets have see-through pieces:
+wall-9's parapets and corners, every "…to transparency" edge. On the floor layer the void showed
+through them as grey patches. The extractor now records `opaque` per terrain (dropping a stray
+transparent variant from an otherwise-opaque mask — the pack mis-tags one), the Floor tool offers
+only base terrains, and overlays live on Decor with a hint pointing there. And wall-9 is a **raised
+platform** set, not a line wall: what you paint becomes the plateau top (grey cracked stone, random
+tufted variants), the ring around it becomes parapet + face — a one-cell line is a three-cell-wide
+raised strip. That's the pack's design (all its "wall N" sheets are cliffs); the swatch tooltip
+says so.
+
+**Foliage.** Standing art goes through the **Prop** toolbar button (the object tool's `prop`
+kind, surfaced so it's findable); the ancient set has no `tileRows` cap, so the props sheet's 1×1
+dressing (tufts, flowers, pebbles) paints as ordinary **decor tiles** from the bottom of the grid.
+
+**Known limits.** A terrain with no art for a corner combination (wall-9 lacks the two
+diagonal-only ones) leaves that cell as it was. Leaving a *floor* terrain writes `outside` (default
+0 = empty) — fine for decor, a hole for floor; the grass-transition sets want an `outside` id
+before they're pleasant on the floor layer. Walls are still visual: drop a `low` (shoot-over
+parapet) or `solid` collision run under the wall by hand (auto-collision under wall tops is the
+obvious next step).
+
+**Fill brushes + `outside` (2026-09-17).** Tom's first go with dunes: "there's no sand brush,
+everything is a transition *from* sand, so it doesn't look good." Right — packs ship only
+transition sets (grass inside, sand outside); in Tiled the plain ground is a base *layer* underneath,
+never a brush, and our "leaving a terrain writes `outside` = 0" left holes. Two additions: a
+`TerrainDef.fill` brush kind (paint writes a full-interior variant on exactly the cells you touch,
+erase resets exactly those; no ring, no edge art) which the extractor **synthesises** from a set
+whose interior *is* that ground (`fills: {"sand": "sand to transparency"}` — its mask-15 variants
+are the pack's plain + pebbled sand tiles, icon = the plainest by colour variance), and per set an
+`outside` fill (`"grass to sand" → "sand"`) so erasing a transition blends back into the ground.
+Fills lead the palette. Applied to dunes (sand, dirt, rocky ground, grass, stone ground), ancient
+(the four grass tones + stone ground — the owed hole-on-erase fix) and highlands (snow). Workflow:
+lay the fill first, then paint transitions over it.
+
+**More packs from the same series (2026-09-17).** Tom bought the creator's *Desert* and
+*Highlands* packs; both ship the same Tiled metadata, so they went through the extractor with no
+new authoring: `scripts/repack-tileset.py dunes` / `highlands`. Two script additions on the way:
+a **band** (a list of sheet specs) lays narrow sheets side by side — the 16-column cliff and
+platform sheets would otherwise each cost a full-width atlas row band — and `names` renames a
+pack's wangsets for the palette (the desert pack titles one "Cliff1-1T-transparency-CTRL+M on
+walls layer…"). Also found and fixed: Tiled orders a rule map's tilesets by first use, so five of
+the new rule maps put the automap tileset *first*; the gid classifier now matches its five ids by
+range instead of "gid ≥ automap firstgid". Naming: the new desert pack is registered as **`dunes`**
+because `desert` is the live 16px pack under arena-00. Both registries carry footprint-less props
+like ancient, but their rects were *located*, not eyeballed: the packs ship every prop as an
+individual PNG, and a scratch script pixel-matched each one into the atlas, so a prop's name is
+the pack's own sprite file name. Left out of the atlases: the desert oasis water (animated), the
+desert tents/houses sheet (55 rows of buildings — one line in `PACKS` if an arena wants a town
+wall), and the highlands' animated pine/cloud frames beyond the first. Raw packs live in
+`/tilesets` at the repo root, gitignored.
+
 ### Deliberately out of scope in v1
 
-- **Autotiling** — editors like Tiled can auto-pick edge/corner variants so painted regions get
-  seamless borders (Wang/blob tiles). Big authoring win, big feature. v1 paints explicit ids; the
-  format doesn't change when autotiling arrives later (it's an editor-side brush, the saved ids
-  are the same kind of ids).
 - **Animated tiles** (water, torches) — needs a frame schedule per id; add as a `TilesetDef`
   extension later.
 - **Margins/spacing in the atlas** — many purchased sheets pad each cell. Rather than carry
@@ -249,5 +383,5 @@ later if it becomes routine):
    no sim changes.
 5. **Enter the Gauntlet**: same swaps inside `bakeFloorChunks` and its entity draw — mechanical
    after (4).
-6. Later, separately: autotile brush, tiled wall skins, animated tiles, multi-cell decor stamps,
-   Asset Forge tileset importer.
+6. Later, separately: ~~autotile brush~~ (built — "Terrain brushes" above, with the ancient-ruins
+   pack), tiled wall skins, animated tiles, multi-cell decor stamps, Asset Forge tileset importer.

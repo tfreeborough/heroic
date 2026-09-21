@@ -5,13 +5,17 @@
  * with no entry (e.g. "placeholder") renders the flat fallback look.
  */
 import { useImage, type SkImage } from "@shopify/react-native-skia";
-import { ARENA_00 } from "@heroic/blood-in-the-sand-sim";
+import { arenaById } from "@heroic/blood-in-the-sand-sim";
 
 const TILESET_IMAGES: Record<string, number> = {
   desert: require("../../assets/tilesets/desert.png") as number,
+  ancient: require("../../assets/tilesets/ancient.png") as number,
+  dunes: require("../../assets/tilesets/dunes.png") as number,
+  highlands: require("../../assets/tilesets/highlands.png") as number,
 };
 
-/** The bundled arena's atlas, decoded async — null until ready (or unknown name),
- *  during which the renderer draws the flat pre-tileset look. */
-export const useArenaAtlas = (): SkImage | null =>
-  useImage(TILESET_IMAGES[ARENA_00.tileset] ?? null);
+/** An arena's atlas (by the room's `welcome.zoneId`, bits-arenas.md), decoded
+ *  async — null until ready (or unknown name), during which the renderer draws
+ *  the flat pre-tileset look. */
+export const useArenaAtlas = (zoneId: string): SkImage | null =>
+  useImage(TILESET_IMAGES[arenaById(zoneId).tileset] ?? null);

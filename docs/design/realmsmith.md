@@ -39,10 +39,14 @@ setup friction for zero gameplay need). If we ever need pixel-identical preview 
 drop CanvasKit — the same Skia WASM the game uses — into the Vite viewport later without restructuring the
 editor. We won't need it for authoring.
 
-**One exception to "no server":** the [Asset Forge](./asset-forge.md) (AI asset generation, built
-2026-07-05) adds a small dev-only Vite plugin (`forge/plugin.ts`) — needed for API keys, image/audio
-post-processing, and writing into the game's assets folder. Zone editing itself stays pure-browser as
-described below.
+**Exceptions to "no server"** — all dev-only Vite plugins, all about the repo's own content:
+the [Asset Forge](./asset-forge.md) (`forge/plugin.ts`, 2026-07-05: API keys, image/audio
+post-processing, writing into the game's assets folder); tileset serving (`tilesetServer/plugin.ts`,
+[tilesets.md](./tilesets.md)); and project zones (`zonesServer/plugin.ts`, 2026-09-13,
+[bits-arenas.md](./bits-arenas.md)): the landing page lists every `zones/*.json` in the repo, opens
+and saves them by path with no picker or permission prompt, and **New arena** clones one and
+regenerates the sim's arena registry. The File System Access path below remains for JSON outside
+the repo. The rule is now "no server for anything the browser can do alone".
 
 ## Tilesets — keeping editor and game identical
 

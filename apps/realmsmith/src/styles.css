@@ -635,6 +635,53 @@ body {
   white-space: nowrap;
 }
 
+/* Terrain brushes (autotile) — a strip of blob swatches above the raw tile grid. */
+.palette-terrains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 40%;
+  overflow: auto;
+  flex-shrink: 0;
+}
+
+.terrain-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  width: 64px;
+  background: #131720;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.terrain-swatch:hover {
+  border-color: #3a4a64;
+}
+
+.terrain-swatch.on {
+  border-color: #5fd0ff;
+  color: var(--text);
+}
+
+.terrain-swatch .prop-name {
+  max-width: 56px;
+}
+
+.terrain-thumb {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.palette-note {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* ── Forge: Blood in the Sand icons ─────────────────────────────────────── */
 
 .forge .icon-manifest {
@@ -917,3 +964,64 @@ body {
 }
 .forge .engine-stable-audio { color: #5fc75f; }
 .forge .engine-elevenlabs { color: #8ab4f8; }
+
+/* --- Project zones (bits-arenas.md § Editor workflow) ------------------------ */
+.zone-picker {
+  text-align: left;
+  min-width: 420px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zone-picker h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.zone-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zone-owner {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.zone-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.zone-row:hover {
+  border-color: #3a4a64;
+}
+
+.new-arena {
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.new-arena input {
+  flex: 1;
+}
+
+.zone-switch {
+  max-width: 260px;
+}

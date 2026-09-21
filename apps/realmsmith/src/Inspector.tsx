@@ -409,6 +409,25 @@ export const Inspector = ({
           </select>
         </label>
       )}
+      {o.kind === "prop" && (
+        <label
+          className="row"
+          title="Bake this prop flat with the floor — under every player, never walked behind. For rugs, rubble, fallen logs: things that lie ON the ground."
+        >
+          <input
+            type="checkbox"
+            checked={o.props.ground === true}
+            onFocus={arm}
+            onChange={(e) =>
+              edit(() => {
+                if (e.target.checked) o.props.ground = true;
+                else delete o.props.ground;
+              })
+            }
+          />
+          On the ground (draw under players)
+        </label>
+      )}
       {o.kind === "key" && (
         <label>
           Color

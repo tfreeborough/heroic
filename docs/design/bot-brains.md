@@ -16,6 +16,10 @@ dead); further tuning happens from play** ·
 Applies to: **Blood in the Sand** ·
 Last decided: 2026-07-20
 
+> **v4 (2026-09-21):** the un-trickable pass — strike predictor, matchup
+> footwork, exhaustive threat/hazard tables, team focus, and the exploit
+> gauntlet — lives in [bot-brains-v4](./bot-brains-v4.md).
+
 > Until matchmaking has a player base, bots ARE the game (Tom, 2026-07-19) —
 > practice mode has to carry a genuinely satisfying single-player fight. This
 > doc replaces the two v1 strategies (`seek` / `circle`) with a composable
