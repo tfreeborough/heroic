@@ -24,13 +24,24 @@
 import { ARCHETYPES, deriveArchetype, focusTarget, resolveBand, type ArchetypeId } from "./botArchetypes";
 import { dashDown, decideCasts, incomingShot, rangedWeapon, windupThreat } from "./botCasts";
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, type DifficultyId } from "./botDifficulty";
-import { DASH_DISTANCE, PLAYER_RADIUS, SANDS_ATTACKER_ID, SANDSTORM, SANDTRAP, TREMOR } from "./config";
+import {
+  cycleSeconds,
+  hazardOf,
+  incomingShell,
+  meleeSpacing,
+  runSpeed,
+  strikeBand,
+  strikeSpan,
+  threatKind,
+} from "./botThreats";
+import { DASH_DISTANCE, DASH_IFRAMES, PLAYER_RADIUS, SANDS_ATTACKER_ID, TICK_DT, WEAPONS } from "./config";
 import type { BotNav } from "./nav";
 import { dashClear, navDirection, openDirection } from "./nav";
-import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot, RoundSnapshot } from "./protocol";
+import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot, RoundSnapshot, ShellSnapshot } from "./protocol";
 
 export * from "./botArchetypes";
 export * from "./botDifficulty";
+export * from "./botThreats";
 export { decideCasts, nearestEnemy, threatRange, windupThreat } from "./botCasts";
 
 /** The tick-to-tick state behind orbit flips and the wedge fallback. */
@@ -71,6 +82,8 @@ export interface BotMemory {
   threatKey: number | null;
   /** Whether that roll passed: this swing gets its reactive answer or not. */
   threatApproved: boolean;
+  /** This swing's timing error, seconds (+ = early, − = late). */
+  threatJitter: number;
   /** Ticks left in a low-tier hesitation freeze (the dither dial). */
   ditherTicks: number;
   /** The flee budget (Tom, 2026-07-22 — cornered cowards are anti-fun):
@@ -83,6 +96,9 @@ export interface BotMemory {
    * the windup's) and whether that roll passed. */
   shotKey: number | null;
   shotApproved: boolean;
+  /** The bombard shell last rolled against (one roll per landing ring). */
+  shellKey: number | null;
+  shellApproved: boolean;
   /** Serpentine state: which way the approach is currently cutting, and
    * ticks until the next irregular flip. */
   weaveSign: number;
@@ -107,6 +123,10 @@ export interface BotMemory {
   bandState: number;
   /** Micro-pause ticks left (M5) — feet only, hands stay live. */
   pauseTicks: number;
+  /** The side a wall-aware retreat is circling toward (v4): -1 / 0 / +1. */
+  retreatSign: number;
+  /** The current mark (v4 team focus) — a sticky bonus stops flip-flopping. */
+  focusId: number | null;
 }
 
 export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
@@ -127,11 +147,14 @@ export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
   stallTargetHp: 0,
   threatKey: null,
   threatApproved: false,
+  threatJitter: 0,
   ditherTicks: 0,
   fleeTicks: 0,
   fleeSpent: false,
   shotKey: null,
   shotApproved: false,
+  shellKey: null,
+  shellApproved: false,
   weaveSign: 1,
   weaveTicks: 0,
   headX: 0,
@@ -145,6 +168,8 @@ export const createBotMemory = (seed = 0x2f6e2b1): BotMemory => ({
   bandFuzzTicks: 0,
   bandState: 0,
   pauseTicks: 0,
+  retreatSign: 0,
+  focusId: null,
 });
 
 /** Everything the brain reads about the match — the three snapshot arrays a
@@ -153,6 +178,10 @@ export interface BotWorld {
   players: PlayerSnapshot[];
   deployables: DeployableSnapshot[];
   projectiles: ProjectileSnapshot[];
+  /** Bombard shells in flight — the landing rings every client draws (v4:
+   * the brain finally reads them). Optional for hand-built test worlds; a
+   * SnapshotMsg carries it. */
+  shells?: ShellSnapshot[];
   /** The round block of the same snapshot — the Closing Sands rides it
    * (bits-sand-circle.md). Optional: every real caller passes a whole
    * SnapshotMsg, which already satisfies it structurally; hand-built test
@@ -165,6 +194,18 @@ const STALL_TICKS = 240; // 8s at 30Hz
 /** How far inside the Closing Sands' ring the feet start leaning centre-ward
  * (bits-sand-circle.md) — the human "edge is getting close" read. */
 const SANDS_MARGIN = 70;
+/** Venom-clock denial: with this little left on my poison clock I keep out of
+ * the knife's walk-plus-dash lunge until the stacks drop. */
+const VENOM_DENY = { clock: 2.2, band: { near: 200, far: 320 } } as const;
+/** px past a dead zone's edge inside which an entry is finished on foot. */
+const STAGE_COMMIT = 45;
+/** px outside a hazard's reach where inward intent is stripped (covers a
+ * few ticks of full-speed travel plus the stick's turn lag). */
+const RIM_GUARD = 45;
+/** Closing Sands radius under which a kiter has no room left — stop staging. */
+const STAGE_RING = 420;
+/** Attack cycles shorter than this can't be out-dodged with a 3s dash. */
+const FAST_CYCLE = 0.6;
 /** How long an impatience press lasts before re-evaluating. */
 const PRESS_TICKS = 150; // 5s
 /** A low-hp retreat may last this long, TOTAL, before the bot must fight
@@ -316,13 +357,75 @@ const strafeDir = (
   return dir;
 };
 
-/** Hostile ground the feet should refuse: enemy quakes, enemy storms, and
- * enemy sandtraps that have finished arming (radius + a body's margin). */
-const hostileZoneRadius = (d: DeployableSnapshot): number | null => {
-  if (d.kind === "quake") return TREMOR.radius;
-  if (d.kind === "sandstorm") return SANDSTORM.radius;
-  if (d.kind === "sandtrap" && d.armLeft === 0) return SANDTRAP.triggerRadius;
-  return null;
+/** How far ahead a retreat looks for room, px, in probe steps. */
+const ROOM_STEPS = [110, 220, 330, 440] as const;
+/** Candidate swings off the straight-away line, radians (0 first = prefer it). */
+const RETREAT_FAN = [0, 0.52, -0.52, 1.05, -1.05, 1.57, -1.57, 2.09, -2.09] as const;
+
+/**
+ * Where to back off TO (v4 — Tom, 2026-09-21: "I can slowly back it into a
+ * corner and then it has nowhere to go"). Straight-away retreat lets the
+ * chaser choose where the fight ends up: every back-pedal is a step toward
+ * whatever wall is behind me, and a corner turns a kiter into a punchbag.
+ * So a retreat reads the ROOM behind each candidate direction (walls,
+ * rocks, the arena edge, and the Closing Sands' ring all count as the end
+ * of the room) and, once the straight line runs short, curls toward the
+ * open side — sticking with the side it picked, like the hazard detours,
+ * so it circles out instead of dithering. With room to spare it is exactly
+ * the old straight line. Mutates `memory` (the committed side).
+ */
+const retreatDirection = (
+  memory: BotMemory,
+  nav: BotNav,
+  from: { x: number; y: number },
+  away: { x: number; y: number },
+  sands: { cx: number; cy: number; r: number } | null,
+): { x: number; y: number } => {
+  const room = (dir: { x: number; y: number }): number => {
+    let clear = 0;
+    for (const step of ROOM_STEPS) {
+      if (!dashClear(nav, from, dir, step)) break;
+      if (sands !== null && Math.hypot(from.x + dir.x * step - sands.cx, from.y + dir.y * step - sands.cy) > sands.r - 30) break;
+      clear = step;
+    }
+    return clear;
+  };
+  const full = ROOM_STEPS[ROOM_STEPS.length - 1]!;
+  if (room(away) >= full) {
+    memory.retreatSign = 0;
+    return away;
+  }
+  const base = Math.atan2(away.y, away.x);
+  let best = away;
+  let bestScore = -Infinity;
+  let bestSign = 0;
+  for (const rot of RETREAT_FAN) {
+    const dir = { x: Math.cos(base + rot), y: Math.sin(base + rot) };
+    const sign = Math.sign(rot);
+    // Room first, then staying away from the threat, then the side I'm
+    // already circling toward.
+    const clear = room(dir);
+    if (clear === 0) continue; // a dead end is not a retreat, however far from them it points
+    const score = clear / full + 0.45 * Math.cos(rot) + (sign !== 0 && sign === memory.retreatSign ? 0.2 : 0);
+    if (score > bestScore) {
+      best = dir;
+      bestScore = score;
+      bestSign = sign;
+    }
+  }
+  memory.retreatSign = bestSign;
+  return best;
+};
+
+/** Is the mark just outside my reach, not swinging at me, with my own
+ * weapon ready — so one hop puts the next swing on its back? */
+const pursuitHop = (me: PlayerSnapshot, target: PlayerSnapshot, dist: number, targetHp: number): boolean => {
+  const mine = strikeBand(me, target);
+  if (mine === null || target.atk === "windup" || me.atk === "recovery") return false;
+  if (dist <= mine.far + 10) return false;
+  // One hop lands the next swing — or the mark is nearly dead and walking
+  // away: never let a finish stroll off while a hop sits in the hand.
+  return dist - DASH_DISTANCE < mine.far - 10 || (targetHp < 0.3 && dist < 320);
 };
 
 export interface BotThinkOptions {
@@ -331,6 +434,9 @@ export interface BotThinkOptions {
   /** Execution-quality tier; callers feed staleness themselves (the
    * SnapshotHistory), this applies the in-brain dials. Default Skilled. */
   difficulty?: DifficultyId;
+  /** Hunt alone — nearest body, no team score (the gauntlet's A/B control
+   * for the v4 team-focus work; never set by a real host). */
+  soloFocus?: boolean;
 }
 
 /**
@@ -381,8 +487,9 @@ export const botThink = (
 
   const archetype = opts?.archetype ?? deriveArchetype(me.weapon, me.abilities.map((s) => s.id));
   const preset = ARCHETYPES[archetype];
-  const target = focusTarget(preset, me, players, tier.focusFire);
+  const target = focusTarget(preset, me, players, tier.focusFire && opts?.soloFocus !== true, memory.focusId);
   if (!target) return IDLE;
+  memory.focusId = target.id;
 
   const mePos = { x: me.x, y: me.y };
   const dist = Math.hypot(target.x - me.x, target.y - me.y) || 1;
@@ -464,7 +571,64 @@ export const botThink = (
 
   /** The dive: a weak-enough mark collapses the band into a charge. */
   const diving = preset.diveBelow !== undefined && targetHp < preset.diveBelow;
-  const band = diving || pressing ? null : resolveBand(preset, me.weapon);
+  // v4 footwork (bot-brains-v4.md stage 2): an arc wielder plays the REACH
+  // matchup before its archetype's band — hold my reach edge against a
+  // shorter weapon, live inside a dead zone. A dead zone outranks even a
+  // press or a dive (charging a trident means arriving inside its prongs);
+  // the out-reach dance yields to both, like any band.
+  let spacing = tier.footwork > 0 ? meleeSpacing(me, target) : null;
+  // Venom-clock denial (Tom's fang trick, 2026-09-21: stab 3–4 times, leave,
+  // re-apply right before the clock runs out — "essentially no counterplay").
+  // There is one: all stacks share ONE clock that only a fresh stab renews,
+  // so when mine is nearly out and the knife isn't already on me, I simply
+  // refuse the re-application — keep out of its lunge for the last couple of
+  // seconds and the whole investment falls off at once.
+  // Only for a fighter that already owns the reach edge (gauntlet: a BLADE
+  // backing off a fang just forfeits swings — it can't keep the knife out
+  // anyway, so it slogs and chases instead).
+  if (
+    spacing !== null &&
+    tier.footwork >= 0.7 &&
+    me.poisonStacks > 0 &&
+    me.poisonLeft < VENOM_DENY.clock &&
+    target.weapon !== null &&
+    WEAPONS[target.weapon].poison !== undefined &&
+    dist > (strikeBand(target, me)?.far ?? 0) + 12
+  ) {
+    spacing = VENOM_DENY.band;
+  }
+  // Staging (gauntlet trace, blade vs a trident kiter): the way INTO a dead
+  // zone is a timed hop through the poke. Ejected with the hop cooling — or
+  // slowed by the last poke — a bot that loiters in the prong band eats a
+  // poke a second, each one re-slowing it. So it backs OUT past the prongs,
+  // waits for the hop, and goes again. With NO hop to wait for (spent, or
+  // never drafted) walking in simply fails against a retreating spear — the
+  // first poke's slow ends the chase (trace: lost from 86hp to a 4hp kiter)
+  // — so it holds outside and lets the Closing Sands take their room away;
+  // once the ring is tight there is nowhere left to kite to, and it goes.
+  const prongs = spacing !== null && spacing.near === 0 ? strikeBand(target, me) : null;
+  let staging = false;
+  // Only from well out in the band: a hop that lands a stride short of the
+  // dead zone must FINISH the entry on foot, not turn round and leave.
+  if (prongs !== null && prongs.near > 0 && dist >= prongs.near + STAGE_COMMIT) {
+    const hop = me.abilities.find((a) => a.id === "dash");
+    const hopSoon = hop !== undefined && hop.charges > 0 && hop.cd <= 0.4;
+    const cornered = world.round?.sands != null && world.round.sands.r < STAGE_RING;
+    if ((!hopSoon || me.slowLeft > 0) && !cornered) {
+      spacing = { near: prongs.far + 15, far: prongs.far + 45 };
+      staging = true;
+    }
+  }
+  const hugging = spacing !== null && spacing.near === 0;
+  const band = spacing !== null && (hugging || staging || !(diving || pressing))
+    ? spacing
+    : diving || pressing
+      ? null
+      : resolveBand(preset, me.weapon);
+  /** How much of the v3 band slop survives: footwork tightens a SPACING band
+   * toward pixel-true (35px of reach edge can't wear ±12% and 25px of lag);
+   * archetype bands keep their full human texture at every tier. */
+  const slop = band !== null && band === spacing ? 1 - tier.footwork : 1;
 
   // M4 sloppy bands: the edges wear a personal fuzz (re-rolled every few
   // seconds) and the advance/hold/back state flips only on a real overshoot
@@ -477,9 +641,10 @@ export const botThink = (
       memory.bandFuzz = 1 + (nextRand(memory) * 2 - 1) * HUMANIZE.bandFuzz;
       memory.bandFuzzTicks = HUMANIZE.bandFuzzMinTicks + Math.floor(nextRand(memory) * HUMANIZE.bandFuzzRangeTicks);
     }
-    bandNear = band.near * memory.bandFuzz;
-    bandFar = band.far * memory.bandFuzz;
-    const h = HUMANIZE.hysteresis;
+    const fuzz = 1 + (memory.bandFuzz - 1) * slop;
+    bandNear = band.near * fuzz;
+    bandFar = band.far * fuzz;
+    const h = 3 + (HUMANIZE.hysteresis - 3) * slop;
     if (dist > bandFar + h) memory.bandState = 1;
     else if (dist < bandNear - h) memory.bandState = -1;
     else if (memory.bandState === 1 && dist < bandFar - h) memory.bandState = 0;
@@ -500,18 +665,24 @@ export const botThink = (
   // moment yours is spent is the doc's promised bait-and-punish).
   const punishing =
     preset.punishRecovery &&
+    spacing === null && // a spaced fighter is already where its weapon works
+
     ((target.atk === "recovery" && dist < 400) ||
       (tier.smartDodge && dashDown(target) && dist < 350));
 
+  // Backing off never means backing into a corner (retreatDirection).
+  const retreat =
+    fleeing || memory.bandState === -1 ? retreatDirection(memory, nav, mePos, away, sands) : away;
+
   // Band-keeping — or the contact charge for band-less brains.
   if (fleeing) {
-    add(away, 1.4);
+    add(retreat, 1.4);
   } else if (punishing) {
     add(toward, 1);
   } else if (band === null || memory.bandState === 1) {
     add(toward, preset.engage);
   } else if (memory.bandState === -1) {
-    add(away, 1);
+    add(retreat, 1);
   }
   // Strafe while holding position (banded brains in the band; contact brains
   // angle their approach with it).
@@ -575,7 +746,13 @@ export const botThink = (
   // stick with it), a late-notice flinch, and greed — a diving or pressing
   // bot damps its avoidance and tanks the trap for the kill, exactly the
   // trade a human makes.
-  const hazardScale = diving || pressing ? HUMANIZE.greedScale : 1;
+  // v4: the sharp tiers only get greedy when the kill is actually THERE — a
+  // mark one good hit from dead. Impatience is no reason to eat a mine (the
+  // trap-camper's whole trick was waiting out the 8s stall clock and letting
+  // the bot press straight across the powder).
+  const sharp = tier.footwork >= 0.7;
+  const greedy = sharp ? diving && targetHp < 0.25 : diving || pressing;
+  const hazardScale = greedy ? HUMANIZE.greedScale : 1;
   const axis = memory.headMag > 0.2 ? { x: memory.headX, y: memory.headY } : fleeing ? away : toward;
   // Greed drops the detour planning outright — a bot chasing a kill walks
   // the straight line and eats the ground; only the shell below still nudges.
@@ -583,7 +760,7 @@ export const botThink = (
   // Keep or retire the running episode.
   let detour: DeployableSnapshot | undefined;
   if (hazardScale === 1 && memory.detourZoneId !== null) {
-    detour = deployables.find((d) => d.id === memory.detourZoneId && d.team !== me.team && hostileZoneRadius(d) !== null);
+    detour = deployables.find((d) => d.id === memory.detourZoneId && hazardOf(d, me)?.detour === true);
     if (detour) {
       const zd = Math.hypot(detour.x - me.x, detour.y - me.y) || 1;
       const behind = (detour.x - me.x) * axis.x + (detour.y - me.y) * axis.y < 0;
@@ -594,9 +771,9 @@ export const botThink = (
   // Or commit a new one: the first zone blocking the corridor ahead.
   if (!detour && hazardScale === 1) {
     for (const d of deployables) {
-      if (d.team === me.team) continue;
-      const radius = hostileZoneRadius(d);
-      if (radius === null) continue;
+      const hazard = hazardOf(d, me);
+      if (hazard === null || !hazard.detour) continue;
+      const radius = hazard.reach;
       const zx = d.x - me.x;
       const zy = d.y - me.y;
       const zd = Math.hypot(zx, zy) || 1;
@@ -637,11 +814,10 @@ export const botThink = (
   // this pass exists to kill).
   if (!diving) {
     for (const d of deployables) {
-      if (d.team === me.team) continue;
-      const radius = hostileZoneRadius(d);
-      if (radius === null) continue;
+      const hazard = hazardOf(d, me);
+      if (hazard === null) continue;
       const zd = Math.hypot(d.x - me.x, d.y - me.y) || 1;
-      if (zd < radius) add({ x: (me.x - d.x) / zd, y: (me.y - d.y) / zd }, 3 * hazardScale);
+      if (zd < hazard.reach) add({ x: (me.x - d.x) / zd, y: (me.y - d.y) / zd }, hazard.shove * hazardScale);
     }
   }
   // The Closing Sands: standing in the blood is never acceptable — a
@@ -651,6 +827,29 @@ export const botThink = (
   if (sands !== null && sandsGap > -SANDS_MARGIN) {
     const weight = inBlood ? 3.5 : 1.2 * ((sandsGap + SANDS_MARGIN) / SANDS_MARGIN);
     add(navDirection(nav, SANDS_ATTACKER_ID, mePos, { x: sands.cx, y: sands.cy }), weight);
+  }
+
+  // v4: hazards are a CONSTRAINT, not a weight. The blend above can settle
+  // into an equilibrium INSIDE a trigger ring whenever the pull through the
+  // zone is strong enough (gauntlet: a camper standing right behind their
+  // mine — engage 1.0 straight across it vs the detour's soft 1.6 — put the
+  // orbit 20px inside the powder on any low margin roll). So after blending,
+  // strip whatever part of the intent still points INTO a zone I'm at the
+  // lip of: the feet slide along the rim instead of through it.
+  if (!greedy) {
+    for (const d of deployables) {
+      const hazard = hazardOf(d, me);
+      if (hazard === null || !hazard.detour) continue;
+      const zx = d.x - me.x;
+      const zy = d.y - me.y;
+      const zd = Math.hypot(zx, zy) || 1;
+      if (zd > hazard.reach + RIM_GUARD || zd < hazard.reach) continue; // far off, or already in (the shell throws me out)
+      const inward = (vx * zx + vy * zy) / zd;
+      if (inward > 0) {
+        vx -= (zx / zd) * inward;
+        vy -= (zy / zd) * inward;
+      }
+    }
   }
 
   const mag = Math.hypot(vx, vy);
@@ -694,30 +893,85 @@ export const botThink = (
   } else if (threat.id !== memory.threatKey) {
     memory.threatKey = threat.id;
     memory.threatApproved = nextRand(memory) < tier.dodgeChance;
+    // …and one TIMING error per swing: how early or late this tier's hands
+    // are on this particular blow (DifficultyPreset.timing).
+    memory.threatJitter = (nextRand(memory) * 2 - 1) * tier.timing;
   }
 
-  // The approved dodge. Against MELEE (any tier) dash immediately: i-frames
-  // plus the hop both answer an arc. Against a PROJECTILE that timing is a
-  // whiff — i-frames die long before the arrow arrives — so smartDodge tiers
-  // hold the dash until the shot is about to loose, then hop PERPENDICULAR
-  // to the shot line: dodge by displacement (the aim locks at fire). Dumb
-  // tiers keep the mistimed windup-start dash; failing THAT way is honest.
+  // The approved answer — v4's STRIKE PREDICTOR (bot-brains-v4.md stage 1).
+  // The old rule was "a windup appeared → dash now", which (a) burned the
+  // 0.2s of i-frames long before a 0.65s hammer landed, (b) emptied the dash
+  // budget on the first stab of a fast cycle, and (c) could be baited for
+  // free, since a windup whose lock breaks cancels with no recovery. Smart
+  // tiers instead ask WHEN the blow lands and WHERE it is lethal at that
+  // instant, then take the cheapest sufficient answer at the last
+  // responsible moment: already clear → nothing; walk out of the band if
+  // the clock allows; else a dash timed so the i-frames straddle the strike
+  // (hopping INTO a dead zone when there is one). A feinted windup never
+  // reaches the commit point. Dumb tiers keep the panic dash at windup start
+  // — failing THAT way is honest.
   const reactApproved = threat !== null && memory.threatApproved;
+  /** Seconds between what I see and my answer taking effect. */
+  const lag = (tier.reactionTicks + 1) * TICK_DT;
   let dodgeNow = false;
+  let sidestep = false;
   if (reactApproved) {
-    if (rangedWeapon(threat) && tier.smartDodge) {
+    const kind = threatKind(threat);
+    const td = Math.hypot(me.x - threat.x, me.y - threat.y) || 1;
+    const off = { x: (me.x - threat.x) / td, y: (me.y - threat.y) / td };
+    const tStrike = Math.max(0, threat.atkLeft - lag);
+    if (kind === "shot" && !tier.smartDodge) {
+      dodgeNow = true; // the mistimed windup-start hop vs a shooter — honest
+    } else if (kind === "shot") {
+      // Hold the hop until the shot is about to loose, then go PERPENDICULAR
+      // to the line: dodge by displacement (the aim locks at fire).
       if (threat.atkLeft <= 0.15) {
         dodgeNow = true;
-        const td = Math.hypot(me.x - threat.x, me.y - threat.y) || 1;
-        const off = { x: (me.x - threat.x) / td, y: (me.y - threat.y) / td };
-        intent = openDirection(nav, mePos, {
-          x: -off.y * memory.orbitSign,
-          y: off.x * memory.orbitSign,
-        });
+        intent = openDirection(nav, mePos, { x: -off.y * memory.orbitSign, y: off.x * memory.orbitSign });
       }
-    } else {
-      dodgeNow = true;
+    } else if (kind === "arc") {
+      const lethal = strikeBand(threat, me)!;
+      const needOut = lethal.far + 6 - td;
+      const needIn = lethal.near > 0 ? td - (lethal.near - 6) : Infinity;
+      // They chase (or back off) at full tilt for all I know — only my
+      // speed EDGE is ground I can count on winning before the strike.
+      const gain = Math.max(0, runSpeed(me, tier.speedFactor) - runSpeed(threat)) * tStrike;
+      if (needOut <= 0 || needIn <= 0) {
+        // Already clear of the band — the swing is a whiff. Spend nothing.
+      } else if (needOut <= gain) {
+        sidestep = true;
+        intent = openDirection(nav, mePos, off);
+      } else if (needIn <= gain) {
+        sidestep = true;
+        intent = openDirection(nav, mePos, { x: -off.x, y: -off.y });
+      } else if (threat.weapon !== null && spacing === null && cycleSeconds(threat.weapon) < FAST_CYCLE) {
+        // A flick faster than the dash can ever answer (the fang: 0.45s a
+        // stab vs four hops a round) — i-framing one stab buys nothing.
+        // Keep the charges for the chase and slog it out. (A SPACED fighter
+        // still hops: for it the dash is the way back out to its reach edge.)
+      } else if (
+        threat.weapon !== null &&
+        // Unclamped on purpose: a LATE hand (negative jitter) must still
+        // fire — after the blow, wasted — not silently never press. The
+        // stale windup I'm watching keeps counting down past the real strike.
+        threat.atkLeft - lag <= Math.max(TICK_DT, (DASH_IFRAMES - strikeSpan(threat.weapon)) / 2) + memory.threatJitter
+      ) {
+        // The timed dash: i-frames straddle the strike (and a thrust's
+        // travel). Into the dead zone if the hop reaches it; otherwise out
+        // through the far edge if THAT is in reach; else wherever the feet
+        // were going — the i-frames alone are the answer.
+        dodgeNow = true;
+        // A dead zone is where I want to live anyway, and the i-frames make
+        // the direction free — always hop IN, even if one hop isn't enough.
+        // Hopping OUT is only for a fighter whose game is the reach edge; a
+        // contact brawler that hops away just hands over its own swing
+        // (gauntlet: a blade retreat-dashing from a fang lost a slog it wins).
+        if (lethal.near > 0) intent = openDirection(nav, mePos, { x: -off.x, y: -off.y });
+        else if (spacing !== null && needOut <= DASH_DISTANCE) intent = openDirection(nav, mePos, off);
+      }
     }
+    // "shell"/"beam": nothing to answer at the windup — the shell's landing
+    // ring is the telegraph, handled with the ground below.
   }
 
   // In-flight shot evasion (smart tiers): the windup model can't see a shot
@@ -744,10 +998,37 @@ export const botThink = (
     }
   }
 
+  // Bombard shells (v4): a marked circle with a clock, sparing no one. EVERY
+  // tier knows what the ring means (ignoring it reads as broken, not new);
+  // the tier only decides how reliably and how late. Walk straight out;
+  // if the feet can't make it, i-frame the landing.
+  const shell = incomingShell(me, world.shells ?? []);
+  if (shell === null) {
+    memory.shellKey = null;
+  } else {
+    if (shell.id !== memory.shellKey) {
+      memory.shellKey = shell.id;
+      memory.shellApproved = nextRand(memory) < Math.max(0.35, tier.dodgeChance);
+    }
+    if (memory.shellApproved) {
+      const tLand = Math.max(0, shell.landIn - lag);
+      evading = true;
+      intent = openDirection(nav, mePos, { x: shell.awayX, y: shell.awayY });
+      if (shell.exitDist > runSpeed(me, tier.speedFactor) * tLand && tLand <= DASH_IFRAMES / 2) evadeDash = true;
+    }
+  }
+
+  // The spacing retreat (v4 footwork): giving ground at my reach edge is a
+  // reflex, not a stroll — M1's half-second reversal swing is exactly the
+  // window a diver needs. The sharp tiers snap it.
+  const footworkSnap =
+    band !== null && band === spacing && memory.bandState === -1 && tier.footwork >= 0.7 && !evading && !dodgeNow && !sidestep;
+  if (footworkSnap) intent = openDirection(nav, mePos, retreat);
+
   // Reactive overrides bypass the M1 smoothing — survival reflexes are fast
   // in humans too. Sync the heading so the recovery curves out of the dodge
   // line instead of teleporting back.
-  if (snapped || dodgeNow || evading) {
+  if (snapped || dodgeNow || evading || sidestep || footworkSnap) {
     if (intent.x !== 0 || intent.y !== 0) {
       memory.headX = intent.x;
       memory.headY = intent.y;
@@ -772,11 +1053,35 @@ export const botThink = (
     (dodgeNow ||
       evadeDash ||
       (!evading &&
-        (((preset.gapCloseDash || pressing) && mayGapClose && dist > (band ? band.far + 120 : 220)) ||
+        // Into a GUN's dead zone (the bombard) the hop is a plain gap-close;
+        // into a trident's it is the predictor's timed hop, never this one.
+        ((hugging && prongs === null && dist > band!.far + 15 && dist - DASH_DISTANCE <= band!.far + 10) ||
+          // The pursuit hop (v4): a contact fighter whose mark is slipping
+          // out of reach — hit-and-run is only free if nobody follows —
+          // spends a hop to stay on it, provided the landing is in reach.
+          // Any arc wielder that is ADVANCING, not just band-less brawlers
+          // (trace: a duellist trailed a disengaging fang at 110–160px for
+          // 2.5s, hop ready and unspent, eating venom and landing nothing).
+          ((band === null || memory.bandState === 1) &&
+            !staging &&
+            tier.footwork >= 0.7 &&
+            mayGapClose &&
+            pursuitHop(me, target, dist, targetHp)) ||
+          ((preset.gapCloseDash || pressing) && mayGapClose && dist > (band ? band.far + 120 : 220)) ||
           (band !== null && dist < band.near * 0.6))));
 
   if (memory.castHoldTicks > 0) memory.castHoldTicks -= 1;
-  let pick = decideCasts(me, target, players, deployables, memory.castHoldTicks === 0, reactApproved);
+  let pick = decideCasts(
+    me,
+    target,
+    players,
+    deployables,
+    memory.castHoldTicks === 0,
+    reactApproved,
+    // Late commitment, graded: the sharp tiers wait for the last quarter
+    // second; a big timing error is as good as pressing on sight.
+    lag + 0.22 + tier.timing * 2,
+  );
   // The reactive picks ride the dodge roll; everything else is a paced play
   // gated by the tier's cast discipline — a failed roll retries a few ticks
   // later, so low tiers cast late and ragged rather than never.
