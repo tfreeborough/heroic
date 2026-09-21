@@ -42,6 +42,8 @@ import {
   shouldCollect,
   weaponEntitlement,
   abilityEntitlement,
+  grantedFinisher,
+  ownableFinisher,
   type BitsAchievementDef,
   type ClientMsg,
   type RoomListing,
@@ -459,7 +461,7 @@ export class RoomManager {
     room.onSkirmishMatchEnd = (winnerTeam) => void this.settleSkirmish(room, winnerTeam);
     this.rooms.set(code, room);
     const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), null, performance.now());
-    if (id !== null) this.claimSkirmishSeat(room, ws, id, msg.token);
+    if (id !== null) this.claimSkirmishSeat(room, ws, id, msg.token, msg.finisher);
     console.log(
       `⚔ room ${code} "${room.meta.name}" (${brawl ? "brawl" : `${teamSize}v${teamSize}`}) created by ${playerName}${room.meta.passcode ? " (locked)" : ""}`,
     );
@@ -473,10 +475,24 @@ export class RoomManager {
    * No token, no DB, unknown token: the seat plays as before and earns
    * nothing. The seat must still belong to THIS socket when the lookup
    * lands, or the answer is dropped (seat ids get re-issued).
+   *
+   * The kill FINISHER rides the same lookup but the other way round
+   * (bits-cosmetics.md § Finishers v1 — DEFAULT-DENY): a title is seated as
+   * claimed and stripped if unowned; a finisher is never seated at all. The
+   * seat stays "none" until the ownership read GRANTS the claim — so no
+   * token, no DB, an unknown id or an unowned one all mean no finisher.
+   * A RECLAIM keeps what the seat already wears: that value was only ever
+   * written by a verified grant, and only the seat-token holder can take
+   * the seat back — the client's automatic rejoin carries no bearer token
+   * (and on a cold launch may not have loaded its worn finisher yet), so
+   * stripping here would undress a paying owner mid-match. A reclaim that
+   * DOES bring a token and a claim is simply verified again.
    */
-  private claimSkirmishSeat(room: Room, ws: Socket, id: number, token: unknown): void {
+  private claimSkirmishSeat(room: Room, ws: Socket, id: number, token: unknown, finisherClaim: unknown): void {
+    if (room.ranked) return;
+    const finisher = ownableFinisher(finisherClaim);
     const db = this.db;
-    if (!db || room.ranked) return;
+    if (!db) return;
     if (typeof token !== "string" || token.length === 0 || token.length > MAX_BEARER_TOKEN) return;
     void (async () => {
       try {
@@ -485,12 +501,17 @@ export class RoomManager {
         ws.data.accountId = accountId;
         room.accounts.set(id, accountId);
         const title = room.titleOf(id);
-        if (title !== "") {
-          const owned = await entitlementsOf(db, accountId);
-          if (room.socketOf(id) === ws && !owned.some((e) => e.itemId === `title:${title}`)) {
-            room.setTitle(id, "", performance.now());
-            console.log(`[${room.meta.code}] seat ${id} claimed unowned title "${title}" — stripped`);
-          }
+        if (title === "" && finisher === null) return;
+        const owned = (await entitlementsOf(db, accountId)).map((e) => e.itemId);
+        if (room.socketOf(id) !== ws) return;
+        if (title !== "" && !owned.includes(`title:${title}`)) {
+          room.setTitle(id, "", performance.now());
+          console.log(`[${room.meta.code}] seat ${id} claimed unowned title "${title}" — stripped`);
+        }
+        if (finisher !== null) {
+          const granted = grantedFinisher(finisher, owned);
+          room.setFinisher(id, granted, performance.now());
+          if (granted === "none") console.log(`[${room.meta.code}] seat ${id} claimed unowned finisher "${finisher}" — denied`);
         }
       } catch (err) {
         console.error(`[${room.meta.code}] skirmish identity for seat ${id} failed:`, err);
@@ -532,7 +553,7 @@ export class RoomManager {
     const playerName = sanitizeName(msg.playerName);
     const id = room.seat(ws, playerName, sanitizeAnnouncer(msg.announcer), sanitizeTitle(msg.title), seatToken, performance.now());
     if (id === null) return this.send(ws, { t: "reject", reason: "room full" });
-    this.claimSkirmishSeat(room, ws, id, msg.token);
+    this.claimSkirmishSeat(room, ws, id, msg.token, msg.finisher);
     // A reclaim landing during the ceremony hold missed the settle's
     // broadcast — hand it over, so the close that follows reads as the
     // settlement (the ceremony plays), not as "match complete" in red.
@@ -577,9 +598,10 @@ export class RoomManager {
     const name = sanitizeName(msg.playerName);
     const announcer = sanitizeAnnouncer(msg.announcer);
     const title = sanitizeTitle(msg.title);
+    const finisher = ownableFinisher(msg.finisher) ?? "none";
     // Token verification + rating loads are async; the socket handler is not.
     // Everything after the awaits re-checks the socket's world before acting.
-    void this.verifyAndEnqueue(ws, msg.token, name, announcer, title, brackets, earned).catch((err) => {
+    void this.verifyAndEnqueue(ws, msg.token, name, announcer, title, finisher, brackets, earned).catch((err) => {
       console.error("queueJoin failed:", err);
       this.trySend(ws, { t: "reject", reason: "ranked is unreachable right now — try again" });
     });
@@ -591,6 +613,7 @@ export class RoomManager {
     name: string,
     announcer: string,
     title: string,
+    finisherClaim: string,
     brackets: string[],
     earned: Map<string, number>,
   ): Promise<void> {
@@ -614,15 +637,17 @@ export class RoomManager {
     if (this.inLiveRankedMatch(accountId)) {
       return this.trySend(ws, { t: "reject", reason: "you're already in a live ranked match" });
     }
-    // One entitlement read serves two verifications: the worn title (an
+    // One entitlement read serves three verifications: the worn title (an
     // unowned claim is SILENTLY stripped, never a rejection — a cosmetic
-    // must not cost a match) and the GATED-ITEM list carried to the seat
+    // must not cost a match), the kill finisher (granted only if owned —
+    // bits-cosmetics.md § Finishers v1) and the GATED-ITEM list carried to the seat
     // for pick validation (bits-secret-items.md — checked synchronously at
     // setWeapon/setAbilities time).
     const owned = await entitlementsOf(db, accountId);
     if (title !== "" && !owned.some((e) => e.itemId === `title:${title}`)) {
       title = "";
     }
+    const finisher = grantedFinisher(finisherClaim, owned.map((e) => e.itemId));
     const items = owned
       .map((e) => e.itemId)
       .filter((i) => i.startsWith("weapon:") || i.startsWith("ability:"));
@@ -641,6 +666,7 @@ export class RoomManager {
         name,
         announcer,
         title,
+        finisher,
         items,
         rating: ratings.get(bracket)!,
         joinedMs: Math.min(now, earned.get(bracket) ?? now),
@@ -863,11 +889,13 @@ export class RoomManager {
         this.trySend(entry.ws, { t: "matchFound", bracket: match.bracket, code });
         const id = room.seat(entry.ws, entry.name, entry.announcer, entry.title, null, now, team);
         if (id === null) continue; // 2×N seats, 2×N players — can't happen
+        room.setFinisher(id, entry.finisher, now); // verified at queue time
         room.ranked!.accounts.set(id, {
           accountId: entry.accountId,
           name: entry.name,
           announcer: entry.announcer,
           title: entry.title,
+          finisher: entry.finisher,
           items: entry.items,
           rating: entry.rating,
           joinedMs: entry.joinedMs,
@@ -918,11 +946,13 @@ export class RoomManager {
           this.closeRoom(room, "the match was called off");
           return;
         }
+        room.setFinisher(id, entry.finisher, now); // verified at queue time
         room.ranked.accounts.set(id, {
           accountId: entry.accountId,
           name: entry.name,
           announcer: entry.announcer,
           title: entry.title,
+          finisher: entry.finisher,
           items: entry.items,
           rating: entry.rating,
           joinedMs: entry.joinedMs,
@@ -967,6 +997,7 @@ export class RoomManager {
           name: botName,
           announcer: "default",
           title: botTitle,
+          finisher: "none", // bots never wear cosmetics (bits-cosmetics.md)
           items: [], // bots own nothing gated, ever (bits-secret-items.md)
           rating: botRating,
           joinedMs: now,
@@ -1036,6 +1067,7 @@ export class RoomManager {
             name: account.name,
             announcer: account.announcer,
             title: account.title,
+            finisher: account.finisher,
             items: account.items,
             rating: account.rating,
             joinedMs: account.joinedMs,

@@ -71,3 +71,15 @@ export const playStrikeHaptic = (weight: HapticWeight | null, crit = false): voi
     lastPlayed = now;
   }
 };
+
+/**
+ * One scripted pulse — a finisher's cue (finisherCues.ts). Shares the burst
+ * floor with the strikes, so a cue landing on top of a blow is swallowed
+ * rather than doubled.
+ */
+export const playHaptic = (weight: HapticWeight | "rigid"): void => {
+  const now = Date.now();
+  if (now - lastPlayed < MIN_GAP_MS) return;
+  lastPlayed = now;
+  fire(weight === "rigid" ? Haptics.ImpactFeedbackStyle.Rigid : IMPACT[weight]);
+};

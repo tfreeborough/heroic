@@ -15,6 +15,7 @@
  */
 import { Skia, type SkPath } from "@shopify/react-native-skia";
 import type { PlayerSnapshot } from "@heroic/blood-in-the-sand-sim";
+import type { BloodId } from "./cosmeticIds";
 
 export interface BloodDecal {
   x: number;
@@ -43,6 +44,10 @@ export interface BloodDecal {
   /** Death pools only: the pool SEEPS after birth — drawn at
    * r × poolGrowth(age), spreading to POOL_GROWTH× over POOL_GROW_MS. */
   grow?: boolean;
+  /** Whose blood this is, cosmetically (bits-cosmetics.md). Position, size
+   * and lifetime are identical for every material — a trail's information
+   * never changes, only what it's made of (bloodMaterials.ts draws it). */
+  mat: BloodId;
 }
 
 // ── Tuning ─────────────────────────────────────────────────────────────────
@@ -103,6 +108,17 @@ const gapJitter = (): number => 0.35 + Math.random() * 1.4;
 /** Standing still still bleeds — a slow pool builds under an idle body. */
 const IDLE_DRIP_MS_MAX = 2800;
 const IDLE_DRIP_MS_MIN = 840;
+
+/** Cosmetic marks OPEN after they land — roses bloom, stars ignite
+ * (bloodMaterials.ts draws that per frame, then hands the settled mark to the
+ * scar cache). Mirrors BLOOM_TOTAL_MS there
+ * plus one fresh scar beat — while any rose is this young the cache stays on
+ * its fresh cadence, so an opened flower is adopted within ~200ms. */
+const BLOOM_HOLD_MS = 460 + 260 + 250;
+
+/** Cosmetic bloods draw from sprite atlases, never from a silhouette — one shared empty
+ * path stands in, so a flowerbed kill builds no paths at all. */
+const NO_PATH = Skia.PathBuilder.Make().detach();
 
 /** Decals at least this big are pools — the premium gradient treatment. */
 export const POOL_MIN_R = 6;
@@ -212,6 +228,7 @@ export interface FlyingDrop {
   dy?: number;
   alpha: number;
   ttlMs: number;
+  mat: BloodId;
 }
 
 /** Where a player last dripped — drives the distance/idle drip cadence. */
@@ -232,6 +249,8 @@ interface DripTracker {
   footSteps: number;
   footSide: 1 | -1;
   footAcc: number;
+  /** The blood on their soles — the last wet pool's material. */
+  footMat: BloodId;
 }
 
 export class BloodField {
@@ -245,6 +264,9 @@ export class BloodField {
    * A plain length can't serve: at the MAX_DECALS cap a push also evicts,
    * so the length sits still while the field churns. */
   epoch = 0;
+  /** Whose blood is what (bits-cosmetics.md) — the caller swaps this for a
+   * lookup into the room's cosmetics; drips read it per player. */
+  materialOf: (playerId: number) => BloodId = () => "default";
   private readonly trackers = new Map<number, DripTracker>();
 
   /**
@@ -281,6 +303,18 @@ export class BloodField {
     return false;
   }
 
+  /** Any cosmetic mark still opening? Same suffix walk as hasGrowingPool — holds the
+   * scar cache on its fresh beat meanwhile. */
+  hasBlooming(nowMs: number): boolean {
+    const d = this.decals;
+    for (let i = d.length - 1; i >= 0; i--) {
+      const dec = d[i]!;
+      if (nowMs - dec.bornMs >= BLOOM_HOLD_MS) break;
+      if (dec.mat !== "default") return true;
+    }
+    return false;
+  }
+
   /**
    * Advance the drip trails from an interpolated view's players. Call once
    * per rendered frame; cadence is distance-based so frame rate doesn't
@@ -305,6 +339,7 @@ export class BloodField {
         bornMs: nowMs,
         ttlMs: drop.ttlMs,
         alpha: drop.alpha,
+        mat: drop.mat,
       });
     }
 
@@ -331,6 +366,7 @@ export class BloodField {
           footSteps: 0,
           footSide: Math.random() < 0.5 ? 1 : -1,
           footAcc: 0,
+          footMat: "default",
         };
         this.trackers.set(p.id, t);
       }
@@ -358,7 +394,7 @@ export class BloodField {
       t.lastDripMs = nowMs;
       t.gapK = gapJitter();
       t.idleK = gapJitter();
-      this.drip(p.x, p.y, moved > 2 ? dx / moved : 0, moved > 2 ? dy / moved : 0, severity, nowMs);
+      this.drip(p.x, p.y, moved > 2 ? dx / moved : 0, moved > 2 ? dy / moved : 0, severity, nowMs, this.materialOf(p.id));
     }
   }
 
@@ -375,7 +411,9 @@ export class BloodField {
     const stepped = Math.hypot(fdx, fdy);
     t.px = p.x;
     t.py = p.y;
-    if (this.inWetPool(p.x, p.y, nowMs)) {
+    const pool = this.wetPoolAt(p.x, p.y, nowMs);
+    if (pool) {
+      t.footMat = pool.mat; // you track the blood you stepped in, not your own
       if (t.footSteps === 0) {
         this.crossings.push({ x: p.x, y: p.y });
         t.footAcc = 0;
@@ -400,14 +438,15 @@ export class BloodField {
       bornMs: nowMs,
       ttlMs: DRIP_TTL_MS,
       alpha: 0.32 * (t.footSteps / FOOT_STEPS), // wears off print by print
+      mat: t.footMat,
     });
     t.footSteps--;
   }
 
-  /** Is (x, y) inside a still-wet pool? Wet decals are a birth-ordered SUFFIX
+  /** The still-wet pool under (x, y), if any. Wet decals are a birth-ordered SUFFIX
    * of the array, so walk backward and stop at the first set one; post-harvest
    * the live array is small anyway. */
-  private inWetPool(x: number, y: number, nowMs: number): boolean {
+  private wetPoolAt(x: number, y: number, nowMs: number): BloodDecal | null {
     const d = this.decals;
     for (let i = d.length - 1; i >= 0; i--) {
       const dec = d[i]!;
@@ -416,9 +455,9 @@ export class BloodField {
       const dx = x - dec.x;
       const dy = y - dec.y;
       const rr = dec.r * poolGrowth(dec, nowMs); // a seeping pool inks further
-      if (dx * dx + dy * dy <= rr * rr) return true;
+      if (dx * dx + dy * dy <= rr * rr) return dec;
     }
-    return false;
+    return null;
   }
 
   /**
@@ -426,7 +465,15 @@ export class BloodField {
    * not a dotted line: lone drops, 2–3 drop spatters, and (only while moving)
    * smears streaked along the direction of travel.
    */
-  private drip(x: number, y: number, dirX: number, dirY: number, severity: number, nowMs: number): void {
+  private drip(
+    x: number,
+    y: number,
+    dirX: number,
+    dirY: number,
+    severity: number,
+    nowMs: number,
+    mat: BloodId,
+  ): void {
     const moving = dirX !== 0 || dirY !== 0;
     const roll = Math.random();
     // Drops land around the feet, biased sideways off the path so the trail
@@ -445,6 +492,7 @@ export class BloodField {
         bornMs: nowMs,
         ttlMs: DRIP_TTL_MS,
         alpha: 0.25 + 0.3 * severity,
+        mat,
       });
       return;
     }
@@ -459,6 +507,7 @@ export class BloodField {
           bornMs: nowMs,
           ttlMs: DRIP_TTL_MS,
           alpha: 0.22 + 0.28 * severity + Math.random() * 0.1,
+          mat,
         });
       }
       return;
@@ -471,6 +520,7 @@ export class BloodField {
       bornMs: nowMs,
       ttlMs: DRIP_TTL_MS,
       alpha: 0.28 + 0.32 * severity,
+      mat,
     });
   }
 
@@ -488,7 +538,14 @@ export class BloodField {
    * instantly. Still "small little droplets, just a lot more of it" (Tom,
    * 2026-07-12) — bombast from count and reach, never blob size.
    */
-  deathBurst(x: number, y: number, dirX: number, dirY: number, nowMs: number): void {
+  deathBurst(
+    x: number,
+    y: number,
+    dirX: number,
+    dirY: number,
+    nowMs: number,
+    mat: BloodId = "default",
+  ): void {
     const CONE_HALF = (26 * Math.PI) / 180;
     const base = Math.atan2(dirY, dirX);
 
@@ -512,6 +569,7 @@ export class BloodField {
         ...(dx !== undefined && dy !== undefined ? { dx, dy } : {}),
         alpha,
         ttlMs: POOL_TTL_MS,
+        mat,
       });
     };
 
@@ -537,6 +595,7 @@ export class BloodField {
         ...(streak ? { dx: Math.cos(ang) * slen, dy: Math.sin(ang) * slen } : {}),
         alpha: 0.4 + Math.random() * 0.2,
         ttlMs: POOL_TTL_MS,
+        mat,
       });
     }
 
@@ -612,6 +671,7 @@ export class BloodField {
         bornMs: nowMs,
         ttlMs: POOL_TTL_MS,
         alpha: 0.5,
+        mat,
       });
     }
 
@@ -627,6 +687,7 @@ export class BloodField {
         bornMs: nowMs,
         ttlMs: POOL_TTL_MS,
         alpha: 0.5,
+        mat,
       });
     }
   }
@@ -645,6 +706,7 @@ export class BloodField {
     nowMs: number,
     dirX = 0,
     dirY = 0,
+    mat: BloodId = "default",
   ): void {
     const drops = Math.min(9, 3 + Math.floor(damage / 8)) + (lethal ? 6 : 0);
     const spread = lethal ? 30 : 22;
@@ -671,6 +733,7 @@ export class BloodField {
         bornMs: nowMs,
         ttlMs: DRIP_TTL_MS,
         alpha: 0.35 + Math.random() * 0.2,
+        mat,
       });
     }
     if (lethal) {
@@ -678,7 +741,7 @@ export class BloodField {
       // marker will sit on top of this later). `grow`: the cluster seeps
       // outward over POOL_GROW_MS — each blob swells around its own centre,
       // so the overlaps deepen and the mass spreads as one stain.
-      this.push({ x, y, r: 16, bornMs: nowMs, ttlMs: POOL_TTL_MS, alpha: 0.5, grow: true });
+      this.push({ x, y, r: 16, bornMs: nowMs, ttlMs: POOL_TTL_MS, alpha: 0.5, grow: true, mat });
       for (let i = 0; i < 5; i++) {
         const ang = Math.random() * Math.PI * 2;
         this.push({
@@ -689,6 +752,7 @@ export class BloodField {
           ttlMs: POOL_TTL_MS,
           alpha: 0.45,
           grow: true,
+          mat,
         });
       }
     }
@@ -697,7 +761,9 @@ export class BloodField {
   private push(decal: Omit<BloodDecal, "seed" | "path" | "clotPath">): void {
     const d = decal as BloodDecal;
     d.seed = Math.random() * 1000;
-    if (d.dx !== undefined && d.dy !== undefined) {
+    if (d.mat !== "default") {
+      d.path = NO_PATH;
+    } else if (d.dx !== undefined && d.dy !== undefined) {
       d.path = teardropPath(d.x, d.y, d.dx, d.dy, Math.max(1, d.r));
     } else if (d.r < POOL_MIN_R) {
       d.path = blobPath(d.x, d.y, d.r, d.seed, d.r < 4 ? 0.16 : 0.3);

@@ -43,6 +43,9 @@ export interface QueueEntry {
   announcer: string;
   /** Worn title (deed id, "" = bare) — entitlement-verified before enqueue. */
   title: string;
+  /** Worn kill finisher — "none" unless the same entitlement read found it
+   * owned (default-deny, bits-cosmetics.md § Finishers v1). */
+  finisher: string;
   /** Owned gated-item entitlements (`weapon:*`/`ability:*`), loaded at the
    * same verify — the seat's pick validation reads these synchronously. */
   items: string[];

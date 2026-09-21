@@ -1,0 +1,25 @@
+{
+  "type": "sfx-bits",
+  "subject": "a lightning bolt striking the ground a few feet away, one violent dry tearing crack with a hard midrange snap and a short deep thump, no rain, no rolling thunder, abrupt tail",
+  "prompt": "a lightning bolt striking the ground a few feet away, one violent dry tearing crack with a hard midrange snap and a short deep thump, no rain, no rolling thunder, abrupt tail. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.5,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_smite_1.mp3",
+    "finisher_smite_2.mp3",
+    "finisher_smite_3.mp3"
+  ],
+  "takeEngines": {
+    "finisher_smite_1.mp3": "stable-audio",
+    "finisher_smite_2.mp3": "stable-audio",
+    "finisher_smite_3.mp3": "stable-audio"
+  },
+  "created": "2026-09-20T22:30:04.203Z",
+  "updated": "2026-09-20T22:30:04.203Z"
+}

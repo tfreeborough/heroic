@@ -199,6 +199,11 @@ export interface ArenaPlayer {
    * `announcer`, broadcast via RoomStatePlayer). "" = bare; disguised ranked
    * bots may claim one so bare bots never become a backfill tell. */
   title: string;
+  /** Worn kill finisher (bits-cosmetics.md — cosmetic, sim-meaningless,
+   * broadcast via RoomStatePlayer so every client plays the KILLER's).
+   * "none" unless the SERVER granted one after an ownership read — a seat
+   * never starts dressed (default-deny); bots and dummies never wear one. */
+  finisher: string;
   /** Travelling-thrust strike (attack.thrustDuration weapons): seconds until
    * the front reaches full reach; 0 = no thrust in flight. Sim-only. */
   thrustLeft: number;
@@ -455,6 +460,7 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   respawnLeft: 0,
   announcer: "default",
   title: "",
+  finisher: "none",
   thrustLeft: 0,
   thrustHits: [],
   shovedBy: null,

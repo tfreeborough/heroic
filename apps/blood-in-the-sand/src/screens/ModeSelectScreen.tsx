@@ -29,11 +29,13 @@ export interface ModeSelectScreenProps {
   onPractice: () => void;
   /** Deeds → the Chronicle (achievements.md § the codex). */
   onDeeds: () => void;
+  /** Wardrobe → where cosmetics are worn (bits-cosmetics.md § F2). */
+  onWardrobe: () => void;
   /** The Glory pill's door: currency → what it buys (bits-store.md). */
   onArmory: () => void;
 }
 
-type ModeKey = "ranked" | "skirmish" | "practice" | "story" | "deeds";
+type ModeKey = "ranked" | "skirmish" | "practice" | "story" | "deeds" | "wardrobe";
 
 /**
  * Per-mode card art. `image` is the forged PNG (assets/modes/<mode>.png,
@@ -54,6 +56,14 @@ const MODE_ART: Record<
   practice: { image: require("../../assets/modes/practice.png"), ramp: ["#4a3520", "#8a6d44", "#c9a76a"], glow: "rgba(245,237,224,0.45)", glowAt: [0.70, 0.10] },
   story: { image: require("../../assets/modes/story.png"), ramp: ["#241a12", "#2e2214", "#3a2a1a"], glow: "rgba(232,200,122,0.10)", glowAt: [0.75, 0.40] },
   deeds: { image: require("../../assets/modes/deeds.png"), ramp: ["#241a10", "#4a3520", "#8a6d44"], glow: "rgba(242,205,110,0.40)", glowAt: [0.76, 0.25] },
+  // The wardrobe is a HALF card, and a half card is roughly square: the dumb
+  // centre `cover` crop of the forged 5:2 (wardrobe.png) keeps only its
+  // middle — the doorway — and loses the dressed stand, which sits far right.
+  // So this card wears a derived cut: the source's right 5:4 (x 450–900),
+  // exact pixels, no resampling — `wardrobe-half.png`. Re-forge → re-cut the
+  // same way. (Deeds/Skirmish/Practice were checked the same day and survive
+  // the centre crop as they are.) The ramp stays as the decode fallback.
+  wardrobe: { image: require("../../assets/modes/wardrobe-half.png"), ramp: ["#1c1210", "#4a1f1a", "#8a3a26"], glow: "rgba(240,190,110,0.45)", glowAt: [0.74, 0.30] },
 };
 
 /**
@@ -289,12 +299,15 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact
 /**
  * The fork behind PLAY (bits-mode-select.md; layout reworked 2026-08-04):
  * Ranked leads full-width, Skirmish + Practice share a half-width row (the
- * space saver), then Deeds, then locked Story. Locked modes render greyscale
+ * space saver), then Deeds + Wardrobe share another (2026-09-20 — the two
+ * "yours" cards: what you've done, what you wear; the wardrobe's first door
+ * was a glyph in the title's icon dock, which nobody would have found), then
+ * locked Story. Locked modes render greyscale
  * instead of hiding — the closed doors are part of the sell. No connectivity
  * checks here: Skirmish always routes into the play flow, whose connect
  * screen already owns down/update states.
  */
-export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onDeeds, onArmory }: ModeSelectScreenProps) => {
+export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onDeeds, onWardrobe, onArmory }: ModeSelectScreenProps) => {
   const insets = useSafeAreaInsets();
   const entrance = useRef(new Animated.Value(0)).current;
 
@@ -364,15 +377,28 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
             compact
           />
         </View>
-        <ModeCard
-          mode="deeds"
-          title="DEEDS"
-          pitch="Chart the legend you've carved."
-          state="live"
-          onEnter={onDeeds}
-          entrance={entrance}
-          index={2}
-        />
+        <View style={styles.halfRow}>
+          <ModeCard
+            mode="deeds"
+            title="DEEDS"
+            pitch="Chart your legend."
+            state="live"
+            onEnter={onDeeds}
+            entrance={entrance}
+            index={2}
+            compact
+          />
+          <ModeCard
+            mode="wardrobe"
+            title="WARDROBE"
+            pitch="Dress your kills."
+            state="live"
+            onEnter={onWardrobe}
+            entrance={entrance}
+            index={2}
+            compact
+          />
+        </View>
         <ModeCard
           mode="story"
           title="STORY"

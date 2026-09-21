@@ -565,7 +565,7 @@ describe("ranked flow", () => {
 
 describe("PendingMatch", () => {
   const entry = (accountId: string, alive = true): QueueEntry =>
-    ({ ws: { readyState: alive ? 1 : 3 } as unknown as Socket, accountId, name: accountId, announcer: "default", title: "", items: [], rating: 1500, joinedMs: 0 });
+    ({ ws: { readyState: alive ? 1 : 3 } as unknown as Socket, accountId, name: accountId, announcer: "default", title: "", finisher: "none", items: [], rating: 1500, joinedMs: 0 });
 
   test("accept is idempotent and counts only summoned accounts", () => {
     const p = new PendingMatch("1v1", [[entry("a")], [entry("b")]], 15_000);
@@ -1394,6 +1394,7 @@ describe("RankedQueue", () => {
     name: accountId,
     announcer: "default",
     title: "",
+    finisher: "none",
     items: [],
     rating,
     joinedMs,

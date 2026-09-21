@@ -99,6 +99,10 @@ export class ScenarioRunner {
   private roundEndedAt: number | null = null;
   private seq = 0;
   private pendingPlace = false;
+  /** Called at every loop restart AFTER the first placement — the shop
+   * window (FinisherPreview) wipes its floor here so each pass of the kill
+   * starts on clean sand. The Primer leaves it unset: its arena remembers. */
+  onRestart: (() => void) | null = null;
 
   constructor(private readonly scenario: Scenario) {
     // A real match sim: no training dummies, no practice charge lift — the
@@ -145,6 +149,7 @@ export class ScenarioRunner {
     this.t = 0;
     this.roundEndedAt = null;
     this.pendingPlace = false;
+    this.onRestart?.();
   }
 
   private placeAll(): void {
@@ -189,6 +194,11 @@ export class ScenarioRunner {
         inputs.set(id, { seq: this.seq++, sx: s.sx, sy: s.sy, casts: s.casts ?? [] });
       }
     }
+    // While the fallen lie, the scene's clock is the only clock: keep the
+    // sim's own round-end timer topped up so it can't respawn everyone at the
+    // spawns mid-hold (ROUND_END_SECONDS dropped to 2 on 2026-09-17, under
+    // every scene's hold — the corpse blinked away before the restart).
+    if (this.roundEndedAt !== null && round.phase === "roundEnd") round.timer = 1;
     const events = stepSim(this.sim, inputs, TICK_DT);
     this.t += TICK_DT;
     for (const e of events) {

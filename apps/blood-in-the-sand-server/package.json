@@ -8,6 +8,7 @@
     "start": "bun src/main.ts",
     "bot": "bun scripts/bot.ts",
     "bounties:backfill": "bun scripts/backfill-bounties.ts",
+    "entitlements:backfill": "bun scripts/backfill-entitlements.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

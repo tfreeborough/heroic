@@ -25,6 +25,7 @@ import {
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
 import { getWornTitle } from "../deeds/wornTitle";
+import { getWornFinisher } from "../deeds/wornFinisher";
 import { grantFromDeedUnlocks } from "../deeds/entitlements";
 import { forgetSeat, peekSeat, rememberSeat, touchSeat, SEAT_TOUCH_INTERVAL_MS, type StoredSeat } from "./seat";
 
@@ -767,6 +768,7 @@ export class ArenaClient {
       brackets,
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
+      finisher: getWornFinisher(),
     });
     this.onChange?.();
   }
@@ -841,6 +843,7 @@ export class ArenaClient {
       // rather than passed in, so every screen's create/join carries them.
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
+      finisher: getWornFinisher(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
     });
   }
@@ -860,6 +863,7 @@ export class ArenaClient {
       ...(token ? { token } : {}),
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
+      finisher: getWornFinisher(),
       ...(pass.trim() ? { pass: pass.trim() } : {}),
       // Rejoining the room we lost a socket in by hand: the seat token proves
       // the disconnected seat is OURS (any other room gets a plain fresh join).
@@ -887,6 +891,7 @@ export class ArenaClient {
       playerName: seat.playerName,
       announcer: getActiveAnnouncer(),
       title: getWornTitle(),
+      finisher: getWornFinisher(),
       seatToken: seat.seatToken,
       reclaimOnly: true,
     });

@@ -5,6 +5,8 @@
  * always clean) and can be read from hot paths (the game loop) without
  * touching React.
  */
+import type { CosmeticLoadout } from "./game/cosmeticIds";
+
 /**
  * Is the hidden dev menu reachable in this build? Dev sessions always, plus
  * internal builds that opt in with EXPO_PUBLIC_DEV_MENU=1 (eas.json's
@@ -22,4 +24,19 @@ export const DEV_MENU_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DEV_MENU === 
 export const devFlags = {
   /** Frame profiler readout in matches: JS fps + sim/record ms per frame. */
   perfOverlay: false,
+  /** Cosmetic prototypes (bits-cosmetics.md): what YOU wear next match —
+   * purely local, nothing rides the wire. `everyone` dresses every fighter
+   * the same way (bots included) — the worst-case perf read, and the quick
+   * way to see blood and finishers without waiting to bleed or kill. */
+  cosmetics: {
+    finisher: "none",
+    blood: "default",
+    trail: "none",
+    colours: 0,
+    /** Trail opacity dial, 0–1 (TRAIL_OPACITY_STEPS) — find it on device. */
+    trailOpacity: 0.4,
+    /** Trail length dial, ms (TRAIL_LENGTH_STEPS). */
+    trailLengthMs: 1300,
+    everyone: false,
+  } as CosmeticLoadout & { trailOpacity: number; trailLengthMs: number; everyone: boolean },
 };

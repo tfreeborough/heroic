@@ -164,5 +164,6 @@ export const toRoomStatePlayers = (state: ArenaState, viewerTeam: Team | 0): Roo
     bot: p.bot,
     announcer: p.announcer,
     title: p.title,
+    finisher: p.finisher,
   }));
 };

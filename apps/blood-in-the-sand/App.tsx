@@ -28,6 +28,7 @@ import { useArenaConnection } from "./src/net/useArenaConnection";
 import { setAnnouncerPack } from "./src/audio";
 import { loadAnnouncerPack, loadPrimerSeen, savePrimerSeen } from "./src/settings";
 import { loadWornTitle } from "./src/deeds/wornTitle";
+import { loadWornFinisher } from "./src/deeds/wornFinisher";
 import { loadEntitlements } from "./src/deeds/entitlements";
 import { useFonts } from "expo-font";
 import { DISPLAY_FONT_SOURCE } from "./src/typography";
@@ -36,6 +37,7 @@ import { PracticeClient } from "./src/net/practice";
 import { parseShowcaseUrl, SHOWCASE_ENABLED } from "./src/net/showcase";
 import { ConnectScreen } from "./src/screens/ConnectScreen";
 import { ArmoryScreen } from "./src/screens/ArmoryScreen";
+import { WardrobeScreen } from "./src/screens/WardrobeScreen";
 import { DeedsScreen } from "./src/screens/DeedsScreen";
 import { GameScreen } from "./src/screens/GameScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -115,7 +117,8 @@ type Route =
   | "settings"
   | "feedback"
   | "deeds"
-  | "armory";
+  | "armory"
+  | "wardrobe";
 
 export default function App() {
   const [route, setRoute] = useState<Route>("home");
@@ -123,6 +126,13 @@ export default function App() {
   // shared header's purse everywhere else) — back retraces whichever one
   // was used.
   const armoryFrom = useRef<Route>("home");
+  // Deeds has two doors too: the mode select's card, and the wardrobe's
+  // locked earnable (bits-cosmetics.md § F2) — back retraces whichever.
+  const deedsFrom = useRef<Route>("modes");
+  const openDeeds = (from: Route): void => {
+    deedsFrom.current = from;
+    setRoute("deeds");
+  };
   const openArmory = (from: Route): void => {
     armoryFrom.current = from;
     setRoute("armory");
@@ -177,6 +187,8 @@ export default function App() {
     void loadAnnouncerPack().then(setAnnouncerPack);
     // The worn title — loaded before any join can claim it (same reasoning).
     void loadWornTitle();
+    // The worn kill finisher — same again (bits-cosmetics.md § Finishers v1).
+    void loadWornFinisher();
     // Earned entitlements — the wizard hides gated items until these load
     // (bits-secret-items.md); refreshed authoritatively on codex visits.
     void loadEntitlements();
@@ -361,6 +373,10 @@ export default function App() {
       setRoute("modes");
     } else if (route === "armory") {
       setRoute(armoryFrom.current);
+    } else if (route === "deeds") {
+      setRoute(deedsFrom.current);
+    } else if (route === "wardrobe") {
+      setRoute("modes"); // its door is a mode-select card
     } else {
       setRoute("home");
     }
@@ -427,8 +443,17 @@ export default function App() {
       />
     );
   } else if (route === "deeds") {
-    // Entered from the mode select's DEEDS card — back returns there.
-    screen = <DeedsScreen onBack={() => setRoute("modes")} onArmory={() => openArmory("deeds")} />;
+    // Entered from the mode select's DEEDS card or the wardrobe's locked
+    // earnable — back returns to whichever door it was.
+    screen = <DeedsScreen onBack={() => setRoute(deedsFrom.current)} onArmory={() => openArmory("deeds")} />;
+  } else if (route === "wardrobe") {
+    screen = (
+      <WardrobeScreen
+        onBack={() => setRoute("modes")}
+        onArmory={() => openArmory("wardrobe")}
+        onDeeds={() => openDeeds("wardrobe")}
+      />
+    );
   } else if (route === "armory") {
     screen = <ArmoryScreen onBack={() => setRoute(armoryFrom.current)} />;
   } else if (route === "modes") {
@@ -450,7 +475,8 @@ export default function App() {
           setRoute("ranked");
         }}
         onPractice={() => leaveQueueThen("Practice", () => setRoute("practice"))}
-        onDeeds={() => setRoute("deeds")}
+        onDeeds={() => openDeeds("modes")}
+        onWardrobe={() => setRoute("wardrobe")}
         onArmory={() => openArmory("modes")}
       />
     );

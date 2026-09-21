@@ -45,3 +45,5 @@ ancient_tiles/
 # The raw itch packs (Ancient Ruins, Desert, Highlands, Village…) live in /tilesets
 # at the repo root — 90MB+ of mockups, characters and per-sprite PNGs we never load.
 /tilesets/
+# bun run cosmetics:preview — off-device contact sheets (bits-cosmetics.md)
+apps/blood-in-the-sand/cosmetics-preview/

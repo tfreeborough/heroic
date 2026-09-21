@@ -1,0 +1,21 @@
+{
+  "type": "sfx-bits",
+  "subject": "a single dry wooden clock tick, tight and slightly hollow, very short, close-miked",
+  "prompt": "a single dry wooden clock tick, tight and slightly hollow, very short, close-miked. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 0.5,
+    "promptInfluence": 0.5,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "arm_clock_tick_1.mp3"
+  ],
+  "takeEngines": {
+    "arm_clock_tick_1.mp3": "elevenlabs"
+  },
+  "created": "2026-09-20T22:59:13.627Z",
+  "updated": "2026-09-20T22:59:13.627Z"
+}
