@@ -2,6 +2,13 @@
    One stylesheet, no JS, no build step. The palette is the games' arena
    language: near-black ground, bone text, rationed gold + blood-red. */
 
+@font-face {
+  font-family: 'Cinzel';
+  src: url('/fonts/Cinzel-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   --ground: #141210;
   --panel: #1d1915;
@@ -47,8 +54,9 @@ header .wrap {
 }
 .mark {
   color: var(--bone);
-  font-family: Georgia, serif;
-  font-size: 18px;
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: 17px;
   letter-spacing: 4px;
   text-transform: uppercase;
   text-decoration: none;
@@ -74,10 +82,14 @@ nav a {
 }
 nav a:hover, nav a[aria-current] { color: var(--gold); }
 
+body.home .wrap { max-width: 1008px; }
+body.home main .wrap > p { max-width: 680px; }
+
 /* ── Main ── */
 main { flex: 1; padding: 56px 0 72px; }
 
 h1 {
+  font-family: 'Cinzel', Georgia, serif;
   color: var(--bone);
   font-size: 32px;
   letter-spacing: 2px;
@@ -116,16 +128,8 @@ strong { color: var(--bone); font-weight: 600; }
   margin-bottom: 28px;
 }
 
-/* ── Brochure cards ── */
-.game {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  padding: 26px 28px;
-  margin-top: 28px;
-}
-.game h2 { margin-top: 0; }
-.game .status {
+/* ── Pills ── */
+.status {
   display: inline-block;
   color: var(--gold);
   border: 1px solid var(--line);
@@ -134,8 +138,136 @@ strong { color: var(--bone); font-weight: 600; }
   font-size: 11px;
   letter-spacing: 2px;
   text-transform: uppercase;
+  margin-bottom: 10px;
+  background: rgba(20, 18, 16, 0.55);
+}
+
+/* ── Home ── */
+main.home { padding: 0 0 72px; }
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 72px 0 64px;
+  border-bottom: 1px solid var(--line);
+}
+/* Backdrop: the arena art blurred into warm light, darkened towards the text
+   and faded into the page at the bottom. The sharp art sits in .hero-art. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -60px;
+  z-index: -2;
+  background: var(--art) center / cover no-repeat;
+  filter: blur(36px) saturate(1.15);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(20,18,16,0.95) 0%, rgba(20,18,16,0.8) 50%, rgba(20,18,16,0.45) 100%),
+    linear-gradient(0deg, var(--ground) 0%, rgba(20,18,16,0) 35%);
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 56px;
+  align-items: center;
+}
+.hero-copy > p { max-width: 540px; }
+.hero-art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: center 55%;
+  border-radius: 16px;
+  border: 1px solid rgba(232,200,122,0.3);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+.hero-title { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
+.app-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 0 1px rgba(232,200,122,0.25);
+  image-rendering: pixelated;
+  flex: none;
+}
+.hero h1 {
+  font-size: 44px;
+  line-height: 1.05;
+  margin: 0;
+  text-shadow: 0 2px 18px rgba(0,0,0,0.6);
+}
+.pitch {
+  color: var(--gold);
+  font-size: 21px;
+  font-style: italic;
   margin-bottom: 12px;
 }
+
+.stores { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+.store {
+  display: inline-block;
+  color: var(--ground);
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 11px 24px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.store:hover { background: var(--bone); border-color: var(--bone); transform: translateY(-1px); }
+.store.ghost { background: transparent; color: var(--gold); }
+.store.ghost:hover { background: rgba(232,200,122,0.1); color: var(--bone); }
+
+/* Screenshots: one scrolling strip, snaps on touch */
+.shots { padding: 40px 0 8px; }
+.shot-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 0 max(24px, calc((100vw - 960px) / 2)) 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.shot-row img {
+  flex: none;
+  width: 200px;
+  height: auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  scroll-snap-align: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.features {
+  list-style: none;
+  margin: 32px 0 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.features li {
+  margin: 0;
+  padding: 16px 18px;
+  border-left: 2px solid var(--red);
+  background: var(--panel);
+  border-radius: 0 10px 10px 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+h2.section { margin: 52px 0 14px; }
 
 /* ── Footer ── */
 footer {
@@ -153,7 +285,19 @@ footer .wrap {
 footer a { color: var(--muted); text-decoration: none; margin-right: 18px; }
 footer a:hover { color: var(--gold); }
 
-@media (max-width: 480px) {
+@media (max-width: 860px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .hero-art { display: none; }
+}
+
+@media (max-width: 600px) {
   h1 { font-size: 26px; }
   main { padding-top: 40px; }
+  main.home { padding-top: 0; }
+  .hero { padding: 48px 0 44px; }
+  .hero::before { filter: none; inset: 0; background-position: 70% 62%; }
+  .hero h1 { font-size: 30px; }
+  .app-icon { width: 72px; height: 72px; border-radius: 17px; }
+  .features { grid-template-columns: 1fr; }
+  .shot-row img { width: 160px; }
 }

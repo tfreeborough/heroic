@@ -9,7 +9,8 @@
   "scripts": {
     "test": "bun test packages",
     "typecheck": "bun run --filter '*' typecheck",
-    "desk": "bun run --cwd apps/desk start"
+    "desk": "bun run --cwd apps/desk start",
+    "site": "bun apps/free-the-borough-site/dev.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

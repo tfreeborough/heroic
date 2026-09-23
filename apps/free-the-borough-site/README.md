@@ -10,6 +10,14 @@ site shared by every Free the Borough game.
 - `/support/` — contact, purchases, community (App Store Connect support URL)
 
 Plain HTML + one stylesheet in `public/`. No build step, no JS, no cookies.
+Game art in `public/img/<game>/` is copied (and shrunk to JPEG) from the game's
+assets and `apps/bits-promos/out/store/`; Cinzel is self-hosted from `public/fonts/`.
+
+## Local preview
+
+`bun run site` from the repo root → http://localhost:7790. It serves `public/`
+the way Render does and reloads the browser whenever a file under `public/`
+changes. `dev.ts` sits outside `public/`, so it never gets deployed.
 
 ## Deploying (Render Static Site)
 
