@@ -1,7 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["bun-types"]
+    "types": [
+      "bun-types"
+    ]
   },
-  "include": ["src", "scripts", "remotion.config.ts"]
+  "include": [
+    "src",
+    "scripts",
+    "desk.config.ts",
+    "desk.templates.ts",
+    "remotion.config.ts"
+  ]
 }

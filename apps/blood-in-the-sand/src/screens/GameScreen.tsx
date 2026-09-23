@@ -1361,7 +1361,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               headcount — it holds on partial force-starts too). */}
           {brawl ? (
             <Text style={styles.teamHint}>
-              <Text style={styles.teamHintVs}>SIX ENTER. ONE LEAVES.</Text>
+              <Text style={styles.brawlEpigraph}>SIX ENTER. ONE LEAVES.</Text>
             </Text>
           ) : (
             <Text style={styles.teamHint}>
@@ -1577,10 +1577,23 @@ const styles = StyleSheet.create({
   // The slain-by plate's centring wrapper — lower-centre, clear of the death
   // camera's subject and the spectate chip below.
   slainWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
-  teamHint: { fontSize: 15, marginTop: 4, fontWeight: "800", letterSpacing: 0.5 },
+  // Dark halo so the line reads over every arena floor (sand, grass, ruins).
+  teamHint: {
+    fontSize: 15,
+    marginTop: 4,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   teamHintMine: { color: "#5aa9e0" },
   teamHintFoe: { color: "#e07a6a" },
   teamHintVs: { color: "#8a7f70", fontWeight: "700" },
+  // Brawl's epigraph stands alone (no coloured names beside it), so it wears
+  // the countdown's cream rather than the muted "vs" grey — that vanished on
+  // the lighter arenas.
+  brawlEpigraph: { color: "#f0e8d8", fontSize: 17, fontWeight: "900", letterSpacing: 2 },
   banner: {
     fontSize: 34,
     fontWeight: "900",

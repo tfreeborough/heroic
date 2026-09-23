@@ -1,0 +1,25 @@
+{
+  "file": "Obelisk Brawl 1 cut.mp4",
+  "facts": {
+    "seconds": 42.9,
+    "width": 874,
+    "height": 1794,
+    "fps": 60,
+    "recordedAt": "2026-09-22T13:36:02",
+    "bytes": 25947056
+  },
+  "title": "",
+  "line": "",
+  "note": "",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Obelisk Brawl 1.mp4",
+  "cleanup": {
+    "startFrom": 0,
+    "endAt": 42.9,
+    "cropTop": 0,
+    "cropBottom": 0.065,
+    "muted": false
+  }
+}

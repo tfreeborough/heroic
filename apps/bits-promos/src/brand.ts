@@ -30,7 +30,7 @@ loadFont({
   weight: "700",
 });
 
-const inter = loadInter("normal", { weights: ["500", "700", "800"], subsets: ["latin"] });
+const inter = loadInter("normal", { weights: ["500", "600", "700", "800"], subsets: ["latin"] });
 /** Google-hosted, fetched at render; the fallback stack keeps an offline
  * render from failing (it just loses the face). */
 export const SANS = `${inter.fontFamily}, -apple-system, "Helvetica Neue", Arial, sans-serif`;
@@ -47,5 +47,6 @@ export const ditherOverlay: React.CSSProperties = {
   pointerEvents: "none",
 };
 
-export const FPS = 30;
-export const VERTICAL = { width: 1080, height: 1920 } as const;
+// Frame rate + the three output shapes live in formats.ts (plain data, no
+// font loading) so the Desk's server can import them; re-exported here.
+export { FPS, FORMATS, VERTICAL, formatSize, type Format } from "./formats";

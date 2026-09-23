@@ -4,6 +4,7 @@
       "id": "blade",
       "name": "Blade",
       "icon": "assets/icons/blade.png",
+      "tagline": "You can't go wrong with a sharp blade.",
       "stats": [
         [
           "STYLE",
@@ -27,6 +28,7 @@
       "id": "bow",
       "name": "Bow",
       "icon": "assets/icons/bow.png",
+      "tagline": "One breath to draw. Make it count.",
       "stats": [
         [
           "STYLE",
@@ -46,6 +48,7 @@
       "id": "staff",
       "name": "Staff",
       "icon": "assets/icons/staff.png",
+      "tagline": "Run if you like. It'll find you.",
       "stats": [
         [
           "STYLE",
@@ -65,6 +68,7 @@
       "id": "hammer",
       "name": "Hammer",
       "icon": "assets/icons/hammer.png",
+      "tagline": "Break their bones.",
       "stats": [
         [
           "STYLE",
@@ -84,6 +88,7 @@
       "id": "trident",
       "name": "Trident",
       "icon": "assets/icons/trident.png",
+      "tagline": "The fish never learns how long the spear is.",
       "stats": [
         [
           "STYLE",
@@ -107,6 +112,7 @@
       "id": "fang",
       "name": "Fang",
       "icon": "assets/icons/fang.png",
+      "tagline": "It barely scratches. That's all it needs.",
       "stats": [
         [
           "STYLE",
@@ -126,6 +132,7 @@
       "id": "scorpion",
       "name": "Scorpion",
       "icon": "assets/icons/scorpion.png",
+      "tagline": "One bolt might miss. Three won't.",
       "stats": [
         [
           "STYLE",
@@ -145,6 +152,7 @@
       "id": "bombard",
       "name": "Bombard",
       "icon": "assets/icons/bombard.png",
+      "tagline": "I just point. The sky does the rest.",
       "stats": [
         [
           "STYLE",
@@ -164,6 +172,7 @@
       "id": "lifeline",
       "name": "Lifeline",
       "icon": "assets/icons/lifeline.png",
+      "tagline": "Stay close and I'll keep you standing.",
       "stats": [
         [
           "STYLE",
@@ -186,6 +195,7 @@
       "name": "Sandtrap",
       "category": "offensive",
       "icon": "assets/icons/sandtrap.png",
+      "tagline": "Watch where you step. I've already buried something there.",
       "stats": [
         [
           "CHARGES",
@@ -202,6 +212,7 @@
       "name": "Tremor",
       "category": "offensive",
       "icon": "assets/icons/tremor.png",
+      "tagline": "Hard to run when the ground won't keep still.",
       "stats": [
         [
           "CHARGES",
@@ -218,6 +229,7 @@
       "name": "Harpoon",
       "category": "offensive",
       "icon": "assets/icons/harpoon.png",
+      "tagline": "Come here. I wasn't asking.",
       "stats": [
         [
           "CHARGES",
@@ -234,6 +246,7 @@
       "name": "Dash",
       "category": "defensive",
       "icon": "assets/icons/dash.png",
+      "tagline": "Swing all you like. I won't be there.",
       "stats": [
         [
           "CHARGES",
@@ -250,6 +263,7 @@
       "name": "Mirror Guard",
       "category": "defensive",
       "icon": "assets/icons/mirror-guard.png",
+      "tagline": "Arrows come back. Swords, sadly, don't.",
       "stats": [
         [
           "CHARGES",
@@ -266,6 +280,7 @@
       "name": "Ironhide",
       "category": "defensive",
       "icon": "assets/icons/ironhide.png",
+      "tagline": "Hit me all you like. I'm in no hurry.",
       "stats": [
         [
           "CHARGES",
@@ -282,6 +297,7 @@
       "name": "Straw Man",
       "category": "defensive",
       "icon": "assets/icons/straw-man.png",
+      "tagline": "He's more convincing than you'd think.",
       "stats": [
         [
           "CHARGES",
@@ -298,6 +314,7 @@
       "name": "Warding Shout",
       "category": "defensive",
       "icon": "assets/icons/warding-shout.png",
+      "tagline": "One shout and they're halfway across the sand.",
       "stats": [
         [
           "CHARGES",
@@ -314,6 +331,7 @@
       "name": "War Drums",
       "category": "support",
       "icon": "assets/icons/war-drums.png",
+      "tagline": "Keep up. The drums won't wait.",
       "stats": [
         [
           "CHARGES",
@@ -330,6 +348,7 @@
       "name": "Blood Font",
       "category": "support",
       "icon": "assets/icons/blood-font.png",
+      "tagline": "Stand in the blood. Trust me, it helps.",
       "stats": [
         [
           "CHARGES",
@@ -346,6 +365,7 @@
       "name": "Sandstorm",
       "category": "support",
       "icon": "assets/icons/sandstorm.png",
+      "tagline": "If I can't see you, you can't see me either.",
       "stats": [
         [
           "CHARGES",
@@ -362,6 +382,7 @@
       "name": "Sinkhole",
       "category": "offensive",
       "icon": "assets/icons/sinkhole.png",
+      "tagline": "The sand is always hungry. I just feed it.",
       "stats": [
         [
           "CHARGES",
@@ -378,6 +399,7 @@
       "name": "Tar Pit",
       "category": "support",
       "icon": "assets/icons/tar-pit.png",
+      "tagline": "Follow me if you like. Mind the tar.",
       "stats": [
         [
           "CHARGES",
@@ -394,6 +416,7 @@
       "name": "Titan's Draught",
       "category": "offensive",
       "icon": "assets/icons/titans-draught.png",
+      "tagline": "The titans never died. They are merely thirsty.",
       "stats": [
         [
           "CHARGES",
@@ -404,6 +427,124 @@
           "14s"
         ]
       ]
+    },
+    {
+      "id": "call-the-tide",
+      "name": "Call the Tide",
+      "category": "offensive",
+      "icon": "assets/icons/call-the-tide.png",
+      "tagline": "I do not wait for the horn. The horn waits for me.",
+      "stats": [
+        [
+          "CHARGES",
+          "1"
+        ],
+        [
+          "COOLDOWN",
+          "7s"
+        ]
+      ]
     }
+  ],
+  "gallery": [
+    "assets/icons/blade.png",
+    "assets/icons/bow.png",
+    "assets/icons/staff.png",
+    "assets/icons/hammer.png",
+    "assets/icons/trident.png",
+    "assets/icons/fang.png",
+    "assets/icons/scorpion.png",
+    "assets/icons/bombard.png",
+    "assets/icons/lifeline.png",
+    "assets/icons/sandtrap.png",
+    "assets/icons/tremor.png",
+    "assets/icons/harpoon.png",
+    "assets/icons/dash.png",
+    "assets/icons/mirror-guard.png",
+    "assets/icons/ironhide.png",
+    "assets/icons/straw-man.png",
+    "assets/icons/warding-shout.png",
+    "assets/icons/war-drums.png",
+    "assets/icons/blood-font.png",
+    "assets/icons/sandstorm.png",
+    "assets/icons/sinkhole.png",
+    "assets/icons/tar-pit.png",
+    "assets/icons/titans-draught.png",
+    "assets/icons/call-the-tide.png",
+    "assets/deeds/deed-along-for-the-ride.png",
+    "assets/deeds/deed-ambush.png",
+    "assets/deeds/deed-assists.png",
+    "assets/deeds/deed-baptism.png",
+    "assets/deeds/deed-both-sides.png",
+    "assets/deeds/deed-bridesmaid.png",
+    "assets/deeds/deed-carnage.png",
+    "assets/deeds/deed-clean-house.png",
+    "assets/deeds/deed-closed-doors.png",
+    "assets/deeds/deed-clutch.png",
+    "assets/deeds/deed-comeback.png",
+    "assets/deeds/deed-concert.png",
+    "assets/deeds/deed-crits.png",
+    "assets/deeds/deed-damage.png",
+    "assets/deeds/deed-doppelganger.png",
+    "assets/deeds/deed-double-kill.png",
+    "assets/deeds/deed-dry-feet.png",
+    "assets/deeds/deed-duo-wins.png",
+    "assets/deeds/deed-even-split.png",
+    "assets/deeds/deed-first-match.png",
+    "assets/deeds/deed-flawless.png",
+    "assets/deeds/deed-full-house.png",
+    "assets/deeds/deed-full-set.png",
+    "assets/deeds/deed-gentlemen.png",
+    "assets/deeds/deed-glory.png",
+    "assets/deeds/deed-grudge.png",
+    "assets/deeds/deed-healing.png",
+    "assets/deeds/deed-kills.png",
+    "assets/deeds/deed-last-grain.png",
+    "assets/deeds/deed-last-word.png",
+    "assets/deeds/deed-lifeblood.png",
+    "assets/deeds/deed-loss-streak.png",
+    "assets/deeds/deed-matching-set.png",
+    "assets/deeds/deed-meat-shield.png",
+    "assets/deeds/deed-mirror.png",
+    "assets/deeds/deed-nobody-wins.png",
+    "assets/deeds/deed-nobodys-hero.png",
+    "assets/deeds/deed-not-today.png",
+    "assets/deeds/deed-old-ways.png",
+    "assets/deeds/deed-one-leaves.png",
+    "assets/deeds/deed-one-more.png",
+    "assets/deeds/deed-open-house.png",
+    "assets/deeds/deed-quicksand.png",
+    "assets/deeds/deed-reflect.png",
+    "assets/deeds/deed-regulars.png",
+    "assets/deeds/deed-revenge.png",
+    "assets/deeds/deed-sand-fall.png",
+    "assets/deeds/deed-selfless.png",
+    "assets/deeds/deed-shieldwall.png",
+    "assets/deeds/deed-six-enter.png",
+    "assets/deeds/deed-six-strangers.png",
+    "assets/deeds/deed-standing.png",
+    "assets/deeds/deed-swift-vengeance.png",
+    "assets/deeds/deed-taken-by-tide.png",
+    "assets/deeds/deed-thread.png",
+    "assets/deeds/deed-tide-decided.png",
+    "assets/deeds/deed-tide-horn.png",
+    "assets/deeds/deed-tide-kills.png",
+    "assets/deeds/deed-tidecaller.png",
+    "assets/deeds/deed-two-blades.png",
+    "assets/deeds/deed-undertow.png",
+    "assets/deeds/deed-uniform.png",
+    "assets/deeds/deed-untouchable.png",
+    "assets/deeds/deed-untouched.png",
+    "assets/deeds/deed-vulture.png",
+    "assets/deeds/deed-waist-deep.png",
+    "assets/deeds/deed-well-met.png",
+    "assets/deeds/deed-win-streak.png",
+    "assets/deeds/deed-wins.png",
+    "assets/ranks/champion.png",
+    "assets/ranks/gladiator.png",
+    "assets/ranks/immortal.png",
+    "assets/ranks/initiate.png",
+    "assets/ranks/pit-fighter.png",
+    "assets/ranks/warlord.png"
   ]
 }

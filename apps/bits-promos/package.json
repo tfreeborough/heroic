@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "sync": "bun scripts/sync-assets.ts",
+    "footage:sync": "bun ../desk/cli.ts sync bits",
     "studio": "bun run sync && remotion studio",
     "render": "bun run sync && remotion render",
     "still": "bun run sync && remotion still",
@@ -20,12 +21,18 @@
     "@remotion/cli": "^4.0.0",
     "@remotion/fonts": "^4.0.0",
     "@remotion/google-fonts": "4.0.518",
+    "@remotion/media-utils": "^4.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "remotion": "^4.0.0"
+    "remotion": "^4.0.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@heroic/blood-in-the-sand-sim": "workspace:*",
     "@types/react": "^19.0.0"
+  },
+  "exports": {
+    "./desk.config": "./desk.config.ts",
+    "./desk.templates": "./desk.templates.ts"
   }
 }

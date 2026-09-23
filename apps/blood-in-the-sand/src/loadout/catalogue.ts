@@ -71,7 +71,7 @@ export interface StatBar {
 export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc: string }> = {
   blade: {
     hint: "fast swings with a stacking bleed",
-    quote: "Nothing as classic as a keen edged blade",
+    quote: "You can't go wrong with a sharp blade.",
     desc: "Best used with a gap closing ability, fast to attack and can finish opponents off quickly",
   },
   bow: {
@@ -81,7 +81,7 @@ export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc:
   },
   staff: {
     hint: "a slow orb of electricity that hunts you down",
-    quote: "You do not seek the orb, for it seeks you.",
+    quote: "Run if you like. It'll find you.",
     desc: "Looses a seeking orb that steers toward its mark until it connects or expires.",
   },
   trident: {
@@ -96,22 +96,22 @@ export const WEAPON_CODEX: Record<WeaponId, { hint: string; quote: string; desc:
   },
   lifeline: {
     hint: "a mending thread to your most wounded ally — no weapon at all",
-    quote: "Hold the line. I will hold you together.",
+    quote: "Stay close and I'll keep you standing.",
     desc: "Links a mending thread to your most wounded ally: the longer the link holds unbroken, the faster it heals. It never touches an enemy — your abilities and your allies are all that stand between you and a blade. In a lone duel it links nothing: this is a choice, not a gun.",
   },
   fang: {
     hint: "lightning stabs that stack a deadly poison",
-    quote: "The bite is nothing. The venom is everything.",
+    quote: "It barely scratches. That's all it needs.",
     desc: "The shortest reach in the arena and barely a scratch per stab — but every stab stacks poison, and stacked poison does the killing while you're already gone.",
   },
   scorpion: {
     hint: "a three-bolt volley, each bolt aimed anew",
-    quote: "One sting is a warning. Three are a verdict.",
+    quote: "One bolt might miss. Three won't.",
     desc: "Looses three fast bolts in quick succession, each aimed at where you are the instant it leaves. Slow to reload — make the volley count.",
   },
   bombard: {
     hint: "lobs a shell onto marked ground — the blast spares no one",
-    quote: "The sky does the killing. I merely point.",
+    quote: "I just point. The sky does the rest.",
     desc: "Marks the ground beneath your foe and drops a shell on it. The mark is honest — anyone can walk clear — and the blast spares no one who stays: enemy, ally, or you. Useless up close: inside its dead zone it cannot fire at all.",
   },
 };
@@ -224,7 +224,7 @@ export const weaponChips = (id: WeaponId): CodexChip[] => {
 export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; desc: string; chips: CodexChip[] }> = {
   sandtrap: {
     hint: "bury a charge — 2s to arm, then it erupts",
-    quote: "Bury a powder charge beneath the sand. Two breaths to arm — then the ground itself turns on them.",
+    quote: "Watch where you step. I've already buried something there.",
     desc: "Buries an explosive charge at your feet. It arms over 2 seconds, then erupts on the first enemy to step close, throwing everyone caught in the blast. One live charge at a time — placing a new one fizzles the old.",
     chips: [
       { label: "ARM", value: `${SANDTRAP.armSeconds}s` },
@@ -235,7 +235,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   tremor: {
     hint: "quake a wide circle — chips and slows everyone inside",
-    quote: "Split the earth beneath them. The ground gives way — and they are slow to leave it.",
+    quote: "Hard to run when the ground won't keep still.",
     desc: "Shakes the ground where you stand: enemies inside the circle take steady chip damage and are slowed while they remain. The zone stays put — hold a choke, guard a font, punish a dogpile.",
     chips: [
       { label: "RADIUS", value: `${TREMOR.radius}px` },
@@ -246,7 +246,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   harpoon: {
     hint: "chain a mark, then haul them in — you hold your ground",
-    quote: "Hurl a barbed harpoon at your mark. It does not miss — and then you haul, and they come.",
+    quote: "Come here. I wasn't asking.",
     desc: "Snaps a chain onto a mark in range — no mark, no cast. The chain lands the instant it's thrown, then reels them in against their will. You stand rooted while you haul; moving lets the chain go.",
     chips: [
       { label: "LANDING", value: "instant" },
@@ -257,7 +257,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   dash: {
     hint: "the classic — short hop, brief invulnerability",
-    quote: "A short, sharp burst of speed — and a heartbeat where nothing can touch you.",
+    quote: "Swing all you like. I won't be there.",
     desc: "A short hop with a moment of invulnerability — attacks and projectiles pass through you if timed right. Barges anyone in your path.",
     chips: [
       { label: "DISTANCE", value: `${DASH_DISTANCE}px` },
@@ -267,7 +267,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   "mirror-guard": {
     hint: "projectiles bounce back — swords don’t",
-    quote: "Raise a polished shield. Arrows and orbs fly back where they came from. Swords, sadly, do not.",
+    quote: "Arrows come back. Swords, sadly, don't.",
     desc: "While raised, projectiles that hit you become yours and fly back at the shooter. Melee passes straight through it.",
     chips: [
       { label: "DURATION", value: `${MIRROR_GUARD.duration}s` },
@@ -276,7 +276,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   ironhide: {
     hint: "become iron — tank hits, move like iron",
-    quote: "Turn your flesh to iron. Shrug off blows, slows and shoves — but iron is heavy, and you’ll move like it.",
+    quote: "Hit me all you like. I'm in no hurry.",
     desc: "Hardens you: incoming damage is cut and slows, shoves and pulls don’t take — but your own speed is halved while it lasts.",
     chips: [
       { label: "DURATION", value: `${IRONHIDE.duration}s` },
@@ -286,7 +286,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   "straw-man": {
     hint: "a decoy that steals their targeting",
-    quote: "Plant a convincing stand-in. Enemy eyes — and blades — snap to it while you slip away.",
+    quote: "He's more convincing than you'd think.",
     desc: "Drops a dummy where you stand. Enemy targeting treats it as a real mark until it breaks or expires.",
     chips: [
       { label: "DUMMY HP", value: String(STRAW_MAN.hp) },
@@ -295,7 +295,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   "warding-shout": {
     hint: "bellow a cone — hurls them back, no damage",
-    quote: "Fill your lungs and ROAR. The sand itself flees your voice — and so do they.",
+    quote: "One shout and they're halfway across the sand.",
     desc: "An instant bellow in the direction you face: every enemy caught in the cone is hurled away hard. No damage — pure space. A shout you point wrong moves nobody.",
     chips: [
       { label: "RANGE", value: `${WARDING_SHOUT.range}px` },
@@ -306,7 +306,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   "war-drums": {
     hint: "a moving circle of speed for your team",
-    quote: "Beat the drums. You and every ally in the circle surge while the rhythm lasts.",
+    quote: "Keep up. The drums won't wait.",
     desc: "A circle of speed that moves with you. Allies inside surge; step out and it’s gone. The beat plays for as long as the drums do.",
     chips: [
       { label: "RADIUS", value: `${WAR_DRUMS.radius}px` },
@@ -316,7 +316,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   "blood-font": {
     hint: "a healing circle — hold it or lose it",
-    quote: "Raise a font of lifeblood. Allies standing in its circle knit their wounds shut.",
+    quote: "Stand in the blood. Trust me, it helps.",
     desc: "Pours a stationary healing circle at your feet. Allies standing inside recover health while it lasts.",
     chips: [
       { label: "RADIUS", value: `${BLOOD_FONT.radius}px` },
@@ -326,7 +326,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   sandstorm: {
     hint: "a blinding whirl — no marks in, no aim out",
-    quote: "Kick up a blinding whirl of sand. Nothing inside it can mark, or be marked — friend or foe.",
+    quote: "If I can't see you, you can't see me either.",
     desc: "Kicks up a swirling cloud at your feet. Anyone inside can’t be targeted — and can’t take aim out of it either. Existing locks break both ways. Friend and foe alike.",
     chips: [
       { label: "RADIUS", value: `${SANDSTORM.radius}px` },
@@ -346,7 +346,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   "tar-pit": {
     hint: "paint a trail of tar behind you as you run",
-    quote: "Let them follow. The road remembers me, and it does not care for them.",
+    quote: "Follow me if you like. Mind the tar.",
     desc: "Opens a spout of tar at your heels: everywhere you run is left slick and black for the rest of the round, and anyone who wades through it — friend, foe, or you doubling back — is slowed to a trudge. Where the trail goes is wherever you went. The stains never wash out; the grip dies with the round.",
     chips: [
       { label: "LAYS FOR", value: `${TAR_PIT.laySeconds}s of running` },
@@ -366,7 +366,7 @@ export const ABILITY_CODEX: Record<AbilityId, { hint: string; quote: string; des
   },
   sinkhole: {
     hint: "throw a hole in the world — it pulls everyone in",
-    quote: "Open the ground where they stand. The sand is patient, and it is always hungry.",
+    quote: "The sand is always hungry. I just feed it.",
     desc: "Hurls a vortex that drags everyone near it toward its centre — friend, foe, and you. The pull deepens the longer it lives; sprinting directly away barely beats it at full strength, and a dash always clears it. No damage — what kills you is where it puts you.",
     chips: [
       { label: "RADIUS", value: `${SINKHOLE.radius}px` },

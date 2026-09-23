@@ -8,8 +8,16 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { CINZEL, SANS, ditherOverlay, palette } from "./brand";
+import { CINZEL, type Format, SANS, ditherOverlay, palette } from "./brand";
 import { DEV } from "./data/copy";
+
+/** Which shape we're drawing into, read off the composition itself so every
+ * component lays itself out without being told. */
+export const useFormat = (): { format: Format; width: number; height: number } => {
+  const { width, height } = useVideoConfig();
+  const format: Format = width > height ? "landscape" : width === height ? "square" : "vertical";
+  return { format, width, height };
+};
 
 /** Warm arena backdrop: night→umber gradient, honey glow, dither grain. */
 export const Backdrop: React.FC<{ glow?: number }> = ({ glow = 0.5 }) => (
@@ -47,13 +55,8 @@ export const PixelIcon: React.FC<{ src: string; size: number; style?: React.CSSP
   />
 );
 
-const useFade = (from: number, to: number) => {
-  const frame = useCurrentFrame();
-  return interpolate(frame, [from, to], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-};
-
 /** The pulsing capture dot — the universal "this is a screen recording". */
-const RecDot: React.FC<{ size?: number }> = ({ size = 18 }) => {
+export const RecDot: React.FC<{ size?: number }> = ({ size = 18 }) => {
   const frame = useCurrentFrame();
   const on = Math.floor(frame / 16) % 2 === 0;
   return (
@@ -75,11 +78,13 @@ const RecDot: React.FC<{ size?: number }> = ({ size = 18 }) => {
  * The cold-open banner: what you're about to see and that it's real. Sits
  * over the ALREADY-PLAYING footage for the first beats, then drops away —
  * no logo screen, no ad grammar (docs/marketing.md: the scroll decision is
- * made before a title card ends).
+ * made before a title card ends). Vertical: 200px down; the short formats
+ * hang it at ~10% of the height.
  */
 export const PreviewBanner: React.FC<{ kindLabel: string; name: string; until: number }> = ({ kindLabel, name, until }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { format, height } = useFormat();
   const s = spring({ frame: frame - 2, fps, config: { damping: 14, stiffness: 170 } });
   const gone = spring({ frame: frame - until, fps, config: { damping: 16, stiffness: 140 } });
   const show = Math.min(s, 1 - gone);
@@ -87,7 +92,7 @@ export const PreviewBanner: React.FC<{ kindLabel: string; name: string; until: n
     <div
       style={{
         position: "absolute",
-        top: 200,
+        top: format === "vertical" ? 200 : Math.round(height * 0.1),
         left: 0,
         right: 0,
         display: "flex",
@@ -124,15 +129,16 @@ export const PreviewBanner: React.FC<{ kindLabel: string; name: string; until: n
 };
 
 /** The corner chip that keeps the raw-capture framing while the clip runs. */
-export const RecChip: React.FC<{ from: number }> = ({ from }) => {
+export const RecChip: React.FC<{ from: number; top?: number }> = ({ from, top }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { format } = useFormat();
   const s = spring({ frame: frame - from, fps, config: { damping: 14, stiffness: 150 } });
   return (
     <div
       style={{
         position: "absolute",
-        top: 120,
+        top: top ?? (format === "vertical" ? 120 : 40),
         right: 44,
         display: "flex",
         alignItems: "center",
@@ -158,7 +164,9 @@ export const RecChip: React.FC<{ from: number }> = ({ from }) => {
  * The recording, fitted whole inside the frame (phone captures are taller
  * than 9:16 — cropping to fill would lose the score bar and HUD), with the
  * phone's status strip and nav bar shaved off via cropTop/cropBottom
- * (fractions of the recording's height).
+ * (fractions of the recording's height). In square and landscape the
+ * portrait capture sits centred with the warm Backdrop either side — never
+ * black bars. All percentages, so the same maths holds in every format.
  */
 export const Footage: React.FC<{ children: React.ReactNode; cropTop?: number; cropBottom?: number }> = ({ children, cropTop = 0, cropBottom = 0 }) => {
   const keep = Math.max(0.2, 1 - cropTop - cropBottom);
@@ -180,25 +188,29 @@ export const Footage: React.FC<{ children: React.ReactNode; cropTop?: number; cr
   );
 };
 
-/** The one card over the footage: icon, name, a line. Lower third. Slides
- * in at `delay`, and back out at `until` so the play is unobstructed. */
+/** The one card over the footage: icon, name, a line. Lower third in the
+ * portrait formats; in landscape it sits beside the footage on the left so
+ * the play is never covered. Slides in at `delay`, out at `until`. */
 export const Card: React.FC<{ icon?: string; name: string; line: string; delay?: number; until?: number }> = ({ icon, name, line, delay = 0, until }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { format, height } = useFormat();
   const s = spring({ frame: frame - delay, fps, config: { damping: 14, stiffness: 150 } });
   const gone = until === undefined ? 0 : spring({ frame: frame - until, fps, config: { damping: 16, stiffness: 140 } });
   const show = Math.min(s, 1 - gone);
+  const landscape = format === "landscape";
   return (
     <div
       style={{
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: 460,
+        bottom: format === "vertical" ? 460 : Math.round(height * 0.24),
         display: "flex",
-        justifyContent: "center",
+        justifyContent: landscape ? "flex-start" : "center",
+        paddingLeft: landscape ? 90 : 0,
         opacity: show,
-        transform: `translateY(${(1 - s) * 30 + gone * 60}px)`,
+        transform: landscape ? `translateX(${(1 - s) * -40 - gone * 60}px)` : `translateY(${(1 - s) * 30 + gone * 60}px)`,
       }}
     >
       <div
@@ -206,8 +218,8 @@ export const Card: React.FC<{ icon?: string; name: string; line: string; delay?:
           display: "flex",
           alignItems: "center",
           gap: 26,
-          maxWidth: 960,
-          margin: "0 50px",
+          maxWidth: landscape ? 560 : 960,
+          margin: landscape ? 0 : "0 50px",
           background: palette.ink,
           borderLeft: `6px solid ${palette.crimson}`,
           padding: "20px 34px 20px 22px",
@@ -254,74 +266,161 @@ const Feature: React.FC<{ text: string; delay: number; strong?: boolean }> = ({ 
   );
 };
 
-/** The outro: the promise, what's in it, free, where it is, who to support. */
-export const Outro: React.FC = () => {
+/** The outro's beats, shared by every layout: the same springs on the same frames. */
+const useOutroBeats = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const icon = spring({ frame: frame - 2, fps, config: { damping: 12, stiffness: 150 } });
   const line = (at: number) => interpolate(frame, [at, at + 10], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const badge = spring({ frame: frame - 84, fps, config: { damping: 10, stiffness: 180 } });
   const pulse = 1 + Math.sin(Math.max(0, frame - 96) / 6) * 0.025;
-  const featureAt = 34;
+  return { icon, line, badge, pulse, featureAt: 34 };
+};
+
+const AppIcon: React.FC<{ scale: number; size?: number }> = ({ scale, size = 220 }) => (
+  <Img
+    src={staticFile("assets/app-icon.png")}
+    style={{ width: size, height: size, borderRadius: size * 0.22, transform: `scale(${scale})`, boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}
+  />
+);
+
+const GameName: React.FC<{ opacity: number; style?: React.CSSProperties }> = ({ opacity, style }) => (
+  <div style={{ opacity, fontFamily: CINZEL, fontWeight: 700, fontSize: 72, color: palette.bone, textAlign: "center", lineHeight: 1.1, textShadow: `0 6px 0 ${palette.umber}`, ...style }}>
+    {DEV.game}
+  </div>
+);
+
+const Headline: React.FC<{ opacity: number; style?: React.CSSProperties }> = ({ opacity, style }) => (
+  <div style={{ opacity, fontFamily: CINZEL, fontWeight: 700, fontSize: 40, color: palette.sand, textAlign: "center", letterSpacing: 1, ...style }}>
+    {DEV.outro.headline}
+  </div>
+);
+
+const FeatureList: React.FC<{ featureAt: number; gap?: number; style?: React.CSSProperties }> = ({ featureAt, gap = 26, style }) => (
+  <div style={{ display: "flex", flexDirection: "column", gap, alignItems: "flex-start", ...style }}>
+    {DEV.outro.features.map((f, i) => (
+      <Feature key={f} text={f} delay={featureAt + i * 9} strong={i === DEV.outro.features.length - 1} />
+    ))}
+  </div>
+);
+
+const FreeBadge: React.FC<{ badge: number; pulse: number; style?: React.CSSProperties }> = ({ badge, pulse, style }) => (
+  <div
+    style={{
+      transform: `scale(${badge * pulse}) rotate(-3deg)`,
+      opacity: badge,
+      fontFamily: SANS,
+      fontWeight: 800,
+      fontSize: 46,
+      letterSpacing: 5,
+      color: palette.night,
+      background: palette.sand,
+      padding: "18px 44px",
+      boxShadow: "0 12px 0 rgba(0,0,0,0.35)",
+      ...style,
+    }}
+  >
+    {DEV.outro.free}
+  </div>
+);
+
+const WhereBadge: React.FC<{ opacity: number; style?: React.CSSProperties }> = ({ opacity, style }) => (
+  <div
+    style={{
+      opacity,
+      fontFamily: SANS,
+      fontWeight: 800,
+      fontSize: 36,
+      letterSpacing: 4,
+      color: palette.bone,
+      background: palette.crimson,
+      padding: "20px 46px",
+      boxShadow: "0 14px 40px rgba(0,0,0,0.5)",
+      ...style,
+    }}
+  >
+    {DEV.outro.where}
+  </div>
+);
+
+const Support: React.FC<{ opacity: number; style?: React.CSSProperties }> = ({ opacity, style }) => (
+  <div style={{ opacity, fontFamily: SANS, fontWeight: 500, fontSize: 30, color: palette.steel, textAlign: "center", fontStyle: "italic", ...style }}>
+    {DEV.outro.support}
+  </div>
+);
+
+const Handles: React.FC<{ opacity: number; style?: React.CSSProperties }> = ({ opacity, style }) => (
+  <div style={{ opacity, fontFamily: SANS, fontWeight: 500, fontSize: 28, color: palette.steel, textAlign: "center", lineHeight: 1.6, letterSpacing: 1, ...style }}>
+    {DEV.handles.join("   ·   ")}
+  </div>
+);
+
+/**
+ * The vertical outro — Tom's approved look, untouched. Laid out on a
+ * 1080×1920 design surface; square renders the same stack scaled down
+ * (design surface = frame / scale) so nothing is dropped, just tightened.
+ */
+const StackOutro: React.FC<{ scale: number; paddingTop: number }> = ({ scale, paddingTop }) => {
+  const { width, height } = useFormat();
+  const { icon, line, badge, pulse, featureAt } = useOutroBeats();
+  return (
+    <AbsoluteFill
+      style={{
+        width: width / scale,
+        height: height / scale,
+        transform: `scale(${scale})`,
+        transformOrigin: "top left",
+        alignItems: "center",
+        paddingTop,
+        gap: 0,
+      }}
+    >
+      <AppIcon scale={icon} />
+      <GameName opacity={line(6)} style={{ marginTop: 30 }} />
+      <Headline opacity={line(16)} style={{ marginTop: 14 }} />
+      <FeatureList featureAt={featureAt} style={{ marginTop: 70 }} />
+      <FreeBadge badge={badge} pulse={pulse} style={{ marginTop: 70 }} />
+      <WhereBadge opacity={line(100)} style={{ marginTop: 34 }} />
+      <Support opacity={line(112)} style={{ marginTop: 40 }} />
+      <Handles opacity={line(120)} style={{ position: "absolute", bottom: 120 }} />
+    </AbsoluteFill>
+  );
+};
+
+/** Landscape: the identity on the left, the pitch on the right, handles below. */
+const WideOutro: React.FC = () => {
+  const { icon, line, badge, pulse, featureAt } = useOutroBeats();
+  return (
+    <AbsoluteFill style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 140, paddingBottom: 60 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 620 }}>
+        <AppIcon scale={icon} />
+        <GameName opacity={line(6)} style={{ marginTop: 30 }} />
+        <Headline opacity={line(16)} style={{ marginTop: 14 }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+        <FeatureList featureAt={featureAt} gap={22} />
+        <FreeBadge badge={badge} pulse={pulse} style={{ marginTop: 50, alignSelf: "flex-start" }} />
+        <WhereBadge opacity={line(100)} style={{ marginTop: 28, whiteSpace: "nowrap" }} />
+        <Support opacity={line(112)} style={{ marginTop: 30, textAlign: "left" }} />
+      </div>
+      <Handles opacity={line(120)} style={{ position: "absolute", bottom: 60, left: 0, right: 0 }} />
+    </AbsoluteFill>
+  );
+};
+
+/** The outro: the promise, what's in it, free, where it is, who to support. */
+export const Outro: React.FC = () => {
+  const { format, height } = useFormat();
   return (
     <AbsoluteFill>
       <Backdrop glow={0.6} />
-      <AbsoluteFill style={{ alignItems: "center", paddingTop: 240, gap: 0 }}>
-        <Img
-          src={staticFile("assets/app-icon.png")}
-          style={{ width: 220, height: 220, borderRadius: 48, transform: `scale(${icon})`, boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}
-        />
-        <div style={{ opacity: line(6), fontFamily: CINZEL, fontWeight: 700, fontSize: 72, color: palette.bone, textAlign: "center", lineHeight: 1.1, textShadow: `0 6px 0 ${palette.umber}`, marginTop: 30 }}>
-          {DEV.game}
-        </div>
-        <div style={{ opacity: line(16), fontFamily: CINZEL, fontWeight: 700, fontSize: 40, color: palette.sand, textAlign: "center", letterSpacing: 1, marginTop: 14 }}>
-          {DEV.outro.headline}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 26, marginTop: 70, alignItems: "flex-start" }}>
-          {DEV.outro.features.map((f, i) => (
-            <Feature key={f} text={f} delay={featureAt + i * 9} strong={i === DEV.outro.features.length - 1} />
-          ))}
-        </div>
-        <div
-          style={{
-            marginTop: 70,
-            transform: `scale(${badge * pulse}) rotate(-3deg)`,
-            opacity: badge,
-            fontFamily: SANS,
-            fontWeight: 800,
-            fontSize: 46,
-            letterSpacing: 5,
-            color: palette.night,
-            background: palette.sand,
-            padding: "18px 44px",
-            boxShadow: "0 12px 0 rgba(0,0,0,0.35)",
-          }}
-        >
-          {DEV.outro.free}
-        </div>
-        <div
-          style={{
-            opacity: line(100),
-            marginTop: 34,
-            fontFamily: SANS,
-            fontWeight: 800,
-            fontSize: 36,
-            letterSpacing: 4,
-            color: palette.bone,
-            background: palette.crimson,
-            padding: "20px 46px",
-            boxShadow: "0 14px 40px rgba(0,0,0,0.5)",
-          }}
-        >
-          {DEV.outro.where}
-        </div>
-        <div style={{ opacity: line(112), fontFamily: SANS, fontWeight: 500, fontSize: 30, color: palette.steel, textAlign: "center", marginTop: 40, fontStyle: "italic" }}>
-          {DEV.outro.support}
-        </div>
-        <div style={{ position: "absolute", bottom: 120, opacity: line(120), fontFamily: SANS, fontWeight: 500, fontSize: 28, color: palette.steel, textAlign: "center", lineHeight: 1.6, letterSpacing: 1 }}>
-          {DEV.handles.join("   ·   ")}
-        </div>
-      </AbsoluteFill>
+      {format === "landscape" ? (
+        <WideOutro />
+      ) : format === "square" ? (
+        <StackOutro scale={height / 1600} paddingTop={70} />
+      ) : (
+        <StackOutro scale={1} paddingTop={240} />
+      )}
     </AbsoluteFill>
   );
 };

@@ -11,15 +11,20 @@ and to the Discord (where match nights keep the queue warm).
 templates + real game data. Three formats, one render each for TikTok /
 Reels / Shorts:
 
-- **Spotlights** — weapon/ability cards from the live sim numbers, cutting
-  to hands-free in-game footage of the item (the capture rig: a dev-only
+- **Spotlights** — weapon/ability reveals over hands-free in-game footage
+  of the item (a weapon slams in and its sim numbers count up on a spec
+  plate; an ability rises into a bloom with its cooldown ring and charges) (the capture rig: a dev-only
   showcase deep link autopilots a 1v1 on the simulator while
   `bun run capture` records it). ~23 exist on day one
   (`bun run capture:roster && bun run render:roster`) — that's a month of
   near-zero-effort posts before counting human gameplay, re-shootable after
   every balance patch.
-- **GameplayClip** — a raw phone screen recording wrapped in a hook banner,
-  watermark, and end card. Recording → rendered post is under 10 minutes.
+- **GameplayClip** — a raw phone screen recording given the trailer
+  treatment: framed footage over a breathing blurred fill, a gold cold-open title, a
+  broadcast lower third for the hook, and the developer's sign-off as the
+  end card (one person, it's free, come and fight me). Record → drop it in the Drive footage folder →
+  it's in the Desk (`bun run desk`, apps/desk): trim it, pick the template, render
+  vertical/square/landscape. Recording → rendered post is under 10 minutes.
 - **Stills** — `remotion still` for thumbnails, Reddit images, Discord
   announcements.
 

@@ -1035,8 +1035,8 @@
         832,
         0,
         0,
-        0,
-        0,
+        1,
+        1,
         0,
         0
       ],
@@ -12711,7 +12711,8 @@
       "x": 1408,
       "y": 896,
       "props": {
-        "prop": "dead-tree-fallen-1"
+        "prop": "dead-tree-fallen-1",
+        "ground": true
       }
     },
     {

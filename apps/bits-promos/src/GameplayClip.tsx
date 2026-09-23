@@ -1,69 +1,89 @@
 import type * as React from "react";
-import { AbsoluteFill, Audio, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { z } from "zod";
 import { SANS, palette } from "./brand";
-import { Backdrop, Card, Footage, Outro, PreviewBanner, RecChip } from "./components";
+import { BrandMark, LowerThird, SignOff, TitleReveal, chromeTop } from "./cinematic";
+import { Backdrop, Outro, RecChip, useFormat } from "./components";
+import { Stage, useSourceAspect } from "./stage";
 
-export type GameplayClipProps = {
-  /** File under public/clips/, e.g. "harpoon-triple.mp4". Empty = placeholder. */
-  clip: string;
-  /** The banner + card title (e.g. "Match point"). */
-  title: string;
-  /** The card's second line. */
-  line: string;
-  /** Seconds of gameplay to show (trim inside the template with startFrom). */
-  durationSeconds: number;
-  /** Seconds into the clip to start from. */
-  startFrom?: number;
-  /** Phone recordings carry the game's audio — keep it unless it's noisy. */
-  muted?: boolean;
-  /** A music track under public/music/, played under the whole video. */
-  music?: string;
-  /** Shave the phone's status strip / nav bar: fractions of the recording's height. */
-  cropTop?: number;
-  cropBottom?: number;
-};
+/** The props panel / Desk form for a match clip. Every field described. */
+export const gameplayClipSchema = z.object({
+  clip: z
+    .string()
+    .describe('The recording, as a path under public/ (e.g. "footage/VID_1.mp4"); a bare filename means public/clips/. Empty = placeholder.'),
+  title: z.string().describe('The cold-open title, in gold (e.g. "Match point")'),
+  line: z.string().describe("The hook sentence on the lower third (e.g. \"He had one HP left. Then the Harpoon.\")"),
+  durationSeconds: z.number().min(1).describe("Seconds of gameplay before the end card — in the Desk, leave empty for the rest of the clip"),
+  startFrom: z.number().min(0).optional().describe("Seconds into the recording to start from"),
+  muted: z.boolean().optional().describe("Drop the recording's own audio"),
+  music: z.string().optional().describe("A track under public/music/, played under the whole video"),
+  cropTop: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the top (status strip)"),
+  cropBottom: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the bottom (nav bar)"),
+  ending: z.enum(["signoff", "pitch"]).optional().describe("How it closes: the developer's sign-off (default) or the feature-list pitch the spotlights use"),
+  push: z.number().min(0).max(0.1).optional().describe("A slow push-in on the footage, as a fraction (default 0 = still — pixel art crawls under a zoom; 0.03 if you want it anyway)"),
+  sourceAspect: z.number().min(0.2).max(5).optional().describe("The recording's width ÷ height; the Desk fills this from the sidecar, a CLI render reads the file"),
+  format: z.enum(["vertical", "square", "landscape"]).optional().describe("Output shape: 9:16 (default), 1:1 or 16:9"),
+});
+export type GameplayClipProps = z.infer<typeof gameplayClipSchema>;
 
-export const CLIP_TIMING = { outro: 6, banner: 3.2, cardAt: 3.5, cardFor: 4 } as const;
+/**
+ * The cut, in seconds: the title rides the first beats of the footage,
+ * the lower third follows, and the end card closes. `outro` is the end
+ * card's length whichever ending is picked, so the Desk's timing holds.
+ */
+export const CLIP_TIMING = { outro: 6, titleUntil: 3.0, lowerAt: 3.4, lowerFor: 4.2, dip: 0.4 } as const;
 
-/** Cold open on your recording → outro (same grammar as the spotlights). */
-export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, cropTop, cropBottom }) => {
+/** Total length: the cut plus the end card. */
+export const gameplayClipDurationSeconds = (p: Pick<GameplayClipProps, "durationSeconds">): number => p.durationSeconds + CLIP_TIMING.outro;
+
+/** `clip` names a file in public/clips/ unless it already carries a folder. */
+export const clipSrc = (clip: string): string => staticFile(clip.includes("/") ? clip : `clips/${clip}`);
+
+/**
+ * One match clip, dressed: cold open on the footage (already playing at
+ * frame zero — no logo screen), the title landing in tracked gold with the
+ * "real gameplay" eyebrow, the brand mark and REC chip holding the corners,
+ * the hook on a broadcast lower third, the audio easing out into a dip,
+ * then the developer's sign-off. The footage itself never moves (pixel art
+ * crawls under a zoom); the blurred fill breathes instead.
+ */
+export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, cropTop, cropBottom, ending = "signoff", push, sourceAspect }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
+  const { format } = useFormat();
   const bodyEnd = durationInFrames - Math.round(CLIP_TIMING.outro * fps);
-  const bodyOut = interpolate(frame, [bodyEnd - 8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const bannerFrames = Math.round(CLIP_TIMING.banner * fps);
-  const cardAt = Math.round(CLIP_TIMING.cardAt * fps);
+  const dip = Math.round(CLIP_TIMING.dip * fps);
+  const bodyOut = interpolate(frame, [bodyEnd - dip, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const titleUntil = Math.round(CLIP_TIMING.titleUntil * fps);
+  const lowerAt = Math.round(CLIP_TIMING.lowerAt * fps);
+  const src = clip ? clipSrc(clip) : null;
+  const aspect = useSourceAspect(src, sourceAspect);
+  const clipVolume = (f: number) => interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const musicVolume = (f: number) => interpolate(f, [durationInFrames - fps * 1.6, durationInFrames], [0.8, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
-      {music ? <Audio src={staticFile(`music/${music}`)} volume={0.8} loop /> : null}
+      {music ? <Audio src={staticFile(`music/${music}`)} volume={musicVolume} loop /> : null}
       <Sequence durationInFrames={bodyEnd}>
         <AbsoluteFill style={{ opacity: bodyOut }}>
-          {clip ? (
-            <Footage cropTop={cropTop} cropBottom={cropBottom}>
-              <OffthreadVideo
-                src={staticFile(`clips/${clip}`)}
-                startFrom={Math.round(startFrom * fps)}
-                muted={muted}
-                style={{ width: "100%", height: "100%", objectFit: "contain" }}
-              />
-            </Footage>
+          {src ? (
+            <Stage src={src} startFrom={Math.round(startFrom * fps)} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push}>
+              <BrandMark from={titleUntil} />
+              <RecChip from={titleUntil + 6} top={chromeTop(format)} />
+              {title ? <TitleReveal title={title} until={titleUntil} /> : null}
+              {line ? <LowerThird kicker={title} line={line} at={lowerAt} until={lowerAt + Math.round(CLIP_TIMING.lowerFor * fps)} /> : null}
+            </Stage>
           ) : (
             <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
               <Backdrop glow={0.3} />
               <div style={{ fontFamily: SANS, fontSize: 40, color: palette.steel, textAlign: "center", padding: "0 90px" }}>
-                Drop a screen recording in public/clips/ and set the clip prop
+                Pick a recording and set the clip prop
               </div>
             </AbsoluteFill>
           )}
-          <PreviewBanner kindLabel="MATCH CLIP" name={title} until={bannerFrames} />
-          <RecChip from={bannerFrames + 6} />
-          <Card name={title} line={line} delay={cardAt} until={cardAt + Math.round(CLIP_TIMING.cardFor * fps)} />
         </AbsoluteFill>
       </Sequence>
-      <Sequence from={bodyEnd}>
-        <Outro />
-      </Sequence>
+      <Sequence from={bodyEnd}>{ending === "pitch" ? <Outro /> : <SignOff />}</Sequence>
     </AbsoluteFill>
   );
 };

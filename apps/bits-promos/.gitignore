@@ -1,8 +1,18 @@
 # Synced from apps/blood-in-the-sand/assets by `bun run sync` — never edit here.
 public/assets/
-# Your screen recordings — big binaries, keep them out of git.
+# Rig captures for the spotlights — big binaries, keep them out of git; the
+# sidecars are small and carry fight timings / hand-set crops, so keep those.
 public/clips/*
+!public/clips/*.json
 !public/clips/README.md
+# Phone recordings mirrored from the Drive drop folder (bun run footage:sync).
+# Media stays out; the sidecars ARE the edit (title, cut, crop) — commit them.
+public/footage/*
+!public/footage/*.json
+!public/footage/README.md
 public/music/*
 !public/music/README.md
 out/
+.DS_Store
+# Binned clips (the Desk moves them here).
+public/footage/.trash/

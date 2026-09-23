@@ -1,0 +1,53 @@
+{
+  "fightStartsAt": 4.8,
+  "seconds": 20,
+  "cues": [
+    {
+      "t": 0.5333333333333333,
+      "kind": "hit",
+      "seat": 1,
+      "weapon": "trident",
+      "amount": 22
+    },
+    {
+      "t": 1.6666666666666685,
+      "kind": "hit",
+      "seat": 1,
+      "weapon": "trident",
+      "amount": 14
+    },
+    {
+      "t": 2.7333333333333334,
+      "kind": "hit",
+      "seat": 1,
+      "weapon": "trident",
+      "amount": 13
+    },
+    {
+      "t": 2.999999999999999,
+      "kind": "hit",
+      "seat": 0,
+      "weapon": "blade",
+      "amount": 15
+    },
+    {
+      "t": 3.73333333333333,
+      "kind": "hit",
+      "seat": 1,
+      "weapon": "trident",
+      "amount": 1
+    },
+    {
+      "t": 3.73333333333333,
+      "kind": "death",
+      "seat": 1,
+      "byStar": true
+    },
+    {
+      "t": 3.73333333333333,
+      "kind": "roundEnd",
+      "starWon": true
+    }
+  ],
+  "end": 3.73333333333333
+}

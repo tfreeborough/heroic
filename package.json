@@ -8,7 +8,8 @@
   ],
   "scripts": {
     "test": "bun test packages",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "desk": "bun run --cwd apps/desk start"
   },
   "devDependencies": {
     "@types/bun": "latest",

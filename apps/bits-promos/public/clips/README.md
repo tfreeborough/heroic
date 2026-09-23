@@ -1,12 +1,8 @@
-# Gameplay clips go here
+# Rig captures
 
-Screen-record on your phone (portrait), AirDrop the video into this folder,
-then render with the GameplayClip template:
+`bun run capture` records the simulator into `<kind>-<id>.mp4` here (plus a
+sidecar with the fight timing) and `render:roster` cuts the spotlights to
+them. Hand-record a replacement under the same name if a script reads badly.
 
-```sh
-bunx remotion render GameplayClip out/harpoon-triple.mp4 \
-  --props='{"clip":"my-recording.mp4","hook":"He had one HP left. Then the Harpoon.","durationSeconds":12,"startFrom":4}'
-```
-
-`startFrom`/`durationSeconds` trim inside the template, so you don't need to
-edit the recording first. Files here are gitignored.
+Phone recordings of real matches don't go here — they live in the Google
+Drive drop folder and land in `public/footage/` via `bun run footage:sync`.

@@ -15,19 +15,49 @@ video is picking a template and passing props.
 ## Templates
 
 Every video **cold-opens on the footage** — no logo screen (it reads as an
-ad and eats the scroll-decision second). A preview banner rides the first
-~3s ("ABILITY PREVIEW · SINKHOLE · ● real gameplay, recorded in-match"),
-a corner REC chip keeps the raw-capture framing, the tagline card slides
-through mid-clip, and the whole pitch (features, FREE TO PLAY, iOS +
-Android, support-indie line) lives in the outro — seen only by people who
-watched. Text in Inter, the game's name in Cinzel; every word in
-`src/data/copy.ts` (`TAGLINES`, `DEV`).
+ad and eats the scroll-decision second). The footage sits on the Stage
+(`src/stage.tsx`: framed, vignetted, the blurred footage as the fill where
+the shape leaves room), the brand mark + REC chip hold the corners, a
+reveal rides the first ~3s, the tagline follows on an icon-led lower third,
+and the whole pitch (features, FREE TO PLAY, iOS + Android, support-indie
+line) lives in the outro — seen only by people who watched. Text in Inter,
+the game's name in Cinzel; every word in `src/data/copy.ts` (`TAGLINES`,
+`DEV`).
+
+**The spotlights each have a flavour** (`src/spotlightKit.tsx`). A weapon is
+forged: its icon slams into the frame with a crimson shockwave, sparks and
+a shake, and a steel spec plate counts the sim's numbers up beneath it
+(style, reach, windup, bleed). An ability is a rite: the icon rises into a
+gold bloom, a cooldown ring draws itself round it, the charges light up as
+pips, and the plate shows charges + cooldown. Both close on the pitch outro
+by default; `ending: "signoff"` swaps in the match clip's indie sign-off.
 
 | Composition | Props |
 | --- | --- |
-| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?}` |
+| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, ending?}` |
 | `AbilitySpotlight` | `{kind:"ability", id:"sinkhole", …}` |
-| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?}` |
+| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, ending?, push?, format?}` |
+
+Every template takes `format`: `vertical` (1080×1920, the default), `square`
+(1080×1080) or `landscape` (1920×1080); the layout adapts (`src/components.tsx`).
+
+**The match clip is the premium one** — it's the template a single good
+recording goes through, so it gets the trailer treatment (`src/stage.tsx`,
+`src/cinematic.tsx`): the footage sits in a framed, vignetted rectangle
+fitted to the recording's exact visible aspect (the Desk passes
+`sourceAspect` from the sidecar; a CLI render measures the file), with the
+same footage blurred and warmed as the fill wherever the shape leaves room,
+and the fill breathing slowly behind it — the footage itself stays still,
+because pixel art crawls a pixel at a time under a zoom (`push` is there if
+you want one anyway). The title lands
+in tracked, light-swept gold over the cold open with a "real gameplay"
+eyebrow, the brand mark + REC chip hold the corners, the hook sentence
+comes in on a broadcast lower third (hugging the footage, above the
+platforms' own UI), the audio eases out into a dip, and it closes on the
+sign-off (`ending: "signoff"` — an independent game, support indie games,
+come and fight me; words in `DEV.signoff`), with the game's item, deed and
+rank art popping into the space around the words (`roster.gallery`, synced
+from the game) — or the spotlights' feature-list pitch (`ending: "pitch"`).
 
 **Sound:** simulator recordings are silent (`simctl` captures no audio) and
 the footage plays muted. Drop a track in `public/music/` and pass
@@ -97,6 +127,23 @@ whatever produced it — so if a script reads badly for some item, record
 that one yourself on a phone and drop it in under the same name. Re-run
 `capture` after any balance change; nothing else needs touching.
 
+## The Desk — the day-to-day tool
+
+`bun run desk` (repo root) opens [the Desk](../desk/README.md): phone clips
+in from the Drive footage folder, cleanup, template + props with a live
+preview, render in every format, the library of finished videos. This
+package is its Blood in the Sand entry — `desk.config.ts` (folders, Drive
+ids, formats) and `desk.templates.ts` (which compositions it offers).
+Studio (`bun run studio`) is only for building templates.
+
+Recordings live in `public/footage/` (media gitignored, sidecars committed);
+`bun run footage:sync -- [--offline] [--add <file>…]` is the Desk's sync
+without the page. One-time Drive setup (opens a browser):
+
+```sh
+rclone config create gdrive-footage drive scope=drive.readonly root_folder_id=1xslGjrceWPdqsBq11wU2wL7OLVi9-h-7
+```
+
 ## Use it
 
 ```sh
@@ -109,9 +156,9 @@ bunx remotion render AbilitySpotlight out/sinkhole.mp4 --props='{"kind":"ability
 # every weapon + ability (~23 videos into out/)
 bun run render:roster           # or: bun scripts/render-roster.ts --only harpoon,sinkhole
 
-# a gameplay clip: record on-device, AirDrop into public/clips/, then
+# phone footage: use the Desk (above). The raw template also works by hand:
 bunx remotion render GameplayClip out/clutch.mp4 \
-  --props='{"clip":"recording.mp4","hook":"He had one HP left. Then the Harpoon.","durationSeconds":12,"startFrom":4}'
+  --props='{"clip":"recording.mp4","title":"Match point","line":"He had one HP left. Then the Harpoon.","durationSeconds":12,"startFrom":4}'
 
 # thumbnails / static posts (also great for Reddit + Discord announcements)
 bunx remotion still WeaponSpotlight out/blade.png --frame=120 --props='{"kind":"weapon","id":"blade"}'
