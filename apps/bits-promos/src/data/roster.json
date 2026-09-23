@@ -546,5 +546,95 @@
     "assets/ranks/initiate.png",
     "assets/ranks/pit-fighter.png",
     "assets/ranks/warlord.png"
+  ],
+  "music": [
+    {
+      "file": "berserker.mp3",
+      "name": "Berserker"
+    },
+    {
+      "file": "carthage.mp3",
+      "name": "Carthage"
+    },
+    {
+      "file": "chant.mp3",
+      "name": "Chant"
+    },
+    {
+      "file": "cretan.mp3",
+      "name": "Cretan"
+    },
+    {
+      "file": "dread.mp3",
+      "name": "Dread"
+    },
+    {
+      "file": "druid.mp3",
+      "name": "Druid"
+    },
+    {
+      "file": "duduk.mp3",
+      "name": "Duduk"
+    },
+    {
+      "file": "gaul.mp3",
+      "name": "Gaul"
+    },
+    {
+      "file": "hellas.mp3",
+      "name": "Hellas"
+    },
+    {
+      "file": "hispania.mp3",
+      "name": "Hispania"
+    },
+    {
+      "file": "horns.mp3",
+      "name": "Horns"
+    },
+    {
+      "file": "kabuki.mp3",
+      "name": "Kabuki"
+    },
+    {
+      "file": "legion.mp3",
+      "name": "Legion"
+    },
+    {
+      "file": "mauryan.mp3",
+      "name": "Mauryan"
+    },
+    {
+      "file": "nile.mp3",
+      "name": "Nile"
+    },
+    {
+      "file": "north.mp3",
+      "name": "North"
+    },
+    {
+      "file": "opera.mp3",
+      "name": "Opera"
+    },
+    {
+      "file": "pharaoh.mp3",
+      "name": "Pharaoh"
+    },
+    {
+      "file": "pontic.mp3",
+      "name": "Pontic"
+    },
+    {
+      "file": "shaman.mp3",
+      "name": "Shaman"
+    },
+    {
+      "file": "taiko.mp3",
+      "name": "Taiko"
+    },
+    {
+      "file": "warring.mp3",
+      "name": "Warring"
+    }
   ]
 }

@@ -1,6 +1,7 @@
 import type * as React from "react";
 import {
   AbsoluteFill,
+  Audio,
   Img,
   interpolate,
   spring,
@@ -10,6 +11,25 @@ import {
 } from "remotion";
 import { CINZEL, type Format, SANS, ditherOverlay, palette } from "./brand";
 import { DEV } from "./data/copy";
+
+/** The music bed's default level (the recording's own audio plays at 1). */
+export const MUSIC_LEVEL = 0.8;
+
+/**
+ * A song from public/music/ under the whole video. Record with the game's
+ * Battle music toggle off, so the footage carries the SFX + crowd and the
+ * score comes in clean here. The songs build sparse → relentless over ~2:30,
+ * so `from` drops straight into the part you want; a short fade-in keeps a
+ * mid-song start from clicking, and it fades out under the end card's tail.
+ */
+export const MusicBed: React.FC<{ music?: string; from?: number; level?: number }> = ({ music, from = 0, level = MUSIC_LEVEL }) => {
+  const { fps, durationInFrames } = useVideoConfig();
+  if (!music) return null;
+  const volume = (f: number) =>
+    level *
+    interpolate(f, [0, fps * 0.25, durationInFrames - fps * 1.6, durationInFrames], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  return <Audio src={staticFile(`music/${music}`)} startFrom={Math.round(from * fps)} volume={volume} loop />;
+};
 
 /** Which shape we're drawing into, read off the composition itself so every
  * component lays itself out without being told. */

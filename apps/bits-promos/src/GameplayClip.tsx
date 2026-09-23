@@ -1,9 +1,9 @@
 import type * as React from "react";
-import { AbsoluteFill, Audio, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 import { SANS, palette } from "./brand";
 import { BrandMark, LowerThird, SignOff, TitleReveal, chromeTop } from "./cinematic";
-import { Backdrop, Outro, RecChip, useFormat } from "./components";
+import { Backdrop, MusicBed, Outro, RecChip, useFormat } from "./components";
 import { Stage, useSourceAspect } from "./stage";
 
 /** The props panel / Desk form for a match clip. Every field described. */
@@ -16,7 +16,9 @@ export const gameplayClipSchema = z.object({
   durationSeconds: z.number().min(1).describe("Seconds of gameplay before the end card — in the Desk, leave empty for the rest of the clip"),
   startFrom: z.number().min(0).optional().describe("Seconds into the recording to start from"),
   muted: z.boolean().optional().describe("Drop the recording's own audio"),
-  music: z.string().optional().describe("A track under public/music/, played under the whole video"),
+  music: z.string().optional().describe("A song from the game (public/music/), played under the whole video. Record with Battle music off in Settings"),
+  musicFrom: z.number().min(0).optional().describe("Seconds into the song to start from (the songs build, so the heavy part is usually 60s+ in)"),
+  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8; the recording plays at 1)"),
   cropTop: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the top (status strip)"),
   cropBottom: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the bottom (nav bar)"),
   ending: z.enum(["signoff", "pitch"]).optional().describe("How it closes: the developer's sign-off (default) or the feature-list pitch the spotlights use"),
@@ -47,7 +49,7 @@ export const clipSrc = (clip: string): string => staticFile(clip.includes("/") ?
  * then the developer's sign-off. The footage itself never moves (pixel art
  * crawls under a zoom); the blurred fill breathes instead.
  */
-export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, cropTop, cropBottom, ending = "signoff", push, sourceAspect }) => {
+export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, musicFrom, musicVolume, cropTop, cropBottom, ending = "signoff", push, sourceAspect }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const { format } = useFormat();
@@ -59,11 +61,10 @@ export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, s
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
   const clipVolume = (f: number) => interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const musicVolume = (f: number) => interpolate(f, [durationInFrames - fps * 1.6, durationInFrames], [0.8, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
-      {music ? <Audio src={staticFile(`music/${music}`)} volume={musicVolume} loop /> : null}
+      <MusicBed music={music} from={musicFrom} level={musicVolume} />
       <Sequence durationInFrames={bodyEnd}>
         <AbsoluteFill style={{ opacity: bodyOut }}>
           {src ? (

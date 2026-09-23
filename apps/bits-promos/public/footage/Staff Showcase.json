@@ -1,0 +1,31 @@
+{
+  "file": "Staff Showcase.mp4",
+  "facts": {
+    "seconds": 23,
+    "width": 720,
+    "height": 1480,
+    "fps": 60,
+    "recordedAt": "2026-09-23T20:35:28",
+    "bytes": 7865759
+  },
+  "title": "",
+  "line": "",
+  "note": "",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Record_2026-09-23-21-33-28_e960a7cd7e8cee15e432ebd947e0ccbf.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 4.225415,
+        "end": 27.227283
+      }
+    ],
+    "transition": "cut",
+    "transitionSeconds": 0,
+    "cropTop": 0,
+    "cropBottom": 0.065,
+    "muted": false
+  }
+}

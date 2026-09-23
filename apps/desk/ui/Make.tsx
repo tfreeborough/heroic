@@ -1,7 +1,8 @@
 import { Player } from "@remotion/player";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Clip, type GameApi, type GameInfo, type Job, fmtSeconds } from "./api";
+import { type Batch, type Clip, type GameApi, type GameInfo, type Job, fmtDate, fmtSeconds } from "./api";
 import { go } from "./App";
+import { ClipPicker } from "./ClipPicker";
 import { SchemaForm } from "./form";
 import type { DeskTemplate as Template } from "../game";
 import { loadTemplates } from "./games";
@@ -18,10 +19,12 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   const formatIds = Object.keys(FORMATS);
   const [TEMPLATES, setTemplates] = useState<Template[]>([]);
   const [clips, setClips] = useState<Clip[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [picking, setPicking] = useState(false);
   const [template, setTemplateState] = useState<Template | null>(null);
   const [clipFile, setClipFile] = useState<string | undefined>(file);
   const [props, setProps] = useState<Record<string, unknown>>({});
-  const [formats, setFormats] = useState<Format[]>(["vertical"]);
+  const [formats, setFormats] = useState<Format[]>(formatIds);
   const [previewFormat, setPreviewFormat] = useState<Format>("vertical");
   const [name, setName] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -30,6 +33,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
 
   useEffect(() => {
     void api.clips().then(setClips);
+    void api.batches().then(setBatches);
     void loadTemplates(game.id).then((ts) => {
       setTemplates(ts);
       if (ts[0]) {
@@ -39,6 +43,15 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     });
   }, [api, game.id]);
   const clip = clips.find((c) => c.file === clipFile);
+  // Which clips a render has used, and how many batches: any prop pointing into footage/ counts.
+  const renderedCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of batches) {
+      const used = new Set(b.renders.flatMap((r) => Object.values(r.props)).filter((v): v is string => typeof v === "string" && v.startsWith("footage/")));
+      for (const f of used) m.set(f.slice(8), (m.get(f.slice(8)) ?? 0) + 1);
+    }
+    return m;
+  }, [batches]);
   const setTemplate = (t: Template) => setTemplateState(t);
 
   // What the preview and the render actually get: a blank duration means
@@ -120,6 +133,10 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     };
   }, [api]);
 
+  // A render finishing moves its clip out of the picker's "not rendered" list.
+  const doneJobs = jobs.filter((j) => j.state === "done").length;
+  useEffect(() => void api.batches().then(setBatches), [api, doneJobs]);
+
   if (!template) return <div className="muted">loading templates…</div>;
 
   const render = async () => {
@@ -145,6 +162,19 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
 
   return (
     <div className="stack" style={{ gap: 20 }}>
+      {picking ? (
+        <ClipPicker
+          api={api}
+          clips={clips}
+          renderedCount={renderedCount}
+          current={clipFile}
+          onPick={(f) => {
+            chooseClip(f);
+            setPicking(false);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      ) : null}
       <div className="row between">
         <h2>Make a video</h2>
         {clip ? (
@@ -158,15 +188,26 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
           <div className="panel stack">
             <div className="field">
               <label>Clip</label>
-              <select value={clipFile ?? ""} onChange={(e) => chooseClip(e.target.value)}>
-                <option value="">— pick a recording —</option>
-                {clips.map((c) => (
-                  <option key={c.file} value={c.file}>
-                    {c.title ? `${c.title} · ` : ""}
-                    {c.file} ({fmtSeconds(c.facts.seconds)})
-                  </option>
-                ))}
-              </select>
+              {clip ? (
+                <div className="clip-chosen">
+                  <img src={api.clipThumb(clip.file, Math.min(clip.facts.seconds * 0.3, 8))} alt="" />
+                  <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
+                    <strong>{clip.title || clip.file.replace(/\.[^.]+$/, "")}</strong>
+                    <span className="small muted mono">{clip.file}</span>
+                    <span className="small muted">
+                      {fmtSeconds(clip.facts.seconds)} · {fmtDate(clip.facts.recordedAt)}
+                      {renderedCount.has(clip.file) ? " · already rendered" : ""}
+                    </span>
+                  </div>
+                  <button className="ghost small" onClick={() => setPicking(true)}>
+                    Change…
+                  </button>
+                </div>
+              ) : (
+                <button className="ghost" onClick={() => setPicking(true)}>
+                  Pick a clip…
+                </button>
+              )}
             </div>
             <div className="field">
               <label>Template</label>

@@ -34,9 +34,9 @@ by default; `ending: "signoff"` swaps in the match clip's indie sign-off.
 
 | Composition | Props |
 | --- | --- |
-| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, ending?}` |
+| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, musicFrom?, musicVolume?, ending?}` |
 | `AbilitySpotlight` | `{kind:"ability", id:"sinkhole", …}` |
-| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, ending?, push?, format?}` |
+| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, push?, format?}` |
 
 Every template takes `format`: `vertical` (1080×1920, the default), `square`
 (1080×1080) or `landscape` (1920×1080); the layout adapts (`src/components.tsx`).
@@ -60,10 +60,17 @@ rank art popping into the space around the words (`roster.gallery`, synced
 from the game) — or the spotlights' feature-list pitch (`ending: "pitch"`).
 
 **Sound:** simulator recordings are silent (`simctl` captures no audio) and
-the footage plays muted. Drop a track in `public/music/` and pass
-`music: "bed.mp3"` (or `bun run render:roster -- --music bed.mp3`) to lay it
-under the whole video; phone recordings in `GameplayClip` keep their own
-audio unless `muted`.
+the footage plays muted. Phone recordings in `GameplayClip` keep their own
+audio unless `muted`. For music, record with Battle music OFF in the game's
+Settings (the footage keeps the SFX, crowd and announcer) and pick a song:
+`bun run sync` copies the game's songs from
+`blood-in-the-sand/assets/audio/music` into `public/music/` and lists them in
+`roster.music`, which is the Desk's music dropdown. `music: "taiko.mp3"` lays
+it under the whole video (`MusicBed` in `src/components.tsx`),
+`musicFrom` starts it that many seconds in (the songs build from sparse to
+relentless, so the heavy part is usually a minute or more in) and
+`musicVolume` sets its level (0 to 1, default 0.8; the recording plays at 1).
+CLI: `bun run render:roster -- --music taiko.mp3`.
 
 ## Hands-free gameplay footage (the capture rig)
 

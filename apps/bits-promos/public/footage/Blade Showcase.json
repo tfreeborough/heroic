@@ -1,0 +1,31 @@
+{
+  "file": "Blade Showcase.mp4",
+  "facts": {
+    "seconds": 26.99,
+    "width": 874,
+    "height": 1794,
+    "fps": 60,
+    "recordedAt": "2026-09-23T21:26:34",
+    "bytes": 22254227
+  },
+  "title": "",
+  "line": "",
+  "note": "3v3 in obelisk with blade, dash and harpoon",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "VID_20260923_212634.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 6.3921,
+        "end": 33.378937
+      }
+    ],
+    "transition": "cut",
+    "transitionSeconds": 0,
+    "cropTop": 0,
+    "cropBottom": 0.065,
+    "muted": false
+  }
+}

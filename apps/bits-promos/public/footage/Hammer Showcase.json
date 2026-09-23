@@ -1,0 +1,35 @@
+{
+  "file": "Hammer Showcase.mp4",
+  "facts": {
+    "seconds": 26.38,
+    "width": 720,
+    "height": 1480,
+    "fps": 60,
+    "recordedAt": "2026-09-23T20:33:06",
+    "bytes": 10431150
+  },
+  "title": "",
+  "line": "",
+  "note": "2v2 hammer showcase in first blood arena with Titan's Draught and War Drums",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Record_2026-09-23-21-31-20_e960a7cd7e8cee15e432ebd947e0ccbf.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 6.087879,
+        "end": 21.432745
+      },
+      {
+        "start": 44.456925,
+        "end": 55.664821
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.2,
+    "cropTop": 0,
+    "cropBottom": 0.065,
+    "muted": false
+  }
+}

@@ -7,6 +7,7 @@
 import type { DeskTemplate } from "../desk/game";
 import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from "./src/GameplayClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
+import { MUSIC_LEVEL } from "./src/components";
 import roster from "./src/data/roster.json";
 
 const weaponIds = roster.weapons.map((w) => ({ value: w.id, label: w.name }));
@@ -17,6 +18,10 @@ const spotlightClipProps: DeskTemplate["clipProps"] = (clip, clipSeconds, facts)
   sourceAspect: facts && facts.width && facts.height ? facts.width / facts.height : undefined,
 });
 const abilityIds = roster.abilities.map((a) => ({ value: a.id, label: a.name }));
+/** The game's battle songs (synced into public/music/ by `bun run sync`). */
+const songs = roster.music.map((m) => ({ value: m.file, label: m.name }));
+/** In every template's defaults, so a picked song survives a template switch. */
+const musicDefaults = { music: "", musicFrom: 0, musicVolume: MUSIC_LEVEL };
 
 export const TEMPLATES: DeskTemplate[] = [
   {
@@ -34,7 +39,8 @@ export const TEMPLATES: DeskTemplate[] = [
     }),
     clipKey: "clip",
     uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
-    defaults: { title: "Match point", line: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0 },
+    defaults: { title: "Match point", line: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0, ...musicDefaults },
+    options: { music: songs },
     hide: ["clip", "format", "sourceAspect"],
   },
   {
@@ -47,8 +53,8 @@ export const TEMPLATES: DeskTemplate[] = [
     clipProps: spotlightClipProps,
     clipKey: "clip",
     uncapped: { durationKey: "clipSeconds", startKey: "clipStartFrom" },
-    defaults: { kind: "weapon", id: weaponIds[0]?.value ?? "blade", muted: false, cropTop: 0, cropBottom: 0, ending: "pitch" },
-    options: { id: weaponIds },
+    defaults: { kind: "weapon", id: weaponIds[0]?.value ?? "blade", muted: false, cropTop: 0, cropBottom: 0, ending: "pitch", ...musicDefaults },
+    options: { id: weaponIds, music: songs },
     hide: ["clip", "format", "kind", "sourceAspect"],
   },
   {
@@ -61,8 +67,8 @@ export const TEMPLATES: DeskTemplate[] = [
     clipProps: spotlightClipProps,
     clipKey: "clip",
     uncapped: { durationKey: "clipSeconds", startKey: "clipStartFrom" },
-    defaults: { kind: "ability", id: abilityIds[0]?.value ?? "sinkhole", muted: false, cropTop: 0, cropBottom: 0, ending: "pitch" },
-    options: { id: abilityIds },
+    defaults: { kind: "ability", id: abilityIds[0]?.value ?? "sinkhole", muted: false, cropTop: 0, cropBottom: 0, ending: "pitch", ...musicDefaults },
+    options: { id: abilityIds, music: songs },
     hide: ["clip", "format", "kind", "sourceAspect"],
   },
 ];

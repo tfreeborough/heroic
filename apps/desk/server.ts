@@ -10,7 +10,7 @@
  * last selected (cookie) — that's what the templates' staticFile() paths
  * resolve to inside the live preview.
  */
-import { existsSync, renameSync, statSync } from "node:fs";
+import { existsSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import index from "./index.html";
 import { type GameConfig } from "./game";
@@ -136,11 +136,13 @@ const server = Bun.serve({
         const replacing = body.replace && outName === safeName(body.replace) ? readSidecar(g, outName) : undefined;
         if (existsSync(join(dir, outName)) && !replacing) return json({ error: `${outName} already exists — pick another name` }, 409);
         if (replacing && replacing.source !== src.file) return json({ error: `${outName} was cut from ${replacing.source ?? "somewhere else"}, not ${src.file}` }, 409);
+        // Always encode to a .partial beside the target, then swap in: a failed or
+        // cancelled cut leaves no half-written .mp4 (the library skips .partial),
+        // and a failed re-cut leaves the old cut intact.
+        const tmp = join(dir, `.${outName}.partial`);
         try {
-          // Encode beside the target, then swap in, so a failed re-cut leaves the old cut intact.
-          const tmp = replacing ? join(dir, `.${outName}.recut.mp4`) : join(dir, outName);
-          await cleanupClip(join(dir, name), tmp, body);
-          if (tmp !== join(dir, outName)) renameSync(tmp, join(dir, outName));
+          await cleanupClip(join(dir, name), tmp, body, req.signal);
+          renameSync(tmp, join(dir, outName));
           const facts = { ...ffprobe(join(dir, outName)), recordedAt: src.facts.recordedAt, bytes: statSync(join(dir, outName)).size };
           const keep = replacing ?? src;
           const side: FootageSidecar = {
@@ -157,6 +159,7 @@ const server = Bun.serve({
           writeSidecar(g, side);
           return json(side);
         } catch (e) {
+          rmSync(tmp, { force: true });
           return fail(e);
         }
       }),

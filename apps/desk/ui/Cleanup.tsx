@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CleanupSpec, Segment, Transition } from "../lib/sidecar";
+import type { CleanupSpec, Segment } from "../lib/sidecar";
 import { type Clip, type GameApi, type GameInfo, fmtSeconds } from "./api";
 import { go } from "./App";
 
@@ -8,8 +8,7 @@ import { go } from "./App";
  * of the whole clip. Click to put the playhead down, SPLIT at the playhead
  * (button, right-click or S), click a piece to select it, DELETE to drop it.
  * Dropped pieces are gaps: playback skips them, and the kept pieces become
- * the new clip, joined by a hard cut, a crossfade or a dip to black. Two
- * video layers preview the join. Crop + audio apply to the whole thing.
+ * the new clip, each join a slide left. Two video layers preview the join. Crop + audio apply to the whole thing.
  * Save = ffmpeg writes a new file next to the original.
  *
  * Opened FROM a cut (Clips → "re-cut"), the track starts with that cut's
@@ -41,7 +40,6 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
   const [removed, setRemoved] = useState<number[]>([]);
   const history = useRef<{ cuts: number[]; removed: number[] }[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
-  const [transition, setTransition] = useState<Transition>("cut");
   const [transitionSeconds, setTransitionSeconds] = useState(0.4);
   const [cropTop, setCropTop] = useState(0.035);
   const [cropBottom, setCropBottom] = useState(0.065);
@@ -61,6 +59,7 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
   const [front, setFront] = useState<"a" | "b">("a");
   const [blend, setBlend] = useState(0); // 0..1 through the current join
   const joinRef = useRef<{ from: number; to: number } | null>(null);
+  const stagedRef = useRef<number | null>(null); // start of the piece the back layer is parked on
 
   useEffect(() => {
     api.clips().then((all) => {
@@ -75,7 +74,6 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
         const track = specToTrack(spec, c.facts.seconds);
         setCuts(track.cuts);
         setRemoved(track.removed);
-        setTransition(spec.transition ?? "cut");
         setTransitionSeconds(spec.transitionSeconds || 0.4);
         setCropTop(spec.cropTop ?? c.cropTop);
         setCropBottom(spec.cropBottom ?? c.cropBottom);
@@ -97,7 +95,7 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
   const segments: Segment[] = useMemo(() => pieces.filter((p) => p.kept).map(({ start, end }) => ({ start, end })), [pieces]);
   const kept = segments.reduce((s, x) => s + (x.end - x.start), 0);
   const joins = Math.max(0, segments.length - 1);
-  const d = transition === "cut" ? 0 : Math.max(0.1, Math.min(transitionSeconds, ...segments.map((s) => (s.end - s.start) / 2)));
+  const d = Math.max(0.1, Math.min(transitionSeconds, ...segments.map((s) => (s.end - s.start) / 2)));
   const outSeconds = Math.max(0, kept - joins * d);
 
   const commit = (next: { cuts?: number[]; removed?: number[] }) => {
@@ -139,6 +137,8 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
     if (v) v.currentTime = to;
     setT(to);
     joinRef.current = null;
+    stagedRef.current = null;
+    vid(front === "a" ? "b" : "a")?.pause();
     setBlend(0);
   };
   const play = () => {
@@ -150,6 +150,7 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
       if (nxt) v.currentTime = nxt.start;
     }
     void v.play();
+    if (joinRef.current) void vid(front === "a" ? "b" : "a")?.play(); // paused mid-slide
     setPlaying(true);
   };
   const pause = () => {
@@ -158,14 +159,20 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
     setPlaying(false);
   };
 
-  /** Runs on the FRONT video's timeupdate: skip gaps, and stage the join preview. */
-  const onTime = (which: "a" | "b") => () => {
-    if (which !== front) return;
-    const v = vid(front)!;
+  /**
+   * One step of playback on the FRONT video: skip gaps, and run the join.
+   * Driven every animation frame while playing, not by the video's
+   * timeupdate: that only fires ~4×/s, which lands once or twice inside a
+   * 0.4s slide and almost never within the hand-over window, so the join
+   * showed as a jump.
+   */
+  const tick = () => {
+    const v = vid(front);
+    if (!v || v.paused) return;
     const time = v.currentTime;
     setT(time);
-    if (v.paused) return;
-    const i = pieceAt(time);
+    // Mid-join, stay on the piece we're leaving even once time runs past its end.
+    const i = joinRef.current ? joinRef.current.from : pieceAt(time);
     const piece = i >= 0 ? pieces[i]! : null;
     const nextKept = pieces.find((p, k) => p.kept && k > i);
     if (!piece || !piece.kept) {
@@ -176,16 +183,22 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
     }
     const remaining = piece.end - time;
     const back = vid(front === "a" ? "b" : "a")!;
-    if (nextKept && d > 0 && remaining <= d) {
+    // Park the back layer on the next piece a second early, so it's decoded when the slide starts.
+    if (nextKept && remaining <= d + 1 && stagedRef.current !== nextKept.start && !joinRef.current) {
+      stagedRef.current = nextKept.start;
+      back.pause();
+      back.currentTime = nextKept.start;
+    }
+    if (nextKept && remaining <= d) {
       // Inside a join: the back layer plays the next piece; blend = how far through.
-      if (!joinRef.current || joinRef.current.from !== i) {
+      if (!joinRef.current) {
         joinRef.current = { from: i, to: pieces.indexOf(nextKept) };
-        back.currentTime = nextKept.start;
+        if (stagedRef.current !== nextKept.start) back.currentTime = nextKept.start;
         void back.play();
       }
       setBlend(Math.min(1, Math.max(0, 1 - remaining / d)));
     }
-    if (remaining <= 0.03) {
+    if (remaining <= 0.02) {
       if (!nextKept) {
         // The end: loop from the first kept piece.
         const first = pieces.find((p) => p.kept)!;
@@ -194,17 +207,26 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
         setBlend(0);
         return;
       }
-      if (joinRef.current && d > 0) {
-        // Hand over to the back layer, which is already mid-piece.
-        v.pause();
-        setFront(front === "a" ? "b" : "a");
-        joinRef.current = null;
-        setBlend(0);
-      } else {
-        v.currentTime = nextKept.start; // hard cut
-      }
+      // Hand over to the back layer, which is already into the next piece.
+      v.pause();
+      stagedRef.current = null;
+      joinRef.current = null;
+      setBlend(0);
+      setFront(front === "a" ? "b" : "a");
     }
   };
+  const tickRef = useRef(tick);
+  tickRef.current = tick;
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const loop = () => {
+      tickRef.current();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
 
   // ── track interaction ──
   const timeAtX = (clientX: number) => {
@@ -280,7 +302,7 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
     pause();
     try {
       const replacing = recut && name.trim() === recut.file.replace(/\.[^.]+$/, "") ? recut.file : undefined;
-      const out = await api.cleanup(clip.file, { name, segments, transition, transitionSeconds: d, cropTop, cropBottom, muted, replace: replacing });
+      const out = await api.cleanup(clip.file, { name, segments, transition: "slide", transitionSeconds: d, cropTop, cropBottom, muted, replace: replacing });
       if (note !== (replacing ? recut!.note : clip.note)) await api.saveClip(out.file, { note });
       setMsg(`✔ saved ${out.file} (${fmtSeconds(out.facts.seconds)})`);
       setTimeout(() => go({ name: "make", file: out.file }), 600);
@@ -293,7 +315,8 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
 
   const layer = (which: "a" | "b") => {
     const isFront = which === front;
-    const opacity = transition === "crossfade" ? (isFront ? 1 : blend) : isFront ? 1 : blend >= 0.5 ? 1 : 0;
+    // Slide left: the front layer leaves to the left as the back one comes in from the right.
+    const x = blend > 0 ? (isFront ? -blend : 1 - blend) * 100 : isFront ? 0 : 100;
     return (
       <video
         key={which}
@@ -301,13 +324,12 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
         src={api.clipUrl(clip.file)}
         muted={muted || !isFront}
         preload="auto"
-        onTimeUpdate={onTime(which)}
+        onTimeUpdate={isFront && !playing ? () => setT(vid(which)!.currentTime) : undefined}
         onLoadedMetadata={which === "a" ? () => seek(0) : undefined}
-        style={{ width: "100%", height: `${(1 / keep) * 100}%`, position: "absolute", top: `${(-cropTop / keep) * 100}%`, left: 0, opacity, zIndex: isFront ? 1 : 2 }}
+        style={{ width: "100%", height: `${(1 / keep) * 100}%`, position: "absolute", top: `${(-cropTop / keep) * 100}%`, left: 0, transform: `translateX(${x}%)`, zIndex: isFront ? 1 : 2 }}
       />
     );
   };
-  const dipShade = transition === "dip" && blend > 0 ? 1 - Math.abs(blend * 2 - 1) : 0;
 
   return (
     <div className="stack" style={{ gap: 20 }} onClick={() => setMenu(null)}>
@@ -385,20 +407,10 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
         </div>
         {segments.length > 1 ? (
           <div className="row">
-            <div className="field" style={{ width: 220 }}>
-              <label>Join the pieces with</label>
-              <select value={transition} onChange={(e) => setTransition(e.target.value as Transition)}>
-                <option value="cut">a hard cut</option>
-                <option value="crossfade">a crossfade</option>
-                <option value="dip">a dip to black</option>
-              </select>
+            <div className="field" style={{ width: 150 }}>
+              <label>Slide over (seconds)</label>
+              <input type="number" step={0.1} min={0.1} max={2} value={transitionSeconds} onChange={(e) => setTransitionSeconds(Math.max(0.1, Number(e.target.value) || 0.4))} />
             </div>
-            {transition !== "cut" ? (
-              <div className="field" style={{ width: 150 }}>
-                <label>over (seconds)</label>
-                <input type="number" step={0.1} min={0.1} max={2} value={transitionSeconds} onChange={(e) => setTransitionSeconds(Math.max(0.1, Number(e.target.value) || 0.4))} />
-              </div>
-            ) : null}
             <span className="small muted">{joins} join{joins === 1 ? "" : "s"} · previewed in the player</span>
           </div>
         ) : null}
@@ -444,9 +456,8 @@ export const Cleanup: React.FC<{ game: GameInfo; api: GameApi; file: string; fro
           <div className="vidwrap" style={{ aspectRatio: `${clip.facts.width} / ${clip.facts.height * keep}` }} onClick={() => (playing ? pause() : play())}>
             {layer("a")}
             {layer("b")}
-            <div style={{ position: "absolute", inset: 0, background: "#000", opacity: dipShade, zIndex: 3, pointerEvents: "none" }} />
           </div>
-          <div className="small muted">Already cropped. Plays the kept pieces in order with the join you chose.</div>
+          <div className="small muted">Already cropped. Plays the kept pieces in order, sliding between them.</div>
         </div>
       </div>
 

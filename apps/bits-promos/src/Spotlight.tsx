@@ -1,9 +1,9 @@
 import type * as React from "react";
-import { AbsoluteFill, Audio, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Sequence, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { z } from "zod";
 import { palette } from "./brand";
 import { BrandMark, Embers, LowerThird, SignOff, chromeTop } from "./cinematic";
-import { Backdrop, Outro, RecChip, useFormat } from "./components";
+import { Backdrop, MusicBed, Outro, RecChip, useFormat } from "./components";
 import { clipSrc } from "./GameplayClip";
 import { DEFAULT_TAGLINE } from "./data/copy";
 import roster from "./data/roster.json";
@@ -37,7 +37,9 @@ export const spotlightSchema = z.object({
     .describe('In-game footage as a path under public/ (e.g. "footage/x.mp4"); a bare filename means public/clips/ (the rig captures, <kind>-<id>.mp4)'),
   clipSeconds: z.number().min(1).optional().describe("Seconds of footage before the end card — in the Desk, leave empty for the rest of the clip"),
   clipStartFrom: z.number().min(0).optional().describe("Seconds into the recording to start from (skips the lobby beat)"),
-  music: z.string().optional().describe("A track under public/music/, played under the whole video"),
+  music: z.string().optional().describe("A song from the game (public/music/), played under the whole video. Record with Battle music off in Settings"),
+  musicFrom: z.number().min(0).optional().describe("Seconds into the song to start from (the songs build, so the heavy part is usually 60s+ in)"),
+  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8; the recording plays at 1)"),
   muted: z.boolean().optional().describe("Drop the recording's own audio"),
   cropTop: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the top (status strip)"),
   cropBottom: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the bottom (nav bar)"),
@@ -58,7 +60,7 @@ export const TIMING = { outro: 6, defaultClip: 8, noClip: 5, reveal: 3.2, cardAt
 export const spotlightSeconds = (p: SpotlightProps): number =>
   (p.clip ? (p.clipSeconds ?? TIMING.defaultClip) : TIMING.noClip) + TIMING.outro;
 
-export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartFrom, music, muted = false, cropTop, cropBottom, ending = "pitch", sourceAspect }) => {
+export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartFrom, music, musicFrom, musicVolume, muted = false, cropTop, cropBottom, ending = "pitch", sourceAspect }) => {
   const entry = findEntry(kind, id);
   const { format } = useFormat();
   const frame = useCurrentFrame();
@@ -73,12 +75,11 @@ export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartF
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
   const clipVolume = (f: number) => interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const musicVolume = (f: number) => interpolate(f, [durationInFrames - fps * 1.6, durationInFrames], [0.8, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const top = chromeTop(format);
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
-      {music ? <Audio src={staticFile(`music/${music}`)} volume={musicVolume} loop /> : null}
+      <MusicBed music={music} from={musicFrom} level={musicVolume} />
       <Sequence durationInFrames={bodyEnd}>
         <AbsoluteFill style={{ opacity: bodyOut }}>
           {src ? (

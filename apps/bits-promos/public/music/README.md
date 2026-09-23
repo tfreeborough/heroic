@@ -1,1 +1,1 @@
-Optional music tracks for the `music` prop (e.g. `--props='{"music":"bed.mp3"}'`). Gitignored.
+The game's battle songs, copied from apps/blood-in-the-sand/assets/audio/music by `bun run sync` (never edit here). Gitignored. Pick one with the `music` prop (e.g. `--props='{"music":"taiko.mp3","musicFrom":60}'`) or the Desk's music dropdown.

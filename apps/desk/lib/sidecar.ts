@@ -33,13 +33,15 @@ export type FootageSidecar = {
 };
 
 export type Segment = { start: number; end: number };
-export type Transition = "cut" | "crossfade" | "dip";
+/** Pieces always join with a slide left. Cuts saved before that may still
+ * say "cut" / "crossfade" / "dip"; a re-cut of one gets the slide. */
+export type Transition = "slide";
 /** What the Cleanup screen saves: the kept segments of the source, in order,
  * how they join, and the crop + audio applied to all of them. */
 export type CleanupSpec = {
   segments: Segment[];
   transition: Transition;
-  /** Seconds each crossfade / dip takes (ignored for a cut). */
+  /** Seconds each slide takes. */
   transitionSeconds: number;
   cropTop: number;
   cropBottom: number;

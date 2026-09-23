@@ -30,8 +30,7 @@ the phone. One filmstrip of the whole clip: click to put the playhead down,
 **Split** there (button, right-click, or `S`), click a piece to select it,
 `Delete` to drop it. Dropped pieces are gaps — playback skips them, and
 `⌘Z` undoes. Drag a split line to move it. Two or more kept pieces join
-with a hard cut, a crossfade or a dip to black, and the player previews the
-join with two video layers. Shave the status bar and nav bar with the
+with a slide left, and the player previews the join with two video layers. Shave the status bar and nav bar with the
 sliders, drop the audio if it's junk, name it, save: ffmpeg writes the new
 clip next to the original in seconds.
 
