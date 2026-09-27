@@ -22,7 +22,7 @@ import {
   WEAPONS,
   type AbilityId,
 } from "./config";
-import { THREAT_KINDS } from "./botThreats";
+import { strikeBand, THREAT_KINDS } from "./botThreats";
 import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot } from "./protocol";
 
 /**
@@ -154,6 +154,11 @@ export const incomingShot = (
 export const dashDown = (p: PlayerSnapshot): boolean =>
   p.abilities.some((s) => s.id === "dash" && (s.cd > 0 || s.charges === 0));
 
+/** Seconds left on this player's Ironhide (0 = not running). The active
+ * window is on the wire like every cooldown clock — and it's on screen. */
+export const ironhideLeft = (p: PlayerSnapshot): number =>
+  p.abilities.find((s) => s.id === "ironhide")?.active ?? 0;
+
 /**
  * Pick this tick's ability press, or null. `enemy` is the brain's FOCUS
  * target (paced rules play toward it); reactive rules scan every opponent —
@@ -177,6 +182,7 @@ export const decideCasts = (
   allowPaced: boolean,
   allowReactive = true,
   reactLead = Infinity,
+  tradeIronhide = false,
 ): AbilityId | null => {
   const dist = Math.hypot(enemy.x - me.x, enemy.y - me.y);
   const seen = allowReactive ? windupThreat(me, players) : null;
@@ -197,6 +203,27 @@ export const decideCasts = (
   }
   // Ironhide: a hit is coming and no dash is up — tank it on purpose.
   if (threat && !slotReady(me, "dash") && slotReady(me, "ironhide")) return "ironhide";
+  // …or, for the sharp tiers, WIN the trade with it: a melee blow is coming
+  // while I'm close enough to answer in kind, and theirs isn't running —
+  // take theirs at 30%, keep the hop for the chase (Tom 2026-09-27: the
+  // player's blade + Ironhide out-traded a Godlike that only ever used it
+  // as a last resort).
+  if (
+    tradeIronhide &&
+    threat &&
+    !rangedWeapon(threat) &&
+    ironhideLeft(threat) === 0 &&
+    slotReady(me, "ironhide")
+  ) {
+    const mine = strikeBand(me, threat);
+    const theirs = strikeBand(threat, me);
+    const gap = Math.hypot(threat.x - me.x, threat.y - me.y);
+    // Only a blow that actually lands on me (a whiff costs nothing), and only
+    // where mine answers it.
+    if (mine !== null && theirs !== null && gap >= theirs.near && gap <= theirs.far + 6 && gap <= mine.far + 15) {
+      return "ironhide";
+    }
+  }
 
   if (!allowPaced) return null;
 

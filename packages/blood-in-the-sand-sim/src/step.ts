@@ -78,8 +78,7 @@ import {
   seatedPlayers,
   type ArenaPlayer,
   type ArenaProjectile,
-  type PlayerInput,
-} from "./state";
+  type PlayerInput, hasRespawners, teamCounts } from "./state";
 import { spawnFacing, spawnSlotPos, teamSlotOf, type ArenaSim } from "./sim";
 
 const moverScratch: Mover[] = [];
@@ -271,10 +270,9 @@ const stepLifelineBeam = (
     if (!nominee.alive) break;
     // Ramp: base + growth per unbroken second, capped — read at the
     // link clock, so a protected healer climbs to font parity.
-    const rate = Math.min(
-      beam.healPerSecondMax,
-      beam.healPerSecondBase + beam.healPerSecondRamp * p.beam!.linkSeconds,
-    );
+    const rate =
+      Math.min(beam.healPerSecondMax, beam.healPerSecondBase + beam.healPerSecondRamp * p.beam!.linkSeconds) *
+      p.healScale;
     const amount = Math.min(
       Math.round(rate * beam.tickInterval),
       nominee.combatant.stats.maxHp - nominee.combatant.hp,
@@ -603,7 +601,7 @@ export const stepSim = (
     stepDeployables(state, players, events, dt);
     stepBleeds(players, events, dt);
     stepSafeCircle(sim, players, events, dt); // the Closing Sands' blood ticks
-    if (state.training) respawnDummies(sim, players, dt);
+    if (state.training || hasRespawners(state)) respawnDummies(sim, players, dt);
     checkRoundOver(sim, events); // stands down in training — rounds never end
   }
 
@@ -734,23 +732,31 @@ const stepProjectiles = (
  * full hp, statuses dropped, back on its spawn slot ("another one spawns in
  * its place"), so the firing range never empties. No rng draws, no events:
  * the client just sees the player flip back to alive.
+ *
+ * Respawning seats (bits-challenges.md, the horde) ride the same pass: a
+ * brain-driven bot that comes back on its slot — the wave mechanic. Its
+ * team is never wiped while it respawns (checkRoundOver), so the round is
+ * the host's to conclude (kills, a clock) or the player's to lose.
  */
 const respawnDummies = (sim: ArenaSim, players: readonly ArenaPlayer[], dt: number): void => {
   for (const p of players) {
-    if (!p.dummy || p.alive) continue;
-    if (p.respawnLeft === 0) {
-      p.respawnLeft = DUMMY_RESPAWN_SECONDS; // just died — start the beat
+    if (p.alive) continue;
+    if (!(p.dummy || p.respawns)) {
+      // A one-life seat: only a delayed FIRST arrival passes through here.
+      if (p.respawnLeft <= 0) continue;
+    } else if (p.respawnLeft === 0) {
+      p.respawnLeft = sim.state.respawnSeconds ?? DUMMY_RESPAWN_SECONDS; // just died — start the beat
       continue;
     }
     p.respawnLeft = Math.max(0, p.respawnLeft - dt);
     if (p.respawnLeft > 0) continue;
-    const spawn = spawnSlotPos(sim, p.team, teamSlotOf(sim.state, p));
+    const spawn = spawnSlotPos(sim, p.team, teamSlotOf(sim.state, p), teamCounts(sim.state)[p.team - 1]!);
     p.mover.pos.x = spawn.x;
     p.mover.pos.y = spawn.y;
     p.mover.vel.x = 0;
     p.mover.vel.y = 0;
     p.facing = spawnFacing(sim, spawn);
-    p.combatant.hp = p.combatant.stats.maxHp;
+    p.combatant.hp = Math.max(1, Math.round(p.combatant.stats.maxHp * p.startHpFrac));
     p.attack = ATTACK_CYCLE_READY;
     p.targetId = null;
     p.lockedTargetId = null;

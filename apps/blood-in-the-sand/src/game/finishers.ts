@@ -2,7 +2,8 @@
  * Finishers — the killer's flourish over a kill (bits-cosmetics.md).
  * PROTOTYPES, worn from the dev menu: Butterflies and Smite live
  * here; the later ones are each their own file behind the FinisherShow
- * interface — constellation.ts, medusa.ts, snuffed.ts, talons.ts, scarabs.ts.
+ * interface — constellation.ts, medusa.ts, snuffed.ts, talons.ts, scarabs.ts,
+ * hammerfall.ts.
  *
  * The slot rule: AIR BELONGS TO THE KILLER, FLOOR BELONGS TO THE VICTIM. A
  * finisher plays in the air over the body; the victim's own blood still hits
@@ -45,6 +46,7 @@ import {
 } from "@shopify/react-native-skia";
 import { Constellation, CONSTELLATION_LIFE_MS } from "./constellation";
 import type { FinisherId } from "./cosmeticIds";
+import { Hammerfall, HAMMERFALL_IMPACT_MS, HAMMERFALL_LIFE_MS } from "./hammerfall";
 import { Medusa, MEDUSA_LIFE_MS } from "./medusa";
 import { Scarabs, SCARABS_LIFE_MS } from "./scarabs";
 import { Snuffed, SNUFFED_LIFE_MS } from "./snuffed";
@@ -63,6 +65,12 @@ export interface FinisherShow {
    *  show draws whatever is left of it. */
   readonly hidesBodyFromMs?: number;
 }
+
+/** A finisher that LANDS a beat after the kill shakes the camera again on
+ *  its impact: the caller pushes a second kill kick this long after the
+ *  first. Undefined = no second kick. */
+export const finisherImpactMs = (id: FinisherId): number | undefined =>
+  id === "hammerfall" ? HAMMERFALL_IMPACT_MS : undefined;
 
 const MAX_LIVE = 3;
 /** Corpses taken this round (hidesBody) — a round has at most a team's worth. */
@@ -408,6 +416,10 @@ export class FinisherField {
         case "scarabs":
           f.show = new Scarabs(x, y);
           f.lifeMs = SCARABS_LIFE_MS;
+          break;
+        case "hammerfall":
+          f.show = new Hammerfall(x, y, dirX);
+          f.lifeMs = HAMMERFALL_LIFE_MS;
           break;
         default:
           f.show = new Snuffed(x, y);

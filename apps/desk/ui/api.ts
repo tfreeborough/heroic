@@ -2,10 +2,11 @@ import type { FormatSpec } from "../game";
 import type { Binned } from "../lib/footage";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
+import type { Platform, Post, Schedule } from "../lib/schedule";
 import type { CleanupSpec, FootageSidecar } from "../lib/sidecar";
 
 export type Clip = FootageSidecar;
-export type { Batch, Binned, Job, Render };
+export type { Batch, Binned, Job, Platform, Post, Render, Schedule };
 /** What /api/games says about a game — enough for the page; templates load separately. */
 export type GameInfo = { id: string; name: string; icon: string; fps: number; formats: Record<string, FormatSpec>; footageFolderId: string; footageDir: string; rendersDir: string };
 
@@ -46,6 +47,19 @@ export const gameApi = (game: string) => {
     upload: (slugs: string[]) => post(`${base}/renders/upload`, { slugs }).then((r) => j<{ ok: boolean; log: string; uploaded: string[] }>(r)),
     renderThumb: (slug: string) => `${base}/renders/${enc(slug)}/thumb`,
     renderUrl: (slug: string) => `/g/${enc(game)}/renders/${enc(slug)}.mp4`,
+
+    /** `claude` = the server has a key and the game a voice, so drafting is on. */
+    schedule: () => fetch(`${base}/schedule`).then((r) => j<Schedule & { claude: boolean }>(r)),
+    redraft: (id: string) => post(`${base}/schedule/${enc(id)}/draft`).then((r) => j<Schedule>(r)),
+    queue: (batches: string[]) => post(`${base}/schedule`, { batches }).then((r) => j<{ schedule: Schedule; placed: Post[]; skipped: string[] }>(r)),
+    scheduleSettings: (patch: { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] }) =>
+      fetch(`${base}/schedule`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Schedule>(r)),
+    reflow: () => post(`${base}/schedule/reflow`).then((r) => j<Schedule>(r)),
+    updatePost: (id: string, patch: Partial<Pick<Post, "day" | "slot" | "title" | "description" | "posted">>) =>
+      fetch(`${base}/schedule/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Schedule>(r)),
+    ignore: (batch: string, ignored: boolean) =>
+      fetch(`${base}/batches/${enc(batch)}/ignore`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ignored }) }).then((r) => j<Schedule>(r)),
+    unqueue: (id: string) => fetch(`${base}/schedule/${enc(id)}`, { method: "DELETE" }).then((r) => j<Schedule>(r)),
   };
 };
 export type GameApi = ReturnType<typeof gameApi>;

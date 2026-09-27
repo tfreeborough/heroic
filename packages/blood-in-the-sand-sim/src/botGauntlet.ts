@@ -86,6 +86,20 @@ const diver: Policy = (me, snap) => {
   return { sx: d.x, sy: d.y, casts: press(me, cast) };
 };
 
+/** Tom's trick #4 (2026-09-27, the Godlike challenge): "go Blade + Ironhide
+ * and win a war of attrition" — walk in, pop Ironhide the moment we're at
+ * grips and stand there trading at 30% damage taken. */
+const ironTrader: Policy = (me, snap) => {
+  const foe = nearestFoe(me, snap);
+  if (!foe) return IDLE(me);
+  const dist = Math.hypot(foe.x - me.x, foe.y - me.y);
+  const d = unit(foe.x - me.x, foe.y - me.y);
+  let cast: AbilityId | null = null;
+  if (dist > 150 && dist < 260) cast = "dash";
+  else if (dist < 130) cast = "ironhide";
+  return { sx: d.x, sy: d.y, casts: press(me, cast) };
+};
+
 /** Tom's trick #3 (2026-09-21, after v4): "I can slowly back it into a
  * corner and then it has nowhere to go." Keep myself on the CENTRE side of
  * the bot and amble at it — its reach-edge back-pedal does the herding for
@@ -303,6 +317,8 @@ export const SETUPS: Setup[] = [
   { label: "TOM hammer vs HERDER blade (corner it, then dive)", bots: [bot("hammer", ...DI)], foes: [human(herder, "blade", ...DI)] },
   { label: "TOM hammer(jugg) vs HERDER blade", bots: [bot("hammer", "ironhide", "warding-shout")], foes: [human(herder, "blade", ...DI)] },
   { label: "TOM bow    vs HERDER blade", bots: [bot("bow", "dash", "mirror-guard")], foes: [human(herder, "blade", ...DI)] },
+  { label: "TOM blade  vs IRONHIDE TRADER blade", bots: [bot("blade", "dash", "harpoon")], foes: [human(ironTrader, "blade", ...DI)] },
+  { label: "TOM blade(DI) vs IRONHIDE TRADER blade", bots: [bot("blade", ...DI)], foes: [human(ironTrader, "blade", ...DI)] },
   { label: "TOM hammer vs VENOM hit-and-run fang", bots: [bot("hammer", ...DI)], foes: [human(venomHitAndRun, "fang", ...DI)] },
   { label: "TOM blade  vs VENOM hit-and-run fang", bots: [bot("blade", ...DI)], foes: [human(venomHitAndRun, "fang", ...DI)] },
   { label: "TOM bow    vs VENOM hit-and-run fang", bots: [bot("bow", "dash", "mirror-guard")], foes: [human(venomHitAndRun, "fang", ...DI)] },

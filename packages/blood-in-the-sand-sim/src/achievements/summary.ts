@@ -167,6 +167,11 @@ export interface SkirmishRoomContext {
 
 export interface MatchSummary {
   ranked: boolean;
+  /** An offline challenge report (bits-challenges.md) — the challenge id.
+   * Only the API's challenge adapter builds these; the game server never
+   * does. Its board's `accepts` gate reads it; nothing else on a ranked or
+   * skirmish summary ever sees it set. */
+  challenge?: string;
   bracket: string | null;
   teamSize: number;
   /** Sides in the room — 2 everywhere but the brawl's 6 (bits-brawl.md). */

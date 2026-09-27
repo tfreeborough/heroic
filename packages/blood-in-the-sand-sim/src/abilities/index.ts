@@ -5,7 +5,7 @@
  * player per tick drives all three drafted slots.
  */
 import { distance, segmentClear, stepAbility } from "@heroic/core";
-import { ABILITIES, HARPOON, PLAYER_RADIUS, SINKHOLE, TAR_PIT } from "../config";
+import { ABILITIES, HARPOON, PLAYER_RADIUS, SINKHOLE, TAR_PIT, type AbilityId } from "../config";
 import type { ArenaEvent } from "../events";
 import type { ArenaSim } from "../sim";
 import { seatedPlayers, type ArenaPlayer, type PlayerInput } from "../state";
@@ -30,6 +30,18 @@ export * from "./wardingShout";
  * the committed roll velocity (which overwrites locomotion wholesale — the
  * escape hop stays a real answer to being slowed).
  */
+/** The slot's lifecycle config for THIS seat: the shipped one, or a scaled
+ * cooldown for a challenge seat (never shorter than the active window — the
+ * lifecycle spends the window inside the cooldown). */
+const abilityConfigFor = (p: ArenaPlayer, id: AbilityId): (typeof ABILITIES)[AbilityId] => {
+  const base = ABILITIES[id];
+  if (p.cooldownScale === 1) return base;
+  return { ...base, cooldown: Math.max(base.activeDuration, base.cooldown * Math.max(0, p.cooldownScale)) };
+};
+
+/** How far into its window a permanent ability's clock is held (see below). */
+const PERMANENT_HOLD_SECONDS = 1;
+
 export const stepPlayerAbilities = (
   sim: ArenaSim,
   p: ArenaPlayer,
@@ -52,10 +64,25 @@ export const stepPlayerAbilities = (
     // nothing, charge kept (bits-sands-deeds.md).
     const gated =
       (slot.id === "harpoon" && mark === null) || (slot.id === "call-the-tide" && !tideCallable(sim));
-    const triggered = pressed && !gated;
+    // A permanent slot (the Titan) fires itself at the bell and its window
+    // is topped back up every tick below — it never reaches cooldown.
+    const permanent = fighting && p.permanentAbilities.includes(slot.id);
+    const triggered = (pressed && !gated) || (permanent && slot.ability.phase === "ready");
 
-    const step = stepAbility(slot.ability, ABILITIES[slot.id], dt, triggered);
-    slot.ability = step.state;
+    const config = abilityConfigFor(p, slot.id);
+    const step = stepAbility(slot.ability, config, dt, triggered);
+    // Held a beat INTO the window, never at its top: clients read "time
+    // since cast" off the active clock (the titan's grow-in is
+    // duration − active), so a clock pinned at full reads as forever-just-
+    // drunk and the body never grows (Tom's device look, 2026-09-27).
+    slot.ability =
+      permanent && step.state.phase === "active"
+        ? {
+            ...step.state,
+            activeRemaining: Math.max(step.state.activeRemaining, config.activeDuration - PERMANENT_HOLD_SECONDS),
+            cooldownRemaining: config.cooldown,
+          }
+        : step.state;
 
     if (step.activated) {
       // Practice never spends the budget — cooldown is the only gate there,

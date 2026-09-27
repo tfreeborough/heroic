@@ -159,3 +159,13 @@ export const dashClear = (nav: BotNav, from: Vec2, dir: Vec2, distance: number):
     x: from.x + dir.x * (distance + PLAYER_RADIUS),
     y: from.y + dir.y * (distance + PLAYER_RADIUS),
   });
+
+/** Is the straight line between two points free of walking geometry? The
+ * medic's line-of-sight proxy (the beam needs to see its patient). */
+export const lineClear = (nav: BotNav, a: Vec2, b: Vec2): boolean => pathClear(nav.grid, a, b);
+
+/** Can a body stand at this point (inside the arena, off the rocks)? */
+export const standable = (nav: BotNav, at: Vec2): boolean => {
+  const c = worldToCell(nav.grid, at);
+  return nav.grid.grid.isWalkable(c.x, c.y);
+};

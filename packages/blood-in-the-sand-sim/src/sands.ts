@@ -10,20 +10,20 @@ import { distance, type Aabb, type Vec2 } from "@heroic/core";
 import { CALL_THE_TIDE, CLOSING_SANDS, PLAYER_RADIUS, SANDS_ATTACKER_ID } from "./config";
 import type { ArenaEvent } from "./events";
 import { killPlayer } from "./abilities/damage";
-import type { ArenaPlayer, RoundState } from "./state";
+import { sandsDelayOf, type ArenaPlayer, type RoundState } from "./state";
 import type { ArenaSim } from "./sim";
 
 /** Close progress 0 (just rolled) → 1 (holding at finalRadius). */
-export const sandsProgress = (round: RoundState): number => {
-  const t = (round.elapsed - CLOSING_SANDS.delaySeconds) / CLOSING_SANDS.closeSeconds;
+export const sandsProgress = (round: RoundState, delaySeconds = CLOSING_SANDS.delaySeconds): number => {
+  const t = (round.elapsed - delaySeconds) / CLOSING_SANDS.closeSeconds;
   return Math.min(1, Math.max(0, t));
 };
 
 /** The CURRENT safe radius — derived, never stored (elapsed + the config
  * table are the whole truth, so a restored state re-derives it exactly). */
-export const sandsRadius = (round: RoundState): number => {
+export const sandsRadius = (round: RoundState, delaySeconds = CLOSING_SANDS.delaySeconds): number => {
   if (!round.sands) return 0;
-  const p = sandsProgress(round);
+  const p = sandsProgress(round, delaySeconds);
   return round.sands.r0 + (CLOSING_SANDS.finalRadius - round.sands.r0) * p;
 };
 
@@ -104,6 +104,7 @@ const spendTideCallers = (players: readonly ArenaPlayer[]): void => {
 export const tideCallable = (sim: ArenaSim): boolean => {
   const { round } = sim.state;
   if (!CLOSING_SANDS.enabled || sim.state.training) return false;
+  if (!Number.isFinite(sandsDelayOf(sim.state))) return false; // a host that turned the tide off
   if (round.phase !== "active" || round.sands !== null) return false;
   return round.elapsed >= CALL_THE_TIDE.minFightSeconds;
 };
@@ -150,7 +151,7 @@ export const summonSands = (
   events: ArenaEvent[],
 ): void => {
   if (!tideCallable(sim)) return;
-  sim.state.round.elapsed = Math.max(sim.state.round.elapsed, CLOSING_SANDS.delaySeconds);
+  sim.state.round.elapsed = Math.max(sim.state.round.elapsed, sandsDelayOf(sim.state));
   rollSands(sim, players, events, caller.id);
 };
 
@@ -183,13 +184,13 @@ export const stepSafeCircle = (
   // The range's rounds never end (checkRoundOver stands down) — a circle
   // there would just grind the dummies forever.
   if (sim.state.training || round.phase !== "active") return;
-  if (round.elapsed < CLOSING_SANDS.delaySeconds) return;
+  if (round.elapsed < sandsDelayOf(sim.state)) return;
 
   if (round.sands === null) rollSands(sim, players, events);
 
   const sands = round.sands!;
-  const r = sandsRadius(round);
-  const p = sandsProgress(round);
+  const r = sandsRadius(round, sandsDelayOf(sim.state));
+  const p = sandsProgress(round, sandsDelayOf(sim.state));
 
   // The shoreline edge detector: a body that was inside last tick and is
   // outside now, within a shove's window, was PUT there (Undertow).

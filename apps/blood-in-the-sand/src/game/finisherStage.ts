@@ -65,6 +65,12 @@ export const FINISHER_CATALOGUE: Readonly<Record<OwnableFinisherId, FinisherCata
     color: "#3fc1c9",
     stillAtMs: 300,
   },
+  hammerfall: {
+    name: "Hammerfall",
+    pitch: "Nothing left to prove.",
+    color: "#c8962e",
+    stillAtMs: 360,
+  },
   snuffed: {
     name: "Snuffed",
     pitch: "A lone candle in the dark, extinguished.",

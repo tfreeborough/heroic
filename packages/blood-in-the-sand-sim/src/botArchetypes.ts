@@ -21,7 +21,9 @@ export type ArchetypeId =
   | "skirmisher"
   | "sniper"
   | "bodyguard"
-  | "opportunist";
+  | "opportunist"
+  | "ward"
+  | "medic";
 
 export const ARCHETYPE_IDS: readonly ArchetypeId[] = [
   "brawler",
@@ -32,6 +34,8 @@ export const ARCHETYPE_IDS: readonly ArchetypeId[] = [
   "sniper",
   "bodyguard",
   "opportunist",
+  "ward",
+  "medic",
 ];
 
 export interface ArchetypePreset {
@@ -63,6 +67,11 @@ export interface ArchetypePreset {
   /** Abandon the band and charge once the target's hp fraction drops below
    * this — the opportunist's dive. */
   diveBelow?: number;
+  /** Ticks a low-hp retreat may last before the bot fights wounded; null =
+   * unlimited. Default is bot.ts' FLEE_BUDGET (Tom 2026-07-22: cornered
+   * cowards are anti-fun). Only the ward lifts it — there cowardice IS
+   * the point (bits-challenges.md, Carry the rookie). */
+  fleeBudgetTicks?: number | null;
 }
 
 export const ARCHETYPES: Record<ArchetypeId, ArchetypePreset> = {
@@ -172,6 +181,42 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypePreset> = {
     // moment the mark is weak enough to finish.
     diveBelow: 0.45,
   },
+  // The escort's charge (bits-challenges.md, Carry the rookie): a bow
+  // that shoots from the far edge of its band and runs at the first
+  // scratch — toward YOU (the leash), never into a corner (retreatDirection
+  // reads the room). Never derived from a kit: only a challenge host pins
+  // it. Its flee budget is lifted, so it keeps running for as long as it's
+  // hurt — the enemy's "weakest" hunters will chase it all round.
+  ward: {
+    name: "Ward",
+    band: { near: 0.75, far: 0.95 },
+    engage: 0.55,
+    strafe: 0.3,
+    disengageBelow: 0.9,
+    anchorLeash: 260,
+    punishRecovery: false,
+    gapCloseDash: false,
+    focus: "nearest",
+    bandRangedOnly: true,
+    fleeBudgetTicks: null,
+  },
+  // The Lifeline's brain (bits-challenges.md, Tall order — Tom 2026-09-27).
+  // The beam picks its own patient; the whole job is WHERE TO STAND: behind
+  // the patient, away from the threat, inside beam range, with line of
+  // sight. The numbers below are unused scaffolding (the medic steering in
+  // botThink replaces band/engage/strafe/leash wholesale); only `focus`
+  // matters — the threat to hide from is the nearest enemy.
+  medic: {
+    name: "Medic",
+    band: null,
+    engage: 0,
+    strafe: 0,
+    disengageBelow: 0,
+    anchorLeash: 0,
+    punishRecovery: false,
+    gapCloseDash: false,
+    focus: "nearest",
+  },
 };
 
 const SUPPORT_COUNT = (abilities: readonly AbilityId[]): number =>
@@ -182,6 +227,7 @@ const DEFENSIVE_COUNT = (abilities: readonly AbilityId[]): number =>
 
 /**
  * Loadout → archetype, first match wins:
+ *  0. a beam weapon (the Lifeline) → Medic (it can't fight at all)
  *  1. all-support hand → Bodyguard (the kit only works near allies)
  *  2. a trap (sandtrap/tremor) → Trapper (ground is the gameplan)
  *  3. a harpoon → Opportunist (dragging picks IS the gameplan)
@@ -193,6 +239,8 @@ const DEFENSIVE_COUNT = (abilities: readonly AbilityId[]): number =>
  */
 export const deriveArchetype = (weapon: WeaponId | null, abilities: readonly AbilityId[]): ArchetypeId => {
   if (weapon === null) return "brawler";
+  // A beam heals and never hurts — no hand changes what the body is for.
+  if (WEAPONS[weapon].beam) return "medic";
   const sup = SUPPORT_COUNT(abilities);
   const def = DEFENSIVE_COUNT(abilities);
   const hasDash = abilities.includes("dash");

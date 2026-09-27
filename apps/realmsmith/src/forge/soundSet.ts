@@ -88,6 +88,8 @@ const STATIC: ReadonlyArray<{ id: string; label: string; category: SoundCategory
   { id: "finisher_scarabs", label: "Scarabs — the swarm (skitter in, swell, away)", category: "finisher" },
   { id: "finisher_scarabs_feed", label: "Scarabs — the feeding crunch (at 0.55s)", category: "finisher" },
   { id: "finisher_snuffed", label: "Snuffed — the flame pinched out (at 0.38s)", category: "finisher" },
+  { id: "finisher_hammerfall", label: "Hammerfall — the anvil strike (at 0.3s)", category: "finisher" },
+  { id: "finisher_hammerfall_swing", label: "Hammerfall — the swing (optional)", category: "finisher" },
   // match flow
   { id: "countdown_tick", label: "Countdown tick", category: "flow" },
   { id: "round_start", label: "Round start", category: "flow" },

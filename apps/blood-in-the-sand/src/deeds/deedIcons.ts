@@ -101,6 +101,16 @@ export const DEED_ICONS: Record<string, number | null> = {
   "deed-mirror": require("../../assets/deeds/deed-mirror.png"),
   "deed-gentlemen": require("../../assets/deeds/deed-gentlemen.png"),
   "deed-nobody-wins": require("../../assets/deeds/deed-nobody-wins.png"),
+
+  // Challenge Deeds
+  "deed-challenge-first": require("../../assets/deeds/deed-challenge-first.png"),
+  "deed-challenge-easy": require("../../assets/deeds/deed-challenge-easy.png"),
+  "deed-challenge-medium": require("../../assets/deeds/deed-challenge-medium.png"),
+  "deed-challenge-hard": require("../../assets/deeds/deed-challenge-hard.png"),
+  "deed-challenge-deathwish": require("../../assets/deeds/deed-challenge-deathwish.png"),
+  "deed-challenge-capstone": require("../../assets/deeds/deed-challenge-capstone.png"),
+  "deed-challenge-stubborn": require("../../assets/deeds/deed-challenge-stubborn.png"),
+
   ...Object.fromEntries(ABILITY_IDS.map((a) => [`deed-casts-${a}`, ICON_SOURCES[a]])),
 };
 

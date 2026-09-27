@@ -135,6 +135,8 @@ const FINISHER_VARIANTS: Record<string, SoundBank> = {
   scarabs: { clips: bank("finisher_scarabs"), volume: 0.9 },
   scarabs_feed: { clips: bank("finisher_scarabs_feed"), volume: 0.8 },
   snuffed: { clips: bank("finisher_snuffed"), volume: 0.6 },
+  hammerfall_swing: { clips: bank("finisher_hammerfall_swing"), volume: 0.75 },
+  hammerfall: { clips: bank("finisher_hammerfall") },
 };
 
 /** Per-weapon RELEASE banks (the bow twang / staff cast whoosh), played on the

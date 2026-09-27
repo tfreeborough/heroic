@@ -208,6 +208,9 @@ describe("archetypes", () => {
   test("derivation: the loadout IS the archetype", () => {
     expect(deriveArchetype("blade", ["warding-shout", "ironhide"])).toBe("brawler");
     expect(deriveArchetype("hammer", ["ironhide", "warding-shout"])).toBe("juggernaut");
+    // A beam can't fight: the Lifeline is a medic whatever the hand.
+    expect(deriveArchetype("lifeline", ["dash"])).toBe("medic");
+    expect(deriveArchetype("lifeline", ["warding-shout", "blood-font"])).toBe("medic");
     expect(deriveArchetype("blade", ["dash", "ironhide"])).toBe("duellist");
     expect(deriveArchetype("blade", ["sandtrap", "dash"])).toBe("trapper");
     expect(deriveArchetype("bow", ["dash", "mirror-guard"])).toBe("skirmisher");

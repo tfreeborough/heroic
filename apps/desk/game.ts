@@ -8,6 +8,7 @@
  */
 import type * as React from "react";
 import type { ZodObject } from "zod";
+import type { AiVoice } from "./lib/draft";
 
 export type FormatSpec = { width: number; height: number; label: string };
 
@@ -30,6 +31,12 @@ export type DeskTemplate = {
    * capped there too. */
   uncapped?: { durationKey: string; startKey: string };
   defaults: Record<string, unknown>;
+  /** The Render button waits for a clip. */
+  needsClip?: boolean;
+  /** One field may carry several alternatives (a hook A/B test): `split`
+   * turns its text into the list, the preview picks one, and a Render
+   * press makes one batch per alternative, named `<name>-<suffix><n>`. */
+  variants?: { key: string; split: (value: string) => string[]; suffix: string };
   /** Selects instead of free text for some fields. */
   options?: Record<string, { value: string; label: string }[]>;
   /** Fields the screen handles itself. */
@@ -62,4 +69,14 @@ export type GameConfig = {
     uploadTarget: string;
   };
   templates: () => Promise<{ TEMPLATES: DeskTemplate[] }>;
+  /** The posting queue's words: draft a title (Shorts) and description
+   * (everywhere) from a render's template + props, in the game's voice.
+   * Without it the queue uses the batch name and the hook. */
+  post?: {
+    draft: (template: string, props: Record<string, unknown>) => { title: string; description: string };
+    /** With ANTHROPIC_API_KEY set, Claude writes the variable part of each
+     * post in this voice at queue time (and on the Queue's Redraft button);
+     * `draft` above stays the fallback. */
+    ai?: AiVoice;
+  };
 };

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@remotion/bundler": "4.0.518",
     "@remotion/player": "4.0.518",
     "@remotion/renderer": "4.0.518",

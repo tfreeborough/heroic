@@ -19,6 +19,8 @@ import { DISPLAY_FONT } from "../typography";
 
 export interface ModeSelectScreenProps {
   onBack: () => void;
+  /** Challenges (bits-challenges.md): the offline hook, full-width under Ranked. */
+  onChallenges: () => void;
   /** Skirmish → the existing online flow (name gate → room list → wizard).
    * The 6-Way Brawl lives INSIDE this flow (bits-brawl.md): a room shape on
    * the create sheet, not a mode of its own. */
@@ -35,7 +37,7 @@ export interface ModeSelectScreenProps {
   onArmory: () => void;
 }
 
-type ModeKey = "ranked" | "skirmish" | "practice" | "story" | "deeds" | "wardrobe";
+type ModeKey = "ranked" | "challenges" | "skirmish" | "practice" | "story" | "deeds" | "wardrobe";
 
 /**
  * Per-mode card art. `image` is the forged PNG (assets/modes/<mode>.png,
@@ -52,6 +54,9 @@ const MODE_ART: Record<
   { image: number | null; ramp: [string, string, string]; glow: string; glowAt: [number, number] }
 > = {
   ranked: { image: require("../../assets/modes/ranked.png"), ramp: ["#3a1c12", "#7a3a1e", "#b06a2c"], glow: "rgba(255,214,140,0.50)", glowAt: [0.78, 0.15] },
+  // Challenges (bits-challenges.md, 2026-09-26): art owed — a Forge brief
+  // ("one fighter, many shadows"); the painted ramp stands in meanwhile.
+  challenges: { image: require("../../assets/modes/challenges.png"), ramp: ["#1a1410", "#3a2416", "#7a3a1e"], glow: "rgba(232,120,60,0.45)", glowAt: [0.76, 0.30] },
   skirmish: { image: require("../../assets/modes/skirmish.png"), ramp: ["#131a21", "#1c2733", "#2b241c"], glow: "rgba(255,160,60,0.55)", glowAt: [0.72, 0.85] },
   practice: { image: require("../../assets/modes/practice.png"), ramp: ["#4a3520", "#8a6d44", "#c9a76a"], glow: "rgba(245,237,224,0.45)", glowAt: [0.70, 0.10] },
   story: { image: require("../../assets/modes/story.png"), ramp: ["#241a12", "#2e2214", "#3a2a1a"], glow: "rgba(232,200,122,0.10)", glowAt: [0.75, 0.40] },
@@ -139,7 +144,7 @@ const CardArt = ({ mode, w, h, locked }: { mode: ModeKey; w: number; h: number; 
 /** Each card owns a slice of the shared entrance clock, top card first:
  *  card i fades/rises over [i × STAGGER, i × STAGGER + SLICE]. Shared with the
  *  screen's sound scheduling so the drum hits land exactly on the settles. */
-const ENTRANCE_STAGGER = 0.18;
+const ENTRANCE_STAGGER = 0.15; // five beats since Challenges (0.18 × 4 + 0.4 fit four)
 const ENTRANCE_SLICE = 0.4;
 
 /**
@@ -307,7 +312,7 @@ const ModeCard = ({ mode, title, pitch, state, onEnter, entrance, index, compact
  * checks here: Skirmish always routes into the play flow, whose connect
  * screen already owns down/update states.
  */
-export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onDeeds, onWardrobe, onArmory }: ModeSelectScreenProps) => {
+export const ModeSelectScreen = ({ onBack, onChallenges, onSkirmish, onRanked, onPractice, onDeeds, onWardrobe, onArmory }: ModeSelectScreenProps) => {
   const insets = useSafeAreaInsets();
   const entrance = useRef(new Animated.Value(0)).current;
 
@@ -316,7 +321,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
     // settles — a four-beat roll down the stack, not one hit after everything.
     // Listening to the clock (native-driven values still emit to JS listeners)
     // keeps the beats glued to the easing instead of guessing with timeouts.
-    const settles = [0, 1, 2, 3].map((i) => i * ENTRANCE_STAGGER + ENTRANCE_SLICE);
+    const settles = [0, 1, 2, 3, 4].map((i) => i * ENTRANCE_STAGGER + ENTRANCE_SLICE);
     let next = 0;
     const sub = entrance.addListener(({ value }) => {
       while (next < settles.length && value >= settles[next]) {
@@ -354,6 +359,17 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
           entrance={entrance}
           index={0}
         />
+        {/* Challenges: the second flagship — the offline hook and the clip
+            feed (bits-challenges.md). Full width so the art can breathe. */}
+        <ModeCard
+          mode="challenges"
+          title="CHALLENGES"
+          pitch="Fights stacked against you. Win them anyway."
+          state="live"
+          onEnter={onChallenges}
+          entrance={entrance}
+          index={1}
+        />
         {/* The half-width pair — one row, one entrance beat, shared slot. */}
         <View style={styles.halfRow}>
           <ModeCard
@@ -363,7 +379,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
             state="live"
             onEnter={onSkirmish}
             entrance={entrance}
-            index={1}
+            index={2}
             compact
           />
           <ModeCard
@@ -373,7 +389,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
             state="live"
             onEnter={onPractice}
             entrance={entrance}
-            index={1}
+            index={2}
             compact
           />
         </View>
@@ -385,7 +401,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
             state="live"
             onEnter={onDeeds}
             entrance={entrance}
-            index={2}
+            index={3}
             compact
           />
           <ModeCard
@@ -395,7 +411,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
             state="live"
             onEnter={onWardrobe}
             entrance={entrance}
-            index={2}
+            index={3}
             compact
           />
         </View>
@@ -406,7 +422,7 @@ export const ModeSelectScreen = ({ onBack, onSkirmish, onRanked, onPractice, onD
           state="locked"
           unlocksAt={STORY_UNLOCKS_AT}
           entrance={entrance}
-          index={3}
+          index={4}
         />
       </View>
     </View>

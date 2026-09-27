@@ -76,6 +76,11 @@ export const COUNTERS = {
 } as const;
 
 export const SKIRMISH_COUNTER_PREFIX = "skirmish:";
+/** The challenge namespace (bits-challenges.md) — written ONLY by the API's
+ * challenge report adapter (challengeCountersAfter, defsChallenges.ts),
+ * never by a match settle: counterDeltas returns nothing for a challenge
+ * summary. Same reasoning as the skirmish prefix. */
+export const CHALLENGE_COUNTER_PREFIX = "challenge:";
 
 /** The skirmish namespace's deltas — nothing ranked, ever. */
 const skirmishDeltas = (summary: MatchSummary): Record<string, number> => {
@@ -89,6 +94,7 @@ export const counterDeltas = (summary: MatchSummary, playerId: number): Record<s
   const stats = summary.stats[playerId];
   const player = summary.players.find((p) => p.id === playerId);
   if (!stats || !player) return {};
+  if (summary.challenge !== undefined) return {}; // the report adapter writes its own namespace
   if (!summary.ranked) return skirmishDeltas(summary);
   const deltas: Record<string, number> = { [COUNTERS.rankedMatches]: 1 };
   const won = wonMatch(summary, playerId);

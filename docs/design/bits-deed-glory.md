@@ -72,8 +72,10 @@ type only accepts a band, so nobody invents a 37.
      `SIGNET_*`), so a new Armory item is unpaid by construction and a new free or
      deed-gated one is paid by construction. Trident and Call the Tide are *earned*,
      so their ladders pay.
-6. **A budget.** `BOUNTY_BUDGET` (9,000) caps everything the boards can ever pay,
+6. **A budget.** `BOUNTY_BUDGET` caps everything the boards can ever pay,
    summed. New content that pushes past it fails the suite — raise it on purpose.
+   Was 9,000; **10,200 since 2026-09-26** to admit the challenge board's 1,125
+   (bits-challenges.md — Tom ratified the bands; the cap moved to fit them).
 7. **Bounties never feed the Glory ladder.** `glory_earned` reads `ranked:` ledger
    rows only (2026-09-10), so a bounty can't push the chain that paid it.
 

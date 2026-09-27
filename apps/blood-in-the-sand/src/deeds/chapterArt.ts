@@ -34,6 +34,8 @@ export const CHAPTER_ART: Record<string, ChapterArt> = {
   glory: { image: null, ramp: ["#241a08", "#4a3510", "#8a6d20"], glow: "rgba(255,220,110,0.36)", glowAt: [0.8, 0.2] },
   "blood-and-mercy": { image: null, ramp: ["#1e0e14", "#3a1a26", "#5a2a3a"], glow: "rgba(255,150,190,0.28)", glowAt: [0.8, 0.2] },
   "the-blood-tide": { image: null, ramp: ["#1a0808", "#3a0e10", "#6a1418"], glow: "rgba(255,60,60,0.34)", glowAt: [0.8, 0.2] },
+  // Challenges (bits-challenges.md, 2026-09-26) — one fighter, many shadows.
+  "against-the-odds": { image: null, ramp: ["#1a1410", "#3a2416", "#7a3a1e"], glow: "rgba(232,120,60,0.34)", glowAt: [0.8, 0.2] },
 };
 
 export const chapterArt = (id: string): ChapterArt => CHAPTER_ART[id] ?? FALLBACK;

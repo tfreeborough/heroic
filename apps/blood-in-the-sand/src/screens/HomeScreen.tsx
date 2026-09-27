@@ -7,7 +7,7 @@ import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { ANNOUNCER_PACK_IDS, playSound, setAnnouncerPack, unlockAudio, type AnnouncerPackId, type BitsSoundEvent } from "../audio";
 import { QueuePill } from "../components/QueueContext";
 import { IconDock } from "../components/IconDock";
-import { DEV_MENU_ENABLED, devFlags } from "../dev";
+import { DEV_MENU_ENABLED, devFlags, type AutopilotMode } from "../dev";
 import { BLOOD_IDS, FINISHER_IDS, TRAIL_COLOUR_PRESETS, TRAIL_IDS, TRAIL_LENGTH_STEPS, TRAIL_OPACITY_STEPS, type FinisherId } from "../game/cosmeticIds";
 import { devResetDeeds, devResetPurchases, ensureIdentity, fetchAchievements } from "../net/api";
 import { forgetCelebratedDeeds } from "../deeds/celebrated";
@@ -364,6 +364,7 @@ export const HomeScreen = ({
   const [playBox, setPlayBox] = useState<{ w: number; h: number } | null>(null);
   // Mirror devFlags so the toggle labels re-render on tap.
   const [perfOverlay, setPerfOverlay] = useState(devFlags.perfOverlay);
+  const [autopilot, setAutopilot] = useState(devFlags.autopilot);
   // Cosmetic prototypes (bits-cosmetics.md): session-only like the perf row.
   const [cosmetics, setCosmetics] = useState({ ...devFlags.cosmetics });
   // The announcer row mirrors a PERSISTED setting (settings.ts), unlike the
@@ -421,6 +422,13 @@ export const HomeScreen = ({
     ],
   });
 
+  // The challenge autopilot cycles OFF → the three tiers worth recording.
+  const AUTOPILOT_TIERS: (AutopilotMode | null)[] = [null, "oracle", "godlike", "masterful", "skilled"];
+  const onCycleAutopilot = (): void => {
+    const next = AUTOPILOT_TIERS[(AUTOPILOT_TIERS.indexOf(devFlags.autopilot) + 1) % AUTOPILOT_TIERS.length] ?? null;
+    devFlags.autopilot = next;
+    setAutopilot(next);
+  };
   const onTogglePerf = (): void => {
     devFlags.perfOverlay = !devFlags.perfOverlay;
     setPerfOverlay(devFlags.perfOverlay);
@@ -654,6 +662,13 @@ export const HomeScreen = ({
           >
           <Pressable onPress={withTap("uiTap", onTogglePerf)} style={styles.devButton}>
             <Text style={styles.devButtonText}>PERF OVERLAY {perfOverlay ? "◉ ON" : "○ OFF"}</Text>
+          </Pressable>
+          {/* Challenge autopilot (bits-challenges.md): the bot brain plays
+              your seat in the next challenge — for recording the clears. */}
+          <Pressable onPress={withTap("uiTap", onCycleAutopilot)} style={styles.devButton}>
+            <Text style={styles.devButtonText}>
+              CHALLENGE AUTOPILOT {autopilot === null ? "○ OFF" : `◉ ${autopilot.toUpperCase()}`}
+            </Text>
           </Pressable>
           {/* The announcer voice — the one PERSISTED row (a real device
               setting auditioned from here until the store exists). */}

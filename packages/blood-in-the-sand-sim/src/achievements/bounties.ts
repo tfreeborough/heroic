@@ -39,4 +39,4 @@ export const bountyOf = (def: { rewards?: readonly AchievementReward[] }): numbe
  * pushes past it fails the suite — raise this on purpose, with the doc's
  * budget table open, never as a drive-by.
  */
-export const BOUNTY_BUDGET = 9000;
+export const BOUNTY_BUDGET = 10_200; // 9,000 + the challenge board's 1,125 (bits-challenges.md, Tom 2026-09-26)

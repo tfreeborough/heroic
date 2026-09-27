@@ -55,6 +55,12 @@ export const FINISHER_CUES: Readonly<Record<OwnableFinisherId, readonly Finisher
     { atMs: 560, haptic: "light" },
     { atMs: 670, haptic: "medium" },
   ],
+  hammerfall: [
+    { atMs: 0, sound: "hammerfall_swing" }, // the swing
+    { atMs: 280, sound: "hammerfall" }, // the anvil strike, ~20ms ahead of the blow
+    // The one finisher that earns "heavy": the kill's own pulse is 300ms gone.
+    { atMs: 300, haptic: "heavy" },
+  ],
   snuffed: [
     { atMs: 370, sound: "snuffed" }, // the pinch
     { atMs: 420, haptic: "soft" },

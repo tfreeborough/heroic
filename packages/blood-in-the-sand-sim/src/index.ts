@@ -19,3 +19,5 @@ export * from "./round";
 export * from "./sands";
 export * from "./step";
 export * from "./achievements";
+export * from "./challenges";
+export * from "./oracle";

@@ -382,6 +382,41 @@ export const devResetPurchases = async (identity: Identity): Promise<boolean> =>
   }
 };
 
+/** What /challenges/report hands back: the deeds the report unlocked (the
+ * client celebrates them itself) and the player's `challenge:` counters. */
+export interface ChallengeReportResult {
+  unlocks: string[];
+  counters: Record<string, number>;
+}
+
+/**
+ * Report a finished challenge round (bits-challenges.md) — cleared or not,
+ * with the device's running attempt count. Null = the API is off or
+ * unreachable; the local tally stands and the next report carries the
+ * total anyway (attempts are absolute, never deltas).
+ */
+export const reportChallenge = async (
+  identity: Identity,
+  report: { id: string; cleared: boolean; attempts: number },
+): Promise<ChallengeReportResult | null> => {
+  if (!API_URL) return null;
+  try {
+    const res = await apiFetch("/challenges/report", {
+      method: "POST",
+      headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
+      body: JSON.stringify(report),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as Partial<ChallengeReportResult>;
+    return {
+      unlocks: Array.isArray(data.unlocks) ? data.unlocks.filter((u): u is string => typeof u === "string") : [],
+      counters: data.counters && typeof data.counters === "object" ? data.counters : {},
+    };
+  } catch {
+    return null;
+  }
+};
+
 /** Dev-only (STORE_DEV_TOOLS=1): grant one deed with its rewards, as a
  * settle would (bits-dev-menu.md § deeds). Unknown id / prod API → false. */
 export const devGrantDeed = async (identity: Identity, id: string): Promise<boolean> => {

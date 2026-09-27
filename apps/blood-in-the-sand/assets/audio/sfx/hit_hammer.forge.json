@@ -2,11 +2,11 @@
   "type": "sfx-bits",
   "subject": "a huge warhammer smashing into a body, one massive blunt crunch with a deep bass thump, close-miked",
   "prompt": "a huge warhammer smashing into a body, one massive blunt crunch with a deep bass thump, close-miked. A single one-shot sound effect, not music.",
-  "provider": "stable-audio-3",
-  "model": "small-sfx",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
   "params": {
-    "durationSeconds": 1,
-    "promptInfluence": null,
+    "durationSeconds": 2,
+    "promptInfluence": 0.55,
     "loudnessLufs": -16,
     "truePeakDb": -1.5
   },
@@ -15,6 +15,11 @@
     "hit_hammer_2.mp3",
     "hit_hammer_3.mp3"
   ],
+  "takeEngines": {
+    "hit_hammer_1.mp3": "elevenlabs",
+    "hit_hammer_2.mp3": "elevenlabs",
+    "hit_hammer_3.mp3": "elevenlabs"
+  },
   "created": "2026-07-16T13:33:52.220Z",
-  "updated": "2026-09-06T21:52:55.558Z"
+  "updated": "2026-09-26T22:40:17.621Z"
 }

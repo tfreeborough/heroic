@@ -5,6 +5,11 @@
  * always clean) and can be read from hot paths (the game loop) without
  * touching React.
  */
+import type { DifficultyId } from "@heroic/blood-in-the-sand-sim";
+
+/** A bot tier, or the Oracle — the rollout planner (sim oracle.ts) that
+ * forecasts the real opponents; on the phone it runs the LITE budget. */
+export type AutopilotMode = DifficultyId | "oracle";
 import type { CosmeticLoadout } from "./game/cosmeticIds";
 
 /**
@@ -24,6 +29,11 @@ export const DEV_MENU_ENABLED = __DEV__ || process.env.EXPO_PUBLIC_DEV_MENU === 
 export const devFlags = {
   /** Frame profiler readout in matches: JS fps + sim/record ms per frame. */
   perfOverlay: false,
+  /** Challenge autopilot (bits-challenges.md, Tom 2026-09-26): the shared
+   * bot brain plays YOUR seat in the next challenge at this tier — for
+   * recording clears nobody can land by thumb. null = you play. Read once
+   * per challenge client, at construction. */
+  autopilot: null as AutopilotMode | null,
   /** Cosmetic prototypes (bits-cosmetics.md): what YOU wear next match —
    * purely local, nothing rides the wire. `everyone` dresses every fighter
    * the same way (bots included) — the worst-case perf read, and the quick

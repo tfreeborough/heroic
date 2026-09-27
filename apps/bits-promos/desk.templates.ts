@@ -6,6 +6,7 @@
  */
 import type { DeskTemplate } from "../desk/game";
 import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from "./src/GameplayClip";
+import { HookClip, hookClipDurationSeconds, hookClipSchema, splitHooks } from "./src/HookClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
 import { MUSIC_LEVEL } from "./src/components";
 import roster from "./src/data/roster.json";
@@ -41,6 +42,28 @@ export const TEMPLATES: DeskTemplate[] = [
     uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
     defaults: { title: "Match point", line: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0, ...musicDefaults },
     options: { music: songs },
+    needsClip: true,
+    hide: ["clip", "format", "sourceAspect"],
+  },
+  {
+    id: "HookClip",
+    label: "Hook clip",
+    blurb: "A match clip built for the scroll: the hook is on screen from the first frame, no title beat. Put several hooks in the field separated by | and one press renders each as its own video.",
+    component: HookClip,
+    schema: hookClipSchema,
+    seconds: (p) => hookClipDurationSeconds(p as { durationSeconds: number }),
+    clipProps: (clip, clipSeconds, facts) => ({
+      clip,
+      durationSeconds: Math.min(12, Math.floor(clipSeconds)),
+      startFrom: 0,
+      sourceAspect: facts && facts.width && facts.height ? facts.width / facts.height : undefined,
+    }),
+    clipKey: "clip",
+    uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
+    defaults: { hook: "", hookFor: 3, look: "bold", follow: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0, ...musicDefaults },
+    options: { music: songs },
+    needsClip: true,
+    variants: { key: "hook", split: splitHooks, suffix: "hook" },
     hide: ["clip", "format", "sourceAspect"],
   },
   {

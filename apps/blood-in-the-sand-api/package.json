@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@heroic/achievements": "workspace:*",
     "@apple/app-store-server-library": "^3.1.0",
     "@clerk/backend": "^3.16.10",
     "@heroic/blood-in-the-sand-persistence": "workspace:*",

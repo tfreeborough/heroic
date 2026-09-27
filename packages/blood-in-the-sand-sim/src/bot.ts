@@ -22,7 +22,7 @@
  * moves (dodges, evasion, unstick) bypass the smoothing and stay sharp.
  */
 import { ARCHETYPES, deriveArchetype, focusTarget, resolveBand, type ArchetypeId } from "./botArchetypes";
-import { dashDown, decideCasts, incomingShot, rangedWeapon, windupThreat } from "./botCasts";
+import { dashDown, decideCasts, incomingShot, ironhideLeft, rangedWeapon, windupThreat } from "./botCasts";
 import { DEFAULT_DIFFICULTY, DIFFICULTIES, type DifficultyId } from "./botDifficulty";
 import {
   cycleSeconds,
@@ -36,7 +36,7 @@ import {
 } from "./botThreats";
 import { DASH_DISTANCE, DASH_IFRAMES, PLAYER_RADIUS, SANDS_ATTACKER_ID, TICK_DT, WEAPONS } from "./config";
 import type { BotNav } from "./nav";
-import { dashClear, navDirection, openDirection } from "./nav";
+import { dashClear, lineClear, navDirection, openDirection, standable } from "./nav";
 import type { DeployableSnapshot, PlayerSnapshot, ProjectileSnapshot, RoundSnapshot, ShellSnapshot } from "./protocol";
 
 export * from "./botArchetypes";
@@ -199,6 +199,9 @@ const SANDS_MARGIN = 70;
 const VENOM_DENY = { clock: 2.2, band: { near: 200, far: 320 } } as const;
 /** px past a dead zone's edge inside which an entry is finished on foot. */
 const STAGE_COMMIT = 45;
+/** Waiting out an enemy Ironhide: the hold band past their reach, and the
+ * mark hp below which the brain swings through the shell anyway. */
+const IRONHIDE_WAIT = { near: 25, far: 60, finishBelow: 0.15 } as const;
 /** px outside a hazard's reach where inward intent is stripped (covers a
  * few ticks of full-speed travel plus the stick's turn lag). */
 const RIM_GUARD = 45;
@@ -417,6 +420,102 @@ const retreatDirection = (
   return best;
 };
 
+/** The medic's standing rules (bits-challenges.md, Tall order). */
+const MEDIC = {
+  /** Guard spot: this far behind the patient, on the side away from the threat. */
+  hold: 170,
+  /** Fan the guard spots per seat (radians) so three medics don't stack
+   * into one hammer arc. */
+  spread: 0.6,
+  /** Past this from the patient, the beam's reach (300 to the rim) beats safety. */
+  leash: 250,
+  /** The threat inside this → back off, harder the closer it is. */
+  danger: 230,
+  /** The threat inside this → spend the dash getting out. */
+  hopBelow: 130,
+} as const;
+/** Flow-field keys for the guard spots — clear of player ids and the sands' -1. */
+const MEDIC_NAV_KEY = -1000;
+
+/**
+ * Where a Lifeline stands. The beam picks its own patient (sticky, most
+ * wounded, in range, in sight — stepLifelineBeam), so the brain only
+ * steers: follow the linked patient (or the most hurt ally, or the one the
+ * threat is about to reach), hold a guard spot behind them from the
+ * threat, stay inside beam reach and sight, and give ground when the
+ * threat comes for me. With nobody left to heal it just runs — the Closing
+ * Sands end that. Returns an unnormalised steering vector.
+ */
+const medicSteer = (
+  memory: BotMemory,
+  nav: BotNav,
+  me: PlayerSnapshot,
+  threat: PlayerSnapshot,
+  players: readonly PlayerSnapshot[],
+  sands: { cx: number; cy: number; r: number } | null,
+): { x: number; y: number } => {
+  const mePos = { x: me.x, y: me.y };
+  const td = Math.hypot(me.x - threat.x, me.y - threat.y) || 1;
+  const away = { x: (me.x - threat.x) / td, y: (me.y - threat.y) / td };
+  const mates = players.filter((p) => p.team === me.team && p.id !== me.id && p.alive);
+  if (mates.length === 0) return retreatDirection(memory, nav, mePos, away, sands);
+
+  let patient = mates.find((p) => p.id === me.beamTargetId);
+  if (!patient) {
+    let worst = 1;
+    for (const p of mates) {
+      const frac = p.maxHp > 0 ? p.hp / p.maxHp : 1;
+      if (frac < worst) {
+        worst = frac;
+        patient = p;
+      }
+    }
+  }
+  if (!patient) {
+    // Nobody hurt yet: shadow whoever the threat will reach first.
+    let nearest = Infinity;
+    for (const p of mates) {
+      const d = Math.hypot(p.x - threat.x, p.y - threat.y);
+      if (d < nearest) {
+        nearest = d;
+        patient = p;
+      }
+    }
+  }
+  const pt = patient!;
+  const patientPos = { x: pt.x, y: pt.y };
+
+  const bx = pt.x - threat.x;
+  const by = pt.y - threat.y;
+  const angle = (bx === 0 && by === 0 ? Math.atan2(away.y, away.x) : Math.atan2(by, bx)) + ((me.id % 3) - 1) * MEDIC.spread;
+  let goal = { x: pt.x + Math.cos(angle) * MEDIC.hold, y: pt.y + Math.sin(angle) * MEDIC.hold };
+  // A patient backed onto a wall or the edge has no "behind" — stand at them.
+  if (!standable(nav, goal)) goal = patientPos;
+
+  let vx = 0;
+  let vy = 0;
+  const gd = Math.hypot(goal.x - me.x, goal.y - me.y);
+  const toGoal = navDirection(nav, MEDIC_NAV_KEY - me.id, mePos, goal);
+  const arrive = Math.min(1, gd / 60); // ease in — no jitter on the spot
+  vx += toGoal.x * arrive;
+  vy += toGoal.y * arrive;
+
+  const pd = Math.hypot(pt.x - me.x, pt.y - me.y);
+  // The beam needs reach AND sight — either failing pulls me to the patient.
+  if (pd > MEDIC.leash || !lineClear(nav, mePos, patientPos)) {
+    const toPatient = navDirection(nav, pt.id, mePos, patientPos);
+    vx += toPatient.x * 1.5;
+    vy += toPatient.y * 1.5;
+  }
+  if (td < MEDIC.danger) {
+    const back = retreatDirection(memory, nav, mePos, away, sands);
+    const w = 0.4 + 2 * (1 - td / MEDIC.danger);
+    vx += back.x * w;
+    vy += back.y * w;
+  }
+  return { x: vx, y: vy };
+};
+
 /** Is the mark just outside my reach, not swinging at me, with my own
  * weapon ready — so one hop puts the next swing on its back? */
 const pursuitHop = (me: PlayerSnapshot, target: PlayerSnapshot, dist: number, targetHp: number): boolean => {
@@ -515,7 +614,8 @@ export const botThink = (
       fleeing = false;
     } else {
       memory.fleeTicks += 1;
-      if (memory.fleeTicks > FLEE_BUDGET_TICKS) {
+      const budget = preset.fleeBudgetTicks === undefined ? FLEE_BUDGET_TICKS : preset.fleeBudgetTicks;
+      if (budget !== null && memory.fleeTicks > budget) {
         memory.fleeSpent = true;
         fleeing = false;
       }
@@ -567,7 +667,8 @@ export const botThink = (
     }
   }
   if (memory.pressTicks > 0) memory.pressTicks -= 1;
-  const pressing = memory.pressTicks > 0 && !fleeing;
+  // A medic never presses: it can't draw blood, so the duel is always "stalled".
+  const pressing = memory.pressTicks > 0 && !fleeing && archetype !== "medic";
 
   /** The dive: a weak-enough mark collapses the band into a charge. */
   const diving = preset.diveBelow !== undefined && targetHp < preset.diveBelow;
@@ -576,7 +677,8 @@ export const botThink = (
   // shorter weapon, live inside a dead zone. A dead zone outranks even a
   // press or a dive (charging a trident means arriving inside its prongs);
   // the out-reach dance yields to both, like any band.
-  let spacing = tier.footwork > 0 ? meleeSpacing(me, target) : null;
+  const medic = archetype === "medic";
+  let spacing = tier.footwork > 0 && !medic ? meleeSpacing(me, target) : null;
   // Venom-clock denial (Tom's fang trick, 2026-09-21: stab 3–4 times, leave,
   // re-apply right before the clock runs out — "essentially no counterplay").
   // There is one: all stacks share ONE clock that only a fresh stab renews,
@@ -619,8 +721,28 @@ export const botThink = (
       staging = true;
     }
   }
+  // Wait out the Ironhide (Tom 2026-09-27: Godlike lost a war of attrition
+  // to blade + Ironhide — it kept trading into 70% damage reduction). The
+  // window is short and plants their feet at half speed, so a sharp melee
+  // brain steps just outside their reach and circles until it drops, then
+  // the ordinary band walks straight back in while the cooldown runs.
+  // Not against a shooter (backing off a bow is just eating arrows) and not
+  // for the kill: a mark one hit from dead still dies through the shell.
+  const theirReach = strikeBand(target, me);
+  const waiting =
+    tier.footwork >= 0.7 &&
+    !medic &&
+    !rangedWeapon(me) &&
+    !rangedWeapon(target) &&
+    theirReach !== null &&
+    ironhideLeft(target) > (tier.reactionTicks + 1) * TICK_DT &&
+    targetHp > IRONHIDE_WAIT.finishBelow;
+  if (waiting) {
+    spacing = { near: theirReach.far + IRONHIDE_WAIT.near, far: theirReach.far + IRONHIDE_WAIT.far };
+    staging = false;
+  }
   const hugging = spacing !== null && spacing.near === 0;
-  const band = spacing !== null && (hugging || staging || !(diving || pressing))
+  const band = spacing !== null && (hugging || staging || waiting || !(diving || pressing))
     ? spacing
     : diving || pressing
       ? null
@@ -721,6 +843,15 @@ export const botThink = (
     if (mate && mateDist > preset.anchorLeash) {
       add(navDirection(nav, mate.id, mePos, { x: mate.x, y: mate.y }), 0.9);
     }
+  }
+
+  // The medic's feet are their own thing — everything above (band, strafe,
+  // weave, leash) is for brains that fight. Hazards, the tide and the
+  // dodges below still apply.
+  if (medic) {
+    vx = 0;
+    vy = 0;
+    add(medicSteer(memory, nav, me, target, players, sands), 1);
   }
 
   // Feet cooperate with hands: a hurt bot drifts to its own team's font…
@@ -1064,11 +1195,14 @@ export const botThink = (
           // 2.5s, hop ready and unspent, eating venom and landing nothing).
           ((band === null || memory.bandState === 1) &&
             !staging &&
+            !waiting &&
             tier.footwork >= 0.7 &&
             mayGapClose &&
             pursuitHop(me, target, dist, targetHp)) ||
-          ((preset.gapCloseDash || pressing) && mayGapClose && dist > (band ? band.far + 120 : 220)) ||
-          (band !== null && dist < band.near * 0.6))));
+          ((preset.gapCloseDash || pressing) && !waiting && mayGapClose && dist > (band ? band.far + 120 : 220)) ||
+          (band !== null && dist < band.near * 0.6) ||
+          // The medic's escape: the threat is on me — hop the way the feet are going.
+          (medic && dist < MEDIC.hopBelow))));
 
   if (memory.castHoldTicks > 0) memory.castHoldTicks -= 1;
   let pick = decideCasts(
@@ -1081,6 +1215,7 @@ export const botThink = (
     // Late commitment, graded: the sharp tiers wait for the last quarter
     // second; a big timing error is as good as pressing on sight.
     lag + 0.22 + tier.timing * 2,
+    sharp,
   );
   // The reactive picks ride the dodge roll; everything else is a paced play
   // gated by the tier's cast discipline — a failed roll retries a few ticks
@@ -1090,6 +1225,9 @@ export const botThink = (
     pick = null;
     memory.castHoldTicks = Math.max(memory.castHoldTicks, 8);
   }
+  // A timed dodge beats tanking it: i-frames take none of the blow, the
+  // shell takes 30% (the trade rule is for when the hop isn't the answer).
+  if (pick === "ironhide" && dodgeNow && dash) pick = null;
   if (pick !== null || dash) {
     memory.castHoldTicks = Math.max(memory.castHoldTicks, 24 + tier.castHoldExtra);
   }

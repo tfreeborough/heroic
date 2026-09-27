@@ -21,9 +21,10 @@ import {
   type Team,
 } from "@heroic/blood-in-the-sand-sim";
 import type { GameClient } from "../net/connection";
+import type { ChallengeObjective } from "../net/practice";
 import { BloodField } from "../game/blood";
 import { FinisherCues } from "../game/finisherCues";
-import { FinisherField } from "../game/finishers";
+import { FinisherField, finisherImpactMs } from "../game/finishers";
 import { TrailField, type TrailWear } from "../game/trails";
 import { TarField } from "../game/tar";
 import { CrackField } from "../game/cracks";
@@ -60,6 +61,7 @@ import { TitleFlex } from "../game/TitleFlex";
 import { pickOutcome, type OutcomeKind } from "../game/roundMessages";
 import { StatusPulses } from "../game/statusRings";
 import { loadLefty } from "../settings";
+import { DISPLAY_FONT } from "../typography";
 import { DEV_MENU_ENABLED, devFlags } from "../dev";
 
 const NUMBER_TTL = 750;
@@ -167,6 +169,9 @@ interface HudState {
   /** The ally the death-camera is trailing (name + hp for the chip), or null
    *  when alive / whole team wiped. hpFrac is quantised to keep setState calm. */
   spectate: { name: string; hpFrac: number } | null;
+  /** A challenge's objective strip (bits-challenges.md) — null outside
+   *  challenges and for last-one-standing recipes. */
+  objective: ChallengeObjective | null;
 }
 
 const INITIAL_HUD: HudState = {
@@ -181,6 +186,7 @@ const INITIAL_HUD: HudState = {
   lost: false,
   dead: false,
   spectate: null,
+  objective: null,
 };
 
 export interface GameScreenProps {
@@ -568,6 +574,11 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               const worn = finisherOf(e.attackerId);
               finishers.spawn(worn, e.x, e.y, now, dx / len, dy / len);
               if (worn !== "none") finisherCues.start(worn, now, gainAt(e.x, e.y), e.attackerId === myId);
+              // A finisher that lands a beat later kicks the camera again then.
+              const impact = finisherImpactMs(worn);
+              if (impact !== undefined) {
+                kicksRef.current.push({ x: e.x, y: e.y, dirX: 0, dirY: 1, bornMs: now + impact });
+              }
             }
             // Kill shake: every kill in view jolts the camera along the
             // spray (render decides "in view"). Straw men too — it's the
@@ -999,9 +1010,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
             spectateDeadAt.current = null;
           }
 
-          // Spent kicks fall off the front (birth-ordered).
+          // Spent kicks fall off. Not birth-ordered: a finisher's impact kick
+          // is pushed with a FUTURE bornMs (finisherImpactMs).
           const kicks = kicksRef.current;
-          while (kicks.length > 0 && now - kicks[0]!.bornMs >= KILL_KICK_MS) kicks.shift();
+          for (let i = kicks.length - 1; i >= 0; i--) if (now - kicks[i]!.bornMs >= KILL_KICK_MS) kicks.splice(i, 1);
 
           const prevPic = picture.value;
           picture.value = recordArena({
@@ -1064,7 +1076,10 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
               Math.max(0, Math.round((slot.cd / def.cooldown) * 100) / 100),
             );
             const active = slot.active > 0;
-            const key = `${slot.id}:${frac}:${active}:${slot.charges}`;
+            // Practice (and every challenge) never spends the round budget —
+            // the button wears ∞ instead of pips.
+            const unlimited = client.practice === true;
+            const key = `${slot.id}:${frac}:${active}:${slot.charges}:${unlimited}`;
             if (key !== lastButtonKeys.current[i]) {
               lastButtonKeys.current[i] = key;
               overlays[i]!.value = recordAbilityButton(
@@ -1072,6 +1087,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
                 active,
                 slot.charges,
                 def.charges,
+                unlimited,
               );
             }
           }
@@ -1208,6 +1224,7 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           lost: client.status === "closed",
           dead,
           spectate,
+          objective: phase === "active" || phase === "countdown" ? (client.objective ?? null) : null,
         };
         const key = JSON.stringify(next);
         if (key !== hudKey.current) {
@@ -1332,6 +1349,46 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
           </Text>
         </View>
       )}
+
+      {/* The challenge objective strip (bits-challenges.md § objective HUD):
+          how close you are, when the arena can't tell you itself — a kill
+          count, a survive clock, or the ward's health. Under the score,
+          above the kill announcements; gone with the match-end plate. */}
+      {hud.objective && !matchPlate ? (
+        <View style={[styles.objectiveWrap, { top: insets.top + 44 }]} pointerEvents="none">
+          {hud.objective.kind === "kills" ? (
+            <>
+              <Text style={styles.objectiveLabel}>KILLS</Text>
+              <Text style={[styles.objectiveValue, hud.objective.have >= hud.objective.need - 2 && styles.objectiveHot]}>
+                {hud.objective.have} / {hud.objective.need}
+              </Text>
+              <View style={styles.objectiveBar}>
+                <View style={[styles.objectiveFill, { width: `${Math.min(100, (hud.objective.have / hud.objective.need) * 100)}%` }]} />
+              </View>
+            </>
+          ) : hud.objective.kind === "survive" ? (
+            <>
+              <Text style={styles.objectiveLabel}>SURVIVE</Text>
+              <Text style={[styles.objectiveValue, hud.objective.left <= 5 && styles.objectiveHot]}>
+                {Math.floor(hud.objective.left / 60)}:{String(hud.objective.left % 60).padStart(2, "0")}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.objectiveLabel}>{hud.objective.name.toUpperCase()}</Text>
+              <View style={styles.objectiveBar}>
+                <View
+                  style={[
+                    styles.objectiveFill,
+                    hud.objective.hpFrac < 0.25 && styles.objectiveFillHot,
+                    { width: `${Math.round(hud.objective.hpFrac * 100)}%` },
+                  ]}
+                />
+              </View>
+            </>
+          )}
+        </View>
+      ) : null}
 
       {/* kill announcements (First Blood / DOUBLE KILL …) — sits below the score,
           clear of the centre countdown/banner */}
@@ -1508,6 +1565,35 @@ export const GameScreen = ({ client, onLeave, onQuit }: GameScreenProps) => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#141210" },
+  objectiveWrap: {
+    position: "absolute",
+    alignSelf: "center",
+    alignItems: "center",
+    gap: 2,
+    minWidth: 120,
+  },
+  objectiveLabel: { color: "#8a7f70", fontSize: 10, fontWeight: "900", letterSpacing: 2 },
+  objectiveValue: {
+    fontFamily: DISPLAY_FONT,
+    color: "#f5ede0",
+    fontSize: 18,
+    letterSpacing: 1.5,
+    fontVariant: ["tabular-nums"],
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  objectiveHot: { color: "#e8b04a" },
+  objectiveBar: {
+    width: 120,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    overflow: "hidden",
+    marginTop: 2,
+  },
+  objectiveFill: { height: "100%", backgroundColor: "#d99a41" },
+  objectiveFillHot: { backgroundColor: "#c7402e" },
   scoreRow: {
     position: "absolute",
     top: 58,

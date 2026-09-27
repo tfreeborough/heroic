@@ -3,11 +3,12 @@ import { type GameInfo, gameApi, games } from "./api";
 import { Cleanup } from "./Cleanup";
 import { Clips } from "./Clips";
 import { Make } from "./Make";
+import { Queue } from "./Queue";
 import { Renders } from "./Renders";
 
-/** Hash routes: #<game>/clips · #<game>/clean/<file>[?from=<cut>] · #<game>/make[/<file> | /batch:<id>] · #<game>/renders
+/** Hash routes: #<game>/clips · #<game>/clean/<file>[?from=<cut>] · #<game>/make[/<file> | /batch:<id>] · #<game>/renders · #<game>/queue
  * `from` = the cut whose edit the Cleanup screen should start from (re-cutting). */
-export type Route = { name: "clips" } | { name: "clean"; file: string; from?: string } | { name: "make"; file?: string; batch?: string } | { name: "renders" };
+export type Route = { name: "clips" } | { name: "clean"; file: string; from?: string } | { name: "make"; file?: string; batch?: string } | { name: "renders" } | { name: "queue" };
 
 const parse = (hash: string): { game?: string; route: Route } => {
   const [game, name, ...rest] = hash.replace(/^#\/?/, "").split("/");
@@ -18,6 +19,7 @@ const parse = (hash: string): { game?: string; route: Route } => {
   if (name === "clean" && arg) route = { name: "clean", file: arg, from };
   else if (name === "make") route = { name: "make", file: arg?.startsWith("batch:") ? undefined : arg, batch: arg?.startsWith("batch:") ? arg.slice(6) : undefined };
   else if (name === "renders") route = { name: "renders" };
+  else if (name === "queue") route = { name: "queue" };
   return { game: game || undefined, route };
 };
 const hashFor = (game: string, r: Route) =>
@@ -71,6 +73,7 @@ export const App = () => {
           {tab("clips", "Clips")}
           {tab("make", "Make a video")}
           {tab("renders", "Renders")}
+          {tab("queue", "Queue")}
         </nav>
         <div className="right">
           {list.length > 1 ? (
@@ -91,6 +94,7 @@ export const App = () => {
         {route.name === "clean" ? <Cleanup game={game} api={api} file={route.file} from={route.from} key={`${route.file}|${route.from ?? ""}`} /> : null}
         {route.name === "make" ? <Make game={game} api={api} file={route.file} batch={route.batch} /> : null}
         {route.name === "renders" ? <Renders game={game} api={api} /> : null}
+        {route.name === "queue" ? <Queue game={game} api={api} /> : null}
       </main>
     </>
   );

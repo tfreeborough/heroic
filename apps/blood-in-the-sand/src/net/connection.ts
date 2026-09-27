@@ -6,6 +6,7 @@
  * v2 flow: connect (no handshake) → browse/create/join rooms → seated in a
  * room lobby → the host starts → snapshots drive the match → back to lobby.
  */
+import type { ChallengeObjective } from "./practice";
 import {
   DEFAULT_PORT,
   HEARTBEAT_INTERVAL_MS,
@@ -225,6 +226,10 @@ export interface GameClient {
   readonly practice?: boolean;
   /** `casts` indexed by ability slot (= pick = button order). */
   sendInput(sx: number, sy: number, casts: boolean[]): void;
+  /** A challenge's live objective (bits-challenges.md § objective HUD) —
+   * PracticeClient only, and only for recipes whose win isn't the sim's
+   * own wipe rule; GameScreen shows a strip while it's non-null. */
+  readonly objective?: ChallengeObjective | null;
   /** Dev perf overlay: drain the wire timings gathered since the last read.
    * OPTIONAL — a networked client only; practice has no wire (null/absent =
    * no `net` line). */
@@ -288,6 +293,13 @@ export interface LobbyClient extends GameClient {
   readonly myAbilities: AbilityId[];
   setWeapon(weapon: WeaponId): void;
   setAbilities(abilities: AbilityId[]): void;
+  /** Challenges (bits-challenges.md): the match waits for START. PracticeClient
+   * in challenge mode only; absent everywhere else. */
+  begin?(): void;
+  readonly begun?: boolean;
+  readonly canBegin?: boolean;
+  /** Your kit is fixed by the recipe — the wizard never opens. */
+  readonly kitLocked?: boolean;
   /** Host-only: bots fill the empty seats, stragglers auto-arm; the countdown
    * follows (bits-bot-backfill.md). */
   forceStart(): void;

@@ -81,6 +81,37 @@ export const restoreRng = (seed: number, draws: number): Rng => {
   return rng;
 };
 
+/** Deep copy of plain match data (arrays, objects, primitives — the state
+ * is guaranteed class-free, see state.ts). Hand-rolled: structuredClone is
+ * not a given on every JS engine the sim runs on. */
+export const clonePlain = <T>(v: T): T => {
+  if (v === null || typeof v !== "object") return v;
+  if (Array.isArray(v)) {
+    const out = new Array(v.length);
+    for (let i = 0; i < v.length; i++) out[i] = clonePlain(v[i]);
+    return out as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const k in v as Record<string, unknown>) out[k] = clonePlain((v as Record<string, unknown>)[k]);
+  return out as T;
+};
+
+/**
+ * An independent copy of a live match — same seed, same draw count, same
+ * everything — that can be stepped without touching the original. The
+ * oracle (oracle.ts) rolls candidate futures on clones; a replay verifier
+ * can fork one too. O(state size): players, shots, deployables — small.
+ */
+export const cloneSim = (sim: ArenaSim): ArenaSim => {
+  const state = clonePlain(sim.state);
+  return {
+    state,
+    zone: sim.zone, // immutable, shared
+    grid: createSpatialGrid(sim.zone.size.x, GRID_CELL, sim.zone.size.y),
+    rng: countingRng(restoreRng(state.seed, state.rngDraws), state),
+  };
+};
+
 export const deriveArenaZone = (file: ZoneFile, teamCount = 2): ArenaZone => {
   const zone = loadZone(file);
   // Two authored anchor SETS share the map (bits-brawl.md § spawns): the
@@ -151,11 +182,10 @@ export const teamSlotOf = (state: ArenaState, player: ArenaPlayer): number =>
  * team's authored anchor, perpendicular to the anchor→arena-centre direction —
  * shoulder to shoulder, facing the enemy, on any map, with zero map edits.
  */
-export const spawnSlotPos = (sim: ArenaSim, team: Team, slot: number): Vec2 => {
+export const spawnSlotPos = (sim: ArenaSim, team: Team, slot: number, lineSize = teamSizeOf(sim.state)): Vec2 => {
   const anchor = sim.zone.spawns[team - 1]!;
-  const teamSize = teamSizeOf(sim.state);
   const perp = spawnFacing(sim, anchor) + Math.PI / 2;
-  const offset = (slot - (teamSize - 1) / 2) * SPAWN_SPACING;
+  const offset = (slot - (lineSize - 1) / 2) * SPAWN_SPACING;
   return { x: anchor.x + Math.cos(perp) * offset, y: anchor.y + Math.sin(perp) * offset };
 };
 
@@ -268,7 +298,19 @@ export const setPlayerWeapon = (sim: ArenaSim, id: number, weapon: WeaponId): bo
   const player = sim.state.players[id];
   if (!player || sim.state.round.phase !== "lobby") return false;
   player.weapon = weapon;
-  player.combatant = makeCombatant({ ...PLAYER_STATS, ...WEAPONS[weapon].stats });
+  const stats = { ...PLAYER_STATS, ...WEAPONS[weapon].stats };
+  stats.maxHp = Math.max(1, Math.round(stats.maxHp * player.maxHpScale));
+  player.combatant = makeCombatant(stats);
+  return true;
+};
+
+/** Scale a seat's max hp (lobby only; challenges' glass foes). Rebuilds the
+ * stats if a weapon is already picked, so call order doesn't matter. */
+export const setPlayerMaxHpScale = (sim: ArenaSim, id: number, scale: number): boolean => {
+  const player = sim.state.players[id];
+  if (!player || sim.state.round.phase !== "lobby" || !(scale > 0)) return false;
+  player.maxHpScale = scale;
+  if (player.weapon) setPlayerWeapon(sim, id, player.weapon);
   return true;
 };
 

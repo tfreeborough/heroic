@@ -23,6 +23,7 @@ import {
   LOADOUT_ABILITY_COUNT,
   PLAYER_RADIUS,
   PLAYER_STATS,
+  CLOSING_SANDS,
   WINS_TO_TAKE_MATCH,
   WINS_TO_TAKE_MATCH_BRAWL,
   type AbilityId,
@@ -188,8 +189,46 @@ export interface ArenaPlayer {
    * exists so rooms can tell humans from bots (host succession, GC, the
    * cancel window, roster markers). Only addBot sets this. */
   bot: boolean;
-  /** Training only: seconds until a dead dummy is replaced; 0 = none pending. */
+  /** Seconds until a dead dummy / respawning seat is replaced; 0 = none pending. */
   respawnLeft: number;
+  /** A respawning seat (bits-challenges.md, the horde): a brain-driven bot
+   * that stands back up on its spawn slot DUMMY_RESPAWN_SECONDS after death
+   * — the wave mechanic. While any seat on a team respawns, that team is
+   * never "wiped" (checkRoundOver counts it alive), so the round ends only
+   * when the OTHER side falls or the host concludes it (concludeRound).
+   * Real rooms never set this — only offline challenge hosts do. */
+  respawns: boolean;
+  /** Seconds after each round start before this seat ARRIVES (bits-
+   * challenges.md, the stream: "five in a row" instead of five at once).
+   * 0 = on the bell. A pending seat is dead-but-coming: it counts as alive
+   * for the round-over rule and the respawn pass stands it up on time. */
+  spawnDelay: number;
+  /** The host fixed this seat's kit (bits-challenges.md: "bow, nothing
+   * else") — the arming gate treats it as complete even with an empty
+   * hand, and the wizard never opens for it. Real rooms never set it. */
+  kitLocked: boolean;
+  /** Fraction of max hp this seat starts every round (and respawn) at —
+   * the handicap dial (bits-challenges.md "Half a heart"). 1 = full. */
+  startHpFrac: number;
+  /** Multiplier on this seat's max hp, baked into its stats when the weapon
+   * is picked (bits-challenges.md, the glass foes). A scaled seat still
+   * starts on a FULL bar — a smaller pool, never a visibly pre-damaged bot.
+   * 1 for every real seat. */
+  maxHpScale: number;
+  /** Abilities held OPEN for the whole round (bits-challenges.md, the
+   * Titan): fired at the bell, and the active window never closes. Rides
+   * the slot's own lifecycle, so every reader of "is it active" (damage,
+   * size, reach, the snapshot, other bots' threat reads) just works. The
+   * ability must be in the hand. Empty for every real seat. */
+  permanentAbilities: AbilityId[];
+  /** Multiplier on this seat's Lifeline heal rate (bits-challenges.md, Tall
+   * order's healers — Tom 2026-09-27). 1 for every real seat. */
+  healScale: number;
+  /** Multiplier on this seat's ability cooldowns (bits-challenges.md, the
+   * horde: 0 = a cast is ready again the moment its active window closes).
+   * 1 for every real seat; the charge budget is a separate gate (practice
+   * already lifts it). */
+  cooldownScale: number;
   /** Announcer-pack id (cosmetic, sim-meaningless — carried like `name` and
    * broadcast via RoomStatePlayer so every client can play the killer's
    * voice). "default" unless the seat's client claimed a pack; bots and
@@ -226,7 +265,7 @@ export type RoundPhase = "lobby" | "countdown" | "active" | "roundEnd" | "matchE
 /** An armed loadout: a weapon plus a full ability hand — the wizard guarantees
  * this by construction; the arming countdown gates on it. */
 export const loadoutComplete = (p: ArenaPlayer): boolean =>
-  p.weapon !== null && p.abilities.length === LOADOUT_ABILITY_COUNT;
+  p.kitLocked || (p.weapon !== null && p.abilities.length === LOADOUT_ABILITY_COUNT);
 
 /** A room seat: a player, or empty. Seat index = player id (stable across the
  * match); team is stored on the player — addPlayer assigns it random-balanced. */
@@ -367,6 +406,13 @@ export interface ArenaState {
    * spend the per-round charge budget — cooldown is the only gate, so you
    * can drill an ability freely. Real rooms never set this. */
   practice: boolean;
+  /** Offline challenge dials (bits-challenges.md) — real rooms leave both
+   * null and read the shipped config: when the Closing Sands roll (seconds
+   * of active round; Infinity = never), and the rounds a match takes. */
+  sandsDelay: number | null;
+  winsToTake: number | null;
+  /** Seconds a respawning seat stays down; null = DUMMY_RESPAWN_SECONDS. */
+  respawnSeconds: number | null;
   /** RNG identity: the seed plus how many draws have happened. The live Rng sits
    * in ArenaSim; restoreRng(seed, rngDraws) rebuilds it from these two numbers. */
   seed: number;
@@ -397,6 +443,9 @@ export const createArenaState = (
   teamNames: pickTeamNames(seed, teamCount),
   training,
   practice,
+  sandsDelay: null,
+  winsToTake: null,
+  respawnSeconds: null,
   seed,
   rngDraws: 0,
   players: Array.from({ length: seatCount }, () => null),
@@ -425,7 +474,19 @@ export const teamSizeOf = (state: ArenaState): number => state.players.length / 
 /** The match threshold for this room's shape: Brawl resolves at 2, classic
  * modes at 3 (bits-brawl.md — six contenders spread wins out). */
 export const winsToTakeOf = (state: ArenaState): number =>
-  state.teamCount > 2 ? WINS_TO_TAKE_MATCH_BRAWL : WINS_TO_TAKE_MATCH;
+  state.winsToTake ?? (state.teamCount > 2 ? WINS_TO_TAKE_MATCH_BRAWL : WINS_TO_TAKE_MATCH);
+
+/** When this room's Closing Sands roll: the host's override or the config. */
+export const sandsDelayOf = (state: ArenaState): number => state.sandsDelay ?? CLOSING_SANDS.delaySeconds;
+
+/** Any seated respawning seat (the wave mechanic) — the respawn pass and
+ * the round-over rule both key off it. */
+export const hasRespawners = (state: ArenaState): boolean =>
+  state.players.some((p) => p !== null && (p.respawns || p.spawnDelay > 0));
+
+/** Dead but on its way back (a respawner between lives, or a delayed
+ * arrival before its first) — still a body the round is waiting on. */
+export const isPending = (p: ArenaPlayer): boolean => !p.alive && p.respawnLeft > 0;
 
 export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, facing: number): ArenaPlayer => ({
   id,
@@ -458,6 +519,14 @@ export const createPlayer = (id: number, name: string, team: Team, spawn: Vec2, 
   dummy: false,
   bot: false,
   respawnLeft: 0,
+  respawns: false,
+  kitLocked: false,
+  spawnDelay: 0,
+  startHpFrac: 1,
+  maxHpScale: 1,
+  permanentAbilities: [],
+  healScale: 1,
+  cooldownScale: 1,
   announcer: "default",
   title: "",
   finisher: "none",

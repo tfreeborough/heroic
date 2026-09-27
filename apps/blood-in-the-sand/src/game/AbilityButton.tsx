@@ -63,6 +63,7 @@ const drawButton = (
   active: boolean,
   charges: number,
   maxCharges: number,
+  unlimited: boolean,
 ): void => {
   const s = ABILITY_BUTTON_SIZE;
   const cx = s / 2;
@@ -100,8 +101,21 @@ const drawButton = (
     canvas.restore();
   }
 
-  // Charge pips: the round budget at a glance, gold in hand / faint burned.
-  if (maxCharges > 1) {
+  // Unlimited casts (practice and every challenge: the round budget is never
+  // spent — bits-challenges.md, Tom 2026-09-26 "a little infinity logo where
+  // the ability count once was"): a lemniscate where the pips would sit —
+  // two stroked loops, no font needed.
+  if (unlimited) {
+    stroke.setColor(C_PIP);
+    stroke.setStrokeWidth(1.6);
+    stroke.setStrokeCap(StrokeCap.Round);
+    const ry = 2.6;
+    const rx = 3.4;
+    const y = s - 8;
+    canvas.drawOval(Skia.XYWHRect(cx - rx * 2 + 0.6, y - ry, rx * 2, ry * 2), stroke);
+    canvas.drawOval(Skia.XYWHRect(cx - 0.6, y - ry, rx * 2, ry * 2), stroke);
+  } else if (maxCharges > 1) {
+    // Charge pips: the round budget at a glance, gold in hand / faint burned.
     const gap = 9;
     const left = cx - ((maxCharges - 1) * gap) / 2;
     for (let i = 0; i < maxCharges; i++) {
@@ -123,7 +137,9 @@ export const recordAbilityButton = (
   active: boolean,
   charges: number,
   maxCharges: number,
-): SkPicture => createPicture((canvas) => drawButton(canvas, frac, active, charges, maxCharges));
+  /** The round budget never spends here (practice, challenges) — draw ∞. */
+  unlimited = false,
+): SkPicture => createPicture((canvas) => drawButton(canvas, frac, active, charges, maxCharges, unlimited));
 
 /** A blank face for slots the snapshot hasn't named yet (pre-first-sample). */
 export const EMPTY_BUTTON_PICTURE: SkPicture = createPicture(() => {});

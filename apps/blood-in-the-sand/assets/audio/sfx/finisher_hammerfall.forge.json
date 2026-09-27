@@ -1,0 +1,23 @@
+{
+  "type": "sfx-bits",
+  "subject": "a blacksmith hammer striking an anvil once, loud, deep, rumbling",
+  "prompt": "a blacksmith hammer striking an anvil once, loud, deep, rumbling. A single one-shot sound effect, not music.",
+  "provider": "stable-audio-3",
+  "model": "small-sfx",
+  "params": {
+    "durationSeconds": 2,
+    "promptInfluence": 0.6,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_hammerfall_1.mp3",
+    "finisher_hammerfall_2.mp3"
+  ],
+  "takeEngines": {
+    "finisher_hammerfall_1.mp3": "stable-audio",
+    "finisher_hammerfall_2.mp3": "stable-audio"
+  },
+  "created": "2026-09-27T13:31:29.799Z",
+  "updated": "2026-09-27T13:31:29.799Z"
+}

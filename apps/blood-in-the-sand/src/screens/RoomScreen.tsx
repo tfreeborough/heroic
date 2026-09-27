@@ -49,6 +49,7 @@ import {
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import type { LobbyClient } from "../net/connection";
+import type { ChallengeDef, ChallengeTier } from "@heroic/blood-in-the-sand-sim";
 import { DeedReplayOverlay } from "./DeedCards";
 import { ARM_CLOCK_BAND, ArmClock } from "./ArmClock";
 import { BRAWL_TEAM_HEX } from "../game/render";
@@ -78,7 +79,19 @@ export interface RoomScreenProps {
   /** A queue-born room (bits-ranked.md): no host powers, no side switching,
    * no shareable code — the wizard and countdown run exactly the same. */
   ranked?: boolean;
+  /** A challenge lobby (bits-challenges.md): the same wizard for your kit
+   * (skipped when the recipe locks it), then the brief in place of the room
+   * view — premise, the opposition's kits, your attempt number — and an
+   * explicit START. Nothing counts down until it's pressed. */
+  challenge?: { def: ChallengeDef; attempt: number };
 }
+
+const CHALLENGE_TIERS: Record<ChallengeTier, { label: string; colour: string }> = {
+  easy: { label: "EASY", colour: "#6f9a5a" },
+  medium: { label: "MEDIUM", colour: "#c9a34a" },
+  hard: { label: "HARD", colour: "#c7702e" },
+  deathwish: { label: "DEATHWISH", colour: "#c7402e" },
+};
 
 // The wizard walks one slot per screen: slot 0 = the weapon, then one per
 // ability. Everything below derives from LOADOUT_ABILITY_COUNT so the flow
@@ -140,7 +153,7 @@ const slotComplete = (picks: Picks, i: number): boolean =>
 const allComplete = (picks: Picks): boolean =>
   picks.weapon !== null && picks.hand.length === LOADOUT_ABILITY_COUNT;
 
-export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps) => {
+export const RoomScreen = ({ client, onLeave, ranked = false, challenge }: RoomScreenProps) => {
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
   const welcome = client.welcome;
@@ -167,7 +180,7 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
     hand: [...client.myAbilities],
   }));
   const [wizard, setWizard] = useState<WizardState | null>(() =>
-    client.myWeapon !== null && client.myAbilities.length === LOADOUT_ABILITY_COUNT
+    client.kitLocked || (client.myWeapon !== null && client.myAbilities.length === LOADOUT_ABILITY_COUNT)
       ? null
       : { step: 0, edit: false },
   );
@@ -472,13 +485,21 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
             only ✕ on screen, so the two never sit stacked. */}
         <View style={styles.tickerRow}>
           <View style={styles.tickerFill}>
-            <RosterTicker
-              players={players}
-              myId={welcome.playerId}
-              myTeam={myTeam}
-              capacity={capacity}
-              brawl={welcome.teamCount > 2}
-            />
+            {challenge ? (
+              // A challenge room has empty seats by design — the ticker's
+              // "who's armed" reading is noise here; the brief below says it all.
+              <Text style={styles.challengeEyebrow}>
+                CHALLENGE · <Text style={{ color: CHALLENGE_TIERS[challenge.def.tier].colour }}>{CHALLENGE_TIERS[challenge.def.tier].label}</Text>
+              </Text>
+            ) : (
+              <RosterTicker
+                players={players}
+                myId={welcome.playerId}
+                myTeam={myTeam}
+                capacity={capacity}
+                brawl={welcome.teamCount > 2}
+              />
+            )}
           </View>
           {wizard === null ? <LeaveX onPress={askLeave} /> : null}
         </View>
@@ -498,6 +519,19 @@ export const RoomScreen = ({ client, onLeave, ranked = false }: RoomScreenProps)
             <Text style={styles.wizardCountdown}>{`MATCH STARTS IN ${timerCeil} — picks stay live`}</Text>
           ) : null}
         </>
+      ) : challenge ? (
+        <ChallengeLobbyView
+          client={client}
+          def={challenge.def}
+          attempt={challenge.attempt}
+          players={players}
+          myId={welcome.playerId}
+          picks={picks}
+          socketRefs={socketRefs}
+          onEditSlot={(i) => jumpToSlot(i, allComplete(picks))}
+          glintKey={glintKey}
+          armed={meArmed}
+        />
       ) : (
         <LobbyView
           client={client}
@@ -1290,6 +1324,126 @@ const LobbyView = (props: LobbyViewProps) => {
   );
 };
 
+// ── Challenge lobby (bits-challenges.md) ─────────────────────────────────────
+
+const ChallengeLobbyView = ({
+  client,
+  def,
+  attempt,
+  players,
+  myId,
+  picks,
+  socketRefs,
+  onEditSlot,
+  glintKey,
+  armed,
+}: {
+  client: LobbyClient;
+  def: ChallengeDef;
+  attempt: number;
+  players: RoomStatePlayer[];
+  myId: number;
+  picks: Picks;
+  socketRefs: React.MutableRefObject<(View | null)[]>;
+  onEditSlot: (i: number) => void;
+  glintKey: number;
+  armed: boolean;
+}) => {
+  const compact = useWindowDimensions().height < COMPACT_LOBBY_HEIGHT;
+  const locked = client.kitLocked === true;
+  const begun = client.begun === true;
+  // The recipe's seats, in the order they were seated — id order matches.
+  const bots = players.filter((p) => p.id !== myId);
+  const specOf = (p: RoomStatePlayer) => def.seats[bots.indexOf(p)];
+  const tierOf = (p: RoomStatePlayer): string => specOf(p)?.difficulty.toUpperCase() ?? "";
+  const allies = bots.filter((p) => p.team === 1);
+  const foes = bots.filter((p) => p.team !== 1);
+  const tier = CHALLENGE_TIERS[def.tier];
+  return (
+    <View style={styles.lobby}>
+      <View style={[styles.lobbyHead, compact && tight.lobbyHead]}>
+        <Text style={[styles.roomName, compact && tight.roomName]}>{def.name}</Text>
+        <Text style={[styles.roomCode, { color: tier.colour }]}>{`ATTEMPT ${attempt}`}</Text>
+      </View>
+      <Text style={styles.challengePremise}>{def.premise}</Text>
+
+      {allies.length > 0 ? (
+        <>
+          <TeamHeader label="AT YOUR SIDE" color={C_FRIEND} compact={compact} />
+          {allies.map((p) => (
+            <PlayerRow key={p.id} p={p} isMe={false} hostId={null} own compact={compact} tag={tierOf(p)} />
+          ))}
+        </>
+      ) : null}
+      <TeamHeader label={foes.length === 1 ? "THE OPPOSITION" : `THE OPPOSITION · ${foes.length}`} color={C_FOE} compact={compact} />
+      {foes.map((p) => (
+        // Their kits are part of the brief — shown, unlike a real room's.
+        // A counter seat has no kit yet: it picks at START, against yours.
+        <PlayerRow
+          key={p.id}
+          p={p}
+          isMe={false}
+          hostId={null}
+          own={false}
+          revealKit={begun || !specOf(p)?.counter}
+          kitPending={!begun && specOf(p)?.counter === true}
+          compact={compact}
+          tag={tierOf(p)}
+        />
+      ))}
+      {!begun && foes.some((p) => specOf(p)?.counter) ? (
+        <Text style={[styles.arsenalHint, compact && tight.arsenalHint]}>
+          it picks its kit after you pick yours
+        </Text>
+      ) : null}
+
+      <TeamHeader label="YOUR ARSENAL" color={C_MUTED} compact={compact} />
+      <SocketStrip
+        picks={picks}
+        current={null}
+        landed={null}
+        refs={socketRefs}
+        onTap={locked ? () => playSound("uiTap") : onEditSlot}
+        size={compact ? 54 : 72}
+        separated
+        glintKey={glintKey}
+      />
+      <Text style={[styles.arsenalHint, compact && tight.arsenalHint]}>
+        {locked
+          ? (def.you.abilities?.length ?? 1) === 0
+            ? "your kit is fixed for this one — no abilities"
+            : "your kit is fixed for this one"
+          : def.you.cooldownScale !== undefined && def.you.cooldownScale < 1
+            ? "tap a socket to change that pick — shorter cooldowns in this one"
+            : "tap a socket to change that pick"}
+      </Text>
+
+      <View style={styles.lobbyFoot}>
+        {begun ? (
+          <Text style={[styles.waitingText, compact && tight.waitingText]}>here we go…</Text>
+        ) : (
+          <Pressable
+            onPress={() => {
+              if (!armed) {
+                playSound("uiTap");
+                return;
+              }
+              unlockAudio();
+              playSound("uiConfirm");
+              client.begin?.();
+            }}
+            style={[styles.forceStart, !armed && styles.forceStartDim]}
+          >
+            <Text style={[styles.forceStartText, !armed && styles.forceStartTextDim]}>
+              {armed ? "⚑ START THE CHALLENGE" : "ARM UP FIRST"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+};
+
 /** Dashed placeholder rows padding a team list to its capacity. Random team
  * assignment means a joiner can land on either side — both lists pad. On
  * compact screens several empties collapse into one "N open seats" row.
@@ -1345,6 +1499,9 @@ const PlayerRow = ({
   own,
   compact,
   swatch,
+  revealKit = false,
+  tag,
+  kitPending = false,
 }: {
   p: RoomStatePlayer;
   isMe: boolean;
@@ -1354,6 +1511,12 @@ const PlayerRow = ({
   /** Brawl only (bits-brawl.md): the fighter's identity colour, shown as a
    * dot before the name — the same colour their body wears in the match. */
   swatch?: string;
+  /** Show the picks even on the other side (a challenge's brief). */
+  revealKit?: boolean;
+  /** A small tag after the name (a challenge bot's tier). */
+  tag?: string;
+  /** A challenge counter seat before START: no kit to show yet. */
+  kitPending?: boolean;
 }) => {
   // Resolved from OUR defs — an unknown claim renders bare, never raw text.
   const wornTitle = resolveTitleText(p.title);
@@ -1365,6 +1528,7 @@ const PlayerRow = ({
         {p.id === hostId ? "♛ " : ""}
         {p.name}
         {p.bot ? <Text style={styles.botTag}>{"  BOT"}</Text> : null}
+        {tag ? <Text style={styles.botTag}>{`  ${tag}`}</Text> : null}
         {isMe ? " (you)" : ""}
         {p.connected ? "" : " — reconnecting…"}
       </Text>
@@ -1375,7 +1539,7 @@ const PlayerRow = ({
       )}
     </View>
     <View style={styles.playerRight}>
-      {own && p.weapon !== null ? (
+      {(own || revealKit) && p.weapon !== null ? (
         <View style={styles.pickIcons}>
           <LoadoutIcon id={p.weapon} size={compact ? 17 : 19} />
           {(p.abilities ?? []).length > 0 ? <View style={styles.pickSep} /> : null}
@@ -1383,6 +1547,8 @@ const PlayerRow = ({
             <LoadoutIcon key={id} id={id} size={compact ? 17 : 19} />
           ))}
         </View>
+      ) : kitPending ? (
+        <Text style={styles.playerStatus}>waiting on you</Text>
       ) : p.armed ? (
         <Text style={styles.playerArmed}>⚔ ARMED</Text>
       ) : (
@@ -1673,6 +1839,10 @@ const styles = StyleSheet.create({
   ribButtons: { alignSelf: "stretch", gap: 10, marginTop: 26 },
 
   lobby: { flex: 1, paddingHorizontal: 22, paddingTop: 12 },
+  challengeEyebrow: { color: C_MUTED, fontSize: 9, fontWeight: "900", letterSpacing: 3, paddingHorizontal: 14 },
+  challengePremise: { color: "#d9cbb4", fontSize: 13.5, lineHeight: 19, marginTop: 6 },
+  forceStartDim: { backgroundColor: "transparent", borderWidth: 1.5, borderColor: "#3a332a" },
+  forceStartTextDim: { color: C_MUTED },
   lobbyHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6 },
   lobbyHeadRight: { flexDirection: "row", alignItems: "center", gap: 10 },
   roomName: { color: C_BONE, fontSize: 22, fontWeight: "900", letterSpacing: 1 },

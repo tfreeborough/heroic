@@ -2,6 +2,7 @@ import type * as React from "react";
 import { Composition } from "remotion";
 import { FPS, VERTICAL, formatSize } from "./brand";
 import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from "./GameplayClip";
+import { HookClip, hookClipDurationSeconds, hookClipSchema } from "./HookClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./Spotlight";
 import { APPLE_SHOT_SIZE, DevNote, FEATURE_SIZE, FeatureGraphic, SHOT_SIZE, StoreShot } from "./Store";
 import { STORE_SHOTS } from "./data/store";
@@ -43,6 +44,19 @@ export const Root: React.FC = () => (
       defaultProps={{ clip: "", title: "Match point", line: "He had one HP left. Then the Harpoon.", durationSeconds: 12, startFrom: 0, muted: false, ending: "signoff" as const, push: 0 }}
       calculateMetadata={({ props }) => ({
         durationInFrames: Math.round(gameplayClipDurationSeconds(props) * FPS),
+        ...formatSize(props.format),
+      })}
+    />
+    <Composition
+      id="HookClip"
+      component={HookClip}
+      schema={hookClipSchema}
+      durationInFrames={FPS * 17}
+      fps={FPS}
+      {...VERTICAL}
+      defaultProps={{ clip: "", hook: "He had 1 HP. Then the Harpoon.", hookFor: 3, look: "bold" as const, follow: "", durationSeconds: 12, startFrom: 0, muted: false, ending: "signoff" as const, push: 0 }}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: Math.round(hookClipDurationSeconds(props) * FPS),
         ...formatSize(props.format),
       })}
     />

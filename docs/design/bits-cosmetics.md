@@ -1112,3 +1112,76 @@ and wearable end to end with no store work; F3 then sells the other four.
 2. Cosmetics blob + entitlement check + protocol bump.
 3. Armory trade, preview, equip surface.
 4. The rest of the launch shelf, sounds through the Forge, deed gates.
+
+## Hammerfall — the challenge capstone finisher (2026-09-27)
+
+Tom: reward players who beat every challenge with a special finisher: "a
+large godlike hammer drops down right onto where they are with a satisfying
+anvil hammer sound." Earned, never sold (`DEED_FINISHERS`, beside Snuffed),
+paid by `challenge-all` ("Nothing left to prove") alongside its title.
+
+**Trust.** Challenge clears come in on the client-trusted
+`/challenges/report` path, so the grant can in principle be faked. Tom
+accepted that: "it's just a finisher, it's not the end of the world." No
+wait on the replay verifier.
+
+**Told apart from Smite by weight.** Smite is a 0.48s cold flash from
+off-screen. Hammerfall is a thing you watch fall, feel land and hear ring.
+
+| t | Beat | Easing |
+|---|---|---|
+| 0–0.34s | The fall: hammer drops in from up-screen (height = up-screen offset + up to 1.35× size), speed streaks; its shadow, the head's footprint, closes and darkens on the body | ease-in (gravity) |
+| 0.34s | Impact: squash, flat dark shock ring, dust skirt, sand chips, gold band flares, a SECOND camera kick (`finisherImpactMs`), body taken (`hidesBodyFromMs`) | — |
+| 0.34–0.58s | The ring: dead still but for a fast shiver that dies away | hold |
+| 0.58–1.15s | The lift: rises back up-screen, growing, fades over the last 30% | ease-in (cubic) |
+| after | The dent (head footprint) + six chunky cracks, baked | — |
+
+**Drawing.** Side-on, an upside-down T (straight down from above a hammer is
+a grey rectangle). Dark iron head with flared faces and a cold bevel, gilded
+band with a diamond rune, wrapped wooden grip, iron pommel; drawn at 1.5×
+the modelled size (head ≈ 190px, wider than three bodies). The head's bottom
+edge lands on the dent's FRONT lip so it covers the dent in 3/4 view. The
+shadow is the head's footprint, never a circle (floor circles = telegraphs).
+Preview lessons: v1 at 1× read as a toy; thin forked cracks read as spider
+legs (the thin-squiggle rule again), now six short thick runs.
+
+**Sound.** Two banks: `finisher_hammerfall` = "a blacksmith hammer striking
+an anvil once, loud" at 320ms (20ms ahead of the landing), and the optional
+`finisher_hammerfall_fall` = "a heavy object falling fast, whoosh" at 0. The
+anvil has a pitch and the score plays in every key, so keep the ring short
+and trim it in playback if it clashes. Haptic: `heavy` at 340ms, the one
+finisher that earns it (the kill's own pulse is 340ms gone, so the throttle
+lets it through).
+
+**Owed:** Tom's device look; forge both banks; deed icon/EarnableMark check
+on the challenges board; `entitlements:backfill` after deploy for anyone who
+already cleared everything.
+
+**v2 — premium pass (2026-09-27).** Tom on v1: "quite cartoony… not the same
+premium feel as some of our other ones." Why: thick black outline + flat
+fills (sticker art), squash-and-stretch + speed lines (the cartoon toolbox),
+toy proportions (stubby block, short stick, round knob), round dust puffs.
+v2 is LIT, not outlined: gradient forged iron with a hard specular edge, an
+hourglass war-maul head with flared faces, a long cylinder-shaded handle with
+a leather grip and iron cap, a BLACKENED collar with gilded bands carrying a
+forked-stave rune + cheek grooves that GLOW (Smite's glow stack, warm on dark
+iron only; runes kindle on the fall, blaze at impact, cool through the lift).
+No squash, no speed lines: one continuous gradient smear the width of the
+head. Impact: white flash under the head, soft gradient dust rolling out low,
+solid spinning chips. Dent = shaded hollow (dark far wall, lit near lip) +
+tapering WEDGE cracks (filled, not stroked). Lessons: a rune on bright gold
+vanishes (needs dark ground); separate ghost copies strobe; a lit centre in
+a dark chip reads as an outline.
+
+**v3 — the swing (2026-09-27).** Tom on v2: "needs to come in like it's being
+flung down on an anvil, rather than being dropped from above… make it
+smaller as it takes up A LOT of space." Now the maul pivots about its grip
+end (an unseen smith's hand on the KILLER's side, from the kill line's dirX)
+and swings over in an arc, FACE first: raised 115° back, steep ease-in
+(u^2.4) over 0.30s → blow → 0.15s ring → rebound 95° back the way it came
+(ease-out, bounced off the anvil), fading; gone 0.87s. Scale 1.45 → 0.9,
+handle 270 → 190, dent = one FACE's footprint (~76×40), dust/chips/cracks
+scaled to match. Smear = three touching arc segments along the head's path.
+Sound: `finisher_hammerfall_fall` renamed `finisher_hammerfall_swing` ("a
+heavy hammer swung hard through the air, whoosh") at 0; anvil strike at
+280ms; `heavy` haptic at 300ms.

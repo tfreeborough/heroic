@@ -74,6 +74,7 @@ export const FINISHER_IDS = [
   "talons",
   "scarabs",
   "snuffed",
+  "hammerfall",
 ] as const;
 export type FinisherId = (typeof FINISHER_IDS)[number];
 export type OwnableFinisherId = Exclude<FinisherId, typeof FINISHER_NONE>;
@@ -86,8 +87,9 @@ export const SIGNET_FINISHERS: ReadonlySet<OwnableFinisherId> = new Set<OwnableF
   "talons",
   "scarabs",
 ]);
-/** Earned, never sold — Snuffed rides the Gravedigger deed. */
-export const DEED_FINISHERS: ReadonlySet<OwnableFinisherId> = new Set<OwnableFinisherId>(["snuffed"]);
+/** Earned, never sold — Snuffed rides the Gravedigger deed, Hammerfall the
+ * challenge capstone ("Nothing left to prove"). */
+export const DEED_FINISHERS: ReadonlySet<OwnableFinisherId> = new Set<OwnableFinisherId>(["snuffed", "hammerfall"]);
 
 export const finisherEntitlement = (finisher: OwnableFinisherId): string => `finisher:${finisher}`;
 
@@ -150,6 +152,7 @@ export const ITEM_NAMES: Record<string, string> = {
   "finisher:talons": "Talons",
   "finisher:scarabs": "Scarabs",
   "finisher:snuffed": "Snuffed",
+  "finisher:hammerfall": "Hammerfall",
 };
 
 /** Display name for an entitlement itemId, with the legacy kebab fallback

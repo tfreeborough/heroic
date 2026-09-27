@@ -35,6 +35,11 @@ import { DISPLAY_FONT_SOURCE } from "./src/typography";
 import { fetchAndApplyUpdate, restartToApply, useUpdateReady } from "./src/updates";
 import { PracticeClient } from "./src/net/practice";
 import { parseShowcaseUrl, SHOWCASE_ENABLED } from "./src/net/showcase";
+import { parseChallengeUrl } from "./src/challenges/link";
+import { ChallengesScreen } from "./src/screens/ChallengesScreen";
+import { ChallengeResult } from "./src/screens/ChallengeCards";
+import { peekChallengeProgress, progressOf } from "./src/challenges/progress";
+import type { ChallengeDef } from "@heroic/blood-in-the-sand-sim";
 import { ConnectScreen } from "./src/screens/ConnectScreen";
 import { ArmoryScreen } from "./src/screens/ArmoryScreen";
 import { WardrobeScreen } from "./src/screens/WardrobeScreen";
@@ -114,6 +119,7 @@ type Route =
   | "play"
   | "ranked"
   | "practice"
+  | "challenges"
   | "settings"
   | "feedback"
   | "deeds"
@@ -143,6 +149,11 @@ export default function App() {
   const client = conn.client;
   // The offline bot match — while set, the practice route shows the game.
   const [practice, setPractice] = useState<PracticeClient | null>(null);
+  // A challenge match (bits-challenges.md) — its own PracticeClient, its own
+  // route, so the practice front door and a challenge never share state.
+  const [challenge, setChallenge] = useState<PracticeClient | null>(null);
+  // A deep link's target card, highlighted on the challenges screen.
+  const [challengeFocus, setChallengeFocus] = useState<string | null>(null);
   // Feedback from the UPDATE NOW attempt ("none" → store nudge, "failed" → retry).
   const [updateHint, setUpdateHint] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -205,6 +216,36 @@ export default function App() {
     practice?.close();
     setPractice(null);
   }, [practice]);
+
+  const endChallenge = useCallback(() => {
+    challenge?.close();
+    setChallenge(null);
+  }, [challenge]);
+
+  /** Seat a challenge: a fresh client per attempt (a fresh seed too). */
+  const startChallenge = useCallback((name: string, def: ChallengeDef): void => {
+    setChallenge((prev) => {
+      prev?.close();
+      return new PracticeClient(name, 1, "bot", undefined, null, false, null, def);
+    });
+    setRoute("challenges");
+  }, []);
+
+  // Challenge deep links (bits-challenges.md § marketing): a post's "can you
+  // beat this?" opens `bloodinthesand://challenge?id=…` and the app lands on
+  // that card, highlighted. Ships in every build — it IS the marketing door
+  // — unlike the showcase link below.
+  useEffect(() => {
+    const open = (url: string | null): void => {
+      const def = url ? parseChallengeUrl(url) : null;
+      if (!def) return;
+      setChallengeFocus(def.id);
+      setRoute("challenges");
+    };
+    void Linking.getInitialURL().then(open);
+    const sub = Linking.addEventListener("url", (e) => open(e.url));
+    return () => sub.remove();
+  }, []);
 
   // Showcase deep links (src/net/showcase.ts): the promo capture rig opens
   // `bloodinthesand://showcase?...` on the simulator and the app drops
@@ -302,6 +343,14 @@ export default function App() {
     };
   }, [practice]);
 
+  useEffect(() => {
+    if (!challenge) return;
+    challenge.onChange = force;
+    return () => {
+      challenge.onChange = null;
+    };
+  }, [challenge]);
+
   // UPDATE NOW on the mismatch screen. If the fix is already staged, restart
   // into it; otherwise fetch it live. Success never returns (JS reloads).
   const applyUpdate = useCallback(async () => {
@@ -365,9 +414,12 @@ export default function App() {
       ]);
     } else if (route === "practice" && practice) {
       confirmLeave(practice.phase === "lobby" ? "lobby" : "match", endPractice);
+    } else if (route === "challenges" && challenge) {
+      if (challenge.phase === "lobby") endChallenge(); // the brief / result card — nothing to forfeit
+      else confirmLeave("match", endChallenge);
     } else if ((route === "play" || route === "ranked") && client?.welcome) {
       confirmLeave(client.phase === "lobby" ? "lobby" : "match", () => client.leaveRoom());
-    } else if (route === "play" || route === "ranked" || route === "practice") {
+    } else if (route === "play" || route === "ranked" || route === "practice" || route === "challenges") {
       // All were entered from the mode select — back retraces that step.
       // (A ranked back KEEPS the queue — it roams; the header pill carries it.)
       setRoute("modes");
@@ -392,6 +444,7 @@ export default function App() {
   // RoomScreen owns the lobby (the arming wizard lives there); the rest is match.
   const inMatch =
     (practice !== null && practice.phase !== "lobby") ||
+    (challenge !== null && challenge.phase !== "lobby") ||
     ((route === "play" || route === "ranked") && client?.welcome != null && client.phase !== "lobby");
 
   // The first-win account nudge (bits-accounts.md): GameScreen noted an
@@ -475,6 +528,7 @@ export default function App() {
           setRoute("ranked");
         }}
         onPractice={() => leaveQueueThen("Practice", () => setRoute("practice"))}
+        onChallenges={() => leaveQueueThen("Challenges", () => setRoute("challenges"))}
         onDeeds={() => openDeeds("modes")}
         onWardrobe={() => setRoute("wardrobe")}
         onArmory={() => openArmory("modes")}
@@ -499,6 +553,38 @@ export default function App() {
         playerName={playerName ?? ""}
       />
     );
+  } else if (route === "challenges") {
+    // A challenge (bits-challenges.md): the card list; then per attempt a
+    // fresh PracticeClient seated on the recipe. Lobby phase = RoomScreen in
+    // challenge dress (the wizard for an own kit, then the brief + START)
+    // before the round, and the result card after it (the sim's lobby
+    // return — the round IS the match, so it lands here once).
+    const def = challenge?.challenge ?? null;
+    screen =
+      !challenge || !def ? (
+        <ChallengesScreen
+          onBack={() => setRoute("modes")}
+          onArmory={() => openArmory("challenges")}
+          onStart={startChallenge}
+          focusId={challengeFocus}
+        />
+      ) : challenge.phase !== "lobby" ? (
+        <GameScreen client={challenge} onLeave={endChallenge} onQuit={endChallenge} />
+      ) : challenge.challengeResult ? (
+        <ChallengeResult
+          def={def}
+          result={challenge.challengeResult}
+          unlocks={challenge.challengeUnlocks}
+          onAgain={() => startChallenge(playerName || "GLADIATOR", def)}
+          onBack={endChallenge}
+        />
+      ) : (
+        <RoomScreen
+          client={challenge}
+          onLeave={endChallenge}
+          challenge={{ def, attempt: progressOf(peekChallengeProgress(), def.id).attempts + 1 }}
+        />
+      );
   } else if (route === "practice") {
     // Practice runs the SAME arming wizard as real rooms before the match.
     screen = !practice ? (

@@ -25,13 +25,20 @@ Reels / Shorts:
   end card (one person, it's free, come and fight me). Record → drop it in the Drive footage folder →
   it's in the Desk (`bun run desk`, apps/desk): trim it, pick the template, render
   vertical/square/landscape. Recording → rendered post is under 10 minutes.
+- **HookClip** — the GameplayClip built for the scroll: no title beat, the
+  hook sentence is on screen from the first frame and lifts at three
+  seconds. Type several hooks in the Desk's field separated by `|` and one
+  press renders each as its own video. This is the template for the hook
+  tests below.
 - **Stills** — `remotion still` for thumbnails, Reddit images, Discord
   announcements.
 
 ### Cadence that survives contact with a day job
 
-- **1 gameplay clip + 2 spotlights a week.** Batch-render spotlights once;
-  schedule ahead with each platform's native scheduler.
+- **1 gameplay clip + 2 spotlights a week** was the launch-week floor;
+  since 2026-09-26 the target is 1–2 posts a day (see Hook testing).
+  Batch-render spotlights once; schedule ahead with each platform's native
+  scheduler.
 - Post the same video natively to TikTok, Reels and Shorts — never a
   cross-post with another platform's watermark (the algorithms punish it).
 - **Hooks are the whole game.** The first second decides the scroll. Lead
@@ -41,6 +48,46 @@ Reels / Shorts:
   invites comments, and comments are the ranking signal.
 - Reply to every early comment; ask a pick question in the caption
   ("Sinkhole or Sandstorm?").
+
+### Hook testing (from 2026-09-26)
+
+The numbers so far: of the viewers who stay, about two thirds of each
+Short gets watched, which is healthy; but roughly four in five thumb past
+inside three seconds. So the hook is the lever, and hooks get tested, not
+guessed.
+
+- **Same footage, same ending, three or four hooks.** The Desk renders
+  them from one trim. Post them days apart, mixed in with other clips,
+  never together; change the caption, the cover and the music start too,
+  so TikTok's duplicate-content check has nothing to match on (Shorts
+  doesn't care).
+- **Test the first frame, not just the words.** Round one: three hook
+  lines on the same start point. Round two: the winning line on three
+  start points (on the swing, one second before the kill, on the
+  reversal). The start point usually moves swipe-away more than any
+  sentence does.
+- **Hook types to rotate:** the outcome tease ("He had 1 HP. Then the
+  Harpoon."), the unfair rule ("One life. No respawn. No healing."), the
+  question ("Would you dodge this or Ironhide it?"), the dev line ("I made
+  a game where nothing is aimed").
+- **Judge by retention, not views.** YouTube Studio gives "viewed vs
+  swiped away" per Short; TikTok gives the retention graph and the
+  full-watch rate. Views at 48 hours are the algorithm's test batch and
+  swing wildly on small numbers. One video per hook proves nothing; the
+  same hook type across several clips does. Keep a sheet: clip, hook type,
+  hook text, platform, post date, swipe-away %, average watch %, views at
+  48h.
+- **The Desk's Queue tab is the plan.** Queue a batch from Renders and it
+  takes the next free slot; hook variants of one clip are held three days
+  apart automatically. Each post has the title (Shorts) and the one
+  description used on every platform, drafted in my voice and editable.
+  Upload through the native schedulers, tick the platform, done. Overdue
+  goes red; Re-flow lays the backlog out again from today.
+- **Cadence: one or two posts a day**, not three a week. This is the same
+  plan as the testing: one clip trimmed once and rendered with three hooks
+  is three posts, so a weekend of recording is a week of daily posts, and
+  daily posts are the only way to get enough samples for the hook data to
+  mean anything. Schedule with each platform's native scheduler.
 
 ### Clip-worthy moments to farm
 

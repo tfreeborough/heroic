@@ -37,6 +37,7 @@ import { COUNTERS, UNDYING_STREAK } from "./counters";
 import { summaryTeamOf, wonMatch, type MatchSummary } from "./summary";
 import { ACHIEVEMENT_DEFS_2V2, CHAPTER_2V2, RANKED_2V2_BOARD, RANKED_2V2_BOARD_DEF } from "./defs2v2";
 import { ACHIEVEMENT_DEFS_SKIRMISH, CHAPTERS_SKIRMISH, SKIRMISH_BOARD, SKIRMISH_BOARD_DEF } from "./defsSkirmish";
+import { ACHIEVEMENT_DEFS_CHALLENGES, CHALLENGE_BOARD, CHALLENGE_BOARD_DEF, CHAPTER_CHALLENGES } from "./defsChallenges";
 
 export type BitsAchievementDef = AchievementDef<MatchSummary>;
 
@@ -50,6 +51,9 @@ export const ACHIEVEMENT_BOARDS: Record<string, BoardDef<MatchSummary>> = {
   [RANKED_2V2_BOARD]: RANKED_2V2_BOARD_DEF,
   // The sealed, zero-pay skirmish board (bits-skirmish-deeds.md, 2026-09-09).
   [SKIRMISH_BOARD]: SKIRMISH_BOARD_DEF,
+  // The offline challenges (bits-challenges.md, 2026-09-26) — the API's
+  // report adapter is the only writer.
+  [CHALLENGE_BOARD]: CHALLENGE_BOARD_DEF,
 };
 
 /** The board's root: everyone's first node, parent of every chain. */
@@ -786,6 +790,7 @@ export const ACHIEVEMENT_DEFS: readonly BitsAchievementDef[] = [
   ...tide,
   ...ACHIEVEMENT_DEFS_2V2,
   ...ACHIEVEMENT_DEFS_SKIRMISH,
+  ...ACHIEVEMENT_DEFS_CHALLENGES,
 ];
 
 /**
@@ -822,6 +827,7 @@ export const ACHIEVEMENT_CHAPTERS: readonly AchievementChapter[] = [
   },
   CHAPTER_2V2,
   ...CHAPTERS_SKIRMISH,
+  CHAPTER_CHALLENGES,
   { id: "the-kill", title: "The Kill", ids: [...idsOf(kills), "killer-instinct", ...idsOf(damage), "carnage"] },
   { id: "the-arsenal", title: "The Arsenal", ids: [...idsOf(weaponRounds), "the-old-ways"] },
   // Slice bounds = 3 tiers × chains per category cluster (offensive grew

@@ -16,7 +16,10 @@ Remotion Studio is not part of the daily loop — it's for building templates.
 **Clips** — the game's clip library, cuts up front. Record on the phone,
 drop the file in the game's Drive footage folder, press **Sync from Drive**:
 rclone pulls new files (additively — nothing local is ever deleted) and each
-gets a sidecar `.json` with its facts and your notes. Media is gitignored,
+gets a sidecar `.json` with its facts and your notes. Anything Drive calls a
+video counts, extension or not: a phone export saved as "scorpion raw" comes
+down as `scorpion raw.mp4`. Files that aren't videos are listed as ignored,
+so the log always says what it saw. Media is gitignored,
 sidecars are committed. The grid shows what you'd make a video from: your
 cleaned-up cuts plus any recording you haven't touched; once a raw has a cut
 it folds away under **Originals already cut**, and the cut links back to it
@@ -44,7 +47,31 @@ watch the preview — it runs the exact template code the render does.
 rendered together). Format chips pick which to play or download, with a tick
 for each that's on Drive; **Upload to Drive** pushes every format not yet
 there in one rclone run; **Re-open** restores the whole batch in Make;
-**Delete** takes the batch (or just the shown format).
+**Delete** takes the batch (or just the shown format). **Queue** puts the
+batch on the posting queue (**Queue all unqueued** does the lot); **ignore**
+marks an experiment the queue must leave alone — never auto-queued, and off
+the queue if it was on it — until you undo it.
+
+**Queue** — what to upload, when. Two slots a day (morning, evening); a
+queued batch lands in the next free slot, and two videos from the same
+recording (the hook variants of one clip) are never within three days of
+each other, so the empty slots between them are for other content. Each
+post carries a **title** (Shorts has one; TikTok and Reels don't) and one
+**description** used on every platform, drafted from the render's props in
+the game's voice (`post.draft` in its desk.config) and editable in place,
+with copy buttons. With `ANTHROPIC_API_KEY` in `apps/desk/.env` (gitignored;
+Bun loads it) and a `post.ai` voice in the game's config, Claude writes the
+variable part instead — the lead line, a sentence of context from the
+clip's note, a question for the comments, and three or four title options
+to pick from — while the game line, the ask and the hashtags stay fixed
+text appended by code, so every post pitches the same thing. The edit
+panel says which it was and has a **redraft** button; a failed call falls
+back to the template, never blocks the queue. The Desk doesn't upload to the platforms (their posting
+APIs need app audits): download, upload through each platform's own
+scheduler, and tick TikTok / Shorts / Reels here. Overdue posts show in
+red; **Re-flow from today** lifts everything not yet posted and lays it
+out again in order under the spacing rule. Stored in
+`<rendersDir>/schedule.json`; deleting a render drops it from the queue.
 
 ## Adding a game
 
@@ -53,7 +80,10 @@ there in one rclone run; **Re-open** restores the whole batch in Make;
 2. Add `desk.config.ts` there (copy BITS's): name, icon, folders, Drive ids,
    fps, formats, `prepare` commands, and `templates: () => import("./desk.templates")`.
 3. Add `desk.templates.ts`: the compositions the Make screen offers —
-   component, zod schema, duration function, defaults.
+   component, zod schema, duration function, defaults. Optionally give the
+   config a `post.draft(template, props)` that writes the queue's title and
+   description in the game's voice, and a `post.ai` voice (about, rules,
+   example lines, fixed boilerplate) for Claude to draft from.
 4. Export both from the package's `exports`, add the package to this app's
    dependencies, and add one line to `games.ts`.
 

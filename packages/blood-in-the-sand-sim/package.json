@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "gauntlet": "bun src/botGauntlet.ts"
+    "gauntlet": "bun src/botGauntlet.ts",
+    "challenges:sim": "bun src/challengeGauntlet.ts"
   },
   "dependencies": {
     "@heroic/achievements": "workspace:*",

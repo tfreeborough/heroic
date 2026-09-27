@@ -212,6 +212,8 @@ export const SOUND_SUBJECTS: Record<string, string> = {
   finisher_scarabs: "a swarm of insects crawling, skittering and clicking",
   finisher_scarabs_feed: "dry twigs and leaves crunching, short",
   finisher_snuffed: "a candle flame snuffed out, one short soft hiss",
+  finisher_hammerfall: "a blacksmith hammer striking an anvil once, loud",
+  finisher_hammerfall_swing: "a heavy hammer swung hard through the air, whoosh",
   // ── UI ────────────────────────────────────────────────────────────────────
   ui_tap: "a fingertip tapping the cover of a leather-bound book, one quick muted tick, close-miked, no reverb",
   ui_confirm: "a heavy iron latch dropping into a stone slot, one clean short clunk, close-miked, no reverb",
@@ -298,6 +300,8 @@ export const SOUND_DURATIONS: Record<string, number> = {
   finisher_scarabs: 1.5,
   finisher_scarabs_feed: 0.7,
   finisher_snuffed: 0.8,
+  finisher_hammerfall: 1.2,
+  finisher_hammerfall_swing: 0.4,
   ui_tap: 0.5,
   ui_confirm: 0.5,
   ui_back: 0.5,
@@ -582,7 +586,7 @@ export const SPRITE: SpriteSpec = {
  * different paste target: BRACKET_ART in RankedScreen.tsx). modeSet.ts
  * derives the checklist from this — a future mode or bracket appears there
  * by adding a key + subject. */
-export const MODE_KEYS = ["ranked", "skirmish", "practice", "story", "deeds", "wardrobe", "bracket-1v1", "bracket-2v2"] as const;
+export const MODE_KEYS = ["ranked", "challenges", "skirmish", "practice", "story", "deeds", "wardrobe", "bracket-1v1", "bracket-2v2"] as const;
 
 /**
  * Art subjects per mode card. Each brief owns the PLACE and the LIGHT (the
@@ -596,6 +600,16 @@ export const MODE_SUBJECTS: Record<string, string> = {
     "the right, tattered blood-red banners streaming, heat-haze over raked fighting sand, " +
     "a lone armoured gladiator small at the arena's centre-right with arms spread to the " +
     "mob; the left side is empty scorched sky above a quiet sun-bleached arena wall",
+  // Challenges (bits-challenges.md): "one fighter, many shadows". Sells the
+  // 1v4 headline clip, so the odds must read at a glance: one figure, the
+  // foes as shadows. Ember sunset so it sits apart from ranked's high sun
+  // and story's storm, and matches the card's stand-in ramp + glow.
+  challenges:
+    "a lone gladiator braced with shield raised in the centre-right of an empty arena at " +
+    "blood-orange sunset, ringed by four armed foes half-lost in the glare at the edges of " +
+    "the frame, their long black shadows stretching across the raked sand to converge at " +
+    "his feet, a low ember sun burning behind the far arena wall, dust hanging in the red " +
+    "light; the left side is a quiet dark sky over a shadowed arena wall",
   deeds:
     "a vast illuminated chronicle unrolled across a stone table by candlelight — aged " +
     "parchment dense with inked deeds on the right, wax seals and small gold-leaf " +
@@ -1138,6 +1152,19 @@ export const DEED_SUBJECTS: Record<string, string> = {
   // brawl, doubled/matched objects for the tricks. One bold object each.
   // Good Company — "Well Met", the board's root.
   "deed-well-met": "two gladiator forearms clasped in a warrior's handshake, leather bracers, a red cord tied around both wrists",
+  // The challenge board (bits-challenges.md, 2026-09-26): one fighter against the odds, tier by tier.
+  "deed-challenge-first": "a lone gladiator silhouette facing a wall of long shadows, one raised blade, sand underfoot",
+  "deed-challenge-easy": "a single wooden training post with one notch cut into it, a sprig of green at its base",
+  // Tier ladder reads as one fight getting harder: training post → shield
+  // taking real blows → arrow-studded helm → skull. No numerals (template).
+  "deed-challenge-medium": "a round bronze buckler with one deep sword gash across its face and a smear of blood, dented but still whole",
+  "deed-challenge-hard": "a gladiator helmet with four arrow shafts lodged in its crest, still standing",
+  "deed-challenge-deathwish": "a cracked skull wearing a gladiator's laurel, a single flame in one eye socket",
+  // "Nothing left to prove": the rudis, the wooden sword a gladiator was
+  // handed when he won his freedom. Not a wreath ring (template bans rings).
+  "deed-challenge-capstone": "a gladiator's wooden rudis sword standing point-up, its grip bound in gold cord with a short sprig of laurel tied beneath the hilt",
+  // "Stubborn": a hundred tries. Tally marks die at 24px, so show the repair.
+  "deed-challenge-stubborn": "a steel gladius snapped in half and lashed back together with thick rope, the blade chipped and notched all along its edge, still fit to fight",
   // The company ladder: Regulars → Old Friends → Thick as Thieves.
   "deed-regulars": "two worn bronze tankards knocked together in a toast, foam spilling over the rims",
   // "Both Sides Now" — beside and against the same fighter.

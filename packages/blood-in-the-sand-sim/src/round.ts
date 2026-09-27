@@ -37,7 +37,7 @@ import {
   teamSlotOf,
   type ArenaSim,
 } from "./sim";
-import { createAbilitySlots, loadoutComplete, seatedPlayers, winsToTakeOf, type Team } from "./state";
+import { createAbilitySlots, isPending, loadoutComplete, seatedPlayers, teamCounts, winsToTakeOf, type Team } from "./state";
 
 /** Respawn everyone at their team spawn with a clean slate and start the countdown. */
 export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
@@ -48,13 +48,17 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
   state.deployables.length = 0;
   state.shells.length = 0;
   for (const p of seatedPlayers(state)) {
-    const spawn = spawnSlotPos(sim, p.team, teamSlotOf(state, p));
+    // The line is centred on the bodies actually seated on that side — a
+    // lone fighter against four stands on the anchor, not two slots left
+    // of it (bits-challenges.md's uneven rooms; a full room is unchanged).
+    const spawn = spawnSlotPos(sim, p.team, teamSlotOf(state, p), teamCounts(state)[p.team - 1]!);
     p.mover.pos.x = spawn.x;
     p.mover.pos.y = spawn.y;
     p.mover.vel.x = 0;
     p.mover.vel.y = 0;
     p.facing = spawnFacing(sim, spawn);
-    p.combatant.hp = p.combatant.stats.maxHp;
+    // The handicap dial (bits-challenges.md): 1 for every real seat.
+    p.combatant.hp = Math.max(1, Math.round(p.combatant.stats.maxHp * p.startHpFrac));
     p.attack = ATTACK_CYCLE_READY;
     p.targetId = null;
     p.lockedTargetId = null;
@@ -72,8 +76,15 @@ export const resetForRound = (sim: ArenaSim, events: ArenaEvent[]): void => {
     p.beam = null;
     p.slowLeft = 0;
     p.slowFactor = 1;
-    p.respawnLeft = 0; // a dummy mid-respawn is simply alive again
-    p.alive = true;
+    // A delayed arrival (bits-challenges.md, the stream) starts the round
+    // down with its clock set; the respawn pass stands it up on time. Its
+    // body waits off the sand so nobody sees a corpse that never fought.
+    p.respawnLeft = p.spawnDelay > 0 ? p.spawnDelay : 0; // a dummy mid-respawn is simply alive again
+    p.alive = p.spawnDelay <= 0;
+    if (p.spawnDelay > 0) {
+      p.mover.pos.x = -10_000;
+      p.mover.pos.y = -10_000;
+    }
     p.shovedBy = null; // a last-second shove never carries into the next round
     p.shoveLeft = 0;
     p.sandsOutside = false;
@@ -281,12 +292,28 @@ export const checkRoundOver = (sim: ArenaSim, events: ArenaEvent[]): void => {
   if (sim.state.training) return;
   const seated = seatedPlayers(sim.state);
   const aliveTeams = new Set<Team>();
-  for (const p of seated) if (p.alive) aliveTeams.add(p.team);
+  // A respawning seat (the horde) is never "wiped" — its team stays in the
+  // round until the other side falls or the host concludes it — and a
+  // delayed arrival still counts before it lands.
+  for (const p of seated) if (p.alive || p.respawns || isPending(p)) aliveTeams.add(p.team);
   if (aliveTeams.size >= 2) return;
 
   // Everyone wiped on the same tick (mutual kills, the sands claiming the
   // last two at once): nobody scores, the round replays.
   const winner: Team | 0 = aliveTeams.size === 1 ? [...aliveTeams][0]! : 0;
+  concludeRound(sim, winner, events);
+};
+
+/**
+ * Close an active round with `winner` (0 = nobody scores, the round
+ * replays) — the tail of checkRoundOver, exported for offline hosts whose
+ * win condition isn't a wipe (bits-challenges.md: the horde's kill count,
+ * a ward's death). Real rooms never call it directly.
+ */
+export const concludeRound = (sim: ArenaSim, winner: Team | 0, events: ArenaEvent[]): void => {
+  const round = sim.state.round;
+  if (round.phase !== "active") return;
+  const seated = seatedPlayers(sim.state);
   if (winner !== 0) round.wins[winner - 1]! += 1;
   round.lastWinner = winner;
   round.phase = "roundEnd";

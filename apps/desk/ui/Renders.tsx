@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type Batch, type GameApi, type GameInfo, type Render, fmtBytes, fmtDate, fmtSeconds } from "./api";
+import { type Batch, type GameApi, type GameInfo, type Post, type Render, fmtBytes, fmtDate, fmtSeconds } from "./api";
 import { go } from "./App";
 
 /**
@@ -12,8 +12,31 @@ export const Renders: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api 
   const [active, setActive] = useState<Record<string, string>>({}); // batch id → slug shown
   const [playing, setPlaying] = useState<string | null>(null); // batch id
   const [msg, setMsg] = useState<Record<string, string>>({});
-  const load = () => api.batches().then(setBatches);
+  const [queued, setQueued] = useState<Post[]>([]);
+  const [ignored, setIgnored] = useState<string[]>([]);
+  const load = () =>
+    Promise.all([
+      api.batches().then(setBatches),
+      api.schedule().then((s) => {
+        setQueued(s.posts);
+        setIgnored(s.ignored);
+      }),
+    ]);
   useEffect(() => void load(), [api]);
+  const postOf = (b: Batch) => queued.find((p) => p.batch === b.id);
+  const isIgnored = (b: Batch) => ignored.includes(b.id);
+  const queueable = (b: Batch) => !postOf(b) && !isIgnored(b);
+  const ignore = async (b: Batch, on: boolean) => {
+    await api.ignore(b.id, on).catch((e: Error) => say(b.id, `✖ ${e.message}`));
+    say(b.id, on ? "ignored by the queue" : "");
+    await load();
+  };
+  const queue = async (ids: string[]) => {
+    const r = await api.queue(ids).catch((e: Error) => ({ placed: [], skipped: ids, error: e.message }) as { placed: Post[]; skipped: string[]; error?: string });
+    for (const p of r.placed) say(p.batch, `✔ queued for ${p.day} ${p.slot + 1}`);
+    if ("error" in r && r.error) for (const id of ids) say(id, `✖ ${r.error}`);
+    await load();
+  };
 
   const shown = (b: Batch): Render => b.renders.find((r) => r.slug === active[b.id]) ?? b.renders[0]!;
   const say = (id: string, text: string) => setMsg((m) => ({ ...m, [id]: text }));
@@ -44,7 +67,14 @@ export const Renders: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api 
           <h2>Renders</h2>
           <div className="muted small">Finished videos in {game.rendersDir}/, grouped by the render that made them. Upload pushes a batch to the game's Drive folder.</div>
         </div>
-        <button onClick={() => go({ name: "make" })}>+ Make a video</button>
+        <div className="row">
+          {batches?.some(queueable) ? (
+            <button className="ghost" onClick={() => void queue(batches.filter(queueable).map((b) => b.id))}>
+              Queue all unqueued
+            </button>
+          ) : null}
+          <button onClick={() => go({ name: "make" })}>+ Make a video</button>
+        </div>
       </div>
       {batches.length === 0 ? (
         <div className="panel muted">Nothing rendered yet.</div>
@@ -54,6 +84,7 @@ export const Renders: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api 
             const r = shown(b);
             const pending = b.renders.filter((x) => !x.uploadedAt);
             const allUp = pending.length === 0;
+            const post = postOf(b);
             return (
               <div className="card" key={b.id}>
                 <div className={`thumb ${r.format === "landscape" ? "wide" : r.format === "square" ? "square" : ""}`} onClick={() => setPlaying(playing === b.id ? null : b.id)} style={{ cursor: "pointer" }}>
@@ -61,6 +92,7 @@ export const Renders: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api 
                 </div>
                 <div className="body">
                   <div className="title" title={b.renders.map((x) => x.slug).join("\n")}>
+                    {isIgnored(b) ? <span className="badge" style={{ marginRight: 6 }}>ignored</span> : null}
                     {b.name}
                   </div>
                   <div className="small muted">
@@ -85,6 +117,24 @@ export const Renders: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api 
                     <button className="small" onClick={() => void upload(b, allUp ? b.renders.map((x) => x.slug) : pending.map((x) => x.slug))}>
                       {allUp ? (b.renders.length === 1 ? "Re-upload" : "Re-upload all") : pending.length === b.renders.length ? (b.renders.length === 1 ? "Upload to Drive" : `Upload all ${b.renders.length} to Drive`) : `Upload ${pending.length} missing to Drive`}
                     </button>
+                    {post ? (
+                      <button className="small ghost" onClick={() => go({ name: "queue" })} title={post.title}>
+                        In queue · {post.day} {post.slot + 1}
+                      </button>
+                    ) : isIgnored(b) ? (
+                      <button className="small ghost" onClick={() => void ignore(b, false)} title="An experiment: the queue leaves it alone. Click to let it be queued again">
+                        Ignored · undo
+                      </button>
+                    ) : (
+                      <>
+                        <button className="small ghost" onClick={() => void queue([b.id])}>
+                          Queue
+                        </button>
+                        <button className="small link" onClick={() => void ignore(b, true)} title="Keep this one out of the posting queue (an experiment, a test render)">
+                          ignore
+                        </button>
+                      </>
+                    )}
                     <button className="small ghost" onClick={() => go({ name: "make", batch: b.id })}>
                       Re-open
                     </button>

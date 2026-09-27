@@ -10,7 +10,15 @@ export {
   type SkirmishRoomContext,
 } from "./summary";
 export { BOUNTY_BANDS, BOUNTY_BUDGET, bounty, bountyOf, type BountyBand } from "./bounties";
-export { COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
+export { CHALLENGE_COUNTER_PREFIX, COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyingStreakUpdates } from "./counters";
+export {
+  ACHIEVEMENT_DEFS_CHALLENGES,
+  CHALLENGE_BOARD,
+  CHALLENGE_CLEAR_DEEDS,
+  CHALLENGE_COUNTERS,
+  challengeCountersAfter,
+  challengeSummary,
+} from "./defsChallenges";
 export {
   ACHIEVEMENT_DEFS_SKIRMISH,
   SKIRMISH_BOARD,

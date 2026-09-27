@@ -13,7 +13,18 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { ACHIEVEMENT_DEFS, RANKED_BRACKETS, SIGNET_ITEM_IDS, SIGNET_PACKS } from "@heroic/blood-in-the-sand-sim";
+import { evaluate } from "@heroic/achievements";
+import {
+  ACHIEVEMENT_BOARDS,
+  ACHIEVEMENT_DEFS,
+  RANKED_BRACKETS,
+  SIGNET_ITEM_IDS,
+  SIGNET_PACKS,
+  challengeById,
+  challengeCountersAfter,
+  challengeSummary,
+  CHALLENGE_COUNTERS,
+} from "@heroic/blood-in-the-sand-sim";
 import {
   FEEDBACK_EMAIL_MAX,
   FEEDBACK_KINDS,
@@ -418,7 +429,8 @@ if (process.env.STORE_DEV_TOOLS === "1") {
    * Tidecaller IS a Tidecaller (the spell lands, the title lands, the
    * Deeds screen replays the ceremony). A milestone's counter is raised to
    * its threshold so the codex bar reads full. Never a game-server path:
-   * real awards only ever come from ranked settles.
+   * real awards come from ranked settles — and, since 2026-09-26, the
+   * challenge report (/challenges/report, the one client-trusted path).
    */
   app.post("/dev/grant-deed", async (c) => {
     const playerId = await authedPlayer(c);
@@ -536,6 +548,68 @@ app.get("/achievements/me", async (c) => {
     counters: { ...counters, glory_earned: earned },
     entitlements,
   });
+});
+
+/**
+ * A challenge report (bits-challenges.md): the client finished an offline
+ * challenge match — cleared or not — and says so. This is the ONE
+ * production award path that trusts the client (Tom, 2026-09-26: "worst
+ * case a free Signet"): exposure is the clear deeds' bounties, each
+ * payable once per player by applyMatchAchievements' idempotency, so a
+ * spoofed report is a nuisance, not an economy. Stage 2 (the doc) is a
+ * seed + input-log replay on the headless sim; until then the report is
+ * the whole claim. 30/min/player — a fast player loses a fight in ~10s.
+ *
+ * Counters are folded by the sim's own adapter (challengeCountersAfter:
+ * attempts only climb, aggregates recomputed) and the board evaluated
+ * exactly as a settle would, so the tier titles and the capstone land in
+ * the same ceremony as the clear that earned them. Returns the unlocks
+ * (the client celebrates them itself, DeedReplayOverlay-style) and the
+ * counters, so the challenge screen can read attempts back on a reinstall.
+ */
+app.post("/challenges/report", async (c) => {
+  const playerId = await authedPlayer(c);
+  if (!playerId) return c.json({ error: "unauthorized" }, 401);
+  if (overLimit(`challenges:${playerId}`, 30)) return c.json({ error: "rate_limited" }, 429);
+  const body = (await c.req.json().catch(() => null)) as
+    | { id?: unknown; cleared?: unknown; attempts?: unknown }
+    | null;
+  const id = typeof body?.id === "string" ? body.id : null;
+  const def = id ? challengeById(id) : undefined;
+  if (!def) return c.json({ error: "unknown challenge" }, 404);
+  const cleared = body?.cleared === true;
+  const attempts = typeof body?.attempts === "number" && Number.isFinite(body.attempts) ? Math.min(1_000_000, Math.max(0, Math.floor(body.attempts))) : 0;
+  const [before, unlockedList] = await Promise.all([achievementCounters(db, playerId), achievementUnlocks(db, playerId)]);
+  const after = challengeCountersAfter(before, { id: def.id, cleared, attempts });
+  const unlocked = new Set(unlockedList.map((u) => u.id));
+  const fired = evaluate({
+    defs: ACHIEVEMENT_DEFS,
+    boards: ACHIEVEMENT_BOARDS,
+    summary: challengeSummary(def.id),
+    playerKey: 0,
+    before,
+    after,
+    unlocked,
+  });
+  const unlocks = fired.map((d) => {
+    const rewards = d.rewards ?? [];
+    const glory = rewards.reduce((sum, r) => (r.kind === "glory" ? sum + r.amount : sum), 0);
+    const entitlements = rewards.flatMap((r) =>
+      r.kind === "entitlement" ? [r.itemId] : r.kind === "title" ? [`title:${d.id}`] : [],
+    );
+    return { id: d.id, ...(glory > 0 ? { glory } : {}), ...(entitlements.length > 0 ? { entitlements } : {}) };
+  });
+  // One mark per distinct report: a clear is keyed by its ordinal (the
+  // n-th clear), a loss by the attempt count it carried — a double-sent
+  // report is a no-op, a genuinely new one always lands.
+  const ordinal = cleared ? `clear:${after[CHALLENGE_COUNTERS.clears(def.id)] ?? 0}` : `attempts:${after[CHALLENGE_COUNTERS.attempts(def.id)] ?? 0}`;
+  await applyMatchAchievements(db, {
+    matchId: `challenge:${playerId}:${def.id}:${ordinal}`,
+    playerId,
+    counters: after,
+    unlocks,
+  });
+  return c.json({ ok: true, unlocks: unlocks.map((u) => u.id), counters: after });
 });
 
 /**

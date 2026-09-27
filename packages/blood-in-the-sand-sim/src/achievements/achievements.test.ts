@@ -8,6 +8,7 @@ import { COUNTERS, SKIRMISH_COUNTER_PREFIX, UNDYING_STREAK, counterDeltas, undyi
 import { ACHIEVEMENT_BOARDS, ACHIEVEMENT_DEFS, RANKED_BOARD } from "./defs";
 import { ACHIEVEMENT_DEFS_2V2, RANKED_2V2_BOARD, TITLE_ONLY_2V2 } from "./defs2v2";
 import { ACHIEVEMENT_DEFS_SKIRMISH, SKIRMISH_BOARD, SKIRMISH_TITLE_IDS } from "./defsSkirmish";
+import { CHALLENGE_BOARD } from "./defsChallenges";
 import { MatchStatsAccumulator, type MatchSummary, type MatchSummaryPlayer } from "./summary";
 
 /** The Wave-3 partnership stats at rest — every one is zero in a 1v1. */
@@ -275,7 +276,9 @@ describe("Wave-1 defs", () => {
 
   test("the boards are sealed — a skirmish match never fires a ranked deed, a ranked match never fires a skirmish one", () => {
     const ranked = new Set([RANKED_BOARD, RANKED_2V2_BOARD]);
-    expect(ACHIEVEMENT_DEFS.every((d) => ranked.has(d.board) || d.board === SKIRMISH_BOARD)).toBe(true);
+    expect(
+      ACHIEVEMENT_DEFS.every((d) => ranked.has(d.board) || d.board === SKIRMISH_BOARD || d.board === CHALLENGE_BOARD),
+    ).toBe(true);
     expect(ACHIEVEMENT_DEFS_2V2.every((d) => d.board === RANKED_2V2_BOARD)).toBe(true);
     expect(ACHIEVEMENT_DEFS_SKIRMISH.every((d) => d.board === SKIRMISH_BOARD)).toBe(true);
     // A skirmish 1v1 between two humans: only skirmish-board deeds may fire.
@@ -521,6 +524,7 @@ describe("Wave-1 defs", () => {
         "the-vulture",
         "always-the-bridesmaid",
         "nobody-wins",
+        "challenge-stubborn",
       ].sort(),
     );
   });

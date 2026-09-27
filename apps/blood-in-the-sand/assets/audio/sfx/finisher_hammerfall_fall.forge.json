@@ -1,0 +1,21 @@
+{
+  "type": "sfx-bits",
+  "subject": "a heavy object falling fast, whoosh",
+  "prompt": "a heavy object falling fast, whoosh. A single one-shot sound effect, not music.",
+  "provider": "elevenlabs-sfx",
+  "model": "eleven_text_to_sound_v2",
+  "params": {
+    "durationSeconds": 1,
+    "promptInfluence": 0.6,
+    "loudnessLufs": -16,
+    "truePeakDb": -1.5
+  },
+  "files": [
+    "finisher_hammerfall_fall_1.mp3"
+  ],
+  "takeEngines": {
+    "finisher_hammerfall_fall_1.mp3": "elevenlabs"
+  },
+  "created": "2026-09-27T13:32:07.686Z",
+  "updated": "2026-09-27T13:32:07.686Z"
+}

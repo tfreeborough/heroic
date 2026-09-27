@@ -46,19 +46,36 @@ import {
   TICK_DT,
   TICK_RATE,
   FREE_WEAPON_IDS,
+  challengeTeamSize,
+  createChallengeJudge,
+  createOracle,
+  ORACLE_LITE,
+  seatChallenge,
+  armCounterPicks,
+  type SeatedChallenge,
   toRoomStatePlayers,
   toSnapshot,
   type AbilityId,
+  type ArchetypeId,
   type ArenaEvent,
+  type ArenaPlayer,
   type ArenaSim,
   type BotMemory,
   type BotNav,
+  type ChallengeDef,
+  type ChallengeJudge,
   type DifficultyId,
+  type Oracle,
+  type OracleFoe,
   type RoundPhase,
   type SnapshotMsg,
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
+import { noteChallengeAttempt, noteChallengeClear } from "../challenges/progress";
+import { DEV_MENU_ENABLED, devFlags, type AutopilotMode } from "../dev";
+import { grantFromDeedUnlocks } from "../deeds/entitlements";
+import { ensureIdentity, reportChallenge } from "./api";
 import { getWornTitle } from "../deeds/wornTitle";
 import { getOwnedWornFinisher } from "../deeds/wornFinisher";
 import type { ConnectionStatus, LobbyClient, RoomStateInfo, WelcomeInfo } from "./connection";
@@ -121,7 +138,38 @@ interface BotSeat {
   /** ms after entering the lobby at which this bot arms itself — staggered
    * beats, so the roster ticker flips one by one while you're mid-wizard. */
   armAtMs: number;
+  /** A challenge's pinned brain (the rookie's `ward`) — absent = derived
+   * from the kit each tick, as ever. */
+  archetype?: ArchetypeId;
 }
+
+/** A scripted seat's fixed kit (the showcase cast's, applied on the first
+ * lobby tick); partial hands are filled from the FREE roster. */
+interface SeatKit {
+  weapon?: WeaponId;
+  abilities?: AbilityId[];
+}
+
+/** The challenge's live objective, for GameScreen's strip (bits-challenges.md
+ * § objective HUD). Null = last-one-standing with nothing to protect — the
+ * arena already tells you when it's over. */
+export type ChallengeObjective =
+  | { kind: "kills"; have: number; need: number }
+  | { kind: "survive"; left: number }
+  | { kind: "protect"; name: string; hpFrac: number; alive: boolean };
+
+/** How a challenge round ended, for the result card. */
+export interface ChallengeResult {
+  cleared: boolean;
+  /** `ward` = the protected seat died; `draw` = everyone fell at once. */
+  reason: "won" | "died" | "ward" | "draw";
+  /** The attempt this run was (1-based, the device tally). */
+  attempt: number;
+}
+
+/** The challenge arming ceremony after START is pressed — a beat with the
+ * veil, not the five-second wait a room of strangers needs. */
+const CHALLENGE_ARM_SECONDS = 2;
 
 const randomArmBeat = (): number => 1200 + Math.random() * 1800;
 
@@ -138,6 +186,18 @@ const randomHand = (): AbilityId[] => {
   const pool = [...FREE_ABILITY_IDS];
   const hand: AbilityId[] = [];
   while (hand.length < LOADOUT_ABILITY_COUNT) {
+    hand.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
+  }
+  return hand;
+};
+
+/** A fixed hand, filled to a full one from the FREE roster (a recipe that
+ * says "dash" gets dash plus one random pick); absent = fully random. */
+const fillHand = (given: AbilityId[] | undefined): AbilityId[] => {
+  if (!given) return randomHand();
+  const hand = [...given];
+  const pool = FREE_ABILITY_IDS.filter((a) => !hand.includes(a));
+  while (hand.length < LOADOUT_ABILITY_COUNT && pool.length > 0) {
     hand.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!);
   }
   return hand;
@@ -173,6 +233,33 @@ export class PracticeClient implements LobbyClient {
   private readonly bots = new Map<number, BotSeat>();
   /** The choreography — set only for showcase matches. */
   private readonly showcase: ShowcaseScript | null;
+  /** The recipe — set only for challenge matches (bits-challenges.md). */
+  readonly challenge: ChallengeDef | null;
+  /** The shared judge (challenges.ts) — the gauntlet runs the same one. */
+  private judgeRef: ChallengeJudge | null = null;
+  /** Seats whose death loses the round (the escort). */
+  private protectIds: number[] = [];
+  /** Dev autopilot (bits-dev-menu.md): the shared brain drives YOUR seat at
+   * this tier — the stick is ignored. For recording clears of challenges
+   * nobody can beat by thumb (Tom, 2026-09-26). Read from devFlags at
+   * construction; never in a shipped build. */
+  private readonly autopilot: AutopilotMode | null;
+  private readonly autopilotMemory = createBotMemory(0x0a07);
+  /** The Oracle (sim oracle.ts) when the autopilot is set to it — forecasts
+   * THIS client's bots with their own memories. Phone budget (ORACLE_LITE). */
+  private readonly oracle: Oracle | null;
+  /** The device tally's number for the round in progress. */
+  private attempt = 0;
+  /** How the last challenge round ended — App shows the result card on the
+   * lobby return while this is set. */
+  challengeResult: ChallengeResult | null = null;
+  /** Deeds the last report unlocked, for the result card's ceremony. */
+  challengeUnlocks: string[] = [];
+  /** A challenge never starts itself (Tom, 2026-09-26: Robin Hood counted
+   * itself in "after a second or two") — the lobby clock waits for begin(). */
+  begun = false;
+  /** The seated recipe (challenges only) — START re-arms its counter seats. */
+  private seated: SeatedChallenge | null = null;
   /** Showcase scene clock: seconds since the round went active. */
   private showcaseT = 0;
   private lobbyEnteredMs: number;
@@ -191,9 +278,23 @@ export class PracticeClient implements LobbyClient {
      *  arena at random — rotation or not, so a new map can be walked before
      *  it ships online. A showcase always shoots on arena-00. */
     arena: string | null = null,
+    /** A challenge recipe (bits-challenges.md): seats, kits, dials and the
+     *  win condition all come from it; teamSize/mode/difficulty are ignored. */
+    challenge: ChallengeDef | null = null,
   ) {
     this.mode = mode;
     this.showcase = showcase;
+    this.challenge = challenge;
+    this.autopilot = DEV_MENU_ENABLED && challenge ? devFlags.autopilot : null;
+    this.oracle =
+      this.autopilot === "oracle" && challenge
+        ? createOracle({ ...ORACLE_LITE, ...(challenge.win.kind === "kills" ? { killWeight: 1500 } : {}) }, Date.now() >>> 0)
+        : null;
+    if (challenge) {
+      arena = challenge.arena;
+      teamSize = challengeTeamSize(challenge);
+      brawl = false;
+    }
     const zoneFile = arenaById(
       showcase ? "arena-00" : (arena ?? ARENA_IDS[Math.floor(Math.random() * ARENA_IDS.length)]),
     );
@@ -218,10 +319,33 @@ export class PracticeClient implements LobbyClient {
     // line-up is fixed instead: you on team 1, armed-on-arrival dummies
     // filling team 2 (an empty `bots` map — nothing thinks, nothing arms).
     // A showcase seats exactly the script's cast, teams forced.
-    const me =
-      mode === "dummies" || showcase
-        ? addPlayer(this.sim, playerName, showcase ? showcase.seats[0]!.team : 1)!
-        : addPlayer(this.sim, playerName)!;
+    // A challenge seats its whole cast through the sim's own seatChallenge
+    // (the recipe on forced teams, bots armed on arrival with their kits,
+    // every dial written, the partial room force-started) — the SAME
+    // seating the headless gauntlet runs, so a simulated clear is the match
+    // the phone plays. You are seat 0 either way.
+    let me: ArenaPlayer;
+    if (challenge) {
+      const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+      const seated = seatChallenge(this.sim, challenge, playerName, Math.random, names);
+      me = seated.me;
+      this.seated = seated;
+      this.protectIds = seated.protectIds;
+      this.judgeRef = createChallengeJudge(challenge, seated.protectIds, me.id);
+      for (const { player, spec } of seated.bots) {
+        this.bots.set(player.id, {
+          memory: createBotMemory((Math.random() * 0x7fffffff) | 0),
+          difficulty: spec.difficulty,
+          armAtMs: 0,
+          ...(spec.archetype ? { archetype: spec.archetype } : {}),
+        });
+      }
+    } else {
+      me =
+        mode === "dummies" || showcase
+          ? addPlayer(this.sim, playerName, showcase ? showcase.seats[0]!.team : 1)!
+          : addPlayer(this.sim, playerName)!;
+    }
     // Your kills announce in YOUR picked voice offline too (bots keep the
     // default) — practice mirrors the real room, announcer included. Same
     // for the worn title: it shows on your own name tag offline.
@@ -243,6 +367,8 @@ export class PracticeClient implements LobbyClient {
           armAtMs: 0,
         });
       }
+    } else if (challenge) {
+      // Already seated in full above (seatChallenge) — nothing to fill.
     } else if (mode === "dummies") {
       for (let i = 0; i < this.sim.state.players.length - 1; i++) {
         addDummy(this.sim, DUMMY_NAMES[i % DUMMY_NAMES.length]!);
@@ -270,7 +396,9 @@ export class PracticeClient implements LobbyClient {
       teamNames: this.sim.state.teamNames,
       roomCode: "BOT",
       roomName:
-        showcase
+        challenge
+          ? challenge.name
+          : showcase
           ? "showcase"
           : mode === "dummies"
           ? "target practice"
@@ -289,8 +417,35 @@ export class PracticeClient implements LobbyClient {
     this.lastSnap = toSnapshot(this.sim.state, []);
     this.buffer.push(this.lastSnap, performance.now());
 
-    // The lobby owns the clock until the countdown starts.
+    // The lobby owns the clock until the countdown starts — except a
+    // challenge, whose clock waits for the START button (begin()).
+    if (!challenge) this.startLobbyClock();
+  }
+
+  /** Whether this seat could start now (armed, or its kit is locked). */
+  get canBegin(): boolean {
+    const me = this.sim.state.players[0];
+    return !!me && (me.kitLocked || (me.weapon !== null && me.abilities.length === LOADOUT_ABILITY_COUNT));
+  }
+
+  /** Your kit is the recipe's (no wizard) — RoomScreen skips the walk. */
+  get kitLocked(): boolean {
+    return this.challenge?.you.locked === true;
+  }
+
+  /** START (challenges only): let the lobby clock run — the sim's own
+   * arming countdown takes it from here, clamped to a beat. */
+  begin(): void {
+    if (!this.challenge || this.begun || !this.canBegin) return;
+    this.begun = true;
+    // A counter seat (Godlike) reads your kit now that it's final — the
+    // lobby hid its kit until this press.
+    if (this.seated) {
+      armCounterPicks(this.sim, this.seated);
+      this.refreshRoomState();
+    }
     this.startLobbyClock();
+    this.onChange?.();
   }
 
   get myWeapon(): WeaponId | null {
@@ -335,7 +490,7 @@ export class PracticeClient implements LobbyClient {
   private startLobbyClock(): void {
     if (this.lobbyTimer !== null) return;
     this.lobbyEnteredMs = performance.now();
-    for (const bot of this.bots.values()) bot.armAtMs = this.showcase ? 0 : randomArmBeat();
+    for (const bot of this.bots.values()) bot.armAtMs = this.showcase || this.challenge ? 0 : randomArmBeat();
     this.lobbyTimer = setInterval(() => this.lobbyTick(), 1000 / TICK_RATE);
   }
 
@@ -348,9 +503,9 @@ export class PracticeClient implements LobbyClient {
     for (const [id, seat] of this.bots) {
       const bot = this.sim.state.players[id];
       if (bot && bot.weapon === null && sinceMs >= seat.armAtMs) {
-        const kit = this.showcase?.seats[id];
+        const kit: SeatKit | undefined = this.showcase?.seats[id];
         setPlayerWeapon(this.sim, id, kit?.weapon ?? randomWeapon());
-        setPlayerAbilities(this.sim, id, kit?.abilities ?? randomHand());
+        setPlayerAbilities(this.sim, id, fillHand(kit?.abilities));
         armed = true;
       }
     }
@@ -377,6 +532,11 @@ export class PracticeClient implements LobbyClient {
     // The showcase rig wants footage, not ceremony — same clamp, shorter.
     if (this.showcase && round.phase === "lobby" && round.timer > SHOWCASE_ARM_SECONDS) {
       round.timer = SHOWCASE_ARM_SECONDS;
+    }
+    // A challenge counts down only after START was pressed — the veil's
+    // beat is the whole ceremony.
+    if (this.challenge && round.phase === "lobby" && round.timer > CHALLENGE_ARM_SECONDS) {
+      round.timer = CHALLENGE_ARM_SECONDS;
     }
 
     this.step(new Map()); // nobody moves pre-countdown; the clock still runs
@@ -425,7 +585,27 @@ export class PracticeClient implements LobbyClient {
       this.step(inputs);
       return;
     }
-    inputs.set(0, { seq: this.seq++, sx, sy, casts });
+    if (this.oracle) {
+      // Dev autopilot, Oracle flavour: rollouts on clones of THIS sim against
+      // these very bots (their live memories are cloned per rollout).
+      const foes: OracleFoe[] = [];
+      for (const [id, seat] of this.bots) {
+        const body = this.sim.state.players[id];
+        if (body && body.team !== 1) foes.push({ id, memory: seat.memory, difficulty: seat.difficulty, ...(seat.archetype ? { archetype: seat.archetype } : {}) });
+      }
+      const d = this.oracle.think(this.sim, 0, foes, this.nav);
+      inputs.set(0, { seq: this.seq++, sx: d.sx, sy: d.sy, casts: d.casts });
+    } else if (this.autopilot && this.autopilot !== "oracle") {
+      // Dev autopilot: the shared brain plays your seat at its tier; the
+      // stick and buttons are ignored. Same staleness rule as the bots.
+      const tier = DIFFICULTIES[this.autopilot];
+      const world = this.history.stale(tier.reactionTicks) ?? this.lastSnap;
+      const snap = this.lastSnap.players.find((p) => p.id === 0);
+      const d = botThink(this.autopilotMemory, snap, world, this.nav, { difficulty: this.autopilot });
+      inputs.set(0, { seq: this.seq++, sx: d.sx, sy: d.sy, casts: d.casts });
+    } else {
+      inputs.set(0, { seq: this.seq++, sx, sy, casts });
+    }
     for (const [id, seat] of this.bots) {
       // Stale WORLD, current self: the tier's reaction time is how old a view
       // of everyone else this bot acts on; its own body it always knows.
@@ -437,7 +617,10 @@ export class PracticeClient implements LobbyClient {
       if (body) body.moveFactor = tier.speedFactor;
       const world = this.history.stale(tier.reactionTicks) ?? this.lastSnap;
       const snap = this.lastSnap.players.find((p) => p.id === id);
-      const decision = botThink(seat.memory, snap, world, this.nav, { difficulty });
+      const decision = botThink(seat.memory, snap, world, this.nav, {
+        difficulty,
+        ...(seat.archetype ? { archetype: seat.archetype } : {}),
+      });
       inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
     }
     this.step(inputs);
@@ -468,6 +651,7 @@ export class PracticeClient implements LobbyClient {
 
   private step(inputs: Map<number, { seq: number; sx: number; sy: number; casts: boolean[] }>): void {
     const events = stepSim(this.sim, inputs, TICK_DT);
+    if (this.challenge) this.judge(events); // may conclude the round — into the same tick's events
     if (this.showcase && this.sim.state.round.phase === "countdown" && this.phase !== "countdown") this.stage();
     this.lastSnap = toSnapshot(this.sim.state, events);
     this.history.push(this.lastSnap);
@@ -479,8 +663,66 @@ export class PracticeClient implements LobbyClient {
       this.onChange?.();
       // Back in the lobby after a match: everyone is disarmed — the wizard
       // reopens and this clock resumes so the next arming countdown can run.
-      if (this.phase === "lobby") this.startLobbyClock();
+      // NOT after a challenge round: the round IS the match, the result card
+      // owns the lobby return, and AGAIN seats a fresh client. Left running,
+      // a full-room locked-kit recipe (Robin Hood: two seats, your kit
+      // "complete" by the lock even with the weapon cleared, the bot
+      // re-arming at 0ms) counts itself straight back into the fight
+      // underneath the deeds ceremony (Tom, 2026-09-26).
+      if (this.phase === "lobby" && !(this.challenge && this.challengeResult)) this.startLobbyClock();
     }
+  }
+
+  /** The shared judge's verdict for this tick → the result card + report. */
+  private judge(events: ArenaEvent[]): void {
+    const verdict = this.judgeRef!.tick(this.sim, events);
+    if (events.some((e) => e.type === "fightStart")) {
+      this.challengeResult = null;
+      this.challengeUnlocks = [];
+      void noteChallengeAttempt(this.challenge!.id).then((n) => {
+        this.attempt = n;
+      });
+    }
+    if (!verdict) return;
+    this.challengeResult = { cleared: verdict.cleared, reason: verdict.reason, attempt: this.attempt };
+    this.report(this.challengeResult);
+  }
+
+  /** Tell the API (bits-challenges.md § trust): the local tally moves first
+   * and stands on its own; the server's answer brings the deeds to
+   * celebrate. Fire-and-forget — a dead API costs nothing but the Glory,
+   * which the next report's absolute attempt count still lets it pay. */
+  private report(result: ChallengeResult): void {
+    const def = this.challenge!;
+    void (async () => {
+      const attempts = result.cleared ? await noteChallengeClear(def.id) : this.attempt;
+      const identity = await ensureIdentity();
+      if (!identity) return;
+      const res = await reportChallenge(identity, { id: def.id, cleared: result.cleared, attempts });
+      if (!res || res.unlocks.length === 0) return;
+      grantFromDeedUnlocks(res.unlocks);
+      this.challengeUnlocks = res.unlocks;
+      this.onChange?.();
+    })();
+  }
+
+  /** The live objective for GameScreen's strip; null when the fight tells
+   * its own story (last one standing, nothing to protect). */
+  get objective(): ChallengeObjective | null {
+    const def = this.challenge;
+    if (!def) return null;
+    const { state } = this.sim;
+    if (def.win.kind === "kills") return { kind: "kills", have: this.judgeRef?.kills ?? 0, need: def.win.count };
+    if (def.win.kind === "survive") return { kind: "survive", left: Math.max(0, Math.ceil(def.win.seconds - state.round.elapsed)) };
+    const ward = this.protectIds.length > 0 ? state.players[this.protectIds[0]!] : null;
+    if (!ward) return null;
+    return {
+      kind: "protect",
+      name: ward.name,
+      // Whole percents, so the strip's setState stays calm.
+      hpFrac: Math.round(Math.max(0, ward.combatant.hp / ward.combatant.stats.maxHp) * 100) / 100,
+      alive: ward.alive,
+    };
   }
 
   private refreshRoomState(): void {

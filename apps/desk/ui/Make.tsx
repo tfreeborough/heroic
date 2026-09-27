@@ -26,6 +26,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   const [props, setProps] = useState<Record<string, unknown>>({});
   const [formats, setFormats] = useState<Format[]>(formatIds);
   const [previewFormat, setPreviewFormat] = useState<Format>("vertical");
+  const [variant, setVariant] = useState(0);
   const [name, setName] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [msg, setMsg] = useState("");
@@ -107,6 +108,18 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clips, file, template]);
 
+  // A template with variants: the alternatives typed in its one field. The
+  // preview shows the chosen one; a render makes a batch for each.
+  const variants = useMemo(() => {
+    const v = template?.variants;
+    if (!v) return [];
+    return v.split(String(effective[v.key] ?? ""));
+  }, [template, effective]);
+  const withVariant = (p: Record<string, unknown>, i: number): Record<string, unknown> => {
+    const v = template?.variants;
+    return v && variants[i] !== undefined ? { ...p, [v.key]: variants[i] } : p;
+  };
+
   const seconds = useMemo(() => {
     try {
       const s = template ? template.seconds(effective) : 10;
@@ -116,7 +129,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     }
   }, [template, effective]);
   const size = FORMATS[previewFormat] ?? FORMATS[formatIds[0]!]!;
-  const inputProps = { ...effective, format: previewFormat };
+  const inputProps = { ...withVariant(effective, Math.min(variant, Math.max(0, variants.length - 1))), format: previewFormat };
 
   // Poll jobs while any run.
   useEffect(() => {
@@ -143,8 +156,16 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     if (!formats.length) return setMsg("tick at least one format");
     setMsg("");
     try {
-      await api.render({ template: template.id, props: effective, formats, name: name || "video" });
-      setMsg(`rendering ${formats.length} format${formats.length === 1 ? "" : "s"} — watch the progress below, then find it under Renders`);
+      if (template.variants && variants.length > 1) {
+        // One batch per alternative, so each lands in the library as its own card.
+        for (let i = 0; i < variants.length; i++) {
+          await api.render({ template: template.id, props: withVariant(effective, i), formats, name: `${name || "video"}-${template.variants.suffix}${i + 1}` });
+        }
+        setMsg(`rendering ${variants.length} ${template.variants.suffix} variants × ${formats.length} format${formats.length === 1 ? "" : "s"} — watch the progress below, then find them under Renders`);
+      } else {
+        await api.render({ template: template.id, props: effective, formats, name: name || "video" });
+        setMsg(`rendering ${formats.length} format${formats.length === 1 ? "" : "s"} — watch the progress below, then find it under Renders`);
+      }
     } catch (e) {
       setMsg(`✖ ${(e as Error).message}`);
     }
@@ -153,7 +174,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     const frame = playerRef.current?.getCurrentFrame() ?? 0;
     setMsg("rendering the still…");
     try {
-      const r = await api.still({ template: template.id, props: effective, format: previewFormat, frame, name: name || "still" });
+      const r = await api.still({ template: template.id, props: withVariant(effective, variant), format: previewFormat, frame, name: name || "still" });
       setMsg(`✔ out/desk/${r.file}`);
     } catch (e) {
       setMsg(`✖ ${(e as Error).message}`);
@@ -249,8 +270,9 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
               ))}
             </div>
             <div className="row">
-              <button disabled={!props[template.clipKey] && template.id === "GameplayClip"} onClick={() => void render()}>
-                Render {formats.length > 1 ? `${formats.length} formats` : ""}
+              <button disabled={!props[template.clipKey] && template.needsClip} onClick={() => void render()}>
+                Render {variants.length > 1 ? `${variants.length} ${template.variants!.suffix}s` : ""}
+                {formats.length > 1 ? ` ${variants.length > 1 ? "×" : ""} ${formats.length} formats` : ""}
               </button>
               <button className="ghost" onClick={() => void still()}>
                 Still of this frame
@@ -285,6 +307,17 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
               {size.width}×{size.height} · {fmtSeconds(seconds)}
             </span>
           </div>
+          {variants.length > 1 ? (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              <span className="small muted">{template.variants!.suffix}</span>
+              {variants.map((v, i) => (
+                <button key={i} className={`small ${Math.min(variant, variants.length - 1) === i ? "" : "ghost"}`} title={v} onClick={() => setVariant(i)}>
+                  {i + 1}
+                </button>
+              ))}
+              <span className="small muted">{variants[Math.min(variant, variants.length - 1)]}</span>
+            </div>
+          ) : null}
           <div className="frame">
             <Player
               ref={playerRef as never}

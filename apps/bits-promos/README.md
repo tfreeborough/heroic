@@ -37,6 +37,7 @@ by default; `ending: "signoff"` swaps in the match clip's indie sign-off.
 | `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, musicFrom?, musicVolume?, ending?}` |
 | `AbilitySpotlight` | `{kind:"ability", id:"sinkhole", …}` |
 | `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, push?, format?}` |
+| `HookClip` | `{clip, hook, hookFor?, look?, follow?, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, push?, format?}` |
 
 Every template takes `format`: `vertical` (1080×1920, the default), `square`
 (1080×1080) or `landscape` (1920×1080); the layout adapts (`src/components.tsx`).
@@ -58,6 +59,19 @@ sign-off (`ending: "signoff"` — an independent game, support indie games,
 come and fight me; words in `DEV.signoff`), with the game's item, deed and
 rank art popping into the space around the words (`roster.gallery`, synced
 from the game) — or the spotlights' feature-list pitch (`ending: "pitch"`).
+
+**The hook clip is the match clip built for the scroll** (`src/HookClip.tsx`).
+Same stage, same chrome, same sign-off — but no title beat: the `hook`
+sentence is on screen, big, from the very first frame (that frame is also
+the cover), holds for `hookFor` seconds (default 3, the window in which
+most viewers decide to thumb past) and lifts off; then the brand mark, REC
+chip and an optional `follow` line on the lower third take over. `look` sets
+it in bold white sans with a crimson bar (default) or the game's tracked
+gold caps. Start the cut ON the action (`startFrom` one second before the
+payoff) — a hook over a setup is still a setup. In the Desk, several hooks
+in the field separated by `|` render as separate videos (`<name>-hook1`,
+`-hook2`…) for testing against each other; the marketing playbook
+(`docs/marketing.md`) says how to read the results.
 
 **Sound:** simulator recordings are silent (`simctl` captures no audio) and
 the footage plays muted. Phone recordings in `GameplayClip` keep their own

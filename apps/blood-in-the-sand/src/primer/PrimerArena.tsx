@@ -28,7 +28,7 @@ import { ARENA_00, TICK_DT, type FinisherId, type InterpolatedView } from "@hero
 import { BloodField } from "../game/blood";
 import { playSound } from "../audio";
 import { FinisherCues } from "../game/finisherCues";
-import { FinisherField } from "../game/finishers";
+import { FinisherField, finisherImpactMs } from "../game/finishers";
 import { CrackField } from "../game/cracks";
 import { TarField } from "../game/tar";
 import { StatusPulses } from "../game/statusRings";
@@ -168,6 +168,8 @@ export const PrimerArena = ({
               if (e.attackerId === runner.youId && e.targetId !== runner.youId && live.current.finisher) {
                 const worn = live.current.finisher;
                 finishers.spawn(worn, e.x, e.y, now, dx / len, dy / len);
+                const impact = finisherImpactMs(worn);
+                if (impact !== undefined) kicks.current.push({ x: e.x, y: e.y, dirX: 0, dirY: 1, bornMs: now + impact });
                 if (live.current.sound && worn !== "none" && heard.current.kills < PREVIEW_SOUND_LOOPS) {
                   heard.current.kills++;
                   cues.current.start(worn, now, PREVIEW_SOUND_GAIN, false);

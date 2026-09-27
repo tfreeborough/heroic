@@ -31,8 +31,6 @@ const writeBinned = (g: GameConfig, names: string[]) => {
   if (sorted.length) writeFileSync(ledgerPath(g), JSON.stringify(sorted, null, 2) + "\n");
   else if (existsSync(ledgerPath(g))) unlinkSync(ledgerPath(g));
 };
-/** rclone filter pattern for one exact file at the remote root. */
-const rcloneExclude = (name: string) => "/" + name.replace(/[\\*?\[\]{}]/g, (c) => "\\" + c);
 
 
 /** Android/iOS recorders stamp the moment into the name: VID_20260912_194723, Screen_Recording_20260912-194723… */
@@ -102,24 +100,53 @@ export const syncFootage = async (g: GameConfig, opts: { offline?: boolean; add?
       log.push(`  rclone config create ${remote} drive scope=drive.readonly root_folder_id=${g.drive.footageFolderId}`);
       ok = false;
     } else {
-      // Ordered --filter rules (rclone reads --include/--exclude in no fixed order):
-      // binned recordings out by name so a bin sticks, then media in, then everything else out.
-      const binned = readBinned(g);
-      const r = await exec(
-        [
-          "rclone", "copy", `${remote}:`, dir,
-          ...binned.flatMap((n) => ["--filter", `- ${rcloneExclude(n)}`]),
-          "--filter", "+ *.{mp4,mov,m4v}", "--filter", "- *",
-          "--ignore-case", "--stats-one-line", "--stats", "10s", "--stats-log-level", "NOTICE",
-        ],
-        g.root,
-      );
-      const noise = r.err.split("\n").filter((l) => l && !l.includes("shared Google Drive client_id"));
-      if (noise.length) log.push(...noise);
-      if (!r.ok) {
-        log.push("⚠ rclone copy failed (offline?) — continuing with what's on disk");
+      // List first, then copy by name: a video is anything Drive calls a video
+      // OR anything with a media extension, so a phone export saved without
+      // an extension ("scorpion raw") still comes down, and lands here with
+      // the extension its type says it needs. Binned names stay on Drive.
+      const listed = await exec(["rclone", "lsjson", "--recursive", "--files-only", `${remote}:`], g.root);
+      if (!listed.ok) {
+        log.push("⚠ rclone couldn't list the Drive folder (offline?) — continuing with what's on disk");
+        log.push(...listed.err.split("\n").filter((l) => l && !l.includes("shared Google Drive client_id")));
         ok = false;
-      } else log.push(`⇣ Drive folder up to date${binned.length ? ` (${binned.length} binned recording${binned.length === 1 ? "" : "s"} left there)` : ""}`);
+      } else {
+        const binned = readBinned(g);
+        const files = JSON.parse(listed.out || "[]") as { Path: string; Name: string; Size: number; MimeType?: string }[];
+        const want: { path: string; local: string; size: number }[] = [];
+        const ignored: string[] = [];
+        for (const f of files) {
+          const ext = MEDIA_EXT.test(f.Name) ? "" : f.MimeType === "video/quicktime" ? ".mov" : f.MimeType?.startsWith("video/") ? ".mp4" : null;
+          if (ext === null) {
+            ignored.push(f.Path);
+            continue;
+          }
+          const local = f.Name + ext;
+          if (binned.includes(local) || binned.includes(f.Name)) continue;
+          const have = join(dir, local);
+          if (existsSync(have) && statSync(have).size === f.Size) continue;
+          want.push({ path: f.Path, local, size: f.Size });
+        }
+        if (want.length) {
+          const list = join(dir, ".sync-files");
+          writeFileSync(list, want.map((w) => w.path).join("\n") + "\n");
+          const r = await exec(["rclone", "copy", `${remote}:`, dir, "--files-from-raw", list, "--stats-one-line", "--stats", "10s", "--stats-log-level", "NOTICE"], g.root);
+          unlinkSync(list);
+          const noise = r.err.split("\n").filter((l) => l && !l.includes("shared Google Drive client_id"));
+          if (noise.length) log.push(...noise);
+          if (!r.ok) {
+            log.push("⚠ rclone copy failed (offline?) — continuing with what's on disk");
+            ok = false;
+          }
+          for (const w of want) {
+            const down = join(dir, w.path);
+            if (w.local !== basename(w.path) && existsSync(down)) {
+              renameSync(down, join(dir, w.local));
+              log.push(`⇣ ${w.path} → ${w.local} (no extension on Drive; it's a video, so it gets one here)`);
+            } else if (existsSync(join(dir, w.local))) log.push(`⇣ ${w.local}`);
+          }
+        } else log.push(`⇣ Drive folder up to date (${files.length - ignored.length} recording${files.length - ignored.length === 1 ? "" : "s"} there, all here${binned.length ? `, ${binned.length} binned` : ""})`);
+        for (const n of ignored) log.push(`· ignored ${n} on Drive — not a video`);
+      }
     }
   }
   for (const src of opts.add ?? []) {

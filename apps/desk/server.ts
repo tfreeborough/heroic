@@ -19,6 +19,9 @@ import { type CleanupSpec, cleanupClip, ffprobe, filmstrip, thumbnail } from "./
 import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip, syncFootage, trashClip, writeSidecar } from "./lib/footage";
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
+import type { Platform, Post } from "./lib/schedule";
+import { hasClaude } from "./lib/draft";
+import { pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
 
 const PORT = Number(process.env.DESK_PORT ?? 3400);
@@ -214,6 +217,41 @@ const server = Bun.serve({
           return fail(e);
         }
       }),
+    },
+
+    // ── the posting queue ──
+    "/api/:game/schedule": {
+      GET: withGame((g) => json({ ...pruneSchedule(g), claude: hasClaude() && Boolean(g.post?.ai) })),
+      /** Queue batches: each lands in the next free slot under the spacing rule. */
+      POST: withGame(async (g, req) => {
+        const body = (await req.json()) as { batches: string[]; from?: string };
+        return json(await queueBatches(g, body.batches ?? [], body.from));
+      }),
+      PUT: withGame(async (g, req) => json(updateSettings(g, (await req.json()) as { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] }))),
+    },
+    "/api/:game/schedule/reflow": { POST: withGame((g) => json(reflow(g))) },
+    "/api/:game/schedule/:id/draft": {
+      POST: withGame(async (g, req) => {
+        try {
+          return json(await redraftPost(g, req.params.id!));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** A batch the queue should leave alone (experiments), or not any more. */
+    "/api/:game/batches/:id/ignore": {
+      PUT: withGame(async (g, req) => json(setIgnored(g, decodeURIComponent(req.params.id!), Boolean(((await req.json()) as { ignored: boolean }).ignored)))),
+    },
+    "/api/:game/schedule/:id": {
+      PUT: withGame(async (g, req) => {
+        try {
+          return json(updatePost(g, req.params.id!, (await req.json()) as Partial<Pick<Post, "day" | "slot" | "title" | "description"> & { posted: Partial<Record<Platform, string>> }>));
+        } catch (e) {
+          return fail(e, 404);
+        }
+      }),
+      DELETE: withGame((g, req) => json(removePost(g, req.params.id!))),
     },
   },
   /** Static: /g/<game>/renders/<file>, /g/<game>/<public path>, then the cookie-selected game's public dir at the root. */

@@ -25,8 +25,7 @@ import {
   type ArenaShell,
   type ArenaState,
   type Deployable,
-  type Team,
-} from "./state";
+  type Team, sandsDelayOf } from "./state";
 
 export const makeClientConfig = (state: ArenaState): ArenaClientConfig => ({
   tickRate: TICK_RATE,
@@ -89,8 +88,8 @@ const toRoundSnapshot = (state: ArenaState): RoundSnapshot => ({
     ? {
         cx: state.round.sands.cx,
         cy: state.round.sands.cy,
-        r: sandsRadius(state.round),
-        p: sandsProgress(state.round),
+        r: sandsRadius(state.round, sandsDelayOf(state)),
+        p: sandsProgress(state.round, sandsDelayOf(state)),
       }
     : null,
 });

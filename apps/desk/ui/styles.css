@@ -125,3 +125,26 @@ button.link.small { font-size: 13px; font-weight: 500; }
 .card.pick.on { border-color: #9fe0ad; }
 .clip-chosen { display: flex; gap: 12px; align-items: center; }
 .clip-chosen img { width: 54px; height: 96px; object-fit: contain; background: var(--ink); border-radius: 6px; }
+
+/* ── the posting queue ── */
+.qday { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+.qday.today .qdate { color: var(--sand); }
+.qday.past .qdate { color: var(--crimson); }
+.qdate { font-weight: 700; line-height: 1.3; }
+.qdate .small { font-weight: 500; }
+.qslots { display: flex; flex-direction: column; gap: 8px; }
+.qslot { display: grid; grid-template-columns: 82px 64px 1fr auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-height: 58px; }
+.qslot.empty { background: transparent; border-style: dashed; color: var(--steel); }
+.qslot.done { opacity: 0.55; }
+.qslot .label { font-size: 12px; font-weight: 600; color: var(--steel); text-transform: uppercase; letter-spacing: 1px; }
+.qslot img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; background: var(--ink); cursor: pointer; }
+.qslot .what { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.qslot .what .hook { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticks { display: flex; gap: 6px; }
+.tickbtn { background: var(--ink); color: var(--steel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 12px; font-weight: 700; }
+.tickbtn.on { background: rgba(70,160,90,0.25); color: #9fe0ad; border-color: rgba(70,160,90,0.5); }
+.qedit { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; padding-top: 8px; border-top: 1px solid var(--line); }
+.qedit .wide { grid-column: 1 / -1; }
+.qedit textarea { min-height: 150px; font-family: inherit; }
+.count { font-size: 12px; color: var(--steel); }
+.count.over { color: var(--crimson); }
