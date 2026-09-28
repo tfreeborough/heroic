@@ -1,8 +1,9 @@
 /**
  * The result card after a challenge round (bits-challenges.md § screen):
- * cleared (attempt number, the Glory, the deeds ceremony) or lost (attempt
- * +1, AGAIN one tap away). Loss reads differently when it was the ward who
- * fell. The lobby BEFORE the round is RoomScreen in challenge dress.
+ * cleared (attempt number, the Glory, the deeds ceremony, BACK TO CHALLENGES
+ * lit to send you on to the next one) or lost (attempt +1, AGAIN one tap
+ * away). Loss reads differently when it was the ward who fell. The lobby
+ * BEFORE the round is RoomScreen in challenge dress.
  */
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -60,6 +61,12 @@ export const ChallengeResult = ({
     onAgain();
   };
 
+  const back = (): void => {
+    unlockAudio();
+    playSound("uiConfirm");
+    onBack();
+  };
+
   const title = result.cleared ? "CLEARED" : result.reason === "ward" ? "THE ROOKIE'S DEAD" : result.reason === "draw" ? "NOBODY WINS" : "DEAD";
   const line = result.cleared
     ? `on the ${ordinal(Math.max(1, result.attempt))} attempt`
@@ -84,14 +91,28 @@ export const ChallengeResult = ({
           <Text style={styles.wait}>already paid — this one was for the tally</Text>
         ) : null}
       </View>
-      <View style={styles.buttons}>
-        <Pressable onPress={again} style={styles.primary}>
-          <Text style={styles.primaryText}>{result.cleared ? "RUN IT BACK" : "AGAIN"}</Text>
-        </Pressable>
-        <Pressable onPress={onBack} style={styles.ghost}>
-          <Text style={styles.ghostText}>BACK TO CHALLENGES</Text>
-        </Pressable>
-      </View>
+      {/* A clear sends you on to the next challenge — BACK is the lit button
+          and RUN IT BACK steps down (Tom kept re-running cleared ones). A loss
+          keeps AGAIN one tap away. */}
+      {result.cleared ? (
+        <View style={styles.buttons}>
+          <Pressable onPress={back} style={styles.primary}>
+            <Text style={styles.primaryText}>BACK TO CHALLENGES</Text>
+          </Pressable>
+          <Pressable onPress={again} style={styles.ghost}>
+            <Text style={styles.ghostText}>RUN IT BACK</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.buttons}>
+          <Pressable onPress={again} style={styles.primary}>
+            <Text style={styles.primaryText}>AGAIN</Text>
+          </Pressable>
+          <Pressable onPress={onBack} style={styles.ghost}>
+            <Text style={styles.ghostText}>BACK TO CHALLENGES</Text>
+          </Pressable>
+        </View>
+      )}
       {replay && <DeedReplayOverlay deeds={replay} onDone={() => setReplay(null)} />}
     </View>
   );
