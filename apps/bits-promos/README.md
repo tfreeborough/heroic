@@ -37,7 +37,7 @@ by default; `ending: "signoff"` swaps in the match clip's indie sign-off.
 | `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, musicFrom?, musicVolume?, ending?}` |
 | `AbilitySpotlight` | `{kind:"ability", id:"sinkhole", …}` |
 | `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, push?, format?}` |
-| `HookClip` | `{clip, hook, hookFor?, look?, follow?, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, push?, format?}` |
+| `HookClip` | `{clip, hook, hookFor?, look?, follow?, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, tail?, loopBlend?, push?, format?}` |
 
 Every template takes `format`: `vertical` (1080×1920, the default), `square`
 (1080×1080) or `landscape` (1920×1080); the layout adapts (`src/components.tsx`).
@@ -68,10 +68,19 @@ most viewers decide to thumb past) and lifts off; then the brand mark, REC
 chip and an optional `follow` line on the lower third take over. `look` sets
 it in bold white sans with a crimson bar (default) or the game's tracked
 gold caps. Start the cut ON the action (`startFrom` one second before the
-payoff) — a hook over a setup is still a setup. In the Desk, several hooks
-in the field separated by `|` render as separate videos (`<name>-hook1`,
+payoff) — a hook over a setup is still a setup. In the Desk, add hooks one
+row at a time and each renders as its own video (`<name>-hook1`,
 `-hook2`…) for testing against each other; the marketing playbook
 (`docs/marketing.md`) says how to read the results.
+
+It **loops** by default (`ending: "loop"`): no end card, since one tells the
+viewer it's over. The chrome clears, the footage crossfades (`loopBlend`,
+default 0.3s) into the frames just before `startFrom`, and the hook drops
+back in so the last frame is frame zero and the platform's replay reads as
+one clip. An optional `tail` line takes the last 1.5s and runs on into the
+hook ("…and that's why you never" / "chase a Harpoon."). Keep loops 7–15s and
+end ON the payoff; set `startFrom` at least `loopBlend` in for a seamless
+crossfade. `ending: "signoff"` or `"pitch"` bring the end card back.
 
 **Sound:** simulator recordings are silent (`simctl` captures no audio) and
 the footage plays muted. Phone recordings in `GameplayClip` keep their own

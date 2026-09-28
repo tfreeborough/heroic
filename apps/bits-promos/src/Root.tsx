@@ -54,7 +54,7 @@ export const Root: React.FC = () => (
       durationInFrames={FPS * 17}
       fps={FPS}
       {...VERTICAL}
-      defaultProps={{ clip: "", hook: "He had 1 HP. Then the Harpoon.", hookFor: 3, look: "bold" as const, follow: "", durationSeconds: 12, startFrom: 0, muted: false, ending: "signoff" as const, push: 0 }}
+      defaultProps={{ clip: "", hook: "He had 1 HP. Then the Harpoon.", hookFor: 3, look: "bold" as const, follow: "", tail: "", durationSeconds: 12, startFrom: 0, muted: false, ending: "loop" as const, push: 0 }}
       calculateMetadata={({ props }) => ({
         durationInFrames: Math.round(hookClipDurationSeconds(props) * FPS),
         ...formatSize(props.format),

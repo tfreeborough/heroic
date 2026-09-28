@@ -5,6 +5,7 @@
  * optional / default.
  */
 import type * as React from "react";
+import { useEffect, useRef } from "react";
 import type { ZodObject, ZodType } from "zod";
 
 type Def = { type: string; innerType?: ZodType; entries?: Record<string, string>; defaultValue?: unknown };
@@ -76,6 +77,84 @@ export const SchemaForm: React.FC<{
             </div>
           );
         })}
+    </div>
+  );
+};
+
+/** A variant field's value as rows: the list the Desk keeps, or a single
+ * string (a re-opened batch's render, or a template default). */
+export const listOf = (v: unknown): string[] => {
+  if (Array.isArray(v)) return v.length ? v.map(String) : [""];
+  return [typeof v === "string" ? v : ""];
+};
+
+/**
+ * Alternatives added one line at a time (hooks to test against each other):
+ * Enter adds a row below, Backspace on an empty row removes it, × drops one.
+ */
+export const VariantList: React.FC<{
+  label: string;
+  rows: string[];
+  placeholder?: string;
+  onChange: (rows: string[]) => void;
+  onFocusRow?: (i: number) => void;
+}> = ({ label, rows, placeholder, onChange, onFocusRow }) => {
+  const inputs = useRef<(HTMLInputElement | null)[]>([]);
+  const focusNext = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusNext.current === null) return;
+    inputs.current[focusNext.current]?.focus();
+    focusNext.current = null;
+  });
+  const set = (i: number, v: string) => onChange(rows.map((r, j) => (j === i ? v : r)));
+  const add = (at: number) => {
+    focusNext.current = at;
+    onChange([...rows.slice(0, at), "", ...rows.slice(at)]);
+  };
+  const remove = (i: number) => {
+    const next = rows.filter((_, j) => j !== i);
+    focusNext.current = Math.max(0, i - 1);
+    onChange(next.length ? next : [""]);
+  };
+  const filled = rows.filter((r) => r.trim()).length;
+  return (
+    <div className="field variants">
+      <label>{label}</label>
+      {rows.map((r, i) => (
+        <div className="row variant" key={i}>
+          <span className="small muted mono">{i + 1}</span>
+          <input
+            ref={(el) => {
+              inputs.current[i] = el;
+            }}
+            type="text"
+            value={r}
+            placeholder={i === 0 ? placeholder : "another one to test"}
+            onChange={(e) => set(i, e.target.value)}
+            onFocus={() => onFocusRow?.(i)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add(i + 1);
+              } else if (e.key === "Backspace" && r === "" && rows.length > 1) {
+                e.preventDefault();
+                remove(i);
+              }
+            }}
+          />
+          {rows.length > 1 ? (
+            <button className="ghost small" title="Remove" onClick={() => remove(i)}>
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+      <div className="row">
+        <button className="ghost small" onClick={() => add(rows.length)}>
+          + Add another
+        </button>
+        <span className="hint">{filled > 1 ? `${filled} ${label}: one press renders each as its own video` : "Add more to test them against each other: each renders as its own video"}</span>
+      </div>
     </div>
   );
 };

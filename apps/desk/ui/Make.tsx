@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type Batch, type Clip, type GameApi, type GameInfo, type Job, fmtDate, fmtSeconds } from "./api";
 import { go } from "./App";
 import { ClipPicker } from "./ClipPicker";
-import { SchemaForm } from "./form";
+import { SchemaForm, VariantList, listOf } from "./form";
 import type { DeskTemplate as Template } from "../game";
 import { loadTemplates } from "./games";
 type Format = string;
@@ -108,21 +108,23 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clips, file, template]);
 
-  // A template with variants: the alternatives typed in its one field. The
-  // preview shows the chosen one; a render makes a batch for each.
-  const variants = useMemo(() => {
-    const v = template?.variants;
-    if (!v) return [];
-    return v.split(String(effective[v.key] ?? ""));
-  }, [template, effective]);
+  // A template with variants: the form keeps a list of alternatives (blank
+  // rows are ones still being typed). The preview shows the chosen one; a
+  // render makes a batch for each, and every render gets a single string.
+  const rows = template?.variants ? listOf(props[template.variants.key]) : [];
+  const variants = useMemo(() => rows.map((r) => r.trim()).filter(Boolean), [rows.join("\n")]);
   const withVariant = (p: Record<string, unknown>, i: number): Record<string, unknown> => {
     const v = template?.variants;
-    return v && variants[i] !== undefined ? { ...p, [v.key]: variants[i] } : p;
+    return v ? { ...p, [v.key]: variants[i] ?? "" } : p;
+  };
+  // Typing in a row shows that hook in the preview.
+  const focusRow = (i: number) => {
+    if (rows[i]?.trim()) setVariant(rows.slice(0, i).filter((r) => r.trim()).length);
   };
 
   const seconds = useMemo(() => {
     try {
-      const s = template ? template.seconds(effective) : 10;
+      const s = template ? template.seconds(withVariant(effective, 0)) : 10;
       return Number.isFinite(s) ? Math.max(1, s) : 10;
     } catch {
       return 10;
@@ -163,7 +165,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
         }
         setMsg(`rendering ${variants.length} ${template.variants.suffix} variants × ${formats.length} format${formats.length === 1 ? "" : "s"} — watch the progress below, then find them under Renders`);
       } else {
-        await api.render({ template: template.id, props: effective, formats, name: name || "video" });
+        await api.render({ template: template.id, props: withVariant(effective, 0), formats, name: name || "video" });
         setMsg(`rendering ${formats.length} format${formats.length === 1 ? "" : "s"} — watch the progress below, then find it under Renders`);
       }
     } catch (e) {
@@ -244,13 +246,23 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
           </div>
           <div className="panel stack">
             <h3>Props</h3>
-            <SchemaForm schema={template.schema} value={props} onChange={setProps} hide={template.hide} options={template.options} />
+            {template.variants ? (
+              <VariantList
+                label={`${template.variants.suffix}s`}
+                rows={rows}
+                placeholder={template.variants.placeholder}
+                onChange={(next) => setProps((p) => ({ ...p, [template.variants!.key]: next }))}
+                onFocusRow={focusRow}
+              />
+            ) : null}
+            <SchemaForm schema={template.schema} value={props} onChange={setProps} hide={[...(template.hide ?? []), ...(template.variants ? [template.variants.key] : [])]} options={template.options} />
             {template.uncapped && clip ? (
               <div className="small muted">
                 {props[template.uncapped.durationKey] === undefined || props[template.uncapped.durationKey] === "" ? "No duration set: " : "Duration capped at the clip: "}
                 the cut runs {fmtSeconds(Number(effective[template.uncapped.startKey]))} → {fmtSeconds(Number(effective[template.uncapped.startKey]) + Number(effective[template.uncapped.durationKey]))} of {fmtSeconds(clip.facts.seconds)}.
               </div>
             ) : null}
+            {template.warn?.(effective, props) ? <div className="small warn">{template.warn(effective, props)}</div> : null}
           </div>
           <div className="panel stack">
             <h3>Render</h3>

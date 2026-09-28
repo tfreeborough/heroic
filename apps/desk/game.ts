@@ -33,10 +33,14 @@ export type DeskTemplate = {
   defaults: Record<string, unknown>;
   /** The Render button waits for a clip. */
   needsClip?: boolean;
-  /** One field may carry several alternatives (a hook A/B test): `split`
-   * turns its text into the list, the preview picks one, and a Render
-   * press makes one batch per alternative, named `<name>-<suffix><n>`. */
-  variants?: { key: string; split: (value: string) => string[]; suffix: string };
+  /** One field may carry several alternatives (a hook A/B test): the Make
+   * screen shows it as a list you add lines to one at a time, the preview
+   * picks one, and a Render press makes one batch per alternative, named
+   * `<name>-<suffix><n>`. Each render gets a single string. */
+  variants?: { key: string; suffix: string; placeholder?: string };
+  /** A caution under the form for these props (effective = what renders,
+   * typed = what's in the form), e.g. a loop that's too long. */
+  warn?: (effective: Record<string, unknown>, typed: Record<string, unknown>) => string | undefined;
   /** Selects instead of free text for some fields. */
   options?: Record<string, { value: string; label: string }[]>;
   /** Fields the screen handles itself. */

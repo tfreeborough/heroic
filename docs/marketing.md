@@ -27,9 +27,10 @@ Reels / Shorts:
   vertical/square/landscape. Recording → rendered post is under 10 minutes.
 - **HookClip** — the GameplayClip built for the scroll: no title beat, the
   hook sentence is on screen from the first frame and lifts at three
-  seconds. Type several hooks in the Desk's field separated by `|` and one
-  press renders each as its own video. This is the template for the hook
-  tests below.
+  seconds. No end card: it loops straight back into the hook so the replay
+  reads as one clip (replays count as watch time). Add several hooks in the
+  Desk, one per row, and one press renders each as its own video. This is
+  the template for the hook tests below.
 - **Stills** — `remotion still` for thumbnails, Reddit images, Discord
   announcements.
 
