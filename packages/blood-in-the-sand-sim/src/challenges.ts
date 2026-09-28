@@ -129,13 +129,17 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     id: "bow-only",
     tier: "easy",
     name: "Robin Hood",
-    premise: "win with the bow and nothing else",
+    premise: "get 10 kills with the bow and nothing else",
     arena: "arena-00",
     you: { locked: true, weapon: "bow", abilities: [] },
-    // Tom 2026-09-28: a lone blade was a slog for a bow — ten of them now,
-    // one every two seconds, each on 10 max hp: one arrow, one body.
-    seats: foes(10, "skilled", { weapon: "blade", abilities: ["dash"], maxHp: 0.1 }).map((s, i) => ({ ...s, spawnDelay: i * 2 })),
-    win: { kind: "lastStanding" },
+    // Tom 2026-09-28: a lone blade was a slog for a bow. A horde-lite now:
+    // four blades on 10 max hp (one arrow, one body), arriving every two
+    // seconds and back up two seconds after they drop — ten kills. (Ten
+    // one-shot seats streaming in at 2s was the other cut: proxy 17%.)
+    seats: foes(4, "skilled", { weapon: "blade", abilities: ["dash"], maxHp: 0.1, respawns: true }).map((s, i) => ({ ...s, spawnDelay: i * 2 })),
+    respawnSeconds: 2,
+    sandsDelay: Infinity,
+    win: { kind: "kills", count: 10 },
     glory: 10,
   },
   {

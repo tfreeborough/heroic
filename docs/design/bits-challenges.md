@@ -493,7 +493,7 @@ per own kit), before → after:
 
 | Challenge | Change | Proxy best clear |
 |---|---|--:|
-| Robin Hood | 10 × Skilled blade + dash on **10 max hp** (one arrow each), one every 2s (first try: 6 every 3s, 63%) | 63% → 17% (24 seeds; 5.3 kills per run, was 0.6) |
+| Robin Hood | a **horde-lite**: 4 × Skilled blade + dash on **10 max hp** (one arrow each), arriving every 2s, **respawning after 2s**, win at **10 kills**, no tide. Tried first: 6 one-shot seats every 3s (63%), then 10 every 2s (17%) | 63% → 17% (24 seeds; 5.8 kills per run) |
 | Three's a crowd | foes Average → **Experienced** | 38% → 17% |
 | Rookie's first day | the hunters **mark the rookie** (`hunt: "ward"` → `markId`) whoever's hitting them; the `ward` also runs from any foe inside 300px (`fleeWithin`), hurt or not. The fight is the peel | 79% → 46% (losses are now all "ward") |
 | Tall order | heal ×0.35 → **×0.5**, so out-damaging the healing stops working; the giant is **relentless** and hunts you (`relentless` drops flee, band, reach-edge footwork and idle pauses; the hammer's reach-edge footwork read as it being scared off) | 13% → 17% (blade; the rest 0%) |

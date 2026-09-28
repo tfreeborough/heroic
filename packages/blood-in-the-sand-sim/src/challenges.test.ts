@@ -318,14 +318,22 @@ describe("seatChallenge + the judge (what the phone and the gauntlet share)", ()
     }
   });
 
-  test("robin hood: a stream of ten blades, each one arrow from dead", () => {
+  test("robin hood: a horde-lite of four respawning blades, each one arrow from dead", () => {
     const def = challengeById("bow-only")!;
+    expect(def.win).toEqual({ kind: "kills", count: 10 });
     const sim = createSim(makeZone(), 0x40b, challengeTeamSize(def), false, true);
-    const seated = seatChallenge(sim, def, "tom", () => 0.5, ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
-    expect(seated.bots.map((b) => b.player.spawnDelay)).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18]);
+    const seated = seatChallenge(sim, def, "tom", () => 0.5, ["a", "b", "c", "d"]);
+    expect(seated.bots.map((b) => b.player.spawnDelay)).toEqual([0, 2, 4, 6]);
+    expect(sim.state.respawnSeconds).toBe(2);
     runToActive(sim);
-    run(sim, seconds(19));
+    run(sim, seconds(7));
     for (const { player } of seated.bots) expect(player.combatant.stats.maxHp).toBe(10);
+    // Down, then back up two seconds later on the same small bar.
+    const events: ReturnType<typeof stepSim> = [];
+    killPlayer(seated.bots[0]!.player, events);
+    run(sim, seconds(2) + 2);
+    expect(seated.bots[0]!.player.alive).toBe(true);
+    expect(seated.bots[0]!.player.combatant.hp).toBe(10);
   });
 });
 
