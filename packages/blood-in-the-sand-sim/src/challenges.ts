@@ -132,9 +132,9 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     premise: "win with the bow and nothing else",
     arena: "arena-00",
     you: { locked: true, weapon: "bow", abilities: [] },
-    // Tom 2026-09-28: a lone blade was a slog for a bow — six of them now,
-    // one every three seconds, each on 10 max hp: one arrow, one body.
-    seats: foes(6, "skilled", { weapon: "blade", abilities: ["dash"], maxHp: 0.1 }).map((s, i) => ({ ...s, spawnDelay: i * 3 })),
+    // Tom 2026-09-28: a lone blade was a slog for a bow — ten of them now,
+    // one every two seconds, each on 10 max hp: one arrow, one body.
+    seats: foes(10, "skilled", { weapon: "blade", abilities: ["dash"], maxHp: 0.1 }).map((s, i) => ({ ...s, spawnDelay: i * 2 })),
     win: { kind: "lastStanding" },
     glory: 10,
   },

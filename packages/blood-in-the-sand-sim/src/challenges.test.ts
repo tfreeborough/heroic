@@ -318,13 +318,13 @@ describe("seatChallenge + the judge (what the phone and the gauntlet share)", ()
     }
   });
 
-  test("robin hood: a stream of six blades, each one arrow from dead", () => {
+  test("robin hood: a stream of ten blades, each one arrow from dead", () => {
     const def = challengeById("bow-only")!;
     const sim = createSim(makeZone(), 0x40b, challengeTeamSize(def), false, true);
-    const seated = seatChallenge(sim, def, "tom", () => 0.5, ["a", "b", "c", "d", "e", "f"]);
-    expect(seated.bots.map((b) => b.player.spawnDelay)).toEqual([0, 3, 6, 9, 12, 15]);
+    const seated = seatChallenge(sim, def, "tom", () => 0.5, ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
+    expect(seated.bots.map((b) => b.player.spawnDelay)).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18]);
     runToActive(sim);
-    run(sim, seconds(16));
+    run(sim, seconds(19));
     for (const { player } of seated.bots) expect(player.combatant.stats.maxHp).toBe(10);
   });
 });
