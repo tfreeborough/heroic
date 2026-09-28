@@ -536,7 +536,19 @@ export interface BotThinkOptions {
   /** Hunt alone — nearest body, no team score (the gauntlet's A/B control
    * for the v4 team-focus work; never set by a real host). */
   soloFocus?: boolean;
+  /** A pinned mark (a challenge recipe's — the rookie's hunters): while that
+   * body is a living enemy it IS the target, whoever else is closer or
+   * hitting me. Falls back to the archetype's own pick once it's down. */
+  markId?: number;
+  /** Never gives ground (Tall order's giant, Tom 2026-09-28: "I was able to
+   * scare it off"): no flee, no band, no reach-edge footwork, no idle
+   * pause — every tick walks at the target. Reactive dodges still fire. */
+  relentless?: boolean;
 }
+
+/** The dials a host pins on one seat for its whole life (a challenge
+ * recipe's) — spread into every botThink call for that seat. */
+export type BotPins = Pick<BotThinkOptions, "archetype" | "markId" | "relentless">;
 
 /**
  * Decide this tick's input. `me` missing/dead (benched) or no living enemy
@@ -586,7 +598,10 @@ export const botThink = (
 
   const archetype = opts?.archetype ?? deriveArchetype(me.weapon, me.abilities.map((s) => s.id));
   const preset = ARCHETYPES[archetype];
-  const target = focusTarget(preset, me, players, tier.focusFire && opts?.soloFocus !== true, memory.focusId);
+  const markId = opts?.markId;
+  const marked = markId === undefined ? undefined : players.find((p) => p.id === markId && p.alive && p.team !== me.team);
+  const target = marked ?? focusTarget(preset, me, players, tier.focusFire && opts?.soloFocus !== true, memory.focusId);
+  const relentless = opts?.relentless === true;
   if (!target) return IDLE;
   memory.focusId = target.id;
 
@@ -608,7 +623,9 @@ export const botThink = (
   // 2026-07-22): a few seconds to break away, pour a font, regroup — then
   // the bot fights wounded. Only actually healing re-arms the allowance,
   // so corner-cowering until picked off can't happen.
-  let fleeing = !lastStand && hp < preset.disengageBelow;
+  // The ward also runs from a foe inside `fleeWithin`, hurt or not.
+  const crowded = preset.fleeWithin !== undefined && dist < preset.fleeWithin;
+  let fleeing = !lastStand && !relentless && (hp < preset.disengageBelow || crowded);
   if (fleeing) {
     if (memory.fleeSpent) {
       fleeing = false;
@@ -620,7 +637,7 @@ export const botThink = (
         fleeing = false;
       }
     }
-  } else if (hp >= preset.disengageBelow) {
+  } else if (hp >= preset.disengageBelow && !crowded) {
     memory.fleeTicks = 0;
     memory.fleeSpent = false;
   }
@@ -644,7 +661,7 @@ export const botThink = (
   // (nobody pauses to size up ground that is actively eating them).
   if (memory.pauseTicks > 0) {
     memory.pauseTicks -= 1;
-  } else if (threat === null && !fleeing && !inBlood && dist > 240 && nextRand(memory) < HUMANIZE.pauseChance) {
+  } else if (threat === null && !fleeing && !relentless && !inBlood && dist > 240 && nextRand(memory) < HUMANIZE.pauseChance) {
     memory.pauseTicks = HUMANIZE.pauseMin + Math.floor(nextRand(memory) * HUMANIZE.pauseRange);
     memory.stuckTicks = 0; // deliberate stillness is not a wedge
   }
@@ -678,7 +695,7 @@ export const botThink = (
   // press or a dive (charging a trident means arriving inside its prongs);
   // the out-reach dance yields to both, like any band.
   const medic = archetype === "medic";
-  let spacing = tier.footwork > 0 && !medic ? meleeSpacing(me, target) : null;
+  let spacing = tier.footwork > 0 && !medic && !relentless ? meleeSpacing(me, target) : null;
   // Venom-clock denial (Tom's fang trick, 2026-09-21: stab 3–4 times, leave,
   // re-apply right before the clock runs out — "essentially no counterplay").
   // There is one: all stacks share ONE clock that only a fresh stab renews,
@@ -732,6 +749,7 @@ export const botThink = (
   const waiting =
     tier.footwork >= 0.7 &&
     !medic &&
+    !relentless &&
     !rangedWeapon(me) &&
     !rangedWeapon(target) &&
     theirReach !== null &&
@@ -744,7 +762,7 @@ export const botThink = (
   const hugging = spacing !== null && spacing.near === 0;
   const band = spacing !== null && (hugging || staging || waiting || !(diving || pressing))
     ? spacing
-    : diving || pressing
+    : diving || pressing || relentless
       ? null
       : resolveBand(preset, me.weapon);
   /** How much of the v3 band slop survives: footwork tightens a SPACING band

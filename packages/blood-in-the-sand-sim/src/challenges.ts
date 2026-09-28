@@ -16,6 +16,7 @@
  * pinned archetype (botThink's opts.archetype — the rookie's `ward`).
  */
 import { FREE_ABILITY_IDS, FREE_WEAPON_IDS, LOADOUT_ABILITY_COUNT, type AbilityId, type WeaponId } from "./config";
+import type { BotPins } from "./bot";
 import type { ArchetypeId } from "./botArchetypes";
 import type { DifficultyId } from "./botDifficulty";
 import type { BountyBand } from "./achievements/bounties";
@@ -61,6 +62,14 @@ export interface ChallengeSeat {
    * weapon] (Godlike, Tom 2026-09-27: no single kit may be the answer).
    * `weapon`/`abilities` are the placeholder it's seated with. */
   counter?: boolean;
+  /** Pin the brain's mark: `ward` = the protected seat (the rookie's
+   * hunters ignore you), `you` = the player. */
+  hunt?: "ward" | "you";
+  /** Never gives ground — no flee, no spacing dance (BotThinkOptions). */
+  relentless?: boolean;
+  /** Never drawn into the FREE-roster top-up (Blot out the sun: a harpoon
+   * on a bow is a blade's instant death). */
+  bannedAbilities?: AbilityId[];
 }
 
 export type ChallengeWin =
@@ -123,7 +132,9 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     premise: "win with the bow and nothing else",
     arena: "arena-00",
     you: { locked: true, weapon: "bow", abilities: [] },
-    seats: foes(1, "skilled", { weapon: "blade", abilities: ["dash"] }),
+    // Tom 2026-09-28: a lone blade was a slog for a bow — six of them now,
+    // one every three seconds, each on 10 max hp: one arrow, one body.
+    seats: foes(6, "skilled", { weapon: "blade", abilities: ["dash"], maxHp: 0.1 }).map((s, i) => ({ ...s, spawnDelay: i * 3 })),
     win: { kind: "lastStanding" },
     glory: 10,
   },
@@ -146,7 +157,7 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     premise: "Win 1v3",
     arena: null,
     you: { locked: false },
-    seats: foes(3, "average"),
+    seats: foes(3, "experienced"), // Tom 2026-09-28: Average was too easy
     win: { kind: "lastStanding" },
     glory: 25,
   },
@@ -170,7 +181,10 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     you: { locked: false },
     seats: [
       { team: 1, difficulty: "novice", weapon: "bow", archetype: "ward", protect: true, name: "The rookie" },
-      ...foes(2, "skilled"),
+      // Tom 2026-09-28: hitting them pulled them off the rookie, so it was
+      // just a 1v2. Now they hunt HIM whoever's hitting them, and he runs —
+      // the fight is the peel.
+      ...foes(2, "skilled", { hunt: "ward" }),
     ],
     win: { kind: "lastStanding" },
     glory: 25,
@@ -203,10 +217,22 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     // hammer; each carries a dash and nothing else. Tuned 09-27 (autopilot
     // proxy, 54 runs): as first specced 0%; healers at 30 max hp 2%; plus
     // heal ×0.35 → 7% (×0.5 4%, ×0.25 11%, no healing 50%) — beside the
-    // 4v1's 6%.
+    // 4v1's 6%. Tom 2026-09-28: ×0.35 let any kit just out-damage the
+    // healing, which defeats the point — ×0.5, so the healers must go
+    // first; and the giant is relentless (the hammer's reach-edge footwork
+    // read as being scared off) and hunts you, always.
     seats: [
-      { team: 2, difficulty: "skilled", weapon: "hammer", abilities: ["titans-draught"], exactHand: true, permanent: ["titans-draught"] },
-      ...foes(3, "skilled", { weapon: "lifeline", abilities: ["dash"], exactHand: true, maxHp: 0.3, healScale: 0.35 }),
+      {
+        team: 2,
+        difficulty: "skilled",
+        weapon: "hammer",
+        abilities: ["titans-draught"],
+        exactHand: true,
+        permanent: ["titans-draught"],
+        hunt: "you",
+        relentless: true,
+      },
+      ...foes(3, "skilled", { weapon: "lifeline", abilities: ["dash"], exactHand: true, maxHp: 0.3, healScale: 0.5 }),
     ],
     win: { kind: "lastStanding" },
     glory: 50,
@@ -218,7 +244,8 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     premise: "Win with only a blade against 3 ranged opponents",
     arena: "desert-1",
     you: { locked: true, weapon: "blade", abilities: [] },
-    seats: foes(3, "experienced", { weapon: "bow" }),
+    // Tom 2026-09-28: never a harpoon — dragged into three bows is instant death.
+    seats: foes(3, "experienced", { weapon: "bow", bannedAbilities: ["harpoon"] }),
     win: { kind: "lastStanding" },
     glory: 50,
   },
@@ -226,11 +253,13 @@ export const CHALLENGES: readonly ChallengeDef[] = [
     id: "the-tide-waits",
     tier: "hard",
     name: "A rising tide",
-    premise: "Win with the blood tide triggering after 10 seconds",
+    premise: "Win with the blood tide triggering after 3 seconds",
     arena: null,
     you: { locked: false },
-    seats: foes(3, "skilled", { weapon: "blade", abilities: ["dash"] }),
-    sandsDelay: 10,
+    // Tom 2026-09-28: at Skilled / 10s it was just the medium 1v3 again —
+    // a tier up, and the tide from the third second.
+    seats: foes(3, "adept", { weapon: "blade", abilities: ["dash"] }),
+    sandsDelay: 3,
     win: { kind: "lastStanding" },
     glory: 50,
   },
@@ -311,9 +340,13 @@ export const challengeTeamSize = (def: ChallengeDef): number => {
 
 /** A fixed hand, filled to a full one from the FREE roster (a recipe that
  * says "dash" gets dash plus one random pick); absent = fully random. */
-export const fillChallengeHand = (given: AbilityId[] | undefined, rng: () => number): AbilityId[] => {
+export const fillChallengeHand = (
+  given: AbilityId[] | undefined,
+  rng: () => number,
+  banned: readonly AbilityId[] = [],
+): AbilityId[] => {
   const hand = [...(given ?? [])];
-  const pool = FREE_ABILITY_IDS.filter((a) => !hand.includes(a));
+  const pool = FREE_ABILITY_IDS.filter((a) => !hand.includes(a) && !banned.includes(a));
   while (hand.length < LOADOUT_ABILITY_COUNT && pool.length > 0) {
     hand.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]!);
   }
@@ -323,6 +356,9 @@ export const fillChallengeHand = (given: AbilityId[] | undefined, rng: () => num
 export interface SeatedChallengeBot {
   player: ArenaPlayer;
   spec: ChallengeSeat;
+  /** Spread into every botThink call for this seat (archetype, mark,
+   * relentless) — resolved here so every host reads the same ids. */
+  pins: BotPins;
 }
 
 export interface SeatedChallenge {
@@ -365,13 +401,27 @@ export const seatChallenge = (
     if (spec.spawnDelay !== undefined) bot.spawnDelay = spec.spawnDelay;
     if (spec.protect) protectIds.push(bot.id);
     setPlayerWeapon(sim, bot.id, spec.weapon ?? FREE_WEAPON_IDS[Math.floor(rng() * FREE_WEAPON_IDS.length)]!);
-    setPlayerAbilities(sim, bot.id, spec.exactHand ? [...(spec.abilities ?? [])] : fillChallengeHand(spec.abilities, rng));
+    setPlayerAbilities(
+      sim,
+      bot.id,
+      spec.exactHand ? [...(spec.abilities ?? [])] : fillChallengeHand(spec.abilities, rng, spec.bannedAbilities),
+    );
     if (spec.permanent) bot.permanentAbilities = [...spec.permanent];
     if (spec.healScale !== undefined) bot.healScale = spec.healScale;
     // A deliberately short hand is complete — the arming gate's locked-kit rule.
     if (spec.exactHand) bot.kitLocked = true;
-    bots.push({ player: bot, spec });
+    bots.push({ player: bot, spec, pins: {} });
   });
+  // Marks resolve once the whole cast (the ward included) has its ids.
+  for (const b of bots) {
+    const { spec } = b;
+    const markId = spec.hunt === "you" ? me.id : spec.hunt === "ward" ? protectIds[0] : undefined;
+    b.pins = {
+      ...(spec.archetype ? { archetype: spec.archetype } : {}),
+      ...(markId !== undefined ? { markId } : {}),
+      ...(spec.relentless ? { relentless: true } : {}),
+    };
+  }
   if (def.sandsDelay !== undefined) sim.state.sandsDelay = def.sandsDelay;
   if (def.respawnSeconds !== undefined) sim.state.respawnSeconds = def.respawnSeconds;
   sim.state.winsToTake = 1; // one round IS the attempt

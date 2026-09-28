@@ -291,6 +291,42 @@ describe("seatChallenge + the judge (what the phone and the gauntlet share)", ()
     expect(judge.tick(sim, events)).toEqual({ cleared: false, reason: "ward", kills: 0 });
     expect(sim.state.round.lastWinner).toBe(2);
   });
+
+  test("brain pins resolve to real ids: the rookie's hunters mark him, the giant marks you and never yields", () => {
+    const rookieDef = challengeById("carry-the-rookie")!;
+    const rookieSim = createSim(makeZone(), 0xabc, challengeTeamSize(rookieDef), false, true);
+    const rookieSeats = seatChallenge(rookieSim, rookieDef, "tom", () => 0.25, ["a", "b", "c"]);
+    const [ward, ...hunters] = rookieSeats.bots;
+    expect(ward!.pins).toEqual({ archetype: "ward" });
+    for (const h of hunters) expect(h.pins).toEqual({ markId: rookieSeats.protectIds[0] });
+
+    const titanDef = challengeById("the-titan")!;
+    const titanSim = createSim(makeZone(), 0x7174, challengeTeamSize(titanDef), false, true);
+    const titanSeats = seatChallenge(titanSim, titanDef, "tom", () => 0.5, ["a", "b", "c", "d"]);
+    expect(titanSeats.bots[0]!.pins).toEqual({ markId: titanSeats.me.id, relentless: true });
+    expect(titanSeats.bots.slice(1).every((b) => Object.keys(b.pins).length === 0)).toBe(true);
+  });
+
+  test("blot out the sun: no bow is ever dealt a harpoon", () => {
+    const def = challengeById("through-the-arrows")!;
+    for (let seed = 0; seed < 40; seed++) {
+      const sim = createSim(makeZone(), seed, challengeTeamSize(def), false, true);
+      let r = seed / 40;
+      const rng = () => (r = (r * 9301 + 49297) % 233280 / 233280);
+      const seated = seatChallenge(sim, def, "tom", rng, ["a", "b", "c"]);
+      for (const b of seated.bots) expect(b.player.abilities).not.toContain("harpoon");
+    }
+  });
+
+  test("robin hood: a stream of six blades, each one arrow from dead", () => {
+    const def = challengeById("bow-only")!;
+    const sim = createSim(makeZone(), 0x40b, challengeTeamSize(def), false, true);
+    const seated = seatChallenge(sim, def, "tom", () => 0.5, ["a", "b", "c", "d", "e", "f"]);
+    expect(seated.bots.map((b) => b.player.spawnDelay)).toEqual([0, 3, 6, 9, 12, 15]);
+    runToActive(sim);
+    run(sim, seconds(16));
+    for (const { player } of seated.bots) expect(player.combatant.stats.maxHp).toBe(10);
+  });
 });
 
 describe("the cooldown scale (the horde)", () => {
@@ -408,6 +444,8 @@ describe("the ward", () => {
     }
     expect(ARCHETYPES.ward.disengageBelow).toBeGreaterThan(0.8);
     expect(ARCHETYPES.ward.anchorLeash).toBeGreaterThan(0);
+    // …and runs from a close foe even on a full bar.
+    expect(ARCHETYPES.ward.fleeWithin).toBeGreaterThan(0);
   });
 });
 

@@ -37,6 +37,7 @@ import {
   stepSim,
   toSnapshot,
   type AbilityId,
+  type BotPins,
   type ChallengeDef,
   type DifficultyId,
   type PlayerInput,
@@ -114,16 +115,16 @@ const runOne = (def: ChallengeDef, seed: number, kit: { weapon: WeaponId; hand: 
   if (RESPAWN !== null && Number.isFinite(RESPAWN)) sim.state.respawnSeconds = RESPAWN;
   const nav = createBotNav(sim.zone);
   const judge = createChallengeJudge(def, seated.protectIds);
-  const brains = new Map<number, { mem: ReturnType<typeof createBotMemory>; tier: DifficultyId; archetype?: string }>();
+  const brains = new Map<number, { mem: ReturnType<typeof createBotMemory>; tier: DifficultyId; pins?: BotPins }>();
   const oracle = ORACLE ? createOracle({ ...ORACLE, ...(def.win.kind === "kills" ? { killWeight: 1500 } : {}) }, seed) : null;
   if (!oracle) brains.set(seated.me.id, { mem: createBotMemory(seed * 3 + 1), tier: TIER });
   const tierOf = (b: (typeof seated.bots)[number]): DifficultyId => (FOE_TIER && b.player.team !== 1 ? FOE_TIER : b.spec.difficulty);
   for (const b of seated.bots) {
-    brains.set(b.player.id, { mem: createBotMemory(seed * 7 + b.player.id * 31), tier: tierOf(b), archetype: b.spec.archetype });
+    brains.set(b.player.id, { mem: createBotMemory(seed * 7 + b.player.id * 31), tier: tierOf(b), pins: b.pins });
   }
   const oracleFoes = seated.bots
     .filter((b) => b.player.team !== 1)
-    .map((b) => ({ id: b.player.id, memory: brains.get(b.player.id)!.mem, difficulty: tierOf(b), archetype: b.spec.archetype as never }));
+    .map((b) => ({ id: b.player.id, memory: brains.get(b.player.id)!.mem, difficulty: tierOf(b), pins: b.pins }));
   const history = new SnapshotHistory();
   const inputs = new Map<number, PlayerInput>();
   let seq = 0;
@@ -160,7 +161,7 @@ const runOne = (def: ChallengeDef, seed: number, kit: { weapon: WeaponId; hand: 
       const world = history.stale(tier.reactionTicks) ?? snap;
       const d = botThink(brain.mem, me, world, nav, {
         difficulty: brain.tier,
-        ...(brain.archetype ? { archetype: brain.archetype as never } : {}),
+        ...brain.pins,
       });
       inputs.set(id, { seq, sx: d.sx, sy: d.sy, casts: d.casts });
     }
