@@ -498,7 +498,7 @@ per own kit), before → after:
 | Rookie's first day | the hunters **mark the rookie** (`hunt: "ward"` → `markId`) whoever's hitting them; the `ward` also runs from any foe inside 300px (`fleeWithin`), hurt or not. The fight is the peel | 79% → 46% (losses are now all "ward") |
 | Tall order | heal ×0.35 → **×0.5**, so out-damaging the healing stops working; the giant is **relentless** and hunts you (`relentless` drops flee, band, reach-edge footwork and idle pauses; the hammer's reach-edge footwork read as it being scared off) | 13% → 17% (blade; the rest 0%) |
 | Blot out the sun | bows are **never dealt a harpoon** (`bannedAbilities`: a drag into three bows was instant death) | 0% → 0% (the no-dash proxy never closes; Tom came close by hand) |
-| A rising tide | foes Skilled → **Adept**, tide at **3s** (was 10s) | 21% → 4% |
+| A rising tide | foes Skilled → **Adept**, tide at **3s** (was 10s). Intended solve (Tom): Warding Shout, knocking them into the blood — none of the proxy's four kits carry it, so the 4% undersells it | 21% → 4% |
 
 New seat dials: `hunt` ("ward" | "you"), `relentless`, and
 `bannedAbilities` (on `ChallengeSeat`). `seatChallenge` turns them into
