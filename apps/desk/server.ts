@@ -15,7 +15,7 @@ import { basename, join } from "node:path";
 import index from "./index.html";
 import { type GameConfig } from "./game";
 import { GAMES, gameById } from "./games";
-import { type CleanupSpec, cleanupClip, ffprobe, filmstrip, thumbnail } from "./lib/ffmpeg";
+import { type CleanupSpec, cleanupClip, ffprobe, filmstripAsync, thumbnail } from "./lib/ffmpeg";
 import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip, syncFootage, trashClip, writeSidecar } from "./lib/footage";
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
@@ -23,6 +23,9 @@ import type { Platform, Post } from "./lib/schedule";
 import { hasClaude } from "./lib/draft";
 import { pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
+import { type VoiceOver, voiceId } from "@heroic/voiceover";
+import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, saveTake, transcribeTake, voicePath, writeVoice } from "./lib/voice";
+import { installWhisper, whisperStatus } from "./lib/whisper";
 
 const PORT = Number(process.env.DESK_PORT ?? 3400);
 
@@ -115,12 +118,14 @@ const server = Bun.serve({
       }),
     },
     "/api/:game/clips/:file/strip": {
-      GET: withGame((g, req) => {
+      /** `?frames=` = how many frames across the whole recording (24–96): the editor asks for more on a long one. */
+      GET: withGame(async (g, req) => {
         const name = safeName(decodeURIComponent(req.params.file!));
         const side = readSidecar(g, name);
         if (!side) return json({ error: "no such clip" }, 404);
+        const frames = Math.max(24, Math.min(96, Math.round(Number(new URL(req.url).searchParams.get("frames")) || 24)));
         try {
-          return file(filmstrip(join(footageDir(g), name), side.facts.seconds));
+          return file(await filmstripAsync(join(footageDir(g), name), side.facts.seconds, frames, 120, req.signal));
         } catch (e) {
           return fail(e);
         }
@@ -163,6 +168,89 @@ const server = Bun.serve({
           return json(side);
         } catch (e) {
           rmSync(tmp, { force: true });
+          return fail(e);
+        }
+      }),
+    },
+
+    // ── voice-overs ──
+    "/api/:game/voice": { GET: withGame((g) => json(listVoices(g))) },
+    /** Is Whisper built and its model down? POST starts the install and answers at once; poll GET. */
+    "/api/:game/voice/whisper": {
+      GET: withGame(() => json(whisperStatus())),
+      POST: withGame(() => {
+        void installWhisper().catch(() => {});
+        return json(whisperStatus());
+      }),
+    },
+    "/api/:game/voice/backup": {
+      POST: withGame(async (g) => {
+        try {
+          return json(await backupTakes(g));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    "/api/:game/voice/:id": {
+      /** The saved voice-over, or an empty one for `?clip=` (nothing is written until the first save). */
+      GET: withGame((g, req) => {
+        const clip = new URL(req.url).searchParams.get("clip") ?? "";
+        const v = clip ? openVoice(g, req.params.id!, safeName(clip)) : readVoice(g, req.params.id!);
+        return v ? json({ ...v, path: voicePath(g, v.id) }) : json({ error: "no such voice-over" }, 404);
+      }),
+      PUT: withGame(async (g, req) => {
+        const body = (await req.json()) as VoiceOver;
+        const volume = Number(body.volume);
+        return json(
+          writeVoice(g, {
+            id: voiceId(req.params.id!),
+            clip: safeName(body.clip ?? ""),
+            takes: body.takes ?? [],
+            pieces: body.pieces ?? [],
+            captionNudgeMs: Number(body.captionNudgeMs) || 0,
+            tidy: body.tidy !== false,
+            denoise: Math.max(0, Math.min(3, Math.round(Number(body.denoise) || 0))),
+            volume: Number.isFinite(volume) && body.volume !== undefined ? Math.max(0, Math.min(1, volume)) : 1,
+          }),
+        );
+      }),
+      /** `?keep=1` takes the edit away and leaves the recordings (it has moved to another clip). */
+      DELETE: withGame((g, req) => {
+        deleteVoice(g, req.params.id!, new URL(req.url).searchParams.get("keep") === "1");
+        return json({ ok: true });
+      }),
+    },
+    /** A recording (the request body: a WAV off the mic, or any audio with `?ext=`) → this voice-over's next take. */
+    "/api/:game/voice/:id/takes": {
+      POST: withGame(async (g, req) => {
+        const q = new URL(req.url).searchParams;
+        try {
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          if (bytes.byteLength < 100) return json({ error: "that recording is empty" }, 400);
+          return json(await saveTake(g, req.params.id!, bytes, { ext: q.get("ext") ?? "wav", tidy: q.get("tidy") !== "0", denoise: Number(q.get("denoise")) || 0, signal: req.signal }));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Whisper over one take (the body): the same take back, with its words. */
+    "/api/:game/voice/:id/transcribe": {
+      POST: withGame(async (g, req) => {
+        try {
+          return json(await transcribeTake(g, (await req.json()) as VoiceOver["takes"][number], req.signal));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** The takes' sound made another way (tidied or not, the noise down or not) from the raw recordings. The body is the voice-over as the page has it. */
+    "/api/:game/voice/:id/sound": {
+      POST: withGame(async (g, req) => {
+        try {
+          const body = (await req.json()) as { voice: VoiceOver; tidy?: boolean; denoise?: number };
+          return json(writeVoice(g, await resound(g, { ...body.voice, id: voiceId(req.params.id!) }, { tidy: body.tidy, denoise: body.denoise }, req.signal)));
+        } catch (e) {
           return fail(e);
         }
       }),

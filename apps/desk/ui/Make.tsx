@@ -1,11 +1,12 @@
 import { Player } from "@remotion/player";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Batch, type Clip, type GameApi, type GameInfo, type Job, fmtDate, fmtSeconds } from "./api";
-import { go } from "./App";
+import { type Batch, type Clip, type GameApi, type GameInfo, type Job, type VoiceSummary, fmtDate, fmtSeconds } from "./api";
+import { editOf, go } from "./App";
 import { ClipPicker } from "./ClipPicker";
 import { SchemaForm, VariantList, listOf } from "./form";
 import type { DeskTemplate as Template } from "../game";
 import { loadTemplates } from "./games";
+import { TikTokOverlay } from "./TikTokOverlay";
 type Format = string;
 
 /**
@@ -20,6 +21,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   const [TEMPLATES, setTemplates] = useState<Template[]>([]);
   const [clips, setClips] = useState<Clip[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [voices, setVoices] = useState<VoiceSummary[]>([]);
   const [picking, setPicking] = useState(false);
   const [template, setTemplateState] = useState<Template | null>(null);
   const [clipFile, setClipFile] = useState<string | undefined>(file);
@@ -35,6 +37,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   useEffect(() => {
     void api.clips().then(setClips);
     void api.batches().then(setBatches);
+    void api.voices().then(setVoices).catch(() => {});
     void loadTemplates(game.id).then((ts) => {
       setTemplates(ts);
       if (ts[0]) {
@@ -99,7 +102,9 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     setClipFile(f);
     const c = clips.find((x) => x.file === f);
     if (c && template) {
-      setProps((p) => ({ ...p, ...template.clipProps(`footage/${c.file}`, c.facts.seconds, c.facts), cropTop: c.cropTop, cropBottom: c.cropBottom, muted: c.muted, ...(c.title && !p.title ? { title: c.title } : {}), ...(c.line && !p.line ? { line: c.line } : {}) }));
+      // A clip you've voiced brings its voice-over with it (the newest, if there are several).
+      const spoken = template.voice ? { voice: voices.find((v) => v.clip === c.file && v.pieces > 0)?.path ?? "" } : {};
+      setProps((p) => ({ ...p, ...template.clipProps(`footage/${c.file}`, c.facts.seconds, c.facts), cropTop: c.cropTop, cropBottom: c.cropBottom, muted: c.muted, ...(c.title && !p.title ? { title: c.title } : {}), ...(c.line && !p.line ? { line: c.line } : {}), ...spoken }));
       if (!name) setName(c.title || c.file.replace(/\.[^.]+$/, ""));
     }
   };
@@ -121,6 +126,14 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   const focusRow = (i: number) => {
     if (rows[i]?.trim()) setVariant(rows.slice(0, i).filter((r) => r.trim()).length);
   };
+
+  // The voice-overs recorded over this clip, as the `voice` field's choices.
+  const voiceOptions = useMemo(() => voices.filter((v) => v.clip === clipFile && v.pieces > 0).map((v) => ({ value: v.path, label: `${v.id} (${fmtSeconds(v.seconds)})` })), [voices, clipFile]);
+  // Voices load after the clip when the screen opens on one (Clips → Make): pick it up then.
+  useEffect(() => {
+    if (!template?.voice || batch || !voiceOptions.length) return;
+    setProps((p) => (p.voice ? p : { ...p, voice: voiceOptions[0]!.value }));
+  }, [voiceOptions, template, batch]);
 
   const seconds = useMemo(() => {
     try {
@@ -201,8 +214,8 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
       <div className="row between">
         <h2>Make a video</h2>
         {clip ? (
-          <button className="ghost small" onClick={() => go({ name: "clean", file: clip.file })}>
-            Clean this clip up first
+          <button className="ghost small" onClick={() => go(editOf(clip, clips))}>
+            Edit this clip first
           </button>
         ) : null}
       </div>
@@ -255,7 +268,15 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
                 onFocusRow={focusRow}
               />
             ) : null}
-            <SchemaForm schema={template.schema} value={props} onChange={setProps} hide={[...(template.hide ?? []), ...(template.variants ? [template.variants.key] : [])]} options={template.options} />
+            <SchemaForm schema={template.schema} value={props} onChange={setProps} hide={[...(template.hide ?? []), ...(template.variants ? [template.variants.key] : [])]} options={template.voice ? { ...template.options, voice: voiceOptions } : template.options} />
+            {template.voice && clip ? (
+              <div className="small muted">
+                {voiceOptions.length ? (props.voice ? "This clip's voice-over is on. " : "This clip has a voice-over: pick it under voice. ") : "No voice-over for this clip yet. "}
+                <button className="link small" onClick={() => go(editOf(clip, clips))}>
+                  {voiceOptions.length ? "Edit it in the editor" : "Record one in the editor"}
+                </button>
+              </div>
+            ) : null}
             {template.uncapped && clip ? (
               <div className="small muted">
                 {props[template.uncapped.durationKey] === undefined || props[template.uncapped.durationKey] === "" ? "No duration set: " : "Duration capped at the clip: "}
@@ -331,20 +352,26 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
             </div>
           ) : null}
           <div className="frame">
-            <Player
-              ref={playerRef as never}
-              component={template.component}
-              inputProps={inputProps}
-              durationInFrames={Math.round(seconds * FPS)}
-              fps={FPS}
-              compositionWidth={size.width}
-              compositionHeight={size.height}
-              controls
-              loop
-              style={{ width: previewFormat === "landscape" ? "100%" : previewFormat === "square" ? "min(100%, 560px)" : "min(100%, 400px)", aspectRatio: `${size.width} / ${size.height}` }}
-            />
+            <div style={{ position: "relative", width: previewFormat === "landscape" ? "100%" : previewFormat === "square" ? "min(100%, 560px)" : "min(100%, 400px)", containerType: "inline-size" }}>
+              <Player
+                ref={playerRef as never}
+                component={template.component}
+                inputProps={inputProps}
+                durationInFrames={Math.round(seconds * FPS)}
+                fps={FPS}
+                compositionWidth={size.width}
+                compositionHeight={size.height}
+                controls
+                loop
+                style={{ width: "100%", aspectRatio: `${size.width} / ${size.height}` }}
+              />
+              {previewFormat === "vertical" ? <TikTokOverlay /> : null}
+            </div>
           </div>
-          <div className="small muted">This preview runs the exact template code the render uses — what you see is what you get.</div>
+          <div className="small muted">
+            This preview runs the exact template code the render uses — what you see is what you get.
+            {previewFormat === "vertical" ? " The TikTok UI on top is preview only; it never goes into the render." : ""}
+          </div>
         </div>
       </div>
     </div>

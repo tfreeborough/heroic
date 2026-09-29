@@ -5,7 +5,7 @@
  * build without setpts / xfade / acrossfade, so it can't join segments.
  * Thumbnails are cached under apps/desk/.cache/.
  */
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import { exec } from "./exec";
@@ -57,6 +57,19 @@ export const filmstrip = (file: string, seconds: number, frames = 24, h = 120): 
   return out;
 };
 
+/** The same strip, made without holding the server up: a long recording at a hundred frames takes a few seconds. */
+export const filmstripAsync = async (file: string, seconds: number, frames = 24, h = 120, signal?: AbortSignal): Promise<string> => {
+  const key = `${basename(file).replace(/[^a-z0-9]+/gi, "-")}-${statSync(file).mtimeMs | 0}-strip${frames}x${h}.jpg`;
+  const out = join(CACHE_DIR, "thumbs", key);
+  if (existsSync(out)) return out;
+  const fps = frames / Math.max(0.5, seconds);
+  const tmp = `${out}.partial.jpg`;
+  const r = await runAsync("ffmpeg", ["-y", "-nostdin", "-v", "error", "-i", file, "-vf", `fps=${fps.toFixed(5)},scale=-2:${h},tile=${frames}x1`, "-frames:v", "1", "-q:v", "5", tmp], signal);
+  if (!r.ok) throw new Error(`filmstrip failed for ${basename(file)}: ${r.err.trim()}`);
+  renameSync(tmp, out);
+  return out;
+};
+
 export type { CleanupSpec };
 
 /** Seconds a cleanup will produce: the segments, minus the overlap each transition eats. */
@@ -92,6 +105,10 @@ export const cleanupClip = async (input: string, output: string, spec: CleanupSp
   });
   let vOut = "[v0]";
   let aOut = "[a0]";
+  // What the cut should run to. With sound in the graph the last piece's
+  // picture ran on past its end (half a second of extra footage, silent), so
+  // the file is told where to stop.
+  let runs = segs[0]!.end - segs[0]!.start;
   if (segs.length > 1) {
     // Each join overlaps the last `d` seconds of what's built so far with the next segment.
     const d = Math.max(0.1, Math.min(spec.transitionSeconds || 0.4, ...segs.map((s) => (s.end - s.start) / 2)));
@@ -104,6 +121,7 @@ export const cleanupClip = async (input: string, output: string, spec: CleanupSp
       aOut = `[ax${i}]`;
       built = built + (segs[i]!.end - segs[i]!.start) - d;
     }
+    runs = built;
   }
   const args = [
     "-y", "-nostdin", "-v", "error", "-i", input,
@@ -111,6 +129,7 @@ export const cleanupClip = async (input: string, output: string, spec: CleanupSp
     "-map", vOut, ...(audio ? ["-map", aOut] : []),
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
     ...(audio ? ["-c:a", "aac", "-b:a", "160k"] : ["-an"]),
+    "-t", runs.toFixed(3),
     "-movflags", "+faststart", "-f", "mp4", output,
   ];
   const r = await runAsync("ffmpeg", args, signal);

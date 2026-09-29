@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { type Binned, type Clip, type GameApi, type GameInfo, fmtDate, fmtSeconds } from "./api";
-import { go } from "./App";
+import { editOf, go } from "./App";
 
 const stem = (file: string) => file.replace(/\.[^.]+$/, "");
 
@@ -12,12 +12,21 @@ const stem = (file: string) => file.replace(/\.[^.]+$/, "");
  */
 export const Clips: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api }) => {
   const [clips, setClips] = useState<Clip[] | null>(null);
+  const [voiced, setVoiced] = useState<Set<string>>(new Set());
   const [binned, setBinned] = useState<Binned[]>([]);
   const [log, setLog] = useState("");
   const [busy, setBusy] = useState(false);
   const [showOriginals, setShowOriginals] = useState(false);
   const [showBin, setShowBin] = useState(false);
-  const load = () => Promise.all([api.clips().then(setClips), api.bin().then(setBinned)]).catch((e) => setLog(String(e)));
+  const load = () =>
+    Promise.all([
+      api.clips().then(setClips),
+      api.bin().then(setBinned),
+      api
+        .voices()
+        .then((v) => setVoiced(new Set(v.filter((x) => x.pieces > 0).map((x) => x.clip))))
+        .catch(() => {}),
+    ]).catch((e) => setLog(String(e)));
   useEffect(() => void load(), []);
 
   const { front, originals, cutsOf } = useMemo(() => {
@@ -63,7 +72,7 @@ export const Clips: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
     const original = c.source ? byFile(c.source) : undefined;
     return (
       <div className="card" key={c.file}>
-        <div className="thumb" onClick={() => go({ name: "clean", file: c.file })} style={{ cursor: "pointer" }}>
+        <div className="thumb" onClick={() => go(editOf(c, clips ?? []))} style={{ cursor: "pointer" }}>
           <img src={api.clipThumb(c.file, Math.min(c.facts.seconds * 0.3, 8))} alt="" loading="lazy" />
         </div>
         <div className="body">
@@ -86,12 +95,13 @@ export const Clips: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
           ) : (
             <span className="badge">raw · untouched</span>
           )}
+          {voiced.has(c.file) ? <span className="badge ok">voiced</span> : null}
           <div className="actions">
             <button className="small" onClick={() => go({ name: "make", file: c.file })}>
               Make a video
             </button>
-            <button className="small ghost" onClick={() => go({ name: "clean", file: c.file })}>
-              {c.source ? "Trim" : "Clean up"}
+            <button className="small ghost" onClick={() => go(editOf(c, clips ?? []))} title="The footage, a voice over it, the captions">
+              Edit
             </button>
             <button className="small danger" onClick={() => void bin(c)}>
               Bin
@@ -112,7 +122,7 @@ export const Clips: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
             <a href={`https://drive.google.com/drive/folders/${game.footageFolderId}`} target="_blank" rel="noreferrer">
               Drive footage folder
             </a>
-            , press Sync. Clean a recording up and the cut takes its place here.
+            , press Sync. Edit a recording and the clip you save takes its place here.
           </div>
         </div>
         <div className="row">

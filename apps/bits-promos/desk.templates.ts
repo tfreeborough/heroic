@@ -4,11 +4,12 @@
  * duration the render uses, so the in-page preview IS the video. Browser
  * only (desk.config.ts lazy-loads it).
  */
-import type { DeskTemplate } from "../desk/game";
+import type { DeskTemplate, VoicePreview } from "../desk/game";
 import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from "./src/GameplayClip";
 import { HookClip, hookClipDurationSeconds, hookClipSchema, isLoop } from "./src/HookClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
 import { MUSIC_LEVEL } from "./src/components";
+import { EDITOR_ONLY, voiceDefaults } from "./src/voice";
 import roster from "./src/data/roster.json";
 
 const weaponIds = roster.weapons.map((w) => ({ value: w.id, label: w.name }));
@@ -40,10 +41,11 @@ export const TEMPLATES: DeskTemplate[] = [
     }),
     clipKey: "clip",
     uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
-    defaults: { title: "Match point", line: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0, ...musicDefaults },
+    defaults: { title: "Match point", line: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0, ...musicDefaults, ...voiceDefaults },
     options: { music: songs },
     needsClip: true,
-    hide: ["clip", "format", "sourceAspect"],
+    voice: true,
+    hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
   },
   {
     id: "HookClip",
@@ -60,7 +62,7 @@ export const TEMPLATES: DeskTemplate[] = [
     }),
     clipKey: "clip",
     uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
-    defaults: { hook: "", hookFor: 3, look: "bold", follow: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "loop", tail: "", loopBlend: 0.3, push: 0, ...musicDefaults },
+    defaults: { hook: "", hookFor: 3, look: "bold", follow: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "loop", tail: "", loopBlend: 0.3, push: 0, ...musicDefaults, ...voiceDefaults },
     options: { music: songs },
     needsClip: true,
     variants: { key: "hook", suffix: "hook", placeholder: "He had 1 HP. Then the Harpoon." },
@@ -72,7 +74,8 @@ export const TEMPLATES: DeskTemplate[] = [
       if (s > 20) return `This loop is ${s}s. Loops work best at 7–15s, ending on the payoff.`;
       return undefined;
     },
-    hide: ["clip", "format", "sourceAspect"],
+    voice: true,
+    hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
   },
   {
     id: "WeaponSpotlight",
@@ -103,3 +106,31 @@ export const TEMPLATES: DeskTemplate[] = [
     hide: ["clip", "format", "kind", "sourceAspect"],
   },
 ];
+
+/**
+ * What the Desk's editor plays while you cut, record and edit: the hook
+ * clip with no hook, as long as the cut, no end card. It's the video a
+ * voiced clip most likely becomes, so the captions sit exactly where they
+ * will. The editor adds `segments` + `slide` (the cut), the crop, `muted`,
+ * `voiceData` and `captions`.
+ */
+export const VOICE_PREVIEW: VoicePreview = {
+  component: HookClip,
+  props: (clip, clipSeconds, facts) => ({
+    clip,
+    hook: "",
+    follow: "",
+    tail: "",
+    durationSeconds: clipSeconds,
+    startFrom: 0,
+    muted: false,
+    cropTop: facts.cropTop,
+    cropBottom: facts.cropBottom,
+    ending: "loop",
+    loopBlend: 0,
+    push: 0,
+    sourceAspect: facts.width && facts.height ? facts.width / facts.height : undefined,
+    ...musicDefaults,
+    ...voiceDefaults,
+  }),
+};

@@ -1,0 +1,194 @@
+{
+ "id": "tall-order",
+ "clip": "Tall order.mp4",
+ "takes": [
+  {
+   "file": "voice/takes/tall-order-1.wav",
+   "seconds": 12.939,
+   "recordedAt": "2026-09-29T12:10:57.559Z",
+   "words": [
+    {
+     "text": "So",
+     "start": 0.72,
+     "end": 0.9
+    },
+    {
+     "text": "this",
+     "start": 0.9,
+     "end": 1.24
+    },
+    {
+     "text": "is",
+     "start": 1.24,
+     "end": 1.36
+    },
+    {
+     "text": "my",
+     "start": 1.36,
+     "end": 1.54
+    },
+    {
+     "text": "sound,",
+     "start": 1.54,
+     "end": 1.96
+    },
+    {
+     "text": "this",
+     "start": 2.18,
+     "end": 2.3
+    },
+    {
+     "text": "is",
+     "start": 2.3,
+     "end": 2.4
+    },
+    {
+     "text": "me",
+     "start": 2.4,
+     "end": 2.58
+    },
+    {
+     "text": "talking",
+     "start": 2.58,
+     "end": 2.98
+    },
+    {
+     "text": "and",
+     "start": 2.98,
+     "end": 3.76
+    },
+    {
+     "text": "hopefully",
+     "start": 3.76,
+     "end": 4.98
+    },
+    {
+     "text": "captions",
+     "start": 4.98,
+     "end": 5.68
+    },
+    {
+     "text": "will",
+     "start": 5.68,
+     "end": 6
+    },
+    {
+     "text": "be",
+     "start": 6,
+     "end": 6.1
+    },
+    {
+     "text": "made",
+     "start": 6.1,
+     "end": 6.3
+    },
+    {
+     "text": "from",
+     "start": 6.3,
+     "end": 6.5
+    },
+    {
+     "text": "this",
+     "start": 6.5,
+     "end": 6.82
+    },
+    {
+     "text": "which",
+     "start": 6.82,
+     "end": 7.44
+    },
+    {
+     "text": "would",
+     "start": 7.44,
+     "end": 7.56
+    },
+    {
+     "text": "be",
+     "start": 7.56,
+     "end": 7.68
+    },
+    {
+     "text": "really",
+     "start": 7.68,
+     "end": 7.9
+    },
+    {
+     "text": "good",
+     "start": 7.9,
+     "end": 8.18
+    },
+    {
+     "text": "but",
+     "start": 8.18,
+     "end": 9.14
+    },
+    {
+     "text": "if",
+     "start": 9.14,
+     "end": 9.32
+    },
+    {
+     "text": "not",
+     "start": 9.32,
+     "end": 9.52
+    },
+    {
+     "text": "we",
+     "start": 9.52,
+     "end": 9.72
+    },
+    {
+     "text": "can",
+     "start": 9.72,
+     "end": 9.86
+    },
+    {
+     "text": "always",
+     "start": 9.86,
+     "end": 10.04
+    },
+    {
+     "text": "make",
+     "start": 10.04,
+     "end": 10.24
+    },
+    {
+     "text": "changes",
+     "start": 10.24,
+     "end": 10.68
+    },
+    {
+     "text": "and",
+     "start": 10.68,
+     "end": 11.24
+    },
+    {
+     "text": "make",
+     "start": 11.24,
+     "end": 11.6
+    },
+    {
+     "text": "it",
+     "start": 11.6,
+     "end": 11.7
+    },
+    {
+     "text": "better.",
+     "start": 11.7,
+     "end": 12.13
+    }
+   ],
+   "transcribed": true
+  }
+ ],
+ "pieces": [
+  {
+   "take": 0,
+   "start": 0.012,
+   "end": 12.939,
+   "at": 0
+  }
+ ],
+ "captionNudgeMs": 0,
+ "tidy": true
+}

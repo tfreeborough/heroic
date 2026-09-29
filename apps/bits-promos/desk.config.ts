@@ -65,6 +65,10 @@ const config: GameConfig = {
   publicDir: "public",
   footageDir: "public/footage",
   rendersDir: "out/desk",
+  voiceDir: "public/voice",
+  // Names Whisper should spell the way the game does.
+  voice: { vocabulary: [GAME, ...roster.weapons.map((w) => w.name), ...roster.abilities.map((a) => a.name)] },
+  bundleWatch: ["../../packages/voiceover/src"],
   prepare: [["bun", "scripts/sync-assets.ts"]],
   fps: FPS,
   formats: FORMATS,

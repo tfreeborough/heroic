@@ -152,3 +152,56 @@ button.link.small { font-size: 13px; font-weight: 500; }
 .qedit textarea { min-height: 150px; font-family: inherit; }
 .count { font-size: 12px; color: var(--steel); }
 .count.over { color: var(--crimson); }
+
+/* ── voice-over ── */
+.edit-top { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 24px; align-items: start; }
+.edit-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; align-items: start; }
+.edit-msg { grid-column: 1 / -1; }
+.meter { flex: 1; min-width: 120px; height: 12px; border-radius: 6px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.meter > div { height: 100%; width: 0; background: #9fe0ad; }
+button.recbtn { background: var(--crimson); color: var(--bone); min-width: 120px; }
+button.recbtn.on { background: var(--bone); color: var(--crimson); }
+.countin { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 120px; font-weight: 800; color: var(--bone); background: rgba(20,10,4,0.5); text-shadow: 0 4px 24px rgba(0,0,0,0.7); pointer-events: none; }
+.recdot { position: absolute; left: 10px; bottom: 10px; background: var(--crimson); color: var(--bone); font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 5px; pointer-events: none; }
+.vtl { display: grid; grid-template-columns: 52px 1fr; gap: 6px; }
+.vtl-names > div.on { color: var(--sand); }
+.vtl-names > div { display: flex; align-items: center; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--steel); margin-bottom: 4px; }
+.vtl-scroll { overflow-x: auto; overflow-y: hidden; border-radius: 8px; padding-bottom: 6px; }
+.vtl-lane { position: relative; min-width: 100%; user-select: none; cursor: col-resize; }
+.vruler { position: relative; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.vruler span { position: absolute; bottom: 2px; padding-left: 4px; font-size: 10.5px; color: var(--steel); border-left: 1px solid var(--line); height: 12px; line-height: 12px; white-space: nowrap; }
+.vrow { position: relative; margin-bottom: 4px; border-radius: 6px; background: rgba(0,0,0,0.35); overflow: hidden; }
+.vrow.clip { overflow: visible; background: rgba(0,0,0,0.35); }
+/* footage: a kept piece, a split, the edges beside footage that was taken out, and the marker for what was */
+.fpiece { position: absolute; top: 0; bottom: 0; background-color: #000; background-repeat: no-repeat; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.6); cursor: col-resize; }
+.fpiece.on { box-shadow: inset 0 0 0 3px var(--sand); z-index: 1; }
+.fedge { position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px; cursor: ew-resize; z-index: 3; }
+.fedge::after { content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 3px; background: var(--bone); border-radius: 2px; }
+.fedge.before { margin-left: -13px; }
+.fedge.after { margin-left: 4px; }
+button.fgone { position: absolute; top: -3px; bottom: -3px; width: 10px; margin-left: -5px; padding: 0; border-radius: 3px; z-index: 4; cursor: pointer; border: 1px solid var(--crimson); background: repeating-linear-gradient(135deg, var(--crimson) 0 4px, #1d120a 4px 8px); }
+button.fgone:hover { filter: brightness(1.4); }
+.vrow.voice { border: 1px solid var(--line); }
+.vpiece { position: absolute; top: 1px; bottom: 1px; background: rgba(220,185,111,0.22); border-radius: 5px; box-shadow: inset 0 0 0 1px rgba(220,185,111,0.55); cursor: grab; overflow: hidden; }
+.vpiece:active { cursor: grabbing; }
+.vpiece.on { background: rgba(220,185,111,0.4); box-shadow: inset 0 0 0 2px var(--sand); }
+.vpiece.over { box-shadow: inset 0 0 0 1px var(--crimson); }
+.vpiece .hang { position: absolute; top: 0; bottom: 0; right: 0; background: rgba(163,44,34,0.55); pointer-events: none; }
+.vpiece .edge { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 2; }
+.vpiece .edge.l { left: 0; }
+.vpiece .edge.r { right: 0; }
+.vpiece .edge:hover, .vpiece.on .edge { background: rgba(242,233,212,0.35); }
+.vrec { position: absolute; top: 1px; bottom: 1px; background: rgba(163,44,34,0.6); border-radius: 5px; pointer-events: none; }
+.vempty { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--steel); pointer-events: none; }
+.vword { position: absolute; top: 5px; height: 24px; line-height: 24px; padding: 0 4px; font-size: 12.5px; white-space: nowrap; color: var(--bone); border-left: 1px solid rgba(220,185,111,0.5); cursor: pointer; }
+/* No room for the word at this zoom: a mark where it is, the word on hover. */
+.vword.tick { width: 5px; padding: 0; overflow: hidden; color: transparent; border-left-color: rgba(220,185,111,0.3); }
+.vword.tick.now { border-left-color: var(--sand); }
+.vword:hover, .vword.tick:hover { width: auto; padding: 0 4px; overflow: visible; color: var(--bone); z-index: 3; background: #1d120a; border-radius: 0 4px 4px 0; }
+.vword.now { color: var(--sand); }
+.vword.on, .vword.tick.on { width: auto; padding: 0 4px; overflow: visible; z-index: 4; background: var(--sand); color: var(--night); border-radius: 0 4px 4px 0; }
+.vword.hidden { text-decoration: line-through; color: var(--steel); }
+.vword.on.hidden { color: var(--umber); }
+input.vword-edit { position: absolute; top: 3px; height: 28px; z-index: 6; padding: 0 6px; font-size: 13px; background: var(--ink); border: 1.5px solid var(--sand); border-radius: 4px; }
+.vhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--crimson); z-index: 5; pointer-events: none; }
+.vhead::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top: 8px solid var(--crimson); }

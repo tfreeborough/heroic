@@ -10,6 +10,10 @@ public/clips/*
 public/footage/*
 !public/footage/*.json
 !public/footage/README.md
+# Voice-overs (the Desk's Voice screen): the recordings stay out, the edits
+# (pieces + words, one .json each) ARE the voice-over — commit them.
+public/voice/takes/
+public/voice/.trash/
 public/music/*
 !public/music/README.md
 out/

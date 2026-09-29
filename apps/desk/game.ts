@@ -45,6 +45,19 @@ export type DeskTemplate = {
   options?: Record<string, { value: string; label: string }[]>;
   /** Fields the screen handles itself. */
   hide?: string[];
+  /** It takes a voice-over: the props `voice` (a path under public/, from
+   * the Voice screen), `captions`, `voiceVolume` and `duck`, plus the hidden
+   * `voiceData` (an unsaved edit, inline). Make fills the `voice` choices
+   * from what's been recorded against the chosen clip. */
+  voice?: boolean;
+};
+
+/** What the Voice screen plays while you record and edit: a composition
+ * that shows the clip the way a finished video would, and takes `voiceData`
+ * + `captions` so the captions on screen are the render's own. */
+export type VoicePreview = {
+  component: React.FC<any>;
+  props: (clipPath: string, clipSeconds: number, clip: { width: number; height: number; cropTop: number; cropBottom: number }) => Record<string, unknown>;
 };
 
 export type GameConfig = {
@@ -60,6 +73,14 @@ export type GameConfig = {
   publicDir: string;
   footageDir: string;
   rendersDir: string;
+  /** Voice-overs (the edits + a takes/ folder). Must sit inside publicDir;
+   * default `<publicDir>/voice`. */
+  voiceDir?: string;
+  /** Names Whisper should know how to spell (the game, its weapons…). */
+  voice?: { vocabulary: string[] };
+  /** Source folders outside the entry's own (relative to root) that the
+   * templates import: a change there re-bundles too. */
+  bundleWatch?: string[];
   /** Run in root when the Desk starts (e.g. sync icons from the game). */
   prepare?: string[][];
   fps: number;
@@ -72,7 +93,7 @@ export type GameConfig = {
     /** rclone destination for finished videos, e.g. "gdrive,root_folder_id=…:Promos/Desk". */
     uploadTarget: string;
   };
-  templates: () => Promise<{ TEMPLATES: DeskTemplate[] }>;
+  templates: () => Promise<{ TEMPLATES: DeskTemplate[]; VOICE_PREVIEW?: VoicePreview }>;
   /** The posting queue's words: draft a title (Shorts) and description
    * (everywhere) from a render's template + props, in the game's voice.
    * Without it the queue uses the batch name and the hook. */

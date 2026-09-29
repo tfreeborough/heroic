@@ -22,14 +22,15 @@ export const MUSIC_LEVEL = 0.8;
  * so `from` drops straight into the part you want; a short fade-in keeps a
  * mid-song start from clicking, and it fades out under the end card's tail.
  */
-export const MusicBed: React.FC<{ music?: string; from?: number; level?: number; loop?: boolean }> = ({ music, from = 0, level = MUSIC_LEVEL, loop = false }) => {
+export const MusicBed: React.FC<{ music?: string; from?: number; level?: number; loop?: boolean; duck?: (frame: number) => number }> = ({ music, from = 0, level = MUSIC_LEVEL, loop = false, duck }) => {
   const { fps, durationInFrames } = useVideoConfig();
   if (!music) return null;
   // A looping video only de-clicks its ends (a few frames), so the replay
   // doesn't sag into a fade and back.
   const [fadeIn, fadeOut] = loop ? [3, 5] : [fps * 0.25, fps * 1.6];
+  // `duck` is the voice-over asking for room: below 1 while someone's talking.
   const volume = (f: number) =>
-    level * interpolate(f, [0, fadeIn, durationInFrames - fadeOut, durationInFrames], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    (duck ? duck(f) : 1) * level * interpolate(f, [0, fadeIn, durationInFrames - fadeOut, durationInFrames], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return <Audio src={staticFile(`music/${music}`)} startFrom={Math.round(from * fps)} volume={volume} loop />;
 };
 

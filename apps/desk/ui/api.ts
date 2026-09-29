@@ -4,14 +4,26 @@ import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
 import type { Platform, Post, Schedule } from "../lib/schedule";
 import type { CleanupSpec, FootageSidecar } from "../lib/sidecar";
+import type { Take, VoiceOver } from "@heroic/voiceover";
+import type { VoiceSummary } from "../lib/voice";
+import type { WhisperStatus } from "../lib/whisper";
 
 export type Clip = FootageSidecar;
-export type { Batch, Binned, Job, Platform, Post, Render, Schedule };
+export type { Batch, Binned, Job, Platform, Post, Render, Schedule, VoiceSummary, WhisperStatus };
 /** What /api/games says about a game — enough for the page; templates load separately. */
 export type GameInfo = { id: string; name: string; icon: string; fps: number; formats: Record<string, FormatSpec>; footageFolderId: string; footageDir: string; rendersDir: string };
 
 const j = async <T>(res: Response): Promise<T> => {
-  const data = (await res.json()) as T & { error?: string };
+  const text = await res.text();
+  let data: T & { error?: string };
+  try {
+    data = JSON.parse(text) as T & { error?: string };
+  } catch {
+    // The page is bundled fresh on every load but the server only reads its
+    // code when it starts, so a route added since then isn't there yet.
+    if (res.status === 404) throw new Error("The Desk's server doesn't know this part of the page yet. It was started before the code changed: stop it (Ctrl+C) and run `bun run desk` again.");
+    throw new Error(text.slice(0, 200) || res.statusText);
+  }
   if (!res.ok) throw new Error(data.error ?? res.statusText);
   return data;
 };
@@ -34,8 +46,27 @@ export const gameApi = (game: string) => {
     cleanup: (file: string, body: CleanupSpec & { name: string; replace?: string }) =>
       post(`${base}/clips/${enc(file)}/cleanup`, body).then((r) => j<Clip>(r)),
     clipThumb: (file: string, at: number) => `${base}/clips/${enc(file)}/thumb?at=${at.toFixed(2)}`,
-    clipStrip: (file: string) => `${base}/clips/${enc(file)}/strip`,
+    clipStrip: (file: string, frames = 24) => `${base}/clips/${enc(file)}/strip?frames=${frames}`,
     clipUrl: (file: string) => `/g/${enc(game)}/footage/${enc(file)}`,
+
+    voices: () => fetch(`${base}/voice`).then((r) => j<VoiceSummary[]>(r)),
+    /** The saved voice-over, or an empty one for this clip. `path` is what a template's `voice` prop takes. */
+    voice: (id: string, clip: string) => fetch(`${base}/voice/${enc(id)}?clip=${enc(clip)}`).then((r) => j<VoiceOver & { path: string }>(r)),
+    saveVoice: (voice: VoiceOver) => fetch(`${base}/voice/${enc(voice.id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(voice) }).then((r) => j<VoiceOver>(r)),
+    /** `keepTakes`: the edit has moved to another clip, its recordings stay. */
+    deleteVoice: (id: string, keepTakes = false) => fetch(`${base}/voice/${enc(id)}${keepTakes ? "?keep=1" : ""}`, { method: "DELETE" }).then((r) => j<{ ok: true }>(r)),
+    /** A saved voice-over as it is on disk, or undefined. */
+    savedVoice: (id: string) => fetch(`${base}/voice/${enc(id)}`).then((r) => (r.ok ? j<VoiceOver & { path: string }>(r) : undefined)),
+    addTake: (id: string, audio: Blob, opts: { tidy: boolean; denoise?: number; ext?: string }) =>
+      fetch(`${base}/voice/${enc(id)}/takes?tidy=${opts.tidy ? 1 : 0}&denoise=${opts.denoise ?? 0}&ext=${enc(opts.ext ?? "wav")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: audio }).then((r) => j<Take>(r)),
+    transcribe: (id: string, take: Take) => post(`${base}/voice/${enc(id)}/transcribe`, take).then((r) => j<Take>(r)),
+    /** The takes' sound made another way: tidied or not, the background noise down (0–3) or not. */
+    sound: (voice: VoiceOver, want: { tidy?: boolean; denoise?: number }) => post(`${base}/voice/${enc(voice.id)}/sound`, { voice, ...want }).then((r) => j<VoiceOver>(r)),
+    whisper: () => fetch(`${base}/voice/whisper`).then((r) => j<WhisperStatus>(r)),
+    installWhisper: () => post(`${base}/voice/whisper`).then((r) => j<WhisperStatus>(r)),
+    backupTakes: () => post(`${base}/voice/backup`).then((r) => j<{ ok: boolean; log: string }>(r)),
+    /** A file under the game's public dir, as the page fetches it (a take's WAV). */
+    publicUrl: (path: string) => `/g/${enc(game)}/${path.split("/").map(enc).join("/")}`,
 
     render: (body: { template: string; props: Record<string, unknown>; formats: string[]; name: string }) => post(`${base}/render`, body).then((r) => j<Job[]>(r)),
     still: (body: { template: string; props: Record<string, unknown>; format: string; frame: number; name: string }) => post(`${base}/still`, body).then((r) => j<{ file: string }>(r)),

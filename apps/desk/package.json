@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The Desk — one local page for the whole promo loop of every game: clips in from Drive, cleanup, template → render, the finished library.",
+  "description": "The Desk \u2014 one local page for the whole promo loop of every game: clips in from Drive, cleanup, template \u2192 render, the finished library.",
   "scripts": {
     "start": "bun server.ts",
     "sync": "bun cli.ts sync",
@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@heroic/voiceover": "workspace:*",
     "@remotion/bundler": "4.0.518",
+    "@remotion/install-whisper-cpp": "4.0.518",
     "@remotion/player": "4.0.518",
     "@remotion/renderer": "4.0.518",
     "bits-promos": "workspace:*",

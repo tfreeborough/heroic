@@ -7,6 +7,7 @@ import { Backdrop, MusicBed, Outro, RecChip, useFormat } from "./components";
 import { clipSrc } from "./GameplayClip";
 import { DEV } from "./data/copy";
 import { Stage, useSourceAspect, useStage } from "./stage";
+import { VoiceLayer, useVoice, voiceProps } from "./voice";
 
 /** The props panel / Desk form for a hook clip. Every field described. */
 export const hookClipSchema = z.object({
@@ -40,6 +41,7 @@ export const hookClipSchema = z.object({
   push: z.number().min(0).max(0.1).optional().describe("A slow push-in on the footage, as a fraction (default 0 = still — pixel art crawls under a zoom; 0.03 if you want it anyway)"),
   sourceAspect: z.number().min(0.2).max(5).optional().describe("The recording's width ÷ height; the Desk fills this from the sidecar, a CLI render reads the file"),
   format: z.enum(["vertical", "square", "landscape"]).optional().describe("Output shape: 9:16 (default), 1:1 or 16:9"),
+  ...voiceProps,
 });
 export type HookClipProps = z.infer<typeof hookClipSchema>;
 
@@ -161,7 +163,7 @@ const HookCard: React.FC<{ hook: string; until: number; look: "bold" | "gold"; r
  * It is the match clip's sibling, kept separate so hook experiments never
  * disturb the premium cut. Everything after the hook is the same grammar.
  */
-export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_TIMING.hookFor, look = "bold", follow, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending, tail, loopBlend = HOOK_TIMING.blend, push, sourceAspect }) => {
+export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_TIMING.hookFor, look = "bold", follow, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending, tail, loopBlend = HOOK_TIMING.blend, push, sourceAspect, voice, voiceData, captions, voiceVolume, duck, segments, slide }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const { format } = useFormat();
@@ -174,7 +176,8 @@ export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_T
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
   // A loop only de-clicks the last few frames; the replay picks the sound straight back up.
-  const clipVolume = loop ? (f: number) => videoVolume * interpolate(f, [bodyEnd - 4, bodyEnd], [1, 0], clamp) : (f: number) => videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], clamp);
+  const spoken = useVoice({ voice, voiceData, duck }, startFrom, bodyEnd, fps);
+  const clipVolume = loop ? (f: number) => spoken.duck(f) * videoVolume * interpolate(f, [bodyEnd - 4, bodyEnd], [1, 0], clamp) : (f: number) => spoken.duck(f) * videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], clamp);
 
   // The loop's tail: the tail line (if there's room after the hook lifts) or
   // the hook dropping back in; the brand chrome clears before either, since
@@ -193,11 +196,11 @@ export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_T
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
-      <MusicBed music={music} from={musicFrom} level={musicVolume} loop={loop} />
+      <MusicBed music={music} from={musicFrom} level={musicVolume} loop={loop} duck={spoken.duck} />
       <Sequence durationInFrames={bodyEnd}>
         <AbsoluteFill style={{ opacity: bodyOut }}>
           {src ? (
-            <Stage src={src} startFrom={startFrame} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push} blend={blend}>
+            <Stage src={src} startFrom={startFrame} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push} blend={blend} segments={segments} slide={slide}>
               <AbsoluteFill style={{ opacity: chrome }}>
                 <BrandMark from={hookUntil} />
                 <RecChip from={hookUntil + 6} top={chromeTop(format)} />
@@ -209,6 +212,7 @@ export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_T
                   <HookCard hook={tailLine} until={Number.MAX_SAFE_INTEGER} look={look} />
                 </Sequence>
               ) : null}
+              <VoiceLayer voice={spoken} captions={captions} volume={voiceVolume} />
             </Stage>
           ) : (
             <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>

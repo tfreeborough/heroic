@@ -15,8 +15,13 @@ import { DEV } from "./data/copy";
 import roster from "./data/roster.json";
 import { useStage } from "./stage";
 
-/** Where the corner chrome sits: clear of the game's own HUD row. */
-export const CHROME_TOP = { vertical: 44, other: 40 } as const;
+/**
+ * Where the corner chrome sits. Vertical drops below the platforms' own top
+ * bar (TikTok's Following / For You tabs and search cover roughly the top
+ * 200px of a 1080×1920 frame; Reels and Shorts are similar), or the game's
+ * name is hidden from most viewers.
+ */
+export const CHROME_TOP = { vertical: 230, other: 40 } as const;
 export const chromeTop = (format: string) => (format === "vertical" ? CHROME_TOP.vertical : CHROME_TOP.other);
 
 /**

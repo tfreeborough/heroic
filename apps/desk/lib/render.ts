@@ -29,11 +29,15 @@ const newestMtime = (dir: string): number => {
 const getBundle = (g: GameConfig, onProgress: (p: number) => void): Promise<string> => {
   const entry = join(g.root, g.remotionEntry);
   const have = bundles.get(g.id);
-  if (have && have.at >= newestMtime(dirname(entry))) return Promise.resolve(have.serveUrl);
+  const watched = [dirname(entry), ...(g.bundleWatch ?? []).map((d) => join(g.root, d))].filter((d) => existsSync(d));
+  if (have && have.at >= Math.max(...watched.map(newestMtime))) return Promise.resolve(have.serveUrl);
   // Several formats of one video start together — share the one bundle.
   let inflight = bundling.get(g.id);
   if (!inflight) {
-    inflight = bundle({ entryPoint: entry, publicDir: join(g.root, g.publicDir), onProgress: (p) => onProgress(p / 100) })
+    // The public dir is linked into the bundle, not copied: it holds gigabytes
+    // of footage, and a copy is a snapshot — a clip cut or a take recorded
+    // after the bundle was made wouldn't be in it.
+    inflight = bundle({ entryPoint: entry, publicDir: join(g.root, g.publicDir), symlinkPublicDir: true, onProgress: (p) => onProgress(p / 100) })
       .then((serveUrl) => {
         bundles.set(g.id, { serveUrl, at: Date.now() });
         return serveUrl;

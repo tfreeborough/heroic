@@ -16,6 +16,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type * as React from "react";
 import { getVideoMetadata } from "@remotion/media-utils";
 import { AbsoluteFill, Easing, OffthreadVideo, Sequence, continueRender, delayRender, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { type Segment, outStarts } from "@heroic/voiceover";
 import { ditherOverlay, palette } from "./brand";
 import { Backdrop, useFormat } from "./components";
 
@@ -84,6 +85,40 @@ export const layoutStage = (
   return { box: { x, y, w, h: Math.round(h) }, side, column: side >= 380 };
 };
 
+/**
+ * A recording played as kept pieces, end to end, each join a slide left
+ * (the look of the Desk's ffmpeg cut, so its editor can preview a cut it
+ * hasn't made yet). `still` = the same timing with hard cuts and no sound,
+ * for the blurred fill.
+ */
+const Pieces: React.FC<{ src: string; segments: Segment[]; slide: number; muted: boolean; volume?: (frame: number) => number; style: React.CSSProperties; still?: boolean }> = ({ src, segments, slide, muted, volume, style, still }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const starts = outStarts({ segments, overlap: slide });
+  const d = Math.round(slide * fps);
+  const ends = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+  return (
+    <>
+      {segments.map((s, i) => {
+        const from = Math.round(starts[i]! * fps);
+        const frames = Math.max(1, Math.round((s.end - s.start) * fps));
+        const arriving = i > 0 && d > 0;
+        const leaving = i < segments.length - 1 && d > 0;
+        const x = still ? 0 : (arriving ? interpolate(frame - from, [0, d], [100, 0], ends) : 0) + (leaving ? interpolate(frame - from, [frames - d, frames], [0, -100], ends) : 0);
+        // The sound crossfades under the slide.
+        const level = (f: number) => (volume ? volume(from + f) : 1) * (arriving ? interpolate(f, [0, d], [0, 1], ends) : 1) * (leaving ? interpolate(f, [frames - d, frames], [1, 0], ends) : 1);
+        return (
+          <Sequence key={`${s.start}-${s.end}`} from={from} durationInFrames={frames} premountFor={fps}>
+            <div style={{ position: "absolute", inset: 0, transform: x ? `translateX(${x}%)` : undefined }}>
+              <OffthreadVideo src={src} startFrom={Math.round(s.start * fps)} muted={muted || Boolean(still)} volume={still ? undefined : level} style={style} />
+            </div>
+          </Sequence>
+        );
+      })}
+    </>
+  );
+};
+
 export const Stage: React.FC<{
   src: string;
   startFrom: number;
@@ -102,8 +137,12 @@ export const Stage: React.FC<{
    * copy of the footage playing from recording frame `source` fades up over
    * the first, so the last frame matches the replay's opening. */
   blend?: { from: number; to: number; source: number };
+  /** Play these pieces of the recording (seconds), in order, instead of
+   * one run from `startFrom`; `slide` = seconds each join takes. */
+  segments?: Segment[];
+  slide?: number;
   children?: React.ReactNode;
-}> = ({ src, startFrom, muted, cropTop = 0, cropBottom = 0, aspect, volume, push = 0, blend, children }) => {
+}> = ({ src, startFrom, muted, cropTop = 0, cropBottom = 0, aspect, volume, push = 0, blend, segments, slide = 0, children }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const shape = useFormat();
@@ -131,7 +170,11 @@ export const Stage: React.FC<{
         {fill ? (
           <>
             <AbsoluteFill style={{ transform: `scale(${fillScale})`, filter: "blur(42px) saturate(1.35) brightness(0.5)" }}>
-              <OffthreadVideo src={src} startFrom={startFrom} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              {segments?.length ? (
+                <Pieces src={src} segments={segments} slide={slide} muted still style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <OffthreadVideo src={src} startFrom={startFrom} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              )}
             </AbsoluteFill>
             <AbsoluteFill style={{ background: `linear-gradient(180deg, rgba(36,23,8,0.35) 0%, rgba(36,23,8,0.55) 100%)` }} />
             <AbsoluteFill style={ditherOverlay} />
@@ -153,8 +196,8 @@ export const Stage: React.FC<{
           }}
         >
           <div style={{ position: "absolute", inset: 0, transform: push ? `scale3d(${scale}, ${scale}, 1)` : undefined, transformOrigin: "50% 50%", willChange: push ? "transform" : undefined }}>
-            <OffthreadVideo src={src} startFrom={startFrom} muted={muted} volume={volume} style={cropStyle} />
-            {blend ? (
+            {segments?.length ? <Pieces src={src} segments={segments} slide={slide} muted={muted} volume={volume} style={cropStyle} /> : <OffthreadVideo src={src} startFrom={startFrom} muted={muted} volume={volume} style={cropStyle} />}
+            {blend && !segments?.length ? (
               <Sequence from={blend.from} layout="none">
                 <div style={{ position: "absolute", inset: 0, opacity: interpolate(frame, [blend.from, blend.to], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
                   <OffthreadVideo src={src} startFrom={blend.source} muted style={cropStyle} />
