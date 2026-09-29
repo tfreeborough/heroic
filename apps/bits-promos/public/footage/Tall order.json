@@ -1,0 +1,39 @@
+{
+  "file": "Tall order.mp4",
+  "facts": {
+    "seconds": 32.12,
+    "width": 720,
+    "height": 1496,
+    "fps": 60,
+    "recordedAt": "2026-09-28T21:24:26",
+    "bytes": 19732531
+  },
+  "title": "",
+  "line": "",
+  "note": "3 clips put together of me failing to beat the tall order challenge",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Record_2026-09-28-22-21-25_e960a7cd7e8cee15e432ebd947e0ccbf.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 11.218042,
+        "end": 21.117989
+      },
+      {
+        "start": 52.107707,
+        "end": 64.712664
+      },
+      {
+        "start": 87.612563,
+        "end": 97.43295
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.4,
+    "cropTop": 0,
+    "cropBottom": 0.055,
+    "muted": false
+  }
+}

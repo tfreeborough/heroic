@@ -1,0 +1,31 @@
+{
+  "file": "Horde - Bombard Cut 2.mp4",
+  "facts": {
+    "seconds": 22.27,
+    "width": 874,
+    "height": 1814,
+    "fps": 60,
+    "recordedAt": "2026-09-28T22:19:18",
+    "bytes": 11854086
+  },
+  "title": "",
+  "line": "",
+  "note": "Using bombard weapon to reign down carnage on the horde challenge",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Horde - Bombard Cut.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 26.377777,
+        "end": 48.638571
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.4,
+    "cropTop": 0,
+    "cropBottom": 0,
+    "muted": false
+  }
+}

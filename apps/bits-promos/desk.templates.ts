@@ -21,8 +21,8 @@ const spotlightClipProps: DeskTemplate["clipProps"] = (clip, clipSeconds, facts)
 const abilityIds = roster.abilities.map((a) => ({ value: a.id, label: a.name }));
 /** The game's battle songs (synced into public/music/ by `bun run sync`). */
 const songs = roster.music.map((m) => ({ value: m.file, label: m.name }));
-/** In every template's defaults, so a picked song survives a template switch. */
-const musicDefaults = { music: "", musicFrom: 0, musicVolume: MUSIC_LEVEL };
+/** In every template's defaults, so a picked song and levels survive a template switch. */
+const musicDefaults = { music: "", musicFrom: 0, musicVolume: MUSIC_LEVEL, videoVolume: 1 };
 
 export const TEMPLATES: DeskTemplate[] = [
   {

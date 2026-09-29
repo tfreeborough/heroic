@@ -24,7 +24,8 @@ export const hookClipSchema = z.object({
   muted: z.boolean().optional().describe("Drop the recording's own audio"),
   music: z.string().optional().describe("A song from the game (public/music/), played under the whole video. Record with Battle music off in Settings"),
   musicFrom: z.number().min(0).optional().describe("Seconds into the song to start from (the songs build, so the heavy part is usually 60s+ in)"),
-  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8; the recording plays at 1)"),
+  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8)"),
+  videoVolume: z.number().min(0).max(1).optional().describe("The recording's own sound, 0 to 1 (default 1). Turn it down (0.3–0.5) when it crowds the music; muted drops it entirely"),
   cropTop: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the top (status strip)"),
   cropBottom: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the bottom (nav bar)"),
   ending: z
@@ -160,7 +161,7 @@ const HookCard: React.FC<{ hook: string; until: number; look: "bold" | "gold"; r
  * It is the match clip's sibling, kept separate so hook experiments never
  * disturb the premium cut. Everything after the hook is the same grammar.
  */
-export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_TIMING.hookFor, look = "bold", follow, startFrom = 0, muted = false, music, musicFrom, musicVolume, cropTop, cropBottom, ending, tail, loopBlend = HOOK_TIMING.blend, push, sourceAspect }) => {
+export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_TIMING.hookFor, look = "bold", follow, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending, tail, loopBlend = HOOK_TIMING.blend, push, sourceAspect }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const { format } = useFormat();
@@ -173,7 +174,7 @@ export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_T
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
   // A loop only de-clicks the last few frames; the replay picks the sound straight back up.
-  const clipVolume = loop ? (f: number) => interpolate(f, [bodyEnd - 4, bodyEnd], [1, 0], clamp) : (f: number) => interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], clamp);
+  const clipVolume = loop ? (f: number) => videoVolume * interpolate(f, [bodyEnd - 4, bodyEnd], [1, 0], clamp) : (f: number) => videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], clamp);
 
   // The loop's tail: the tail line (if there's room after the hook lifts) or
   // the hook dropping back in; the brand chrome clears before either, since

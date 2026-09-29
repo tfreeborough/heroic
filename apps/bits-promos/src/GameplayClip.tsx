@@ -18,7 +18,8 @@ export const gameplayClipSchema = z.object({
   muted: z.boolean().optional().describe("Drop the recording's own audio"),
   music: z.string().optional().describe("A song from the game (public/music/), played under the whole video. Record with Battle music off in Settings"),
   musicFrom: z.number().min(0).optional().describe("Seconds into the song to start from (the songs build, so the heavy part is usually 60s+ in)"),
-  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8; the recording plays at 1)"),
+  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8)"),
+  videoVolume: z.number().min(0).max(1).optional().describe("The recording's own sound, 0 to 1 (default 1). Turn it down (0.3–0.5) when it crowds the music; muted drops it entirely"),
   cropTop: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the top (status strip)"),
   cropBottom: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the bottom (nav bar)"),
   ending: z.enum(["signoff", "pitch"]).optional().describe("How it closes: the developer's sign-off (default) or the feature-list pitch the spotlights use"),
@@ -49,7 +50,7 @@ export const clipSrc = (clip: string): string => staticFile(clip.includes("/") ?
  * then the developer's sign-off. The footage itself never moves (pixel art
  * crawls under a zoom); the blurred fill breathes instead.
  */
-export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, musicFrom, musicVolume, cropTop, cropBottom, ending = "signoff", push, sourceAspect }) => {
+export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending = "signoff", push, sourceAspect }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const { format } = useFormat();
@@ -60,7 +61,7 @@ export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, s
   const lowerAt = Math.round(CLIP_TIMING.lowerAt * fps);
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
-  const clipVolume = (f: number) => interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const clipVolume = (f: number) => videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>

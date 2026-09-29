@@ -1,0 +1,35 @@
+{
+  "file": "Player vs godlike (trident).mp4",
+  "facts": {
+    "seconds": 26.4,
+    "width": 720,
+    "height": 1496,
+    "fps": 60,
+    "recordedAt": "2026-09-28T21:26:28",
+    "bytes": 12462949
+  },
+  "title": "",
+  "line": "",
+  "note": "Me playing in the godlike challenge against the godlike bot with a trident, 2 clips stitched together",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Record_2026-09-28-22-24-59_e960a7cd7e8cee15e432ebd947e0ccbf.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 11.984474,
+        "end": 23.386407
+      },
+      {
+        "start": 60.652876,
+        "end": 75.752803
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.4,
+    "cropTop": 0,
+    "cropBottom": 0.055,
+    "muted": false
+  }
+}

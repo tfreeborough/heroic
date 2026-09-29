@@ -34,10 +34,10 @@ by default; `ending: "signoff"` swaps in the match clip's indie sign-off.
 
 | Composition | Props |
 | --- | --- |
-| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, musicFrom?, musicVolume?, ending?}` |
+| `WeaponSpotlight` | `{kind:"weapon", id:"blade", clip?, clipSeconds?, clipStartFrom?, music?, musicFrom?, musicVolume?, videoVolume?, ending?}` |
 | `AbilitySpotlight` | `{kind:"ability", id:"sinkhole", …}` |
-| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, push?, format?}` |
-| `HookClip` | `{clip, hook, hookFor?, look?, follow?, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, ending?, tail?, loopBlend?, push?, format?}` |
+| `GameplayClip` | `{clip, title, line, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, videoVolume?, ending?, push?, format?}` |
+| `HookClip` | `{clip, hook, hookFor?, look?, follow?, durationSeconds, startFrom?, muted?, music?, musicFrom?, musicVolume?, videoVolume?, ending?, tail?, loopBlend?, push?, format?}` |
 
 Every template takes `format`: `vertical` (1080×1920, the default), `square`
 (1080×1080) or `landscape` (1920×1080); the layout adapts (`src/components.tsx`).
