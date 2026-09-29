@@ -72,6 +72,10 @@ export interface ArchetypePreset {
    * cowards are anti-fun). Only the ward lifts it — there cowardice IS
    * the point (bits-challenges.md, Carry the rookie). */
   fleeBudgetTicks?: number | null;
+  /** Also run whenever the target is inside this (px), whatever my hp —
+   * the ward's (Tom 2026-09-28: the rookie should try fleeing, so the
+   * challenge is about peel). */
+  fleeWithin?: number;
 }
 
 export const ARCHETYPES: Record<ArchetypeId, ArchetypePreset> = {
@@ -186,7 +190,8 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypePreset> = {
   // scratch — toward YOU (the leash), never into a corner (retreatDirection
   // reads the room). Never derived from a kit: only a challenge host pins
   // it. Its flee budget is lifted, so it keeps running for as long as it's
-  // hurt — the enemy's "weakest" hunters will chase it all round.
+  // hurt or a foe is close — and the recipe pins every hunter's mark on it
+  // (ChallengeSeat.hunt), so it runs all round and your job is the peel.
   ward: {
     name: "Ward",
     band: { near: 0.75, far: 0.95 },
@@ -199,6 +204,7 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypePreset> = {
     focus: "nearest",
     bandRangedOnly: true,
     fleeBudgetTicks: null,
+    fleeWithin: 300,
   },
   // The Lifeline's brain (bits-challenges.md, Tall order — Tom 2026-09-27).
   // The beam picks its own patient; the whole job is WHERE TO STAND: behind

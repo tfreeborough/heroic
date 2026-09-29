@@ -255,6 +255,38 @@ describe("archetypes", () => {
     expect(d.sx).toBeGreaterThan(0); // diving the weak mark, past the near body
   });
 
+  test("a pinned mark outranks the nearest body (the rookie's hunters)", () => {
+    const me = snap({ team: 2, x: 300, y: 100, weapon: "blade", abilities: [slot("dash")] });
+    const hitter = snap({ id: 8, team: 1, x: 150, y: 100 }); // the nearer body, at -x
+    const rookie = snap({ id: 9, team: 1, x: 600, y: 100 });
+    const free = botThink(createBotMemory(), me, w([me, hitter, rookie]), nav, { archetype: "brawler" });
+    expect(free.sx).toBeLessThan(0);
+    const marked = botThink(createBotMemory(), me, w([me, hitter, rookie]), nav, { archetype: "brawler", markId: 9 });
+    expect(marked.sx).toBeGreaterThan(0);
+    // The mark down → back to the archetype's own pick.
+    const down = snap({ id: 9, team: 1, x: 600, y: 100, alive: false });
+    const after = botThink(createBotMemory(), me, w([me, hitter, down]), nav, { archetype: "brawler", markId: 9 });
+    expect(after.sx).toBeLessThan(0);
+  });
+
+  test("relentless: a hurt, fleeing-archetype bot still walks at its mark", () => {
+    const hurt = snap({ x: 200, y: 100, hp: 30, weapon: "bow", abilities: [slot("mirror-guard"), slot("ironhide")] });
+    const enemy = snap({ id: 9, team: 2, x: 600, y: 100, weapon: "bow" });
+    const mate = snap({ id: 1, team: 1, x: 300, y: 550 });
+    const scared = botThink(createBotMemory(), hurt, w([hurt, mate, enemy]), nav, { difficulty: "godlike" });
+    expect(scared.sx).toBeLessThan(0);
+    const bold = botThink(createBotMemory(), hurt, w([hurt, mate, enemy]), nav, { difficulty: "godlike", relentless: true });
+    expect(bold.sx).toBeGreaterThan(0);
+  });
+
+  test("the ward runs from a close foe even on a full bar", () => {
+    const rookie = snap({ x: 350, y: 100, weapon: "bow" });
+    const you = snap({ id: 1, team: 1, x: 250, y: 100 });
+    const close = snap({ id: 9, team: 2, x: 550, y: 100, weapon: "blade" });
+    const d = botThink(createBotMemory(), rookie, w([rookie, you, close]), nav, { archetype: "ward" });
+    expect(d.sx).toBeLessThan(0);
+  });
+
   test("last stand: a lone survivor stops fleeing; with a teammate it retreats", () => {
     // A hurt sniper beyond its band: with a living teammate it disengages
     // (away from the enemy at +x); as its team's last body it presses the
