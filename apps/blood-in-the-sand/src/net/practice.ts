@@ -56,12 +56,12 @@ import {
   toRoomStatePlayers,
   toSnapshot,
   type AbilityId,
-  type ArchetypeId,
   type ArenaEvent,
   type ArenaPlayer,
   type ArenaSim,
   type BotMemory,
   type BotNav,
+  type BotPins,
   type ChallengeDef,
   type ChallengeJudge,
   type DifficultyId,
@@ -138,9 +138,10 @@ interface BotSeat {
   /** ms after entering the lobby at which this bot arms itself — staggered
    * beats, so the roster ticker flips one by one while you're mid-wizard. */
   armAtMs: number;
-  /** A challenge's pinned brain (the rookie's `ward`) — absent = derived
-   * from the kit each tick, as ever. */
-  archetype?: ArchetypeId;
+  /** A challenge's pinned brain dials (the rookie's `ward`, the hunters'
+   * mark, the giant's relentlessness) — absent = derived from the kit each
+   * tick, as ever. */
+  pins?: BotPins;
 }
 
 /** A scripted seat's fixed kit (the showcase cast's, applied on the first
@@ -332,12 +333,12 @@ export class PracticeClient implements LobbyClient {
       this.seated = seated;
       this.protectIds = seated.protectIds;
       this.judgeRef = createChallengeJudge(challenge, seated.protectIds, me.id);
-      for (const { player, spec } of seated.bots) {
+      for (const { player, spec, pins } of seated.bots) {
         this.bots.set(player.id, {
           memory: createBotMemory((Math.random() * 0x7fffffff) | 0),
           difficulty: spec.difficulty,
           armAtMs: 0,
-          ...(spec.archetype ? { archetype: spec.archetype } : {}),
+          pins,
         });
       }
     } else {
@@ -591,7 +592,7 @@ export class PracticeClient implements LobbyClient {
       const foes: OracleFoe[] = [];
       for (const [id, seat] of this.bots) {
         const body = this.sim.state.players[id];
-        if (body && body.team !== 1) foes.push({ id, memory: seat.memory, difficulty: seat.difficulty, ...(seat.archetype ? { archetype: seat.archetype } : {}) });
+        if (body && body.team !== 1) foes.push({ id, memory: seat.memory, difficulty: seat.difficulty, ...(seat.pins ? { pins: seat.pins } : {}) });
       }
       const d = this.oracle.think(this.sim, 0, foes, this.nav);
       inputs.set(0, { seq: this.seq++, sx: d.sx, sy: d.sy, casts: d.casts });
@@ -619,7 +620,7 @@ export class PracticeClient implements LobbyClient {
       const snap = this.lastSnap.players.find((p) => p.id === id);
       const decision = botThink(seat.memory, snap, world, this.nav, {
         difficulty,
-        ...(seat.archetype ? { archetype: seat.archetype } : {}),
+        ...seat.pins,
       });
       inputs.set(id, { seq: 0, sx: decision.sx, sy: decision.sy, casts: decision.casts });
     }

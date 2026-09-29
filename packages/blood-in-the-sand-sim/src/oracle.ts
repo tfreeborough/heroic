@@ -20,9 +20,8 @@
  * landed, foes' health, room to move, not flanked. Cost is the knob:
  * candidates × horizon × (1 + foes) brain-thinks per replan.
  */
-import { botThink, createBotMemory, type BotMemory } from "./bot";
+import { botThink, createBotMemory, type BotMemory, type BotPins } from "./bot";
 import type { BotNav } from "./nav";
-import type { ArchetypeId } from "./botArchetypes";
 import { DIFFICULTIES, type DifficultyId } from "./botDifficulty";
 import { TICK_DT, WEAPONS } from "./config";
 import type { ArenaEvent } from "./events";
@@ -35,7 +34,8 @@ export interface OracleFoe {
   id: number;
   memory: BotMemory;
   difficulty: DifficultyId;
-  archetype?: ArchetypeId;
+  /** The seat's pinned brain dials (a challenge's archetype, mark, relentless). */
+  pins?: BotPins;
 }
 
 export interface OracleOptions {
@@ -151,7 +151,7 @@ export const createOracle = (opts: OracleOptions = ORACLE_FULL, seed = 0x0c1e): 
           if (b) b.moveFactor = tier.speedFactor;
           const d = botThink(f.memory, body, snap, nav, {
             difficulty: f.difficulty,
-            ...(f.archetype ? { archetype: f.archetype } : {}),
+            ...f.pins,
           });
           last.set(f.id, { seq: 0, sx: d.sx, sy: d.sy, casts: d.casts });
         }
