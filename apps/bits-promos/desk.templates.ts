@@ -6,7 +6,7 @@
  */
 import type { DeskTemplate } from "../desk/game";
 import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from "./src/GameplayClip";
-import { HookClip, hookClipDurationSeconds, hookClipSchema, splitHooks } from "./src/HookClip";
+import { HookClip, hookClipDurationSeconds, hookClipSchema, isLoop } from "./src/HookClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
 import { MUSIC_LEVEL } from "./src/components";
 import roster from "./src/data/roster.json";
@@ -21,8 +21,8 @@ const spotlightClipProps: DeskTemplate["clipProps"] = (clip, clipSeconds, facts)
 const abilityIds = roster.abilities.map((a) => ({ value: a.id, label: a.name }));
 /** The game's battle songs (synced into public/music/ by `bun run sync`). */
 const songs = roster.music.map((m) => ({ value: m.file, label: m.name }));
-/** In every template's defaults, so a picked song survives a template switch. */
-const musicDefaults = { music: "", musicFrom: 0, musicVolume: MUSIC_LEVEL };
+/** In every template's defaults, so a picked song and levels survive a template switch. */
+const musicDefaults = { music: "", musicFrom: 0, musicVolume: MUSIC_LEVEL, videoVolume: 1 };
 
 export const TEMPLATES: DeskTemplate[] = [
   {
@@ -48,10 +48,10 @@ export const TEMPLATES: DeskTemplate[] = [
   {
     id: "HookClip",
     label: "Hook clip",
-    blurb: "A match clip built for the scroll: the hook is on screen from the first frame, no title beat. Put several hooks in the field separated by | and one press renders each as its own video.",
+    blurb: "A match clip built for the scroll: the hook is on screen from the first frame, no title beat, and by default no end card either: it loops straight back into the hook. Add several hooks and one press renders each as its own video.",
     component: HookClip,
     schema: hookClipSchema,
-    seconds: (p) => hookClipDurationSeconds(p as { durationSeconds: number }),
+    seconds: (p) => hookClipDurationSeconds(p as never),
     clipProps: (clip, clipSeconds, facts) => ({
       clip,
       durationSeconds: Math.min(12, Math.floor(clipSeconds)),
@@ -60,10 +60,18 @@ export const TEMPLATES: DeskTemplate[] = [
     }),
     clipKey: "clip",
     uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
-    defaults: { hook: "", hookFor: 3, look: "bold", follow: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", push: 0, ...musicDefaults },
+    defaults: { hook: "", hookFor: 3, look: "bold", follow: "", durationSeconds: 12, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "loop", tail: "", loopBlend: 0.3, push: 0, ...musicDefaults },
     options: { music: songs },
     needsClip: true,
-    variants: { key: "hook", split: splitHooks, suffix: "hook" },
+    variants: { key: "hook", suffix: "hook", placeholder: "He had 1 HP. Then the Harpoon." },
+    // Loops live on being replayed, and a long one rarely is.
+    warn: (p, typed) => {
+      if (!isLoop(p.ending as never)) return undefined;
+      const s = Math.round(Number(p.durationSeconds));
+      if (typed.durationSeconds === undefined || typed.durationSeconds === "") return `No duration set, so this loop runs ${s}s to the end of the clip. Loops work best at 7–15s, ending on the payoff.`;
+      if (s > 20) return `This loop is ${s}s. Loops work best at 7–15s, ending on the payoff.`;
+      return undefined;
+    },
     hide: ["clip", "format", "sourceAspect"],
   },
   {

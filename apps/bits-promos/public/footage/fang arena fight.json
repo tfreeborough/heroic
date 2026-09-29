@@ -1,0 +1,31 @@
+{
+  "file": "fang arena fight.mp4",
+  "facts": {
+    "seconds": 19.63,
+    "width": 720,
+    "height": 1496,
+    "fps": 60,
+    "recordedAt": "2026-09-24T15:20:17",
+    "bytes": 15869876
+  },
+  "title": "",
+  "line": "",
+  "note": "2v2 in ancient rites arena wielding fang, 1 round",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "fang raw.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 51.312466,
+        "end": 70.944992
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.4,
+    "cropTop": 0,
+    "cropBottom": 0.055,
+    "muted": false
+  }
+}

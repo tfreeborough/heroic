@@ -15,7 +15,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type * as React from "react";
 import { getVideoMetadata } from "@remotion/media-utils";
-import { AbsoluteFill, Easing, OffthreadVideo, continueRender, delayRender, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, OffthreadVideo, Sequence, continueRender, delayRender, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { ditherOverlay, palette } from "./brand";
 import { Backdrop, useFormat } from "./components";
 
@@ -98,8 +98,12 @@ export const Stage: React.FC<{
    * capture crawls a pixel at a time across those hard edges. The fill
    * breathes instead. */
   push?: number;
+  /** A loop's crossfade: from body frame `from` to `to`, a second (muted)
+   * copy of the footage playing from recording frame `source` fades up over
+   * the first, so the last frame matches the replay's opening. */
+  blend?: { from: number; to: number; source: number };
   children?: React.ReactNode;
-}> = ({ src, startFrom, muted, cropTop = 0, cropBottom = 0, aspect, volume, push = 0, children }) => {
+}> = ({ src, startFrom, muted, cropTop = 0, cropBottom = 0, aspect, volume, push = 0, blend, children }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const shape = useFormat();
@@ -150,6 +154,13 @@ export const Stage: React.FC<{
         >
           <div style={{ position: "absolute", inset: 0, transform: push ? `scale3d(${scale}, ${scale}, 1)` : undefined, transformOrigin: "50% 50%", willChange: push ? "transform" : undefined }}>
             <OffthreadVideo src={src} startFrom={startFrom} muted={muted} volume={volume} style={cropStyle} />
+            {blend ? (
+              <Sequence from={blend.from} layout="none">
+                <div style={{ position: "absolute", inset: 0, opacity: interpolate(frame, [blend.from, blend.to], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) }}>
+                  <OffthreadVideo src={src} startFrom={blend.source} muted style={cropStyle} />
+                </div>
+              </Sequence>
+            ) : null}
           </div>
           <div
             style={{

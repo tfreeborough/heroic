@@ -50,7 +50,7 @@ const draftInput = (g: GameConfig, b: Batch): DraftInput => {
   const props = b.renders[0]?.props ?? {};
   const footage = clipOf(b);
   const side = footage.startsWith("footage/") ? readSidecar(g, footage.slice(8)) : undefined;
-  const hook = hookOf(b).split("|")[0]!.trim();
+  const hook = hookOf(b);
   return { template: b.template, hook, note: side?.note ?? "" };
 };
 

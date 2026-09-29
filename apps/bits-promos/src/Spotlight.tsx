@@ -39,7 +39,8 @@ export const spotlightSchema = z.object({
   clipStartFrom: z.number().min(0).optional().describe("Seconds into the recording to start from (skips the lobby beat)"),
   music: z.string().optional().describe("A song from the game (public/music/), played under the whole video. Record with Battle music off in Settings"),
   musicFrom: z.number().min(0).optional().describe("Seconds into the song to start from (the songs build, so the heavy part is usually 60s+ in)"),
-  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8; the recording plays at 1)"),
+  musicVolume: z.number().min(0).max(1).optional().describe("The song's level, 0 to 1 (default 0.8)"),
+  videoVolume: z.number().min(0).max(1).optional().describe("The recording's own sound, 0 to 1 (default 1). Turn it down (0.3–0.5) when it crowds the music; muted drops it entirely"),
   muted: z.boolean().optional().describe("Drop the recording's own audio"),
   cropTop: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the top (status strip)"),
   cropBottom: z.number().min(0).max(0.4).optional().describe("Fraction of the recording's height to shave off the bottom (nav bar)"),
@@ -60,7 +61,7 @@ export const TIMING = { outro: 6, defaultClip: 8, noClip: 5, reveal: 3.2, cardAt
 export const spotlightSeconds = (p: SpotlightProps): number =>
   (p.clip ? (p.clipSeconds ?? TIMING.defaultClip) : TIMING.noClip) + TIMING.outro;
 
-export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartFrom, music, musicFrom, musicVolume, muted = false, cropTop, cropBottom, ending = "pitch", sourceAspect }) => {
+export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartFrom, music, musicFrom, musicVolume, videoVolume = 1, muted = false, cropTop, cropBottom, ending = "pitch", sourceAspect }) => {
   const entry = findEntry(kind, id);
   const { format } = useFormat();
   const frame = useCurrentFrame();
@@ -74,7 +75,7 @@ export const Spotlight: React.FC<SpotlightProps> = ({ kind, id, clip, clipStartF
   const cardUntil = cardAt + Math.round(TIMING.cardFor * fps);
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
-  const clipVolume = (f: number) => interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  const clipVolume = (f: number) => videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const top = chromeTop(format);
 
   return (

@@ -32,7 +32,7 @@ const draft = (template: string, props: Record<string, unknown>) => {
     return { title: title(`The ${name}`), description: `${line}The ${name}, as it plays in ${GAME}.\n\n${ABOUT}\n\n${ASK}\n\n${TAGS}` };
   }
   // The match and hook clips: the hook is the lead; the title (a label) is a fallback.
-  const lead = str("hook").split("|")[0]!.trim() || str("line") || str("title") || GAME;
+  const lead = str("hook") || str("line") || str("title") || GAME;
   return { title: title(lead), description: `${lead}\n\nReal gameplay, recorded in a match.\n\n${ABOUT}\n\n${ASK}\n\n${TAGS}` };
 };
 
