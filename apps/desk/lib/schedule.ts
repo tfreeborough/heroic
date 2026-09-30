@@ -40,6 +40,8 @@ export type Post = {
   draftedBy?: "template" | "claude";
   /** ISO timestamp per platform once it's up. */
   posted: Partial<Record<Platform, string>>;
+  /** Marked done by hand (not every platform gets every video). */
+  doneAt?: string;
   createdAt: string;
 };
 
@@ -71,7 +73,7 @@ export const dayDiff = (a: string, b: string): number => {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
 };
 
-export const isDone = (p: Post): boolean => PLATFORMS.every((pl) => Boolean(p.posted[pl.id]));
+export const isDone = (p: Post): boolean => Boolean(p.doneAt) || PLATFORMS.every((pl) => Boolean(p.posted[pl.id]));
 
 // ── placing ──
 /**

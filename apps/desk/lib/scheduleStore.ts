@@ -116,7 +116,9 @@ export const redraftPost = async (g: GameConfig, id: string): Promise<Schedule> 
   return writeSchedule(g, s);
 };
 
-export const updatePost = (g: GameConfig, id: string, patch: Partial<Pick<Post, "day" | "slot" | "title" | "description" | "posted">>): Schedule => {
+export type PostPatch = Partial<Pick<Post, "day" | "slot" | "title" | "description" | "posted">> & { doneAt?: string | null };
+
+export const updatePost = (g: GameConfig, id: string, patch: PostPatch): Schedule => {
   const s = readSchedule(g);
   const p = s.posts.find((x) => x.id === id);
   if (!p) throw new Error(`no post ${id}`);
@@ -125,6 +127,26 @@ export const updatePost = (g: GameConfig, id: string, patch: Partial<Pick<Post, 
   if (patch.title !== undefined) p.title = patch.title;
   if (patch.description !== undefined) p.description = patch.description;
   if (patch.posted !== undefined) p.posted = patch.posted;
+  if (patch.doneAt === null) delete p.doneAt;
+  else if (patch.doneAt !== undefined) p.doneAt = patch.doneAt;
+  return writeSchedule(g, s);
+};
+
+/**
+ * Dragged to a day and slot. Whatever sat there swaps into the dragged
+ * post's old place, so two posts never share a slot.
+ */
+export const movePost = (g: GameConfig, id: string, day: string, slot: number): Schedule => {
+  const s = readSchedule(g);
+  const p = s.posts.find((x) => x.id === id);
+  if (!p) throw new Error(`no post ${id}`);
+  const there = s.posts.find((x) => x.id !== id && x.day === day && x.slot === slot);
+  if (there) {
+    there.day = p.day;
+    there.slot = p.slot;
+  }
+  p.day = day;
+  p.slot = slot;
   return writeSchedule(g, s);
 };
 

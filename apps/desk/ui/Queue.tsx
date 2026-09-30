@@ -19,11 +19,19 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
   const [s, setS] = useState<(Schedule & { claude?: boolean }) | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // post id being redrafted
   const [open, setOpen] = useState<string | null>(null); // post id being edited
-  const [playing, setPlaying] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<Post | null>(null); // open in the preview modal
+  const [dragging, setDragging] = useState<string | null>(null); // post id on the drag handle
+  const [over, setOver] = useState<string | null>(null); // "day/slot" under the cursor
   const [msg, setMsg] = useState("");
   const [showDone, setShowDone] = useState(false);
   const now = today();
   useEffect(() => void api.schedule().then(setS), [api]);
+  useEffect(() => {
+    if (!playing) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setPlaying(null);
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [playing]);
 
   const days = useMemo(() => {
     if (!s) return [];
@@ -54,10 +62,38 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
     else posted[pl] = new Date().toISOString();
     void save(api.updatePost(p.id, { posted }));
   };
+  const markDone = (p: Post) => void save(api.updatePost(p.id, { doneAt: p.doneAt ? null : new Date().toISOString() }));
   const patch = (p: Post, fields: Partial<Pick<Post, "day" | "slot" | "title" | "description">>) => void save(api.updatePost(p.id, fields));
   const remove = (p: Post) => {
     if (!confirm(`Take ${p.name} out of the queue? The video stays in Renders.`)) return;
     void save(api.unqueue(p.id));
+  };
+  /** Drop targets: a slot (swaps with whatever's there) or a day's date (its first free slot). */
+  const dropOn = (day: string, slot: number) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      setOver(`${day}/${slot}`);
+    },
+    onDragLeave: () => setOver((o) => (o === `${day}/${slot}` ? null : o)),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = dragging;
+      setDragging(null);
+      setOver(null);
+      const p = s.posts.find((x) => x.id === id);
+      if (!p || (p.day === day && p.slot === slot)) return;
+      // Optimistic, so the card lands where it was dropped before the server answers.
+      setS({ ...s, posts: s.posts.map((x) => (x.id === p.id ? { ...x, day, slot } : x.day === day && x.slot === slot ? { ...x, day: p.day, slot: p.slot } : x)) });
+      void save(api.move(p.id, day, slot));
+    },
+  });
+  const freeSlot = (day: string, id: string) => {
+    for (let i = 0; i < s.slotsPerDay; i++) if (!s.posts.some((x) => x.id !== id && x.day === day && x.slot === i)) return i;
+    return s.slotsPerDay; // full: past the last slot rather than swapping someone out
   };
   const copy = async (text: string, what: string) => {
     try {
@@ -77,13 +113,27 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
     const done = isDone(p);
     const editing = open === p.id;
     return (
-      <div className={`qslot${done ? " done" : ""}`} key={p.id}>
+      <div className={`qslot${done ? " done" : ""}${dragging === p.id ? " dragging" : ""}${over === `${p.day}/${p.slot}` && dragging !== p.id ? " over" : ""}`} key={p.id} {...dropOn(p.day, p.slot)}>
+        <span
+          className="qhandle"
+          draggable
+          title="drag to another day or slot"
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", p.id);
+            const card = e.currentTarget.parentElement;
+            if (card) e.dataTransfer.setDragImage(card, 12, 20);
+            setDragging(p.id);
+          }}
+          onDragEnd={() => {
+            setDragging(null);
+            setOver(null);
+          }}
+        >
+          ⠿
+        </span>
         <span className="label">{s.slotLabels[p.slot] ?? `slot ${p.slot + 1}`}</span>
-        {playing === p.id ? (
-          <video src={api.renderUrl(p.slug)} controls autoPlay style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6 }} onClick={() => setPlaying(null)} />
-        ) : (
-          <img src={api.renderThumb(p.slug)} alt="" loading="lazy" onClick={() => setPlaying(p.id)} title="play" />
-        )}
+        <img src={api.renderThumb(p.slug)} alt="" loading="lazy" onClick={() => setPlaying(p)} title="play" />
         <div className="what">
           <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</strong>
           <span className="small hook muted" title={p.hook}>
@@ -111,6 +161,9 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
               {pl.label}
             </button>
           ))}
+          <button className={`tickbtn${p.doneAt ? " on" : ""}`} onClick={() => markDone(p)} title={p.doneAt ? `marked done ${p.doneAt.slice(0, 16).replace("T", " ")}` : "mark it done without ticking every platform"}>
+            {p.doneAt ? "✔ Done" : "Done"}
+          </button>
         </div>
         {editing ? (
           <div className="qedit">
@@ -209,10 +262,10 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
       <div>
         {days.map(({ day, posts }) => {
           const past = day < now;
-          const empties = Math.max(0, s.slotsPerDay - posts.length);
+          const free = Array.from({ length: s.slotsPerDay }, (_, i) => i).filter((i) => !posts.some((p) => p.slot === i));
           if (past && posts.every(isDone) && !showDone) return null;
           return (
-            <div className={`qday${day === now ? " today" : past ? " past" : ""}`} key={day}>
+            <div className={`qday${day === now ? " today" : past ? " past" : ""}`} key={day} {...(dragging ? dropOn(day, freeSlot(day, dragging)) : {})}>
               <div className="qdate">
                 {fmtDay(day)}
                 <div className="small muted">{day === now ? "today" : past ? "overdue" : `in ${dayDiff(now, day)} day${dayDiff(now, day) === 1 ? "" : "s"}`}</div>
@@ -220,9 +273,10 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
               <div className="qslots">
                 {posts.map(slotView)}
                 {!past
-                  ? Array.from({ length: empties }, (_, i) => (
-                      <div className="qslot empty" key={`e${i}`}>
-                        <span className="label">{s.slotLabels[posts.length + i] ?? `slot ${posts.length + i + 1}`}</span>
+                  ? free.map((i) => (
+                      <div className={`qslot empty${over === `${day}/${i}` ? " over" : ""}`} key={`e${i}`} {...dropOn(day, i)}>
+                        <span />
+                        <span className="label">{s.slotLabels[i] ?? `slot ${i + 1}`}</span>
                         <span />
                         <span className="small">empty</span>
                         <span />
@@ -237,6 +291,19 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
       <label className="small muted">
         <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> show days that are all done
       </label>
+      {playing ? (
+        <div className="modal-back" onClick={() => setPlaying(null)}>
+          <div className="qpreview" onClick={(e) => e.stopPropagation()}>
+            <div className="row between">
+              <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{playing.name}</strong>
+              <button className="ghost small" onClick={() => setPlaying(null)}>
+                Close
+              </button>
+            </div>
+            <video src={api.renderUrl(playing.slug)} controls autoPlay />
+          </div>
+        </div>
+      ) : null}
       <div className="small muted">Stored in {game.rendersDir}/schedule.json. Deleting a render takes it out of the queue.</div>
     </div>
   );

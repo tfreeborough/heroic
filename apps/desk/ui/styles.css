@@ -137,9 +137,16 @@ button.link.small { font-size: 13px; font-weight: 500; }
 .qdate { font-weight: 700; line-height: 1.3; }
 .qdate .small { font-weight: 500; }
 .qslots { display: flex; flex-direction: column; gap: 8px; }
-.qslot { display: grid; grid-template-columns: 82px 64px 1fr auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-height: 58px; }
+.qslot { display: grid; grid-template-columns: 14px 82px 64px 1fr auto; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-height: 58px; }
 .qslot.empty { background: transparent; border-style: dashed; color: var(--steel); }
 .qslot.done { opacity: 0.55; }
+.qslot.dragging { opacity: 0.35; }
+.qslot.over { border-color: var(--sand); border-style: solid; box-shadow: 0 0 0 1px var(--sand); }
+.qhandle { cursor: grab; color: var(--steel); font-size: 18px; line-height: 1; user-select: none; text-align: center; }
+.qhandle:hover { color: var(--sand); }
+.qhandle:active { cursor: grabbing; }
+.qpreview { background: var(--night); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; max-height: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.qpreview video { height: min(78vh, 900px); max-width: 100%; aspect-ratio: 9 / 16; background: var(--ink); border-radius: 8px; }
 .qslot .label { font-size: 12px; font-weight: 600; color: var(--steel); text-transform: uppercase; letter-spacing: 1px; }
 .qslot img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; background: var(--ink); cursor: pointer; }
 .qslot .what { min-width: 0; display: flex; flex-direction: column; gap: 2px; }

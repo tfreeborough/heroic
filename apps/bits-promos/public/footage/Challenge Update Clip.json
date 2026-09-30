@@ -1,0 +1,43 @@
+{
+  "file": "Challenge Update Clip.mp4",
+  "facts": {
+    "seconds": 130.54,
+    "width": 720,
+    "height": 1496,
+    "fps": 60,
+    "recordedAt": "2026-09-29T10:06:11",
+    "bytes": 33442737
+  },
+  "title": "",
+  "line": "",
+  "note": "Me giving an update on the challenges update with some background footage",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Record_2026-09-29-11-02-43_cc36c1c9b1ca14a83351bc515c4a537f.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 0,
+        "end": 25.532
+      },
+      {
+        "start": 42.794,
+        "end": 63.607
+      },
+      {
+        "start": 78.541,
+        "end": 108.496
+      },
+      {
+        "start": 133.207,
+        "end": 188.649
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.4,
+    "cropTop": 0,
+    "cropBottom": 0.055,
+    "muted": false
+  }
+}

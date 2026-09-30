@@ -86,7 +86,8 @@ export const gameApi = (game: string) => {
     scheduleSettings: (patch: { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] }) =>
       fetch(`${base}/schedule`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Schedule>(r)),
     reflow: () => post(`${base}/schedule/reflow`).then((r) => j<Schedule>(r)),
-    updatePost: (id: string, patch: Partial<Pick<Post, "day" | "slot" | "title" | "description" | "posted">>) =>
+    move: (id: string, day: string, slot: number) => post(`${base}/schedule/${enc(id)}/move`, { day, slot }).then((r) => j<Schedule>(r)),
+    updatePost: (id: string, patch: Partial<Pick<Post, "day" | "slot" | "title" | "description" | "posted">> & { doneAt?: string | null }) =>
       fetch(`${base}/schedule/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Schedule>(r)),
     ignore: (batch: string, ignored: boolean) =>
       fetch(`${base}/batches/${enc(batch)}/ignore`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ignored }) }).then((r) => j<Schedule>(r)),

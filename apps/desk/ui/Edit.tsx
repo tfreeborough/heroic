@@ -603,20 +603,20 @@ export const Edit: React.FC<{ game: GameInfo; api: GameApi; file: string; from?:
   const setSlide = (seconds: number) => snapRef.current && recutTo(snapRef.current.track, Math.max(0.1, seconds || 0.4));
 
   // ── edits: the voice ──
-  const splitVoice = (exact = false) => {
+  const splitVoice = (toGap = false) => {
     const cur = snapRef.current;
     if (!cur) return;
     const i = pieceAt(cur.vo.pieces, t);
     const p = cur.vo.pieces[i];
     if (!p) return setMsg("Put the playhead on a piece of voice to split it.");
-    const at = exact ? t : snapToGap(p, cur.vo.takes[p.take], t);
+    const at = toGap ? snapToGap(p, cur.vo.takes[p.take], t) : t;
     const next = splitPiece(cur.vo.pieces, at);
     if (next === cur.vo.pieces) return;
     commit({ ...cur, vo: { ...cur.vo, pieces: next } });
     setPicked({ piece: i + 1 });
     if (at !== t) seek(at);
   };
-  const split = (exact = false) => (row === "voice" ? splitVoice(exact) : splitFootage());
+  const split = (toGap = false) => (row === "voice" ? splitVoice(toGap) : splitFootage());
   const remove = () => {
     const cur = snapRef.current;
     if (!cur || !picked) return;
@@ -912,7 +912,7 @@ export const Edit: React.FC<{ game: GameInfo; api: GameApi; file: string; from?:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pxPerSec, seek, setSnap, srcTotal, total, FPS]);
 
-  // Keys: space play/pause · R record/stop · S split (⌥S exact) · Delete · ⌘Z · ← → nudge
+  // Keys: space play/pause · R record/stop · S split (⌥S: voice between words) · Delete · ⌘Z · ← → nudge
   useEffect(() => {
     // Typing somewhere: the keys are the field's. A tick box or a button that
     // happens to have the focus is not typing, and mustn't swallow the space bar.
@@ -978,6 +978,13 @@ export const Edit: React.FC<{ game: GameInfo; api: GameApi; file: string; from?:
   }, [words, pxPerSec]);
   const mine = useMemo(() => voices.filter((v) => v.clip === voiceClip), [voices, voiceClip]);
   const stripFrames = Math.max(24, Math.min(96, Math.ceil(srcTotal / 0.75)));
+  // Zoomed in, the coarse strip stretches one picture over seconds of footage and you split by a stale frame.
+  // Ask for one frame per thumbnail's width (in doubling steps, so the wheel doesn't refetch every tick),
+  // layered over the coarse strip so something shows while it's made.
+  const aspect = source ? (source.facts.width || 9) / (source.facts.height || 16) : 9 / 16;
+  const wantFrames = Math.ceil((srcTotal * pxPerSec) / (ROW.clip * aspect));
+  const denseFrames = Math.min(1024, 2 ** Math.ceil(Math.log2(Math.max(1, wantFrames))));
+  const stripImage = source ? [...(denseFrames > stripFrames ? [denseFrames] : []), stripFrames].map((n) => `url("${api.clipStrip(source.file, n)}")`).join(", ") : undefined;
 
   if (preview === null) return <div className="panel muted">This game's templates can't preview an edit yet: its desk.templates.ts needs a VOICE_PREVIEW.</div>;
   if (!source || !snap || !vo || !inputProps || !preview) return <div className="muted">{msg || "loading…"}</div>;
@@ -1326,7 +1333,7 @@ export const Edit: React.FC<{ game: GameInfo; api: GameApi; file: string; from?:
             <button className="small" disabled={locked} onClick={(e) => (playing ? pause() : play(e))}>
               {playing ? "❚❚ Pause" : "▶ Play"}
             </button>
-            <button className="small ghost" disabled={locked || (row === "voice" && pieceAt(pieces, t) < 0)} onClick={() => split()} title="S. Splits the row you last clicked in. On the voice it lands between words (⌥S: exactly at the playhead).">
+            <button className="small ghost" disabled={locked || (row === "voice" && pieceAt(pieces, t) < 0)} onClick={() => split()} title="S. Splits the row you last clicked in. Exactly at the playhead (⌥S on the voice: the nearest gap between words).">
               Split the {row} at the playhead
             </button>
             <button className="small ghost" disabled={locked || !picked} onClick={remove} title="Delete">
@@ -1379,7 +1386,7 @@ export const Edit: React.FC<{ game: GameInfo; api: GameApi; file: string; from?:
                       style={{
                         left: pct(b.out),
                         width: pct(b.end - b.out),
-                        backgroundImage: `url("${api.clipStrip(source.file, stripFrames)}")`,
+                        backgroundImage: stripImage,
                         backgroundSize: `${srcTotal * pxPerSec}px 100%`,
                         backgroundPosition: `${-p.start * pxPerSec}px 0`,
                       }}

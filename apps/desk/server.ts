@@ -19,9 +19,8 @@ import { type CleanupSpec, cleanupClip, ffprobe, filmstripAsync, thumbnail } fro
 import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip, syncFootage, trashClip, writeSidecar } from "./lib/footage";
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
-import type { Platform, Post } from "./lib/schedule";
 import { hasClaude } from "./lib/draft";
-import { pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
+import { type PostPatch, movePost, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
 import { type VoiceOver, voiceId } from "@heroic/voiceover";
 import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, saveTake, transcribeTake, voicePath, writeVoice } from "./lib/voice";
@@ -33,6 +32,12 @@ const json = (data: unknown, status = 200) => Response.json(data, { status });
 const fail = (e: unknown, status = 500) => json({ error: (e as Error).message ?? String(e) }, status);
 const safeName = (name: string) => basename(name); // never walk out of a folder
 
+/** Most bytes one Range reply carries. An open-ended `bytes=N-` on a 200 MB
+ * recording otherwise streams to the end: Chrome parks those half-read
+ * streams, several <video>s use up its 6 connections, and a seek back dies
+ * with PIPELINE_ERROR_READ. Short replies make it ask again as it goes. */
+const RANGE_CHUNK = 4 * 1024 * 1024;
+
 /** A file response that honours Range, so <video> can seek. */
 const file = (path: string, req?: Request): Response => {
   if (!existsSync(path) || !statSync(path).isFile()) return new Response("not found", { status: 404 });
@@ -41,7 +46,7 @@ const file = (path: string, req?: Request): Response => {
   const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
   if (!m) return new Response(f, { headers: { "Accept-Ranges": "bytes" } });
   const start = m[1] ? Number(m[1]) : Math.max(0, f.size - Number(m[2]));
-  const end = m[1] && m[2] ? Math.min(Number(m[2]), f.size - 1) : f.size - 1;
+  const end = Math.min(m[1] && m[2] ? Number(m[2]) : f.size - 1, f.size - 1, start + RANGE_CHUNK - 1);
   if (start > end || start >= f.size) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${f.size}` } });
   return new Response(f.slice(start, end + 1), {
     status: 206,
@@ -118,12 +123,15 @@ const server = Bun.serve({
       }),
     },
     "/api/:game/clips/:file/strip": {
-      /** `?frames=` = how many frames across the whole recording (24–96): the editor asks for more on a long one. */
+      /** `?frames=` = how many frames across the whole recording: the editor asks for more on a long one, and more again zoomed in.
+       * Capped so the tiled JPEG stays under its 65,535px width limit. */
       GET: withGame(async (g, req) => {
         const name = safeName(decodeURIComponent(req.params.file!));
         const side = readSidecar(g, name);
         if (!side) return json({ error: "no such clip" }, 404);
-        const frames = Math.max(24, Math.min(96, Math.round(Number(new URL(req.url).searchParams.get("frames")) || 24)));
+        const tileWidth = (120 * (side.facts.width || 9)) / (side.facts.height || 16);
+        const most = Math.max(24, Math.min(1024, Math.floor(60000 / tileWidth)));
+        const frames = Math.max(24, Math.min(most, Math.round(Number(new URL(req.url).searchParams.get("frames")) || 24)));
         try {
           return file(await filmstripAsync(join(footageDir(g), name), side.facts.seconds, frames, 120, req.signal));
         } catch (e) {
@@ -318,6 +326,17 @@ const server = Bun.serve({
       PUT: withGame(async (g, req) => json(updateSettings(g, (await req.json()) as { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] }))),
     },
     "/api/:game/schedule/reflow": { POST: withGame((g) => json(reflow(g))) },
+    /** Dragged to another day/slot; whatever was there swaps places with it. */
+    "/api/:game/schedule/:id/move": {
+      POST: withGame(async (g, req) => {
+        try {
+          const body = (await req.json()) as { day: string; slot: number };
+          return json(movePost(g, req.params.id!, body.day, body.slot));
+        } catch (e) {
+          return fail(e, 404);
+        }
+      }),
+    },
     "/api/:game/schedule/:id/draft": {
       POST: withGame(async (g, req) => {
         try {
@@ -334,7 +353,7 @@ const server = Bun.serve({
     "/api/:game/schedule/:id": {
       PUT: withGame(async (g, req) => {
         try {
-          return json(updatePost(g, req.params.id!, (await req.json()) as Partial<Pick<Post, "day" | "slot" | "title" | "description"> & { posted: Partial<Record<Platform, string>> }>));
+          return json(updatePost(g, req.params.id!, (await req.json()) as PostPatch));
         } catch (e) {
           return fail(e, 404);
         }

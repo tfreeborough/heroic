@@ -69,7 +69,7 @@ export const VoiceTrack: React.FC<{ voice: VoiceOver; pieces: Piece[]; volume?: 
   const volume = asked * Math.max(0, Math.min(1, voice.volume ?? 1));
   return (
     <>
-      {pieces.map((p, i) => {
+      {pieces.map((p) => {
         const take = voice.takes[p.take];
         if (!take) return null;
         const from = Math.round(p.at * fps);
@@ -77,8 +77,12 @@ export const VoiceTrack: React.FC<{ voice: VoiceOver; pieces: Piece[]; volume?: 
         if (frames < 1) return null;
         const fade = Math.min(2, Math.floor(frames / 2));
         const level = fade ? (f: number) => volume * interpolate(f, [0, fade, frames - fade, frames], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : volume;
+        // Keyed by exactly what the Player's shared audio tags key it by (file, from, length). A new
+        // <Audio> with the same id as one still mounted borrows its tag, then loses it when the old
+        // one unmounts: that piece plays silence until a reload. Index or sub-frame keys did that on
+        // every split (later pieces shift index) and every small drag.
         return (
-          <Sequence key={`${p.take}-${p.start}-${p.at}-${i}`} from={from} durationInFrames={frames} layout="none">
+          <Sequence key={`${take.file}-${from}-${frames}`} from={from} durationInFrames={frames} layout="none">
             <Audio src={staticFile(take.file)} startFrom={Math.round(p.start * fps)} volume={level} />
           </Sequence>
         );
