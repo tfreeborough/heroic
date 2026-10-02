@@ -1,0 +1,6091 @@
+{
+ "id": "ranked-explainer",
+ "clip": "Ranked explainer.mp4",
+ "takes": [
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-1.n2v1.wav",
+   "seconds": 10.181,
+   "recordedAt": "2026-10-01T21:48:05.768Z",
+   "words": [
+    {
+     "text": "Hello,",
+     "start": 0.7,
+     "end": 1.089
+    },
+    {
+     "text": "my",
+     "start": 1.089,
+     "end": 1.232
+    },
+    {
+     "text": "name's",
+     "start": 1.232,
+     "end": 1.605
+    },
+    {
+     "text": "Tom,",
+     "start": 1.605,
+     "end": 1.85
+    },
+    {
+     "text": "the",
+     "start": 1.85,
+     "end": 2.084
+    },
+    {
+     "text": "solo",
+     "start": 2.084,
+     "end": 2.392
+    },
+    {
+     "text": "indie",
+     "start": 2.392,
+     "end": 2.765
+    },
+    {
+     "text": "developer",
+     "start": 2.765,
+     "end": 3.393
+    },
+    {
+     "text": "for",
+     "start": 3.393,
+     "end": 3.638
+    },
+    {
+     "text": "my",
+     "start": 3.638,
+     "end": 3.819
+    },
+    {
+     "text": "mobile",
+     "start": 3.819,
+     "end": 4.213
+    },
+    {
+     "text": "game",
+     "start": 4.213,
+     "end": 4.511
+    },
+    {
+     "text": "Blood",
+     "start": 4.511,
+     "end": 4.883
+    },
+    {
+     "text": "in",
+     "start": 4.883,
+     "end": 5.053
+    },
+    {
+     "text": "the",
+     "start": 5.053,
+     "end": 5.277
+    },
+    {
+     "text": "Sand,",
+     "start": 5.277,
+     "end": 5.575
+    },
+    {
+     "text": "and",
+     "start": 6.03,
+     "end": 6.218
+    },
+    {
+     "text": "I'm",
+     "start": 6.218,
+     "end": 6.357
+    },
+    {
+     "text": "here",
+     "start": 6.357,
+     "end": 6.455
+    },
+    {
+     "text": "today",
+     "start": 6.455,
+     "end": 6.741
+    },
+    {
+     "text": "to",
+     "start": 6.741,
+     "end": 6.872
+    },
+    {
+     "text": "talk",
+     "start": 6.872,
+     "end": 7.076
+    },
+    {
+     "text": "to",
+     "start": 7.076,
+     "end": 7.191
+    },
+    {
+     "text": "you",
+     "start": 7.191,
+     "end": 7.363
+    },
+    {
+     "text": "about",
+     "start": 7.363,
+     "end": 7.649
+    },
+    {
+     "text": "the",
+     "start": 7.649,
+     "end": 7.829
+    },
+    {
+     "text": "ranked",
+     "start": 7.829,
+     "end": 8.164
+    },
+    {
+     "text": "system",
+     "start": 8.164,
+     "end": 8.507
+    },
+    {
+     "text": "inside",
+     "start": 8.507,
+     "end": 8.842
+    },
+    {
+     "text": "of",
+     "start": 8.842,
+     "end": 8.981
+    },
+    {
+     "text": "the",
+     "start": 8.981,
+     "end": 9.108
+    },
+    {
+     "text": "game.",
+     "start": 9.108,
+     "end": 9.345
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-2.n2v1.wav",
+   "seconds": 11.029,
+   "recordedAt": "2026-10-01T21:48:42.908Z",
+   "words": [
+    {
+     "text": "Hi",
+     "start": 0.63,
+     "end": 0.767
+    },
+    {
+     "text": "there,",
+     "start": 0.767,
+     "end": 1.051
+    },
+    {
+     "text": "my",
+     "start": 1.051,
+     "end": 1.179
+    },
+    {
+     "text": "name's",
+     "start": 1.179,
+     "end": 1.491
+    },
+    {
+     "text": "Tom,",
+     "start": 1.491,
+     "end": 1.699
+    },
+    {
+     "text": "I'm",
+     "start": 1.699,
+     "end": 1.832
+    },
+    {
+     "text": "the",
+     "start": 1.832,
+     "end": 2.002
+    },
+    {
+     "text": "developer",
+     "start": 2.002,
+     "end": 2.532
+    },
+    {
+     "text": "of",
+     "start": 2.532,
+     "end": 2.693
+    },
+    {
+     "text": "Blood",
+     "start": 2.693,
+     "end": 2.967
+    },
+    {
+     "text": "in",
+     "start": 2.967,
+     "end": 3.1
+    },
+    {
+     "text": "the",
+     "start": 3.1,
+     "end": 3.27
+    },
+    {
+     "text": "Sand,",
+     "start": 3.27,
+     "end": 3.535
+    },
+    {
+     "text": "and",
+     "start": 3.85,
+     "end": 4.066
+    },
+    {
+     "text": "today",
+     "start": 4.066,
+     "end": 4.254
+    },
+    {
+     "text": "I'm",
+     "start": 4.254,
+     "end": 4.404
+    },
+    {
+     "text": "going",
+     "start": 4.404,
+     "end": 4.705
+    },
+    {
+     "text": "to",
+     "start": 4.705,
+     "end": 4.78
+    },
+    {
+     "text": "walk",
+     "start": 4.78,
+     "end": 4.968
+    },
+    {
+     "text": "you",
+     "start": 4.968,
+     "end": 5.137
+    },
+    {
+     "text": "through",
+     "start": 5.137,
+     "end": 5.334
+    },
+    {
+     "text": "how",
+     "start": 5.334,
+     "end": 5.55
+    },
+    {
+     "text": "our",
+     "start": 5.55,
+     "end": 5.719
+    },
+    {
+     "text": "ranked",
+     "start": 5.719,
+     "end": 5.992
+    },
+    {
+     "text": "system",
+     "start": 5.992,
+     "end": 6.33
+    },
+    {
+     "text": "works",
+     "start": 6.33,
+     "end": 6.659
+    },
+    {
+     "text": "and",
+     "start": 6.659,
+     "end": 6.875
+    },
+    {
+     "text": "what",
+     "start": 6.875,
+     "end": 7.034
+    },
+    {
+     "text": "you",
+     "start": 7.034,
+     "end": 7.189
+    },
+    {
+     "text": "can",
+     "start": 7.189,
+     "end": 7.321
+    },
+    {
+     "text": "expect",
+     "start": 7.321,
+     "end": 7.64
+    },
+    {
+     "text": "when",
+     "start": 7.64,
+     "end": 7.866
+    },
+    {
+     "text": "playing",
+     "start": 7.866,
+     "end": 8.176
+    },
+    {
+     "text": "the",
+     "start": 8.176,
+     "end": 8.317
+    },
+    {
+     "text": "game",
+     "start": 8.317,
+     "end": 8.495
+    },
+    {
+     "text": "against",
+     "start": 8.495,
+     "end": 8.805
+    },
+    {
+     "text": "other",
+     "start": 8.805,
+     "end": 9.03
+    },
+    {
+     "text": "players.",
+     "start": 9.03,
+     "end": 9.425
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-3.n2v1.wav",
+   "seconds": 21.371,
+   "recordedAt": "2026-10-01T21:49:26.979Z",
+   "words": [
+    {
+     "text": "Right",
+     "start": 0.84,
+     "end": 1.165
+    },
+    {
+     "text": "off",
+     "start": 1.25,
+     "end": 1.362
+    },
+    {
+     "text": "the",
+     "start": 1.362,
+     "end": 1.49
+    },
+    {
+     "text": "bat,",
+     "start": 1.49,
+     "end": 1.67
+    },
+    {
+     "text": "if",
+     "start": 1.67,
+     "end": 1.758
+    },
+    {
+     "text": "you're",
+     "start": 1.758,
+     "end": 2.014
+    },
+    {
+     "text": "familiar",
+     "start": 2.014,
+     "end": 2.31
+    },
+    {
+     "text": "with",
+     "start": 2.31,
+     "end": 2.486
+    },
+    {
+     "text": "competitive",
+     "start": 2.486,
+     "end": 2.983
+    },
+    {
+     "text": "games,",
+     "start": 2.983,
+     "end": 3.263
+    },
+    {
+     "text": "our",
+     "start": 3.263,
+     "end": 3.391
+    },
+    {
+     "text": "ranked",
+     "start": 3.391,
+     "end": 3.655
+    },
+    {
+     "text": "system",
+     "start": 3.655,
+     "end": 3.943
+    },
+    {
+     "text": "will",
+     "start": 3.943,
+     "end": 4.175
+    },
+    {
+     "text": "feel",
+     "start": 4.24,
+     "end": 4.451
+    },
+    {
+     "text": "very",
+     "start": 4.451,
+     "end": 4.705
+    },
+    {
+     "text": "familiar",
+     "start": 4.75,
+     "end": 5.129
+    },
+    {
+     "text": "to",
+     "start": 5.129,
+     "end": 5.283
+    },
+    {
+     "text": "you.",
+     "start": 5.283,
+     "end": 5.445
+    },
+    {
+     "text": "It",
+     "start": 5.86,
+     "end": 6.13
+    },
+    {
+     "text": "uses",
+     "start": 6.13,
+     "end": 6.42
+    },
+    {
+     "text": "the",
+     "start": 6.42,
+     "end": 6.654
+    },
+    {
+     "text": "standard",
+     "start": 6.654,
+     "end": 7.194
+    },
+    {
+     "text": "ELO",
+     "start": 7.194,
+     "end": 7.428
+    },
+    {
+     "text": "system",
+     "start": 7.428,
+     "end": 7.845
+    },
+    {
+     "text": "and",
+     "start": 8.2,
+     "end": 8.524
+    },
+    {
+     "text": "most",
+     "start": 8.524,
+     "end": 8.932
+    },
+    {
+     "text": "players",
+     "start": 8.932,
+     "end": 9.495
+    },
+    {
+     "text": "have",
+     "start": 9.55,
+     "end": 9.745
+    },
+    {
+     "text": "to",
+     "start": 9.745,
+     "end": 9.835
+    },
+    {
+     "text": "play",
+     "start": 9.835,
+     "end": 10.045
+    },
+    {
+     "text": "10",
+     "start": 10.09,
+     "end": 10.351
+    },
+    {
+     "text": "placement",
+     "start": 10.351,
+     "end": 10.805
+    },
+    {
+     "text": "games",
+     "start": 10.805,
+     "end": 11.074
+    },
+    {
+     "text": "in",
+     "start": 11.074,
+     "end": 11.181
+    },
+    {
+     "text": "order",
+     "start": 11.181,
+     "end": 11.443
+    },
+    {
+     "text": "to",
+     "start": 11.443,
+     "end": 11.55
+    },
+    {
+     "text": "get",
+     "start": 11.55,
+     "end": 11.704
+    },
+    {
+     "text": "their",
+     "start": 11.704,
+     "end": 11.958
+    },
+    {
+     "text": "rating.",
+     "start": 11.958,
+     "end": 12.265
+    },
+    {
+     "text": "The",
+     "start": 12.76,
+     "end": 12.96
+    },
+    {
+     "text": "placement",
+     "start": 12.96,
+     "end": 13.187
+    },
+    {
+     "text": "games",
+     "start": 13.187,
+     "end": 13.475
+    },
+    {
+     "text": "are",
+     "start": 13.475,
+     "end": 13.64
+    },
+    {
+     "text": "there",
+     "start": 13.64,
+     "end": 13.919
+    },
+    {
+     "text": "to",
+     "start": 13.919,
+     "end": 14.067
+    },
+    {
+     "text": "ensure",
+     "start": 14.067,
+     "end": 14.416
+    },
+    {
+     "text": "that",
+     "start": 14.416,
+     "end": 14.625
+    },
+    {
+     "text": "you're",
+     "start": 14.625,
+     "end": 14.93
+    },
+    {
+     "text": "playing",
+     "start": 14.93,
+     "end": 15.34
+    },
+    {
+     "text": "against",
+     "start": 15.34,
+     "end": 15.75
+    },
+    {
+     "text": "a",
+     "start": 15.75,
+     "end": 15.845
+    },
+    {
+     "text": "wide",
+     "start": 15.845,
+     "end": 16.098
+    },
+    {
+     "text": "variety",
+     "start": 16.098,
+     "end": 16.508
+    },
+    {
+     "text": "of",
+     "start": 16.508,
+     "end": 16.656
+    },
+    {
+     "text": "enemies",
+     "start": 16.656,
+     "end": 16.935
+    },
+    {
+     "text": "and",
+     "start": 17.36,
+     "end": 17.631
+    },
+    {
+     "text": "to",
+     "start": 17.631,
+     "end": 17.831
+    },
+    {
+     "text": "ensure",
+     "start": 17.831,
+     "end": 18.301
+    },
+    {
+     "text": "that",
+     "start": 18.301,
+     "end": 18.619
+    },
+    {
+     "text": "you",
+     "start": 18.619,
+     "end": 18.854
+    },
+    {
+     "text": "are",
+     "start": 18.854,
+     "end": 19.125
+    },
+    {
+     "text": "graded",
+     "start": 19.37,
+     "end": 19.858
+    },
+    {
+     "text": "correctly",
+     "start": 19.858,
+     "end": 20.405
+    },
+    {
+     "text": "in",
+     "start": 20.405,
+     "end": 20.648
+    },
+    {
+     "text": "the",
+     "start": 20.648,
+     "end": 20.815
+    },
+    {
+     "text": "correct.",
+     "start": 20.89,
+     "end": 21.005
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-4.n2v1.wav",
+   "seconds": 23.541,
+   "recordedAt": "2026-10-01T21:50:03.295Z",
+   "words": [
+    {
+     "text": "So",
+     "start": 0.56,
+     "end": 0.722
+    },
+    {
+     "text": "firstly",
+     "start": 0.722,
+     "end": 1.113
+    },
+    {
+     "text": "it's",
+     "start": 1.113,
+     "end": 1.338
+    },
+    {
+     "text": "worth",
+     "start": 1.338,
+     "end": 1.681
+    },
+    {
+     "text": "mentioning",
+     "start": 1.681,
+     "end": 2.318
+    },
+    {
+     "text": "that",
+     "start": 2.318,
+     "end": 2.631
+    },
+    {
+     "text": "I",
+     "start": 2.631,
+     "end": 2.783
+    },
+    {
+     "text": "support",
+     "start": 2.783,
+     "end": 3.292
+    },
+    {
+     "text": "1v1",
+     "start": 3.292,
+     "end": 3.86
+    },
+    {
+     "text": "and",
+     "start": 3.86,
+     "end": 4.085
+    },
+    {
+     "text": "2v2",
+     "start": 4.13,
+     "end": 4.674
+    },
+    {
+     "text": "ranked",
+     "start": 4.674,
+     "end": 5.079
+    },
+    {
+     "text": "modes",
+     "start": 5.079,
+     "end": 5.425
+    },
+    {
+     "text": "and",
+     "start": 5.86,
+     "end": 6.216
+    },
+    {
+     "text": "each",
+     "start": 6.216,
+     "end": 6.422
+    },
+    {
+     "text": "of",
+     "start": 6.422,
+     "end": 6.534
+    },
+    {
+     "text": "these",
+     "start": 6.534,
+     "end": 6.671
+    },
+    {
+     "text": "carry",
+     "start": 6.671,
+     "end": 6.972
+    },
+    {
+     "text": "their",
+     "start": 6.972,
+     "end": 7.246
+    },
+    {
+     "text": "own",
+     "start": 7.246,
+     "end": 7.435
+    },
+    {
+     "text": "separate",
+     "start": 7.49,
+     "end": 7.874
+    },
+    {
+     "text": "ratings.",
+     "start": 7.874,
+     "end": 8.235
+    },
+    {
+     "text": "In",
+     "start": 8.85,
+     "end": 9.002
+    },
+    {
+     "text": "order",
+     "start": 9.002,
+     "end": 9.271
+    },
+    {
+     "text": "to",
+     "start": 9.271,
+     "end": 9.419
+    },
+    {
+     "text": "get",
+     "start": 9.419,
+     "end": 9.58
+    },
+    {
+     "text": "a",
+     "start": 9.58,
+     "end": 9.692
+    },
+    {
+     "text": "rating",
+     "start": 9.692,
+     "end": 9.979
+    },
+    {
+     "text": "you",
+     "start": 9.979,
+     "end": 10.185
+    },
+    {
+     "text": "will",
+     "start": 10.185,
+     "end": 10.329
+    },
+    {
+     "text": "need",
+     "start": 10.329,
+     "end": 10.535
+    },
+    {
+     "text": "to",
+     "start": 10.59,
+     "end": 10.662
+    },
+    {
+     "text": "play",
+     "start": 10.662,
+     "end": 10.805
+    },
+    {
+     "text": "10",
+     "start": 10.86,
+     "end": 11.154
+    },
+    {
+     "text": "ranked",
+     "start": 11.154,
+     "end": 11.485
+    },
+    {
+     "text": "placement",
+     "start": 11.54,
+     "end": 11.991
+    },
+    {
+     "text": "matches",
+     "start": 11.991,
+     "end": 12.39
+    },
+    {
+     "text": "against",
+     "start": 12.39,
+     "end": 12.763
+    },
+    {
+     "text": "other",
+     "start": 12.763,
+     "end": 13.023
+    },
+    {
+     "text": "players",
+     "start": 13.023,
+     "end": 13.405
+    },
+    {
+     "text": "and",
+     "start": 13.86,
+     "end": 14.12
+    },
+    {
+     "text": "you",
+     "start": 14.12,
+     "end": 14.278
+    },
+    {
+     "text": "will",
+     "start": 14.278,
+     "end": 14.498
+    },
+    {
+     "text": "get",
+     "start": 14.498,
+     "end": 14.746
+    },
+    {
+     "text": "placed",
+     "start": 14.746,
+     "end": 15.208
+    },
+    {
+     "text": "into",
+     "start": 15.208,
+     "end": 15.547
+    },
+    {
+     "text": "a",
+     "start": 15.547,
+     "end": 15.671
+    },
+    {
+     "text": "standard",
+     "start": 15.671,
+     "end": 16.269
+    },
+    {
+     "text": "ELO",
+     "start": 16.269,
+     "end": 16.551
+    },
+    {
+     "text": "rating",
+     "start": 16.551,
+     "end": 16.912
+    },
+    {
+     "text": "system.",
+     "start": 16.912,
+     "end": 17.375
+    },
+    {
+     "text": "Typically",
+     "start": 17.73,
+     "end": 18.216
+    },
+    {
+     "text": "this",
+     "start": 18.216,
+     "end": 18.488
+    },
+    {
+     "text": "would",
+     "start": 18.488,
+     "end": 18.806
+    },
+    {
+     "text": "be",
+     "start": 18.806,
+     "end": 18.965
+    },
+    {
+     "text": "somewhere",
+     "start": 18.965,
+     "end": 19.517
+    },
+    {
+     "text": "between",
+     "start": 19.517,
+     "end": 19.956
+    },
+    {
+     "text": "14",
+     "start": 19.956,
+     "end": 20.256
+    },
+    {
+     "text": "to",
+     "start": 20.256,
+     "end": 20.415
+    },
+    {
+     "text": "1600",
+     "start": 20.415,
+     "end": 20.882
+    },
+    {
+     "text": "after",
+     "start": 20.882,
+     "end": 21.21
+    },
+    {
+     "text": "your",
+     "start": 21.21,
+     "end": 21.453
+    },
+    {
+     "text": "first",
+     "start": 21.453,
+     "end": 21.781
+    },
+    {
+     "text": "10",
+     "start": 21.781,
+     "end": 21.968
+    },
+    {
+     "text": "games.",
+     "start": 21.968,
+     "end": 22.295
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-5.n2v1.wav",
+   "seconds": 7.856,
+   "recordedAt": "2026-10-01T21:50:19.000Z",
+   "words": [
+    {
+     "text": "Like",
+     "start": 0.92,
+     "end": 1.182
+    },
+    {
+     "text": "with",
+     "start": 1.182,
+     "end": 1.347
+    },
+    {
+     "text": "other",
+     "start": 1.347,
+     "end": 1.531
+    },
+    {
+     "text": "competitive",
+     "start": 1.531,
+     "end": 2.094
+    },
+    {
+     "text": "games",
+     "start": 2.094,
+     "end": 2.434
+    },
+    {
+     "text": "like",
+     "start": 2.434,
+     "end": 2.715
+    },
+    {
+     "text": "League",
+     "start": 2.715,
+     "end": 3.084
+    },
+    {
+     "text": "of",
+     "start": 3.084,
+     "end": 3.24
+    },
+    {
+     "text": "Legends,",
+     "start": 3.24,
+     "end": 3.667
+    },
+    {
+     "text": "Dota,",
+     "start": 3.667,
+     "end": 3.919
+    },
+    {
+     "text": "Smite,",
+     "start": 3.919,
+     "end": 4.22
+    },
+    {
+     "text": "things",
+     "start": 4.22,
+     "end": 4.55
+    },
+    {
+     "text": "like",
+     "start": 4.55,
+     "end": 4.763
+    },
+    {
+     "text": "that,",
+     "start": 4.763,
+     "end": 5.035
+    },
+    {
+     "text": "you",
+     "start": 5.52,
+     "end": 5.699
+    },
+    {
+     "text": "are",
+     "start": 5.699,
+     "end": 5.906
+    },
+    {
+     "text": "given",
+     "start": 5.906,
+     "end": 6.31
+    },
+    {
+     "text": "a",
+     "start": 6.31,
+     "end": 6.437
+    },
+    {
+     "text": "rank,",
+     "start": 6.437,
+     "end": 6.875
+    },
+    {
+     "text": "let's",
+     "start": 7.33,
+     "end": 7.685
+    },
+    {
+     "text": "say.",
+     "start": 7.685,
+     "end": 7.855
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-6.n2v1.wav",
+   "seconds": 39.291,
+   "recordedAt": "2026-10-01T21:51:11.027Z",
+   "words": [
+    {
+     "text": "Like",
+     "start": 0.85,
+     "end": 1.114
+    },
+    {
+     "text": "other",
+     "start": 1.114,
+     "end": 1.415
+    },
+    {
+     "text": "competitive",
+     "start": 1.415,
+     "end": 1.923
+    },
+    {
+     "text": "games,",
+     "start": 1.923,
+     "end": 2.253
+    },
+    {
+     "text": "you",
+     "start": 2.253,
+     "end": 2.455
+    },
+    {
+     "text": "are",
+     "start": 2.455,
+     "end": 2.644
+    },
+    {
+     "text": "given",
+     "start": 2.644,
+     "end": 2.954
+    },
+    {
+     "text": "a",
+     "start": 2.954,
+     "end": 3.058
+    },
+    {
+     "text": "rank",
+     "start": 3.058,
+     "end": 3.322
+    },
+    {
+     "text": "alongside",
+     "start": 3.322,
+     "end": 3.877
+    },
+    {
+     "text": "your",
+     "start": 3.877,
+     "end": 4.122
+    },
+    {
+     "text": "ELO",
+     "start": 4.122,
+     "end": 4.338
+    },
+    {
+     "text": "rating.",
+     "start": 4.338,
+     "end": 4.715
+    },
+    {
+     "text": "In",
+     "start": 5.03,
+     "end": 5.114
+    },
+    {
+     "text": "Blood",
+     "start": 5.114,
+     "end": 5.357
+    },
+    {
+     "text": "in",
+     "start": 5.357,
+     "end": 5.506
+    },
+    {
+     "text": "the",
+     "start": 5.506,
+     "end": 5.618
+    },
+    {
+     "text": "Sand,",
+     "start": 5.618,
+     "end": 5.842
+    },
+    {
+     "text": "I",
+     "start": 5.842,
+     "end": 6.029
+    },
+    {
+     "text": "chose",
+     "start": 6.029,
+     "end": 6.29
+    },
+    {
+     "text": "to",
+     "start": 6.29,
+     "end": 6.421
+    },
+    {
+     "text": "just",
+     "start": 6.421,
+     "end": 6.608
+    },
+    {
+     "text": "show",
+     "start": 6.608,
+     "end": 6.794
+    },
+    {
+     "text": "you",
+     "start": 6.794,
+     "end": 6.925
+    },
+    {
+     "text": "both,",
+     "start": 7.33,
+     "end": 7.583
+    },
+    {
+     "text": "so",
+     "start": 7.583,
+     "end": 7.753
+    },
+    {
+     "text": "you",
+     "start": 7.753,
+     "end": 7.884
+    },
+    {
+     "text": "can",
+     "start": 7.884,
+     "end": 8.015
+    },
+    {
+     "text": "actually",
+     "start": 8.015,
+     "end": 8.381
+    },
+    {
+     "text": "see",
+     "start": 8.381,
+     "end": 8.521
+    },
+    {
+     "text": "your",
+     "start": 8.521,
+     "end": 8.704
+    },
+    {
+     "text": "raw",
+     "start": 8.704,
+     "end": 8.896
+    },
+    {
+     "text": "rating",
+     "start": 8.896,
+     "end": 9.227
+    },
+    {
+     "text": "and",
+     "start": 9.227,
+     "end": 9.428
+    },
+    {
+     "text": "the",
+     "start": 9.428,
+     "end": 9.585
+    },
+    {
+     "text": "rank",
+     "start": 9.585,
+     "end": 9.795
+    },
+    {
+     "text": "that",
+     "start": 9.795,
+     "end": 9.978
+    },
+    {
+     "text": "it",
+     "start": 9.978,
+     "end": 10.065
+    },
+    {
+     "text": "corresponds",
+     "start": 10.13,
+     "end": 10.527
+    },
+    {
+     "text": "to,",
+     "start": 10.527,
+     "end": 10.645
+    },
+    {
+     "text": "and",
+     "start": 11.19,
+     "end": 11.397
+    },
+    {
+     "text": "all",
+     "start": 11.397,
+     "end": 11.56
+    },
+    {
+     "text": "this",
+     "start": 11.56,
+     "end": 11.749
+    },
+    {
+     "text": "does",
+     "start": 11.749,
+     "end": 11.929
+    },
+    {
+     "text": "is",
+     "start": 11.929,
+     "end": 12.082
+    },
+    {
+     "text": "determine",
+     "start": 12.082,
+     "end": 12.515
+    },
+    {
+     "text": "the",
+     "start": 12.515,
+     "end": 12.722
+    },
+    {
+     "text": "sort",
+     "start": 12.722,
+     "end": 12.939
+    },
+    {
+     "text": "of",
+     "start": 12.939,
+     "end": 13.065
+    },
+    {
+     "text": "players",
+     "start": 13.11,
+     "end": 13.476
+    },
+    {
+     "text": "you",
+     "start": 13.476,
+     "end": 13.62
+    },
+    {
+     "text": "get",
+     "start": 13.62,
+     "end": 13.736
+    },
+    {
+     "text": "matched",
+     "start": 13.736,
+     "end": 14.054
+    },
+    {
+     "text": "up",
+     "start": 14.054,
+     "end": 14.218
+    },
+    {
+     "text": "against",
+     "start": 14.218,
+     "end": 14.564
+    },
+    {
+     "text": "when",
+     "start": 14.564,
+     "end": 14.757
+    },
+    {
+     "text": "you",
+     "start": 14.757,
+     "end": 14.911
+    },
+    {
+     "text": "play",
+     "start": 14.911,
+     "end": 15.123
+    },
+    {
+     "text": "ranked.",
+     "start": 15.123,
+     "end": 15.431
+    },
+    {
+     "text": "So,",
+     "start": 15.431,
+     "end": 15.595
+    },
+    {
+     "text": "naturally,",
+     "start": 15.95,
+     "end": 16.397
+    },
+    {
+     "text": "if",
+     "start": 16.397,
+     "end": 16.57
+    },
+    {
+     "text": "you",
+     "start": 16.57,
+     "end": 16.732
+    },
+    {
+     "text": "are",
+     "start": 16.732,
+     "end": 16.915
+    },
+    {
+     "text": "a",
+     "start": 16.915,
+     "end": 17.042
+    },
+    {
+     "text": "better",
+     "start": 17.042,
+     "end": 17.306
+    },
+    {
+     "text": "player",
+     "start": 17.306,
+     "end": 17.611
+    },
+    {
+     "text": "with",
+     "start": 17.611,
+     "end": 17.835
+    },
+    {
+     "text": "a",
+     "start": 17.835,
+     "end": 17.896
+    },
+    {
+     "text": "higher",
+     "start": 17.896,
+     "end": 18.19
+    },
+    {
+     "text": "rank,",
+     "start": 18.19,
+     "end": 18.485
+    },
+    {
+     "text": "you",
+     "start": 18.54,
+     "end": 18.671
+    },
+    {
+     "text": "will",
+     "start": 18.671,
+     "end": 18.851
+    },
+    {
+     "text": "get",
+     "start": 18.851,
+     "end": 18.982
+    },
+    {
+     "text": "matched",
+     "start": 18.982,
+     "end": 19.294
+    },
+    {
+     "text": "against",
+     "start": 19.294,
+     "end": 19.605
+    },
+    {
+     "text": "better",
+     "start": 19.68,
+     "end": 19.986
+    },
+    {
+     "text": "players,",
+     "start": 19.986,
+     "end": 20.395
+    },
+    {
+     "text": "and",
+     "start": 20.83,
+     "end": 20.975
+    },
+    {
+     "text": "the",
+     "start": 20.975,
+     "end": 21.076
+    },
+    {
+     "text": "queue",
+     "start": 21.076,
+     "end": 21.241
+    },
+    {
+     "text": "will",
+     "start": 21.241,
+     "end": 21.38
+    },
+    {
+     "text": "dynamically",
+     "start": 21.38,
+     "end": 21.765
+    },
+    {
+     "text": "try",
+     "start": 21.82,
+     "end": 22.088
+    },
+    {
+     "text": "to",
+     "start": 22.088,
+     "end": 22.286
+    },
+    {
+     "text": "match",
+     "start": 22.286,
+     "end": 22.565
+    },
+    {
+     "text": "players",
+     "start": 22.66,
+     "end": 23.07
+    },
+    {
+     "text": "as",
+     "start": 23.07,
+     "end": 23.229
+    },
+    {
+     "text": "and",
+     "start": 23.229,
+     "end": 23.313
+    },
+    {
+     "text": "when",
+     "start": 23.313,
+     "end": 23.518
+    },
+    {
+     "text": "they",
+     "start": 23.518,
+     "end": 23.723
+    },
+    {
+     "text": "queue,",
+     "start": 23.723,
+     "end": 23.975
+    },
+    {
+     "text": "so",
+     "start": 24.4,
+     "end": 24.552
+    },
+    {
+     "text": "you",
+     "start": 24.552,
+     "end": 24.757
+    },
+    {
+     "text": "may",
+     "start": 24.757,
+     "end": 24.918
+    },
+    {
+     "text": "find",
+     "start": 24.918,
+     "end": 25.177
+    },
+    {
+     "text": "that",
+     "start": 25.177,
+     "end": 25.373
+    },
+    {
+     "text": "even",
+     "start": 25.373,
+     "end": 25.552
+    },
+    {
+     "text": "if",
+     "start": 25.552,
+     "end": 25.677
+    },
+    {
+     "text": "there",
+     "start": 25.677,
+     "end": 25.918
+    },
+    {
+     "text": "are",
+     "start": 25.918,
+     "end": 26.025
+    },
+    {
+     "text": "players",
+     "start": 26.25,
+     "end": 26.597
+    },
+    {
+     "text": "in",
+     "start": 26.597,
+     "end": 26.691
+    },
+    {
+     "text": "the",
+     "start": 26.691,
+     "end": 26.754
+    },
+    {
+     "text": "queue,",
+     "start": 26.754,
+     "end": 26.975
+    },
+    {
+     "text": "you",
+     "start": 27.08,
+     "end": 27.239
+    },
+    {
+     "text": "may",
+     "start": 27.239,
+     "end": 27.367
+    },
+    {
+     "text": "be",
+     "start": 27.367,
+     "end": 27.495
+    },
+    {
+     "text": "waiting",
+     "start": 27.495,
+     "end": 27.797
+    },
+    {
+     "text": "a",
+     "start": 27.797,
+     "end": 27.885
+    },
+    {
+     "text": "little",
+     "start": 27.885,
+     "end": 28.148
+    },
+    {
+     "text": "while",
+     "start": 28.148,
+     "end": 28.403
+    },
+    {
+     "text": "if",
+     "start": 28.403,
+     "end": 28.539
+    },
+    {
+     "text": "you",
+     "start": 28.539,
+     "end": 28.666
+    },
+    {
+     "text": "are",
+     "start": 28.666,
+     "end": 28.794
+    },
+    {
+     "text": "a",
+     "start": 28.794,
+     "end": 28.874
+    },
+    {
+     "text": "particularly",
+     "start": 28.874,
+     "end": 29.344
+    },
+    {
+     "text": "good",
+     "start": 29.344,
+     "end": 29.575
+    },
+    {
+     "text": "player.",
+     "start": 29.67,
+     "end": 29.955
+    },
+    {
+     "text": "Because",
+     "start": 30.39,
+     "end": 30.75
+    },
+    {
+     "text": "we",
+     "start": 30.75,
+     "end": 30.877
+    },
+    {
+     "text": "are",
+     "start": 30.877,
+     "end": 30.999
+    },
+    {
+     "text": "waiting",
+     "start": 30.999,
+     "end": 31.275
+    },
+    {
+     "text": "for",
+     "start": 31.34,
+     "end": 31.54
+    },
+    {
+     "text": "people",
+     "start": 31.54,
+     "end": 31.836
+    },
+    {
+     "text": "to",
+     "start": 31.836,
+     "end": 31.984
+    },
+    {
+     "text": "basically",
+     "start": 31.984,
+     "end": 32.393
+    },
+    {
+     "text": "get",
+     "start": 32.393,
+     "end": 32.593
+    },
+    {
+     "text": "matched",
+     "start": 32.593,
+     "end": 32.924
+    },
+    {
+     "text": "up",
+     "start": 32.924,
+     "end": 33.063
+    },
+    {
+     "text": "against",
+     "start": 33.063,
+     "end": 33.385
+    },
+    {
+     "text": "you.",
+     "start": 33.385,
+     "end": 33.585
+    },
+    {
+     "text": "As",
+     "start": 34.1,
+     "end": 34.269
+    },
+    {
+     "text": "the",
+     "start": 34.269,
+     "end": 34.497
+    },
+    {
+     "text": "queue",
+     "start": 34.497,
+     "end": 34.844
+    },
+    {
+     "text": "time",
+     "start": 34.844,
+     "end": 35.082
+    },
+    {
+     "text": "goes",
+     "start": 35.082,
+     "end": 35.32
+    },
+    {
+     "text": "on,",
+     "start": 35.32,
+     "end": 35.489
+    },
+    {
+     "text": "we",
+     "start": 35.489,
+     "end": 35.647
+    },
+    {
+     "text": "will",
+     "start": 35.647,
+     "end": 35.935
+    },
+    {
+     "text": "gradually",
+     "start": 36.03,
+     "end": 36.61
+    },
+    {
+     "text": "increase",
+     "start": 36.61,
+     "end": 37.057
+    },
+    {
+     "text": "the",
+     "start": 37.057,
+     "end": 37.247
+    },
+    {
+     "text": "bands",
+     "start": 37.247,
+     "end": 37.537
+    },
+    {
+     "text": "wider",
+     "start": 37.537,
+     "end": 37.835
+    },
+    {
+     "text": "and",
+     "start": 37.835,
+     "end": 38.025
+    },
+    {
+     "text": "wider.",
+     "start": 38.025,
+     "end": 38.315
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-7.n2v1.wav",
+   "seconds": 29.221,
+   "recordedAt": "2026-10-01T21:52:03.423Z",
+   "words": [
+    {
+     "text": "Like",
+     "start": 0.62,
+     "end": 0.861
+    },
+    {
+     "text": "other",
+     "start": 0.861,
+     "end": 1.112
+    },
+    {
+     "text": "competitive",
+     "start": 1.112,
+     "end": 1.558
+    },
+    {
+     "text": "games,",
+     "start": 1.558,
+     "end": 1.882
+    },
+    {
+     "text": "your",
+     "start": 1.882,
+     "end": 2.068
+    },
+    {
+     "text": "rating",
+     "start": 2.068,
+     "end": 2.384
+    },
+    {
+     "text": "is",
+     "start": 2.384,
+     "end": 2.541
+    },
+    {
+     "text": "essentially",
+     "start": 2.541,
+     "end": 3.126
+    },
+    {
+     "text": "who",
+     "start": 3.126,
+     "end": 3.312
+    },
+    {
+     "text": "you",
+     "start": 3.312,
+     "end": 3.47
+    },
+    {
+     "text": "get",
+     "start": 3.47,
+     "end": 3.627
+    },
+    {
+     "text": "matched",
+     "start": 3.627,
+     "end": 3.999
+    },
+    {
+     "text": "against,",
+     "start": 3.999,
+     "end": 4.435
+    },
+    {
+     "text": "so",
+     "start": 4.54,
+     "end": 4.703
+    },
+    {
+     "text": "if",
+     "start": 4.703,
+     "end": 4.9
+    },
+    {
+     "text": "you",
+     "start": 4.9,
+     "end": 5.006
+    },
+    {
+     "text": "are",
+     "start": 5.006,
+     "end": 5.15
+    },
+    {
+     "text": "a",
+     "start": 5.15,
+     "end": 5.256
+    },
+    {
+     "text": "particularly",
+     "start": 5.256,
+     "end": 5.813
+    },
+    {
+     "text": "good",
+     "start": 5.813,
+     "end": 6.044
+    },
+    {
+     "text": "player",
+     "start": 6.044,
+     "end": 6.275
+    },
+    {
+     "text": "with",
+     "start": 6.275,
+     "end": 6.409
+    },
+    {
+     "text": "a",
+     "start": 6.409,
+     "end": 6.486
+    },
+    {
+     "text": "high",
+     "start": 6.486,
+     "end": 6.678
+    },
+    {
+     "text": "rating,",
+     "start": 6.678,
+     "end": 7.005
+    },
+    {
+     "text": "you",
+     "start": 7.44,
+     "end": 7.649
+    },
+    {
+     "text": "may",
+     "start": 7.649,
+     "end": 7.817
+    },
+    {
+     "text": "be",
+     "start": 7.817,
+     "end": 7.971
+    },
+    {
+     "text": "waiting",
+     "start": 7.971,
+     "end": 8.153
+    },
+    {
+     "text": "a",
+     "start": 8.153,
+     "end": 8.253
+    },
+    {
+     "text": "little",
+     "start": 8.253,
+     "end": 8.544
+    },
+    {
+     "text": "bit",
+     "start": 8.544,
+     "end": 8.689
+    },
+    {
+     "text": "longer",
+     "start": 8.689,
+     "end": 8.98
+    },
+    {
+     "text": "in",
+     "start": 8.98,
+     "end": 9.089
+    },
+    {
+     "text": "the",
+     "start": 9.089,
+     "end": 9.234
+    },
+    {
+     "text": "queue",
+     "start": 9.234,
+     "end": 9.47
+    },
+    {
+     "text": "for",
+     "start": 9.47,
+     "end": 9.656
+    },
+    {
+     "text": "us",
+     "start": 9.656,
+     "end": 9.756
+    },
+    {
+     "text": "to",
+     "start": 9.756,
+     "end": 9.847
+    },
+    {
+     "text": "try",
+     "start": 9.847,
+     "end": 10.01
+    },
+    {
+     "text": "and",
+     "start": 10.01,
+     "end": 10.138
+    },
+    {
+     "text": "find",
+     "start": 10.138,
+     "end": 10.337
+    },
+    {
+     "text": "players",
+     "start": 10.337,
+     "end": 10.683
+    },
+    {
+     "text": "of",
+     "start": 10.683,
+     "end": 10.841
+    },
+    {
+     "text": "your",
+     "start": 10.841,
+     "end": 11.023
+    },
+    {
+     "text": "equivalent",
+     "start": 11.023,
+     "end": 11.486
+    },
+    {
+     "text": "skill",
+     "start": 11.486,
+     "end": 11.723
+    },
+    {
+     "text": "level.",
+     "start": 11.723,
+     "end": 11.995
+    },
+    {
+     "text": "If",
+     "start": 12.48,
+     "end": 12.625
+    },
+    {
+     "text": "we",
+     "start": 12.625,
+     "end": 12.728
+    },
+    {
+     "text": "can't",
+     "start": 12.728,
+     "end": 12.968
+    },
+    {
+     "text": "find",
+     "start": 12.968,
+     "end": 13.122
+    },
+    {
+     "text": "anyone,",
+     "start": 13.122,
+     "end": 13.413
+    },
+    {
+     "text": "we",
+     "start": 13.413,
+     "end": 13.507
+    },
+    {
+     "text": "will",
+     "start": 13.507,
+     "end": 13.712
+    },
+    {
+     "text": "gradually",
+     "start": 13.712,
+     "end": 14.192
+    },
+    {
+     "text": "widen",
+     "start": 14.192,
+     "end": 14.491
+    },
+    {
+     "text": "the",
+     "start": 14.491,
+     "end": 14.637
+    },
+    {
+     "text": "bands",
+     "start": 14.637,
+     "end": 14.885
+    },
+    {
+     "text": "until",
+     "start": 14.885,
+     "end": 15.133
+    },
+    {
+     "text": "we",
+     "start": 15.133,
+     "end": 15.236
+    },
+    {
+     "text": "can",
+     "start": 15.236,
+     "end": 15.381
+    },
+    {
+     "text": "find",
+     "start": 15.381,
+     "end": 15.57
+    },
+    {
+     "text": "someone",
+     "start": 15.57,
+     "end": 15.938
+    },
+    {
+     "text": "more",
+     "start": 15.938,
+     "end": 16.126
+    },
+    {
+     "text": "appropriate,",
+     "start": 16.126,
+     "end": 16.665
+    },
+    {
+     "text": "but",
+     "start": 17.14,
+     "end": 17.309
+    },
+    {
+     "text": "just",
+     "start": 17.309,
+     "end": 17.485
+    },
+    {
+     "text": "be",
+     "start": 17.53,
+     "end": 17.707
+    },
+    {
+     "text": "aware",
+     "start": 17.707,
+     "end": 18.04
+    },
+    {
+     "text": "that",
+     "start": 18.04,
+     "end": 18.305
+    },
+    {
+     "text": "if",
+     "start": 18.305,
+     "end": 18.483
+    },
+    {
+     "text": "you",
+     "start": 18.483,
+     "end": 18.682
+    },
+    {
+     "text": "beat",
+     "start": 18.682,
+     "end": 19.003
+    },
+    {
+     "text": "a",
+     "start": 19.003,
+     "end": 19.125
+    },
+    {
+     "text": "1400",
+     "start": 19.69,
+     "end": 20.156
+    },
+    {
+     "text": "rating",
+     "start": 20.156,
+     "end": 20.815
+    },
+    {
+     "text": "player",
+     "start": 20.87,
+     "end": 21.237
+    },
+    {
+     "text": "and",
+     "start": 21.237,
+     "end": 21.41
+    },
+    {
+     "text": "you",
+     "start": 21.41,
+     "end": 21.594
+    },
+    {
+     "text": "are",
+     "start": 21.594,
+     "end": 21.778
+    },
+    {
+     "text": "1800,",
+     "start": 21.778,
+     "end": 22.165
+    },
+    {
+     "text": "your",
+     "start": 22.54,
+     "end": 22.803
+    },
+    {
+     "text": "actual",
+     "start": 22.803,
+     "end": 23.139
+    },
+    {
+     "text": "rating",
+     "start": 23.139,
+     "end": 23.503
+    },
+    {
+     "text": "itself",
+     "start": 23.503,
+     "end": 23.848
+    },
+    {
+     "text": "won't",
+     "start": 23.848,
+     "end": 24.111
+    },
+    {
+     "text": "go",
+     "start": 24.111,
+     "end": 24.238
+    },
+    {
+     "text": "up",
+     "start": 24.238,
+     "end": 24.383
+    },
+    {
+     "text": "by",
+     "start": 24.383,
+     "end": 24.51
+    },
+    {
+     "text": "that",
+     "start": 24.51,
+     "end": 24.638
+    },
+    {
+     "text": "much,",
+     "start": 24.638,
+     "end": 24.91
+    },
+    {
+     "text": "even",
+     "start": 24.91,
+     "end": 25.101
+    },
+    {
+     "text": "though",
+     "start": 25.101,
+     "end": 25.409
+    },
+    {
+     "text": "you",
+     "start": 25.409,
+     "end": 25.573
+    },
+    {
+     "text": "will",
+     "start": 25.573,
+     "end": 25.791
+    },
+    {
+     "text": "still",
+     "start": 25.791,
+     "end": 26.063
+    },
+    {
+     "text": "get",
+     "start": 26.063,
+     "end": 26.236
+    },
+    {
+     "text": "the",
+     "start": 26.236,
+     "end": 26.399
+    },
+    {
+     "text": "same",
+     "start": 26.399,
+     "end": 26.617
+    },
+    {
+     "text": "glory",
+     "start": 26.617,
+     "end": 26.935
+    },
+    {
+     "text": "rewards.",
+     "start": 27.58,
+     "end": 27.649
+    },
+    {
+     "text": "Thank",
+     "start": 27.649,
+     "end": 27.701
+    },
+    {
+     "text": "you.",
+     "start": 27.701,
+     "end": 27.725
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-8.n2v1.wav",
+   "seconds": 26.715,
+   "recordedAt": "2026-10-01T21:52:42.900Z",
+   "words": [
+    {
+     "text": "So,",
+     "start": 0.87,
+     "end": 1.071
+    },
+    {
+     "text": "as",
+     "start": 1.071,
+     "end": 1.246
+    },
+    {
+     "text": "well",
+     "start": 1.246,
+     "end": 1.462
+    },
+    {
+     "text": "as",
+     "start": 1.462,
+     "end": 1.668
+    },
+    {
+     "text": "the",
+     "start": 1.668,
+     "end": 1.905
+    },
+    {
+     "text": "excitement",
+     "start": 1.905,
+     "end": 2.575
+    },
+    {
+     "text": "of",
+     "start": 4.8,
+     "end": 6.165
+    },
+    {
+     "text": "increasing",
+     "start": 6.27,
+     "end": 6.735
+    },
+    {
+     "text": "or",
+     "start": 6.735,
+     "end": 6.899
+    },
+    {
+     "text": "decreasing",
+     "start": 6.899,
+     "end": 7.335
+    },
+    {
+     "text": "your",
+     "start": 7.335,
+     "end": 7.543
+    },
+    {
+     "text": "rating",
+     "start": 7.543,
+     "end": 7.836
+    },
+    {
+     "text": "while",
+     "start": 7.836,
+     "end": 8.086
+    },
+    {
+     "text": "playing",
+     "start": 8.086,
+     "end": 8.422
+    },
+    {
+     "text": "ranked",
+     "start": 8.422,
+     "end": 8.715
+    },
+    {
+     "text": "and",
+     "start": 9.13,
+     "end": 9.35
+    },
+    {
+     "text": "getting",
+     "start": 9.35,
+     "end": 9.502
+    },
+    {
+     "text": "bragging",
+     "start": 9.502,
+     "end": 9.961
+    },
+    {
+     "text": "rights,",
+     "start": 9.961,
+     "end": 10.295
+    },
+    {
+     "text": "one",
+     "start": 10.66,
+     "end": 10.737
+    },
+    {
+     "text": "of",
+     "start": 10.737,
+     "end": 10.9
+    },
+    {
+     "text": "the",
+     "start": 10.9,
+     "end": 10.957
+    },
+    {
+     "text": "main",
+     "start": 10.957,
+     "end": 11.187
+    },
+    {
+     "text": "features",
+     "start": 11.187,
+     "end": 11.666
+    },
+    {
+     "text": "in",
+     "start": 11.666,
+     "end": 11.82
+    },
+    {
+     "text": "Blood",
+     "start": 11.82,
+     "end": 12.126
+    },
+    {
+     "text": "in",
+     "start": 12.126,
+     "end": 12.28
+    },
+    {
+     "text": "the",
+     "start": 12.28,
+     "end": 12.462
+    },
+    {
+     "text": "Sand",
+     "start": 12.462,
+     "end": 12.701
+    },
+    {
+     "text": "is",
+     "start": 12.701,
+     "end": 12.864
+    },
+    {
+     "text": "that",
+     "start": 12.864,
+     "end": 13.104
+    },
+    {
+     "text": "ranked",
+     "start": 13.104,
+     "end": 13.468
+    },
+    {
+     "text": "is",
+     "start": 13.468,
+     "end": 13.631
+    },
+    {
+     "text": "the",
+     "start": 13.631,
+     "end": 13.823
+    },
+    {
+     "text": "main",
+     "start": 13.823,
+     "end": 14.062
+    },
+    {
+     "text": "way",
+     "start": 14.062,
+     "end": 14.273
+    },
+    {
+     "text": "to",
+     "start": 14.273,
+     "end": 14.436
+    },
+    {
+     "text": "earn",
+     "start": 14.436,
+     "end": 14.685
+    },
+    {
+     "text": "glory",
+     "start": 14.685,
+     "end": 15.02
+    },
+    {
+     "text": "in",
+     "start": 15.02,
+     "end": 15.183
+    },
+    {
+     "text": "the",
+     "start": 15.183,
+     "end": 15.356
+    },
+    {
+     "text": "game.",
+     "start": 15.356,
+     "end": 15.605
+    },
+    {
+     "text": "And",
+     "start": 16.02,
+     "end": 16.24
+    },
+    {
+     "text": "glory",
+     "start": 16.24,
+     "end": 16.508
+    },
+    {
+     "text": "is",
+     "start": 16.508,
+     "end": 16.671
+    },
+    {
+     "text": "essentially",
+     "start": 16.671,
+     "end": 17.274
+    },
+    {
+     "text": "the",
+     "start": 17.274,
+     "end": 17.484
+    },
+    {
+     "text": "currency",
+     "start": 17.484,
+     "end": 17.992
+    },
+    {
+     "text": "in",
+     "start": 17.992,
+     "end": 18.155
+    },
+    {
+     "text": "the",
+     "start": 18.155,
+     "end": 18.212
+    },
+    {
+     "text": "game",
+     "start": 18.212,
+     "end": 18.49
+    },
+    {
+     "text": "you",
+     "start": 18.49,
+     "end": 18.7
+    },
+    {
+     "text": "can",
+     "start": 18.7,
+     "end": 18.911
+    },
+    {
+     "text": "use",
+     "start": 18.911,
+     "end": 19.131
+    },
+    {
+     "text": "to",
+     "start": 19.131,
+     "end": 19.265
+    },
+    {
+     "text": "buy",
+     "start": 19.265,
+     "end": 19.485
+    },
+    {
+     "text": "weapons,",
+     "start": 19.61,
+     "end": 20.461
+    },
+    {
+     "text": "spells,",
+     "start": 20.461,
+     "end": 21.145
+    },
+    {
+     "text": "finishes,",
+     "start": 21.25,
+     "end": 21.76
+    },
+    {
+     "text": "all",
+     "start": 21.76,
+     "end": 21.886
+    },
+    {
+     "text": "of",
+     "start": 21.886,
+     "end": 22.04
+    },
+    {
+     "text": "that",
+     "start": 22.04,
+     "end": 22.319
+    },
+    {
+     "text": "good",
+     "start": 22.319,
+     "end": 22.598
+    },
+    {
+     "text": "stuff",
+     "start": 22.598,
+     "end": 22.945
+    },
+    {
+     "text": "outside",
+     "start": 22.99,
+     "end": 23.572
+    },
+    {
+     "text": "of",
+     "start": 23.572,
+     "end": 23.769
+    },
+    {
+     "text": "the",
+     "start": 23.769,
+     "end": 24.002
+    },
+    {
+     "text": "standard",
+     "start": 24.002,
+     "end": 24.618
+    },
+    {
+     "text": "loadout.",
+     "start": 24.618,
+     "end": 25.165
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-9.n2v1.wav",
+   "seconds": 16.539,
+   "recordedAt": "2026-10-01T21:53:30.417Z",
+   "words": [
+    {
+     "text": "Because",
+     "start": 0.51,
+     "end": 0.885
+    },
+    {
+     "text": "competition",
+     "start": 0.885,
+     "end": 1.453
+    },
+    {
+     "text": "is",
+     "start": 1.453,
+     "end": 1.588
+    },
+    {
+     "text": "at",
+     "start": 1.588,
+     "end": 1.7
+    },
+    {
+     "text": "the",
+     "start": 1.7,
+     "end": 1.868
+    },
+    {
+     "text": "heart",
+     "start": 1.868,
+     "end": 2.14
+    },
+    {
+     "text": "of",
+     "start": 2.14,
+     "end": 2.252
+    },
+    {
+     "text": "the",
+     "start": 2.252,
+     "end": 2.403
+    },
+    {
+     "text": "game,",
+     "start": 2.403,
+     "end": 2.635
+    },
+    {
+     "text": "Ranked",
+     "start": 3.03,
+     "end": 3.321
+    },
+    {
+     "text": "is",
+     "start": 3.321,
+     "end": 3.488
+    },
+    {
+     "text": "the",
+     "start": 3.488,
+     "end": 3.706
+    },
+    {
+     "text": "only",
+     "start": 3.706,
+     "end": 3.997
+    },
+    {
+     "text": "way",
+     "start": 3.997,
+     "end": 4.185
+    },
+    {
+     "text": "to",
+     "start": 4.185,
+     "end": 4.362
+    },
+    {
+     "text": "really",
+     "start": 4.362,
+     "end": 4.767
+    },
+    {
+     "text": "earn",
+     "start": 4.767,
+     "end": 5.069
+    },
+    {
+     "text": "glory",
+     "start": 5.069,
+     "end": 5.506
+    },
+    {
+     "text": "through",
+     "start": 5.506,
+     "end": 5.912
+    },
+    {
+     "text": "battle",
+     "start": 5.912,
+     "end": 6.338
+    },
+    {
+     "text": "in",
+     "start": 6.338,
+     "end": 6.515
+    },
+    {
+     "text": "it.",
+     "start": 7.7,
+     "end": 7.833
+    },
+    {
+     "text": "Glory",
+     "start": 7.833,
+     "end": 8.141
+    },
+    {
+     "text": "can",
+     "start": 8.141,
+     "end": 8.291
+    },
+    {
+     "text": "be",
+     "start": 8.291,
+     "end": 8.408
+    },
+    {
+     "text": "used",
+     "start": 8.408,
+     "end": 8.633
+    },
+    {
+     "text": "in",
+     "start": 8.633,
+     "end": 8.766
+    },
+    {
+     "text": "a",
+     "start": 8.766,
+     "end": 8.832
+    },
+    {
+     "text": "variety",
+     "start": 8.832,
+     "end": 9.224
+    },
+    {
+     "text": "of",
+     "start": 9.224,
+     "end": 9.365
+    },
+    {
+     "text": "ways,",
+     "start": 9.365,
+     "end": 9.615
+    },
+    {
+     "text": "primarily",
+     "start": 9.7,
+     "end": 10.227
+    },
+    {
+     "text": "to",
+     "start": 10.227,
+     "end": 10.379
+    },
+    {
+     "text": "buy",
+     "start": 10.379,
+     "end": 10.585
+    },
+    {
+     "text": "weapons",
+     "start": 10.77,
+     "end": 11.297
+    },
+    {
+     "text": "and",
+     "start": 11.297,
+     "end": 11.529
+    },
+    {
+     "text": "spells",
+     "start": 11.529,
+     "end": 11.975
+    },
+    {
+     "text": "from",
+     "start": 11.975,
+     "end": 12.269
+    },
+    {
+     "text": "the",
+     "start": 12.269,
+     "end": 12.491
+    },
+    {
+     "text": "store,",
+     "start": 12.491,
+     "end": 12.836
+    },
+    {
+     "text": "as",
+     "start": 12.836,
+     "end": 12.988
+    },
+    {
+     "text": "well",
+     "start": 12.988,
+     "end": 13.281
+    },
+    {
+     "text": "as",
+     "start": 13.281,
+     "end": 13.453
+    },
+    {
+     "text": "unique",
+     "start": 13.453,
+     "end": 13.858
+    },
+    {
+     "text": "finishes.",
+     "start": 13.858,
+     "end": 14.395
+    },
+    {
+     "text": "You",
+     "start": 15.11,
+     "end": 15.264
+    },
+    {
+     "text": "can",
+     "start": 15.264,
+     "end": 15.395
+    },
+    {
+     "text": "basically",
+     "start": 15.395,
+     "end": 15.79
+    },
+    {
+     "text": "trick...",
+     "start": 15.79,
+     "end": 16.025
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-10.n2v1.wav",
+   "seconds": 7.589,
+   "recordedAt": "2026-10-01T21:53:56.491Z",
+   "words": [
+    {
+     "text": "Because",
+     "start": 0.69,
+     "end": 1.123
+    },
+    {
+     "text": "I",
+     "start": 1.123,
+     "end": 1.225
+    },
+    {
+     "text": "really",
+     "start": 1.225,
+     "end": 1.455
+    },
+    {
+     "text": "wanted",
+     "start": 1.455,
+     "end": 1.824
+    },
+    {
+     "text": "Blood",
+     "start": 1.824,
+     "end": 2.091
+    },
+    {
+     "text": "in",
+     "start": 2.091,
+     "end": 2.248
+    },
+    {
+     "text": "the",
+     "start": 2.248,
+     "end": 2.441
+    },
+    {
+     "text": "Sand",
+     "start": 2.441,
+     "end": 2.699
+    },
+    {
+     "text": "to",
+     "start": 2.699,
+     "end": 2.847
+    },
+    {
+     "text": "be",
+     "start": 2.847,
+     "end": 2.967
+    },
+    {
+     "text": "a",
+     "start": 2.967,
+     "end": 3.063
+    },
+    {
+     "text": "competitive",
+     "start": 3.063,
+     "end": 3.718
+    },
+    {
+     "text": "game,",
+     "start": 3.718,
+     "end": 3.985
+    },
+    {
+     "text": "players",
+     "start": 4.09,
+     "end": 4.533
+    },
+    {
+     "text": "can",
+     "start": 4.533,
+     "end": 4.745
+    },
+    {
+     "text": "own",
+     "start": 4.745,
+     "end": 4.967
+    },
+    {
+     "text": "glory",
+     "start": 4.967,
+     "end": 5.329
+    },
+    {
+     "text": "through",
+     "start": 5.329,
+     "end": 5.642
+    },
+    {
+     "text": "ranked.",
+     "start": 5.642,
+     "end": 6.055
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-11.n2v1.wav",
+   "seconds": 27.285,
+   "recordedAt": "2026-10-01T21:55:24.708Z",
+   "words": [
+    {
+     "text": "Like",
+     "start": 0.69,
+     "end": 0.934
+    },
+    {
+     "text": "other",
+     "start": 0.934,
+     "end": 1.192
+    },
+    {
+     "text": "competitive",
+     "start": 1.192,
+     "end": 1.653
+    },
+    {
+     "text": "games,",
+     "start": 1.653,
+     "end": 1.976
+    },
+    {
+     "text": "one",
+     "start": 1.976,
+     "end": 2.142
+    },
+    {
+     "text": "of",
+     "start": 2.142,
+     "end": 2.252
+    },
+    {
+     "text": "the",
+     "start": 2.252,
+     "end": 2.418
+    },
+    {
+     "text": "features",
+     "start": 2.418,
+     "end": 2.86
+    },
+    {
+     "text": "of",
+     "start": 2.86,
+     "end": 3.017
+    },
+    {
+     "text": "mine",
+     "start": 3.017,
+     "end": 3.257
+    },
+    {
+     "text": "is",
+     "start": 3.257,
+     "end": 3.413
+    },
+    {
+     "text": "in",
+     "start": 3.413,
+     "end": 3.561
+    },
+    {
+     "text": "the",
+     "start": 3.561,
+     "end": 3.727
+    },
+    {
+     "text": "matchmaking.",
+     "start": 3.727,
+     "end": 4.335
+    },
+    {
+     "text": "So",
+     "start": 4.76,
+     "end": 4.931
+    },
+    {
+     "text": "when",
+     "start": 4.931,
+     "end": 5.222
+    },
+    {
+     "text": "you",
+     "start": 5.222,
+     "end": 5.323
+    },
+    {
+     "text": "first",
+     "start": 5.323,
+     "end": 5.675
+    },
+    {
+     "text": "queue",
+     "start": 5.675,
+     "end": 5.916
+    },
+    {
+     "text": "for",
+     "start": 5.916,
+     "end": 6.117
+    },
+    {
+     "text": "ranked,",
+     "start": 6.117,
+     "end": 6.428
+    },
+    {
+     "text": "we",
+     "start": 6.428,
+     "end": 6.534
+    },
+    {
+     "text": "will",
+     "start": 6.534,
+     "end": 6.775
+    },
+    {
+     "text": "try",
+     "start": 6.775,
+     "end": 6.946
+    },
+    {
+     "text": "to",
+     "start": 6.946,
+     "end": 7.107
+    },
+    {
+     "text": "match",
+     "start": 7.107,
+     "end": 7.419
+    },
+    {
+     "text": "around",
+     "start": 7.419,
+     "end": 7.8
+    },
+    {
+     "text": "your",
+     "start": 7.8,
+     "end": 8.052
+    },
+    {
+     "text": "ELO",
+     "start": 8.052,
+     "end": 8.283
+    },
+    {
+     "text": "rating,",
+     "start": 8.283,
+     "end": 8.695
+    },
+    {
+     "text": "and",
+     "start": 9.11,
+     "end": 9.389
+    },
+    {
+     "text": "as",
+     "start": 9.389,
+     "end": 9.54
+    },
+    {
+     "text": "you're",
+     "start": 9.54,
+     "end": 9.681
+    },
+    {
+     "text": "spending",
+     "start": 9.681,
+     "end": 10.036
+    },
+    {
+     "text": "longer",
+     "start": 10.036,
+     "end": 10.355
+    },
+    {
+     "text": "and",
+     "start": 10.355,
+     "end": 10.488
+    },
+    {
+     "text": "longer",
+     "start": 10.488,
+     "end": 10.745
+    },
+    {
+     "text": "in",
+     "start": 10.745,
+     "end": 10.851
+    },
+    {
+     "text": "the",
+     "start": 10.851,
+     "end": 10.984
+    },
+    {
+     "text": "queue,",
+     "start": 10.984,
+     "end": 11.205
+    },
+    {
+     "text": "we",
+     "start": 11.205,
+     "end": 11.303
+    },
+    {
+     "text": "will",
+     "start": 11.303,
+     "end": 11.498
+    },
+    {
+     "text": "eventually",
+     "start": 11.498,
+     "end": 11.985
+    },
+    {
+     "text": "widen",
+     "start": 12.11,
+     "end": 12.421
+    },
+    {
+     "text": "those",
+     "start": 12.421,
+     "end": 12.66
+    },
+    {
+     "text": "bands",
+     "start": 12.66,
+     "end": 12.909
+    },
+    {
+     "text": "until",
+     "start": 12.909,
+     "end": 13.175
+    },
+    {
+     "text": "we",
+     "start": 13.175,
+     "end": 13.299
+    },
+    {
+     "text": "can",
+     "start": 13.299,
+     "end": 13.405
+    },
+    {
+     "text": "find",
+     "start": 13.405,
+     "end": 13.618
+    },
+    {
+     "text": "a",
+     "start": 13.618,
+     "end": 13.716
+    },
+    {
+     "text": "player",
+     "start": 13.716,
+     "end": 14
+    },
+    {
+     "text": "that",
+     "start": 14,
+     "end": 14.142
+    },
+    {
+     "text": "matches",
+     "start": 14.142,
+     "end": 14.47
+    },
+    {
+     "text": "with",
+     "start": 14.47,
+     "end": 14.665
+    },
+    {
+     "text": "you.",
+     "start": 14.665,
+     "end": 14.825
+    },
+    {
+     "text": "Just",
+     "start": 15.4,
+     "end": 15.656
+    },
+    {
+     "text": "to",
+     "start": 15.656,
+     "end": 15.744,
+     "hidden": true
+    },
+    {
+     "text": "be",
+     "start": 15.744,
+     "end": 15.85
+    },
+    {
+     "text": "aware",
+     "start": 15.85,
+     "end": 16.115
+    },
+    {
+     "text": "that",
+     "start": 16.115,
+     "end": 16.327
+    },
+    {
+     "text": "if",
+     "start": 16.327,
+     "end": 16.477
+    },
+    {
+     "text": "you",
+     "start": 16.477,
+     "end": 16.618
+    },
+    {
+     "text": "are",
+     "start": 16.618,
+     "end": 16.75
+    },
+    {
+     "text": "a",
+     "start": 16.75,
+     "end": 16.847
+    },
+    {
+     "text": "really",
+     "start": 16.847,
+     "end": 17.165
+    },
+    {
+     "text": "highly",
+     "start": 17.165,
+     "end": 17.465
+    },
+    {
+     "text": "skilled",
+     "start": 17.465,
+     "end": 17.765
+    },
+    {
+     "text": "player,",
+     "start": 17.81,
+     "end": 18.125
+    },
+    {
+     "text": "and",
+     "start": 18.47,
+     "end": 18.657
+    },
+    {
+     "text": "you",
+     "start": 18.657,
+     "end": 18.803
+    },
+    {
+     "text": "match",
+     "start": 18.803,
+     "end": 19.047
+    },
+    {
+     "text": "against",
+     "start": 19.047,
+     "end": 19.388
+    },
+    {
+     "text": "a",
+     "start": 19.388,
+     "end": 19.478
+    },
+    {
+     "text": "player",
+     "start": 19.478,
+     "end": 19.709
+    },
+    {
+     "text": "of",
+     "start": 19.709,
+     "end": 19.847
+    },
+    {
+     "text": "lower",
+     "start": 19.847,
+     "end": 20.091
+    },
+    {
+     "text": "skill,",
+     "start": 20.091,
+     "end": 20.335
+    },
+    {
+     "text": "you",
+     "start": 20.67,
+     "end": 20.846
+    },
+    {
+     "text": "won't",
+     "start": 20.846,
+     "end": 21.045
+    },
+    {
+     "text": "really",
+     "start": 21.045,
+     "end": 21.281
+    },
+    {
+     "text": "earn",
+     "start": 21.281,
+     "end": 21.503
+    },
+    {
+     "text": "the",
+     "start": 21.503,
+     "end": 21.641
+    },
+    {
+     "text": "same",
+     "start": 21.641,
+     "end": 21.824
+    },
+    {
+     "text": "amount",
+     "start": 21.824,
+     "end": 22.092
+    },
+    {
+     "text": "of",
+     "start": 22.092,
+     "end": 22.214
+    },
+    {
+     "text": "rating",
+     "start": 22.214,
+     "end": 22.481
+    },
+    {
+     "text": "increase",
+     "start": 22.481,
+     "end": 22.848
+    },
+    {
+     "text": "as",
+     "start": 22.848,
+     "end": 22.971
+    },
+    {
+     "text": "you",
+     "start": 22.971,
+     "end": 23.108
+    },
+    {
+     "text": "would",
+     "start": 23.108,
+     "end": 23.23
+    },
+    {
+     "text": "if",
+     "start": 23.23,
+     "end": 23.349
+    },
+    {
+     "text": "you",
+     "start": 23.349,
+     "end": 23.441
+    },
+    {
+     "text": "were",
+     "start": 23.441,
+     "end": 23.624
+    },
+    {
+     "text": "matched",
+     "start": 23.624,
+     "end": 23.945
+    },
+    {
+     "text": "fairly",
+     "start": 23.99,
+     "end": 24.316
+    },
+    {
+     "text": "against",
+     "start": 24.316,
+     "end": 24.687
+    },
+    {
+     "text": "someone",
+     "start": 24.687,
+     "end": 25.067
+    },
+    {
+     "text": "of",
+     "start": 25.067,
+     "end": 25.221
+    },
+    {
+     "text": "a",
+     "start": 25.221,
+     "end": 25.293
+    },
+    {
+     "text": "similar",
+     "start": 25.293,
+     "end": 25.673
+    },
+    {
+     "text": "rating.",
+     "start": 25.673,
+     "end": 26.035
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-12.n2v1.wav",
+   "seconds": 31.52,
+   "recordedAt": "2026-10-01T21:56:04.765Z",
+   "words": [
+    {
+     "text": "Because",
+     "start": 0.88,
+     "end": 1.268
+    },
+    {
+     "text": "this",
+     "start": 1.268,
+     "end": 1.479
+    },
+    {
+     "text": "is",
+     "start": 1.479,
+     "end": 1.585
+    },
+    {
+     "text": "a",
+     "start": 1.585,
+     "end": 1.677
+    },
+    {
+     "text": "competitive",
+     "start": 1.677,
+     "end": 2.171
+    },
+    {
+     "text": "game",
+     "start": 2.171,
+     "end": 2.426
+    },
+    {
+     "text": "and",
+     "start": 2.426,
+     "end": 2.567
+    },
+    {
+     "text": "we",
+     "start": 2.567,
+     "end": 2.655
+    },
+    {
+     "text": "really",
+     "start": 2.655,
+     "end": 2.928
+    },
+    {
+     "text": "want",
+     "start": 2.928,
+     "end": 3.131
+    },
+    {
+     "text": "to",
+     "start": 3.131,
+     "end": 3.254
+    },
+    {
+     "text": "reward",
+     "start": 3.254,
+     "end": 3.562
+    },
+    {
+     "text": "players",
+     "start": 3.562,
+     "end": 3.932
+    },
+    {
+     "text": "for",
+     "start": 3.932,
+     "end": 4.073
+    },
+    {
+     "text": "playing",
+     "start": 4.073,
+     "end": 4.417
+    },
+    {
+     "text": "against",
+     "start": 4.417,
+     "end": 4.831
+    },
+    {
+     "text": "actual",
+     "start": 4.831,
+     "end": 5.254
+    },
+    {
+     "text": "other",
+     "start": 5.254,
+     "end": 5.5
+    },
+    {
+     "text": "people,",
+     "start": 5.5,
+     "end": 5.835
+    },
+    {
+     "text": "playing",
+     "start": 6.44,
+     "end": 6.882
+    },
+    {
+     "text": "ranked",
+     "start": 6.882,
+     "end": 7.11
+    },
+    {
+     "text": "is",
+     "start": 7.11,
+     "end": 7.25
+    },
+    {
+     "text": "one",
+     "start": 7.25,
+     "end": 7.399
+    },
+    {
+     "text": "of",
+     "start": 7.399,
+     "end": 7.487
+    },
+    {
+     "text": "the",
+     "start": 7.487,
+     "end": 7.636
+    },
+    {
+     "text": "few",
+     "start": 7.636,
+     "end": 7.776
+    },
+    {
+     "text": "ways",
+     "start": 7.776,
+     "end": 8.003
+    },
+    {
+     "text": "to",
+     "start": 8.003,
+     "end": 8.109
+    },
+    {
+     "text": "earn",
+     "start": 8.109,
+     "end": 8.284
+    },
+    {
+     "text": "lots",
+     "start": 8.284,
+     "end": 8.538
+    },
+    {
+     "text": "of",
+     "start": 8.538,
+     "end": 8.66
+    },
+    {
+     "text": "glory",
+     "start": 8.66,
+     "end": 8.941
+    },
+    {
+     "text": "in",
+     "start": 8.941,
+     "end": 9.09
+    },
+    {
+     "text": "the",
+     "start": 9.09,
+     "end": 9.238
+    },
+    {
+     "text": "arena.",
+     "start": 9.238,
+     "end": 9.545
+    },
+    {
+     "text": "Glory",
+     "start": 10.16,
+     "end": 10.561
+    },
+    {
+     "text": "is",
+     "start": 10.561,
+     "end": 10.756
+    },
+    {
+     "text": "our",
+     "start": 10.756,
+     "end": 10.996
+    },
+    {
+     "text": "in-game",
+     "start": 10.996,
+     "end": 11.386
+    },
+    {
+     "text": "currency",
+     "start": 11.386,
+     "end": 11.993
+    },
+    {
+     "text": "you",
+     "start": 11.993,
+     "end": 12.245
+    },
+    {
+     "text": "can",
+     "start": 12.245,
+     "end": 12.474
+    },
+    {
+     "text": "use",
+     "start": 12.474,
+     "end": 12.726
+    },
+    {
+     "text": "to",
+     "start": 12.726,
+     "end": 12.887
+    },
+    {
+     "text": "buy",
+     "start": 12.887,
+     "end": 13.15
+    },
+    {
+     "text": "weapons,",
+     "start": 13.15,
+     "end": 13.7
+    },
+    {
+     "text": "spells",
+     "start": 13.7,
+     "end": 14.181
+    },
+    {
+     "text": "and",
+     "start": 14.181,
+     "end": 14.445
+    },
+    {
+     "text": "cool",
+     "start": 14.49,
+     "end": 14.77
+    },
+    {
+     "text": "new",
+     "start": 14.77,
+     "end": 14.991
+    },
+    {
+     "text": "finishes",
+     "start": 14.991,
+     "end": 15.503
+    },
+    {
+     "text": "from",
+     "start": 15.503,
+     "end": 15.782
+    },
+    {
+     "text": "the",
+     "start": 15.782,
+     "end": 15.936
+    },
+    {
+     "text": "store,",
+     "start": 15.936,
+     "end": 16.245
+    },
+    {
+     "text": "as",
+     "start": 16.66,
+     "end": 16.835
+    },
+    {
+     "text": "well",
+     "start": 16.96,
+     "end": 17.2
+    },
+    {
+     "text": "as",
+     "start": 17.2,
+     "end": 17.326
+    },
+    {
+     "text": "basically",
+     "start": 17.326,
+     "end": 17.79
+    },
+    {
+     "text": "anything",
+     "start": 17.79,
+     "end": 18.207
+    },
+    {
+     "text": "else",
+     "start": 18.207,
+     "end": 18.435
+    },
+    {
+     "text": "that",
+     "start": 18.435,
+     "end": 18.655
+    },
+    {
+     "text": "gets",
+     "start": 18.655,
+     "end": 18.875
+    },
+    {
+     "text": "added",
+     "start": 18.875,
+     "end": 19.15
+    },
+    {
+     "text": "in",
+     "start": 19.15,
+     "end": 19.284
+    },
+    {
+     "text": "the",
+     "start": 19.284,
+     "end": 19.449
+    },
+    {
+     "text": "future.",
+     "start": 19.449,
+     "end": 19.685
+    },
+    {
+     "text": "It's",
+     "start": 20.26,
+     "end": 20.5
+    },
+    {
+     "text": "worth",
+     "start": 20.5,
+     "end": 20.804
+    },
+    {
+     "text": "noting",
+     "start": 20.804,
+     "end": 21.154
+    },
+    {
+     "text": "that",
+     "start": 21.154,
+     "end": 21.412
+    },
+    {
+     "text": "weapons",
+     "start": 21.412,
+     "end": 21.799
+    },
+    {
+     "text": "and",
+     "start": 21.799,
+     "end": 21.983
+    },
+    {
+     "text": "spells",
+     "start": 21.983,
+     "end": 22.351
+    },
+    {
+     "text": "from",
+     "start": 22.351,
+     "end": 22.582
+    },
+    {
+     "text": "the",
+     "start": 22.582,
+     "end": 22.766
+    },
+    {
+     "text": "store",
+     "start": 22.766,
+     "end": 23.07
+    },
+    {
+     "text": "aren't",
+     "start": 23.07,
+     "end": 23.393
+    },
+    {
+     "text": "better",
+     "start": 23.393,
+     "end": 23.761
+    },
+    {
+     "text": "than",
+     "start": 23.761,
+     "end": 23.964
+    },
+    {
+     "text": "the",
+     "start": 23.964,
+     "end": 24.148
+    },
+    {
+     "text": "default",
+     "start": 24.148,
+     "end": 24.517
+    },
+    {
+     "text": "loadouts,",
+     "start": 24.517,
+     "end": 25.005
+    },
+    {
+     "text": "they",
+     "start": 25.37,
+     "end": 25.652
+    },
+    {
+     "text": "just",
+     "start": 25.652,
+     "end": 25.866
+    },
+    {
+     "text": "add",
+     "start": 25.866,
+     "end": 26.177
+    },
+    {
+     "text": "slightly",
+     "start": 26.177,
+     "end": 26.585
+    },
+    {
+     "text": "interesting",
+     "start": 26.585,
+     "end": 27.275
+    },
+    {
+     "text": "mechanics",
+     "start": 27.42,
+     "end": 27.848
+    },
+    {
+     "text": "and",
+     "start": 27.848,
+     "end": 28.012
+    },
+    {
+     "text": "other",
+     "start": 28.012,
+     "end": 28.225
+    },
+    {
+     "text": "ways",
+     "start": 28.225,
+     "end": 28.411
+    },
+    {
+     "text": "to",
+     "start": 28.411,
+     "end": 28.503
+    },
+    {
+     "text": "play",
+     "start": 28.503,
+     "end": 28.689
+    },
+    {
+     "text": "the",
+     "start": 28.689,
+     "end": 28.831
+    },
+    {
+     "text": "game.",
+     "start": 28.831,
+     "end": 29.031
+    },
+    {
+     "text": "Thank",
+     "start": 29.031,
+     "end": 29.515
+    },
+    {
+     "text": "you.",
+     "start": 29.515,
+     "end": 29.665
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-13.n2v1.wav",
+   "seconds": 10.197,
+   "recordedAt": "2026-10-01T21:56:38.202Z",
+   "words": [
+    {
+     "text": "Now",
+     "start": 0.72,
+     "end": 0.91
+    },
+    {
+     "text": "there's",
+     "start": 0.91,
+     "end": 1.076
+    },
+    {
+     "text": "nothing",
+     "start": 1.076,
+     "end": 1.465
+    },
+    {
+     "text": "like",
+     "start": 1.465,
+     "end": 1.705
+    },
+    {
+     "text": "earning",
+     "start": 1.705,
+     "end": 2.094
+    },
+    {
+     "text": "glory",
+     "start": 2.094,
+     "end": 2.434
+    },
+    {
+     "text": "in",
+     "start": 2.434,
+     "end": 2.575
+    },
+    {
+     "text": "battle",
+     "start": 2.575,
+     "end": 2.885
+    },
+    {
+     "text": "and",
+     "start": 3.33,
+     "end": 3.572
+    },
+    {
+     "text": "in",
+     "start": 3.572,
+     "end": 3.751
+    },
+    {
+     "text": "Blood",
+     "start": 3.751,
+     "end": 4.119
+    },
+    {
+     "text": "in",
+     "start": 4.119,
+     "end": 4.288
+    },
+    {
+     "text": "the",
+     "start": 4.288,
+     "end": 4.53
+    },
+    {
+     "text": "Sand",
+     "start": 4.53,
+     "end": 4.835
+    },
+    {
+     "text": "you",
+     "start": 5.04,
+     "end": 5.262
+    },
+    {
+     "text": "basically",
+     "start": 5.262,
+     "end": 5.705
+    },
+    {
+     "text": "earn",
+     "start": 5.705,
+     "end": 5.985
+    },
+    {
+     "text": "glory",
+     "start": 5.985,
+     "end": 6.322
+    },
+    {
+     "text": "through",
+     "start": 6.322,
+     "end": 6.669
+    },
+    {
+     "text": "ranked.",
+     "start": 6.669,
+     "end": 7.055
+    },
+    {
+     "text": "You",
+     "start": 7.39,
+     "end": 7.543
+    },
+    {
+     "text": "can",
+     "start": 7.543,
+     "end": 7.662
+    },
+    {
+     "text": "earn",
+     "start": 7.662,
+     "end": 7.854
+    },
+    {
+     "text": "it",
+     "start": 7.854,
+     "end": 7.967
+    },
+    {
+     "text": "through",
+     "start": 7.967,
+     "end": 8.279
+    },
+    {
+     "text": "deeds",
+     "start": 8.279,
+     "end": 8.491
+    },
+    {
+     "text": "and",
+     "start": 8.491,
+     "end": 8.643
+    },
+    {
+     "text": "achieve...",
+     "start": 8.643,
+     "end": 8.955
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-14.n2v1.wav",
+   "seconds": 21.813,
+   "recordedAt": "2026-10-01T21:57:10.513Z",
+   "words": [
+    {
+     "text": "The",
+     "start": 0.6,
+     "end": 0.78
+    },
+    {
+     "text": "whole",
+     "start": 0.78,
+     "end": 1.01
+    },
+    {
+     "text": "aim",
+     "start": 1.01,
+     "end": 1.177
+    },
+    {
+     "text": "with",
+     "start": 1.177,
+     "end": 1.394
+    },
+    {
+     "text": "Blood",
+     "start": 1.394,
+     "end": 1.67
+    },
+    {
+     "text": "in",
+     "start": 1.67,
+     "end": 1.787
+    },
+    {
+     "text": "the",
+     "start": 1.787,
+     "end": 1.954
+    },
+    {
+     "text": "Sand",
+     "start": 1.954,
+     "end": 2.171
+    },
+    {
+     "text": "is",
+     "start": 2.171,
+     "end": 2.313
+    },
+    {
+     "text": "to",
+     "start": 2.313,
+     "end": 2.422
+    },
+    {
+     "text": "win",
+     "start": 2.422,
+     "end": 2.589
+    },
+    {
+     "text": "glory",
+     "start": 2.589,
+     "end": 2.882
+    },
+    {
+     "text": "in",
+     "start": 2.882,
+     "end": 3.024
+    },
+    {
+     "text": "the",
+     "start": 3.024,
+     "end": 3.191
+    },
+    {
+     "text": "arena,",
+     "start": 3.191,
+     "end": 3.475
+    },
+    {
+     "text": "and",
+     "start": 3.83,
+     "end": 4.135
+    },
+    {
+     "text": "glory",
+     "start": 4.135,
+     "end": 4.435
+    },
+    {
+     "text": "can",
+     "start": 4.435,
+     "end": 4.682
+    },
+    {
+     "text": "be",
+     "start": 4.682,
+     "end": 4.832
+    },
+    {
+     "text": "exchanged",
+     "start": 4.832,
+     "end": 5.464
+    },
+    {
+     "text": "to",
+     "start": 5.464,
+     "end": 5.646
+    },
+    {
+     "text": "buy",
+     "start": 5.646,
+     "end": 5.86
+    },
+    {
+     "text": "weapons,",
+     "start": 5.86,
+     "end": 6.363
+    },
+    {
+     "text": "abilities,",
+     "start": 6.363,
+     "end": 6.995
+    },
+    {
+     "text": "and",
+     "start": 6.995,
+     "end": 7.199
+    },
+    {
+     "text": "unique",
+     "start": 7.199,
+     "end": 7.627
+    },
+    {
+     "text": "finishes",
+     "start": 7.627,
+     "end": 8.195
+    },
+    {
+     "text": "from",
+     "start": 8.26,
+     "end": 8.52
+    },
+    {
+     "text": "the",
+     "start": 8.52,
+     "end": 8.681
+    },
+    {
+     "text": "in-game",
+     "start": 8.681,
+     "end": 8.985
+    },
+    {
+     "text": "shop.",
+     "start": 8.985,
+     "end": 9.245
+    },
+    {
+     "text": "It's",
+     "start": 9.98,
+     "end": 10.188
+    },
+    {
+     "text": "worth",
+     "start": 10.188,
+     "end": 10.437
+    },
+    {
+     "text": "noting",
+     "start": 10.437,
+     "end": 10.763
+    },
+    {
+     "text": "that",
+     "start": 10.763,
+     "end": 11.025
+    },
+    {
+     "text": "weapons",
+     "start": 11.35,
+     "end": 11.688
+    },
+    {
+     "text": "and",
+     "start": 11.688,
+     "end": 11.818
+    },
+    {
+     "text": "abilities",
+     "start": 11.818,
+     "end": 12.218
+    },
+    {
+     "text": "aren't",
+     "start": 12.218,
+     "end": 12.479
+    },
+    {
+     "text": "necessarily",
+     "start": 12.479,
+     "end": 12.971
+    },
+    {
+     "text": "better",
+     "start": 12.971,
+     "end": 13.262
+    },
+    {
+     "text": "in",
+     "start": 13.262,
+     "end": 13.404
+    },
+    {
+     "text": "the",
+     "start": 13.404,
+     "end": 13.531
+    },
+    {
+     "text": "in-game",
+     "start": 13.531,
+     "end": 13.792
+    },
+    {
+     "text": "shop,",
+     "start": 13.792,
+     "end": 14.015
+    },
+    {
+     "text": "in",
+     "start": 14.38,
+     "end": 14.528
+    },
+    {
+     "text": "fact",
+     "start": 14.528,
+     "end": 14.685
+    },
+    {
+     "text": "a",
+     "start": 14.685,
+     "end": 14.781
+    },
+    {
+     "text": "lot",
+     "start": 14.781,
+     "end": 14.921
+    },
+    {
+     "text": "of",
+     "start": 14.921,
+     "end": 15.026
+    },
+    {
+     "text": "them",
+     "start": 15.026,
+     "end": 15.2
+    },
+    {
+     "text": "are",
+     "start": 15.2,
+     "end": 15.349
+    },
+    {
+     "text": "worse",
+     "start": 15.349,
+     "end": 15.628
+    },
+    {
+     "text": "than",
+     "start": 15.628,
+     "end": 15.829
+    },
+    {
+     "text": "the",
+     "start": 15.829,
+     "end": 15.968
+    },
+    {
+     "text": "standard",
+     "start": 15.968,
+     "end": 16.361
+    },
+    {
+     "text": "loadout,",
+     "start": 16.361,
+     "end": 16.745
+    },
+    {
+     "text": "but",
+     "start": 17.09,
+     "end": 17.296
+    },
+    {
+     "text": "what",
+     "start": 17.296,
+     "end": 17.539
+    },
+    {
+     "text": "they",
+     "start": 17.539,
+     "end": 17.754
+    },
+    {
+     "text": "do",
+     "start": 17.754,
+     "end": 17.911
+    },
+    {
+     "text": "do",
+     "start": 17.911,
+     "end": 18.064
+    },
+    {
+     "text": "is",
+     "start": 18.064,
+     "end": 18.217
+    },
+    {
+     "text": "unlock",
+     "start": 18.217,
+     "end": 18.585
+    },
+    {
+     "text": "unique",
+     "start": 18.585,
+     "end": 18.872
+    },
+    {
+     "text": "ways",
+     "start": 18.872,
+     "end": 19.132
+    },
+    {
+     "text": "to",
+     "start": 19.132,
+     "end": 19.285
+    },
+    {
+     "text": "play",
+     "start": 19.36,
+     "end": 19.526
+    },
+    {
+     "text": "the",
+     "start": 19.526,
+     "end": 19.711
+    },
+    {
+     "text": "game",
+     "start": 19.711,
+     "end": 19.98
+    },
+    {
+     "text": "that",
+     "start": 19.98,
+     "end": 20.239
+    },
+    {
+     "text": "you",
+     "start": 20.239,
+     "end": 20.405
+    },
+    {
+     "text": "maybe",
+     "start": 20.46,
+     "end": 20.768
+    },
+    {
+     "text": "haven't...",
+     "start": 20.768,
+     "end": 21.155
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-15.n2v1.wav",
+   "seconds": 21.355,
+   "recordedAt": "2026-10-01T21:58:19.831Z",
+   "words": [
+    {
+     "text": "I",
+     "start": 0.66,
+     "end": 0.826
+    },
+    {
+     "text": "would",
+     "start": 0.826,
+     "end": 1.188
+    },
+    {
+     "text": "like",
+     "start": 1.188,
+     "end": 1.607
+    },
+    {
+     "text": "to",
+     "start": 1.607,
+     "end": 1.853
+    },
+    {
+     "text": "stress",
+     "start": 1.853,
+     "end": 2.446
+    },
+    {
+     "text": "that",
+     "start": 2.446,
+     "end": 2.865
+    },
+    {
+     "text": "weapons",
+     "start": 4.83,
+     "end": 5.216
+    },
+    {
+     "text": "and",
+     "start": 5.216,
+     "end": 5.539
+    },
+    {
+     "text": "abilities",
+     "start": 5.539,
+     "end": 6.017
+    },
+    {
+     "text": "from",
+     "start": 6.017,
+     "end": 6.424
+    },
+    {
+     "text": "the",
+     "start": 6.424,
+     "end": 6.748
+    },
+    {
+     "text": "in-game",
+     "start": 6.748,
+     "end": 7.324
+    },
+    {
+     "text": "shop",
+     "start": 7.324,
+     "end": 7.745
+    },
+    {
+     "text": "aren't",
+     "start": 7.79,
+     "end": 8.126
+    },
+    {
+     "text": "necessarily",
+     "start": 8.126,
+     "end": 8.606
+    },
+    {
+     "text": "better",
+     "start": 8.606,
+     "end": 9.019
+    },
+    {
+     "text": "than",
+     "start": 9.019,
+     "end": 9.231
+    },
+    {
+     "text": "the",
+     "start": 9.231,
+     "end": 9.365
+    },
+    {
+     "text": "default",
+     "start": 9.365,
+     "end": 9.692
+    },
+    {
+     "text": "loadout,",
+     "start": 9.692,
+     "end": 10.095
+    },
+    {
+     "text": "in",
+     "start": 10.39,
+     "end": 10.585
+    },
+    {
+     "text": "fact",
+     "start": 10.585,
+     "end": 10.77
+    },
+    {
+     "text": "in",
+     "start": 10.77,
+     "end": 10.924
+    },
+    {
+     "text": "some",
+     "start": 10.924,
+     "end": 11.069
+    },
+    {
+     "text": "cases",
+     "start": 11.069,
+     "end": 11.358
+    },
+    {
+     "text": "they",
+     "start": 11.358,
+     "end": 11.557
+    },
+    {
+     "text": "are",
+     "start": 11.557,
+     "end": 11.693
+    },
+    {
+     "text": "arguably",
+     "start": 11.693,
+     "end": 12.064
+    },
+    {
+     "text": "a",
+     "start": 12.064,
+     "end": 12.164
+    },
+    {
+     "text": "lot",
+     "start": 12.164,
+     "end": 12.308
+    },
+    {
+     "text": "worse.",
+     "start": 12.308,
+     "end": 12.625
+    },
+    {
+     "text": "However,",
+     "start": 13,
+     "end": 13.402
+    },
+    {
+     "text": "in",
+     "start": 13.402,
+     "end": 13.488
+    },
+    {
+     "text": "the",
+     "start": 13.488,
+     "end": 13.642
+    },
+    {
+     "text": "right",
+     "start": 13.642,
+     "end": 13.91
+    },
+    {
+     "text": "hands",
+     "start": 13.91,
+     "end": 14.216
+    },
+    {
+     "text": "and",
+     "start": 14.216,
+     "end": 14.369
+    },
+    {
+     "text": "with",
+     "start": 14.369,
+     "end": 14.58
+    },
+    {
+     "text": "the",
+     "start": 14.58,
+     "end": 14.733
+    },
+    {
+     "text": "right",
+     "start": 14.733,
+     "end": 14.963
+    },
+    {
+     "text": "skill",
+     "start": 14.963,
+     "end": 15.202
+    },
+    {
+     "text": "and",
+     "start": 15.202,
+     "end": 15.336
+    },
+    {
+     "text": "tactics",
+     "start": 15.336,
+     "end": 15.71
+    },
+    {
+     "text": "they",
+     "start": 15.71,
+     "end": 15.92
+    },
+    {
+     "text": "can",
+     "start": 15.92,
+     "end": 16.073
+    },
+    {
+     "text": "become",
+     "start": 16.073,
+     "end": 16.38
+    },
+    {
+     "text": "a",
+     "start": 16.38,
+     "end": 16.485
+    },
+    {
+     "text": "viable",
+     "start": 16.485,
+     "end": 16.801
+    },
+    {
+     "text": "addition",
+     "start": 16.801,
+     "end": 17.222
+    },
+    {
+     "text": "and",
+     "start": 17.222,
+     "end": 17.443
+    },
+    {
+     "text": "an",
+     "start": 17.443,
+     "end": 17.558
+    },
+    {
+     "text": "interesting",
+     "start": 17.558,
+     "end": 18.132
+    },
+    {
+     "text": "addition",
+     "start": 18.132,
+     "end": 18.515
+    },
+    {
+     "text": "to",
+     "start": 18.67,
+     "end": 18.9
+    },
+    {
+     "text": "your",
+     "start": 18.9,
+     "end": 19.125
+    },
+    {
+     "text": "gameplay.",
+     "start": 19.125,
+     "end": 19.565
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-16.n2v1.wav",
+   "seconds": 19.221,
+   "recordedAt": "2026-10-01T21:59:59.841Z",
+   "words": [
+    {
+     "text": "There's",
+     "start": 0.81,
+     "end": 1.146
+    },
+    {
+     "text": "also",
+     "start": 1.146,
+     "end": 1.386
+    },
+    {
+     "text": "hundreds",
+     "start": 1.386,
+     "end": 1.701
+    },
+    {
+     "text": "of",
+     "start": 1.701,
+     "end": 1.842
+    },
+    {
+     "text": "achievements",
+     "start": 1.842,
+     "end": 2.431
+    },
+    {
+     "text": "that",
+     "start": 2.431,
+     "end": 2.671
+    },
+    {
+     "text": "can",
+     "start": 2.671,
+     "end": 2.812
+    },
+    {
+     "text": "be",
+     "start": 2.812,
+     "end": 2.912
+    },
+    {
+     "text": "gained",
+     "start": 2.912,
+     "end": 3.21
+    },
+    {
+     "text": "through",
+     "start": 3.21,
+     "end": 3.5
+    },
+    {
+     "text": "playing",
+     "start": 3.5,
+     "end": 3.84
+    },
+    {
+     "text": "ranked,",
+     "start": 3.84,
+     "end": 4.155
+    },
+    {
+     "text": "and",
+     "start": 4.39,
+     "end": 4.603
+    },
+    {
+     "text": "this",
+     "start": 4.603,
+     "end": 4.758
+    },
+    {
+     "text": "is",
+     "start": 4.758,
+     "end": 4.83
+    },
+    {
+     "text": "the",
+     "start": 4.83,
+     "end": 4.957
+    },
+    {
+     "text": "primary",
+     "start": 4.957,
+     "end": 5.229
+    },
+    {
+     "text": "way",
+     "start": 5.229,
+     "end": 5.411
+    },
+    {
+     "text": "you",
+     "start": 5.411,
+     "end": 5.538
+    },
+    {
+     "text": "will",
+     "start": 5.538,
+     "end": 5.71
+    },
+    {
+     "text": "earn",
+     "start": 5.71,
+     "end": 5.965
+    },
+    {
+     "text": "deeds",
+     "start": 5.965,
+     "end": 6.2
+    },
+    {
+     "text": "in",
+     "start": 6.2,
+     "end": 6.355
+    },
+    {
+     "text": "the",
+     "start": 6.355,
+     "end": 6.482
+    },
+    {
+     "text": "game.",
+     "start": 6.482,
+     "end": 6.745
+    },
+    {
+     "text": "Deeds",
+     "start": 7.39,
+     "end": 7.764
+    },
+    {
+     "text": "can",
+     "start": 7.764,
+     "end": 7.987
+    },
+    {
+     "text": "offer",
+     "start": 7.987,
+     "end": 8.27
+    },
+    {
+     "text": "you",
+     "start": 8.27,
+     "end": 8.493
+    },
+    {
+     "text": "glory",
+     "start": 8.493,
+     "end": 8.847
+    },
+    {
+     "text": "as",
+     "start": 8.847,
+     "end": 9.019
+    },
+    {
+     "text": "a",
+     "start": 9.019,
+     "end": 9.12
+    },
+    {
+     "text": "reward,",
+     "start": 9.12,
+     "end": 9.535
+    },
+    {
+     "text": "titles,",
+     "start": 9.68,
+     "end": 10.206
+    },
+    {
+     "text": "unique",
+     "start": 10.206,
+     "end": 10.685
+    },
+    {
+     "text": "finishes,",
+     "start": 10.685,
+     "end": 11.318
+    },
+    {
+     "text": "and",
+     "start": 11.318,
+     "end": 11.45
+    },
+    {
+     "text": "even",
+     "start": 11.45,
+     "end": 11.701
+    },
+    {
+     "text": "weapons,",
+     "start": 11.701,
+     "end": 12.275
+    },
+    {
+     "text": "so",
+     "start": 12.61,
+     "end": 12.754
+    },
+    {
+     "text": "it's",
+     "start": 12.754,
+     "end": 12.948
+    },
+    {
+     "text": "worth",
+     "start": 12.948,
+     "end": 13.193
+    },
+    {
+     "text": "taking",
+     "start": 13.193,
+     "end": 13.497
+    },
+    {
+     "text": "a",
+     "start": 13.497,
+     "end": 13.59
+    },
+    {
+     "text": "look",
+     "start": 13.59,
+     "end": 13.784
+    },
+    {
+     "text": "at",
+     "start": 13.784,
+     "end": 13.915
+    },
+    {
+     "text": "some",
+     "start": 13.915,
+     "end": 14.118
+    },
+    {
+     "text": "of",
+     "start": 14.118,
+     "end": 14.22
+    },
+    {
+     "text": "the",
+     "start": 14.22,
+     "end": 14.359
+    },
+    {
+     "text": "deeds",
+     "start": 14.359,
+     "end": 14.612
+    },
+    {
+     "text": "and",
+     "start": 14.612,
+     "end": 14.781
+    },
+    {
+     "text": "seeing",
+     "start": 14.781,
+     "end": 15.086
+    },
+    {
+     "text": "if",
+     "start": 15.086,
+     "end": 15.229
+    },
+    {
+     "text": "you",
+     "start": 15.229,
+     "end": 15.331
+    },
+    {
+     "text": "can",
+     "start": 15.331,
+     "end": 15.525
+    },
+    {
+     "text": "unlock",
+     "start": 15.58,
+     "end": 16.008
+    },
+    {
+     "text": "some",
+     "start": 16.008,
+     "end": 16.258
+    },
+    {
+     "text": "of",
+     "start": 16.258,
+     "end": 16.383
+    },
+    {
+     "text": "them",
+     "start": 16.383,
+     "end": 16.591
+    },
+    {
+     "text": "and",
+     "start": 16.591,
+     "end": 16.831
+    },
+    {
+     "text": "some",
+     "start": 16.831,
+     "end": 17.081
+    },
+    {
+     "text": "of",
+     "start": 17.081,
+     "end": 17.207
+    },
+    {
+     "text": "the",
+     "start": 17.207,
+     "end": 17.384
+    },
+    {
+     "text": "crazy",
+     "start": 17.384,
+     "end": 17.717
+    },
+    {
+     "text": "titles.",
+     "start": 17.717,
+     "end": 18.145
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-17.n2v1.wav",
+   "seconds": 14.08,
+   "recordedAt": "2026-10-01T22:00:25.935Z",
+   "words": [
+    {
+     "text": "It's",
+     "start": 0.58,
+     "end": 0.837
+    },
+    {
+     "text": "also",
+     "start": 0.837,
+     "end": 1.126
+    },
+    {
+     "text": "worth",
+     "start": 1.126,
+     "end": 1.419
+    },
+    {
+     "text": "noting",
+     "start": 1.419,
+     "end": 1.797
+    },
+    {
+     "text": "that",
+     "start": 1.797,
+     "end": 2.039
+    },
+    {
+     "text": "most",
+     "start": 2.039,
+     "end": 2.343
+    },
+    {
+     "text": "deeds",
+     "start": 2.343,
+     "end": 2.71
+    },
+    {
+     "text": "in",
+     "start": 2.71,
+     "end": 2.889
+    },
+    {
+     "text": "the",
+     "start": 2.889,
+     "end": 3.077
+    },
+    {
+     "text": "game,",
+     "start": 3.077,
+     "end": 3.371
+    },
+    {
+     "text": "i.e.",
+     "start": 3.371,
+     "end": 3.707
+    },
+    {
+     "text": "achievements,",
+     "start": 3.707,
+     "end": 4.515
+    },
+    {
+     "text": "can",
+     "start": 4.62,
+     "end": 4.875
+    },
+    {
+     "text": "only",
+     "start": 4.875,
+     "end": 5.185
+    },
+    {
+     "text": "be",
+     "start": 5.185,
+     "end": 5.362
+    },
+    {
+     "text": "unlocked",
+     "start": 5.362,
+     "end": 5.695
+    },
+    {
+     "text": "through",
+     "start": 5.695,
+     "end": 5.938
+    },
+    {
+     "text": "playing",
+     "start": 5.938,
+     "end": 6.315
+    },
+    {
+     "text": "ranked,",
+     "start": 6.79,
+     "end": 7.102
+    },
+    {
+     "text": "so",
+     "start": 7.102,
+     "end": 7.249
+    },
+    {
+     "text": "it's",
+     "start": 7.249,
+     "end": 7.448
+    },
+    {
+     "text": "worth",
+     "start": 7.448,
+     "end": 7.639
+    },
+    {
+     "text": "keeping",
+     "start": 7.639,
+     "end": 7.977
+    },
+    {
+     "text": "an",
+     "start": 7.977,
+     "end": 8.124
+    },
+    {
+     "text": "eye",
+     "start": 8.124,
+     "end": 8.237
+    },
+    {
+     "text": "on",
+     "start": 8.237,
+     "end": 8.34
+    },
+    {
+     "text": "some",
+     "start": 8.34,
+     "end": 8.548
+    },
+    {
+     "text": "of",
+     "start": 8.548,
+     "end": 8.652
+    },
+    {
+     "text": "the",
+     "start": 8.652,
+     "end": 8.808
+    },
+    {
+     "text": "crazy",
+     "start": 8.808,
+     "end": 9.068
+    },
+    {
+     "text": "titles,",
+     "start": 9.068,
+     "end": 9.423
+    },
+    {
+     "text": "weapons,",
+     "start": 9.423,
+     "end": 9.787
+    },
+    {
+     "text": "and",
+     "start": 9.787,
+     "end": 9.874
+    },
+    {
+     "text": "finishes",
+     "start": 9.874,
+     "end": 10.263
+    },
+    {
+     "text": "you",
+     "start": 10.263,
+     "end": 10.463
+    },
+    {
+     "text": "can",
+     "start": 10.463,
+     "end": 10.619
+    },
+    {
+     "text": "unlock",
+     "start": 10.619,
+     "end": 10.965
+    },
+    {
+     "text": "with",
+     "start": 11.38,
+     "end": 11.664
+    },
+    {
+     "text": "ranked",
+     "start": 11.664,
+     "end": 11.998
+    },
+    {
+     "text": "only",
+     "start": 11.998,
+     "end": 12.282
+    },
+    {
+     "text": "deeds.",
+     "start": 12.282,
+     "end": 12.625
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-18.n2v1.wav",
+   "seconds": 2.624,
+   "recordedAt": "2026-10-01T22:01:09.211Z",
+   "words": [
+    {
+     "text": "With",
+     "start": 0.42,
+     "end": 0.703
+    },
+    {
+     "text": "ranked",
+     "start": 0.703,
+     "end": 1.093
+    },
+    {
+     "text": "only",
+     "start": 1.093,
+     "end": 1.386
+    },
+    {
+     "text": "deeds.",
+     "start": 1.386,
+     "end": 1.835
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-19.n2v1.wav",
+   "seconds": 11.568,
+   "recordedAt": "2026-10-01T22:01:52.457Z",
+   "words": [
+    {
+     "text": "Blood",
+     "start": 0.64,
+     "end": 0.961
+    },
+    {
+     "text": "in",
+     "start": 0.961,
+     "end": 1.089
+    },
+    {
+     "text": "the",
+     "start": 1.089,
+     "end": 1.272
+    },
+    {
+     "text": "Sand",
+     "start": 1.272,
+     "end": 1.515
+    },
+    {
+     "text": "is",
+     "start": 1.515,
+     "end": 1.671
+    },
+    {
+     "text": "completely",
+     "start": 1.671,
+     "end": 2.267
+    },
+    {
+     "text": "free",
+     "start": 2.267,
+     "end": 2.523
+    },
+    {
+     "text": "to",
+     "start": 2.523,
+     "end": 2.67
+    },
+    {
+     "text": "play",
+     "start": 2.67,
+     "end": 2.908
+    },
+    {
+     "text": "and",
+     "start": 2.908,
+     "end": 3.055
+    },
+    {
+     "text": "is",
+     "start": 3.055,
+     "end": 3.165
+    },
+    {
+     "text": "available",
+     "start": 3.165,
+     "end": 3.696
+    },
+    {
+     "text": "on",
+     "start": 3.696,
+     "end": 3.852
+    },
+    {
+     "text": "iOS",
+     "start": 3.852,
+     "end": 4.063
+    },
+    {
+     "text": "and",
+     "start": 4.063,
+     "end": 4.264
+    },
+    {
+     "text": "Android.",
+     "start": 4.264,
+     "end": 4.695
+    },
+    {
+     "text": "Simply",
+     "start": 5.09,
+     "end": 5.431
+    },
+    {
+     "text": "search",
+     "start": 5.431,
+     "end": 5.695
+    },
+    {
+     "text": "for",
+     "start": 5.695,
+     "end": 5.866
+    },
+    {
+     "text": "the",
+     "start": 5.866,
+     "end": 6.036
+    },
+    {
+     "text": "title",
+     "start": 6.036,
+     "end": 6.339
+    },
+    {
+     "text": "in",
+     "start": 6.339,
+     "end": 6.5
+    },
+    {
+     "text": "the",
+     "start": 6.5,
+     "end": 6.67
+    },
+    {
+     "text": "App",
+     "start": 6.67,
+     "end": 6.859
+    },
+    {
+     "text": "Store",
+     "start": 6.859,
+     "end": 7.105
+    },
+    {
+     "text": "and",
+     "start": 7.105,
+     "end": 7.294
+    },
+    {
+     "text": "you",
+     "start": 7.294,
+     "end": 7.427
+    },
+    {
+     "text": "will",
+     "start": 7.427,
+     "end": 7.597
+    },
+    {
+     "text": "find",
+     "start": 7.597,
+     "end": 7.824
+    },
+    {
+     "text": "it.",
+     "start": 7.824,
+     "end": 7.985
+    },
+    {
+     "text": "And",
+     "start": 8.59,
+     "end": 8.769
+    },
+    {
+     "text": "I",
+     "start": 8.769,
+     "end": 8.855
+    },
+    {
+     "text": "would",
+     "start": 8.855,
+     "end": 8.933
+    },
+    {
+     "text": "encourage",
+     "start": 8.933,
+     "end": 9.393
+    },
+    {
+     "text": "you",
+     "start": 9.393,
+     "end": 9.525
+    },
+    {
+     "text": "all",
+     "start": 9.525,
+     "end": 9.673
+    },
+    {
+     "text": "to",
+     "start": 9.673,
+     "end": 9.767
+    },
+    {
+     "text": "play",
+     "start": 9.767,
+     "end": 9.993
+    },
+    {
+     "text": "it",
+     "start": 9.993,
+     "end": 10.125
+    },
+    {
+     "text": "if",
+     "start": 10.26,
+     "end": 10.455
+    },
+    {
+     "text": "you...",
+     "start": 10.455,
+     "end": 10.695
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/record-2026-10-01-14-27-45-b783bf344239542886fee7b48fa4b892-20.n2v1.wav",
+   "seconds": 10.112,
+   "recordedAt": "2026-10-01T22:02:16.538Z",
+   "words": [
+    {
+     "text": "Blood",
+     "start": 0.63,
+     "end": 0.965
+    },
+    {
+     "text": "in",
+     "start": 0.965,
+     "end": 1.113
+    },
+    {
+     "text": "the",
+     "start": 1.113,
+     "end": 1.29
+    },
+    {
+     "text": "Sand",
+     "start": 1.29,
+     "end": 1.558
+    },
+    {
+     "text": "is",
+     "start": 1.558,
+     "end": 1.721
+    },
+    {
+     "text": "free",
+     "start": 1.721,
+     "end": 1.95
+    },
+    {
+     "text": "to",
+     "start": 1.95,
+     "end": 2.103
+    },
+    {
+     "text": "play",
+     "start": 2.103,
+     "end": 2.362
+    },
+    {
+     "text": "and",
+     "start": 2.362,
+     "end": 2.572
+    },
+    {
+     "text": "available",
+     "start": 2.572,
+     "end": 3.137
+    },
+    {
+     "text": "now",
+     "start": 3.137,
+     "end": 3.357
+    },
+    {
+     "text": "in",
+     "start": 3.357,
+     "end": 3.519
+    },
+    {
+     "text": "the",
+     "start": 3.519,
+     "end": 3.711
+    },
+    {
+     "text": "App",
+     "start": 3.711,
+     "end": 3.921
+    },
+    {
+     "text": "Store",
+     "start": 3.921,
+     "end": 4.227
+    },
+    {
+     "text": "and",
+     "start": 4.227,
+     "end": 4.438
+    },
+    {
+     "text": "Google",
+     "start": 4.438,
+     "end": 4.811
+    },
+    {
+     "text": "Play",
+     "start": 4.811,
+     "end": 5.069
+    },
+    {
+     "text": "Store.",
+     "start": 5.069,
+     "end": 5.385
+    },
+    {
+     "text": "Simply",
+     "start": 5.49,
+     "end": 5.855
+    },
+    {
+     "text": "search",
+     "start": 5.855,
+     "end": 6.151
+    },
+    {
+     "text": "for",
+     "start": 6.151,
+     "end": 6.348
+    },
+    {
+     "text": "Blood",
+     "start": 6.348,
+     "end": 6.565
+    },
+    {
+     "text": "in",
+     "start": 6.565,
+     "end": 6.703
+    },
+    {
+     "text": "the",
+     "start": 6.703,
+     "end": 6.88
+    },
+    {
+     "text": "Sand",
+     "start": 6.88,
+     "end": 7.166
+    },
+    {
+     "text": "and",
+     "start": 7.166,
+     "end": 7.393
+    },
+    {
+     "text": "download",
+     "start": 7.393,
+     "end": 7.866
+    },
+    {
+     "text": "the",
+     "start": 7.866,
+     "end": 8.093
+    },
+    {
+     "text": "game",
+     "start": 8.093,
+     "end": 8.339
+    },
+    {
+     "text": "today.",
+     "start": 8.339,
+     "end": 8.645
+    }
+   ],
+   "transcribed": true
+  }
+ ],
+ "pieces": [
+  {
+   "take": 1,
+   "start": 0.578,
+   "end": 3.562,
+   "at": 0.06
+  },
+  {
+   "take": 1,
+   "start": 3.822,
+   "end": 6.569,
+   "at": 3.044
+  },
+  {
+   "take": 1,
+   "start": 6.772,
+   "end": 9.49,
+   "at": 5.791
+  },
+  {
+   "take": 3,
+   "start": 0.531,
+   "end": 5.443,
+   "at": 8.509
+  },
+  {
+   "take": 3,
+   "start": 5.834,
+   "end": 8.303,
+   "at": 13.421
+  },
+  {
+   "take": 3,
+   "start": 8.793,
+   "end": 13.44,
+   "at": 15.89
+  },
+  {
+   "take": 3,
+   "start": 13.84,
+   "end": 17.421,
+   "at": 20.537
+  },
+  {
+   "take": 3,
+   "start": 17.699,
+   "end": 22.421,
+   "at": 24.118
+  },
+  {
+   "take": 10,
+   "start": 0.643,
+   "end": 4.374,
+   "at": 28.84
+  },
+  {
+   "take": 10,
+   "start": 4.715,
+   "end": 8.742,
+   "at": 32.571
+  },
+  {
+   "take": 10,
+   "start": 9.082,
+   "end": 11.986,
+   "at": 36.598
+  },
+  {
+   "take": 10,
+   "start": 12.101,
+   "end": 14.86,
+   "at": 39.502
+  },
+  {
+   "take": 10,
+   "start": 15.363,
+   "end": 18.147,
+   "at": 42.261
+  },
+  {
+   "take": 10,
+   "start": 18.444,
+   "end": 20.356,
+   "at": 45.045
+  },
+  {
+   "take": 10,
+   "start": 20.625,
+   "end": 26.14,
+   "at": 46.957
+  },
+  {
+   "take": 13,
+   "start": 0.568,
+   "end": 3.502,
+   "at": 52.472
+  },
+  {
+   "take": 13,
+   "start": 3.799,
+   "end": 9.456,
+   "at": 55.406
+  },
+  {
+   "take": 14,
+   "start": 4.758,
+   "end": 7.524,
+   "at": 61.063
+  },
+  {
+   "take": 14,
+   "start": 7.784,
+   "end": 10.115,
+   "at": 63.829
+  },
+  {
+   "take": 14,
+   "start": 10.374,
+   "end": 12.674,
+   "at": 66.16
+  },
+  {
+   "take": 14,
+   "start": 12.971,
+   "end": 18.131,
+   "at": 68.46
+  },
+  {
+   "take": 14,
+   "start": 18.659,
+   "end": 19.593,
+   "at": 73.62
+  },
+  {
+   "take": 16,
+   "start": 0.483,
+   "end": 6.368,
+   "at": 74.554
+  },
+  {
+   "take": 16,
+   "start": 6.368,
+   "end": 6.468,
+   "at": 80.483
+  },
+  {
+   "take": 16,
+   "start": 6.717,
+   "end": 10.991,
+   "at": 80.624
+  },
+  {
+   "take": 17,
+   "start": 0.373,
+   "end": 1.9,
+   "at": 84.917
+  },
+  {
+   "take": 19,
+   "start": 0.623,
+   "end": 5.176,
+   "at": 86.454
+  },
+  {
+   "take": 19,
+   "start": 5.461,
+   "end": 8.742,
+   "at": 91.377
+  }
+ ],
+ "captionNudgeMs": -50,
+ "tidy": true,
+ "denoise": 2,
+ "volume": 0.5
+}

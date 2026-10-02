@@ -24,11 +24,10 @@ export const DEV = {
   matchClip: {
     real: "Real gameplay · recorded in-match",
   },
-  /** The match clip's end card — an indie game, and why that matters. Android
-   * isn't mentioned until Play approves the listing. */
+  /** The match clip's end card — an indie game, and why that matters. */
   signoff: {
     eyebrow: "Support indie games",
-    lines: ["An independent game, free to play on iOS.", "Every install, rating and share keeps indie games alive."],
+    lines: ["An independent game, free on iOS and Android.", "Every install, rating and share keeps indie games alive."],
     ask: "Come and fight me.",
     signature: "Free the Borough Games · an independent studio",
   },

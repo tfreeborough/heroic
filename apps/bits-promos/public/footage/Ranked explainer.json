@@ -1,0 +1,35 @@
+{
+  "file": "Ranked explainer.mp4",
+  "facts": {
+    "seconds": 95.48,
+    "width": 720,
+    "height": 1496,
+    "fps": 60,
+    "recordedAt": "2026-10-01T13:31:50",
+    "bytes": 19622063
+  },
+  "title": "",
+  "line": "",
+  "note": "",
+  "cropTop": 0,
+  "cropBottom": 0,
+  "muted": false,
+  "source": "Record_2026-10-01-14-27-45_b783bf344239542886fee7b48fa4b892.mp4",
+  "cleanup": {
+    "segments": [
+      {
+        "start": 82.989,
+        "end": 107.122
+      },
+      {
+        "start": 141.127,
+        "end": 212.873
+      }
+    ],
+    "transition": "slide",
+    "transitionSeconds": 0.4,
+    "cropTop": 0,
+    "cropBottom": 0.055,
+    "muted": false
+  }
+}
