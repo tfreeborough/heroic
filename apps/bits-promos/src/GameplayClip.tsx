@@ -4,14 +4,15 @@ import { z } from "zod";
 import { SANS, palette } from "./brand";
 import { BrandMark, LowerThird, SignOff, TitleReveal, chromeTop } from "./cinematic";
 import { Backdrop, MusicBed, Outro, RecChip, useFormat } from "./components";
-import { VoiceLayer, useVoice, voiceProps } from "./voice";
-import { Stage, useSourceAspect } from "./stage";
+import { VoiceLayer, useBed, useVoice, voiceProps } from "./voice";
+import type { Playable } from "@heroic/voiceover";
+import { Stage, useSequence, useSourceAspect } from "./stage";
 
 /** The props panel / Desk form for a match clip. Every field described. */
 export const gameplayClipSchema = z.object({
   clip: z
     .string()
-    .describe('The recording, as a path under public/ (e.g. "footage/VID_1.mp4"); a bare filename means public/clips/. Empty = placeholder.'),
+    .describe('The recording or a Desk edit, as a path under public/ (e.g. "footage/VID_1.mp4" or "sequences/devlog-1.json"); a bare filename means public/clips/. Empty = placeholder.'),
   title: z.string().describe('The cold-open title, in gold (e.g. "Match point")'),
   line: z.string().describe("The hook sentence on the lower third (e.g. \"He had one HP left. Then the Harpoon.\")"),
   durationSeconds: z.number().min(1).describe("Seconds of gameplay before the end card — in the Desk, leave empty for the rest of the clip"),
@@ -52,7 +53,7 @@ export const clipSrc = (clip: string): string => staticFile(clip.includes("/") ?
  * then the developer's sign-off. The footage itself never moves (pixel art
  * crawls under a zoom); the blurred fill breathes instead.
  */
-export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending = "signoff", push, sourceAspect, voice, voiceData, captions, voiceVolume, duck, segments, slide }) => {
+export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending = "signoff", push, sourceAspect, voice, voiceData, captions, voiceVolume, duck, sequenceData }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const { format } = useFormat();
@@ -63,16 +64,18 @@ export const GameplayClip: React.FC<GameplayClipProps> = ({ clip, title, line, s
   const lowerAt = Math.round(CLIP_TIMING.lowerAt * fps);
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
-  const spoken = useVoice({ voice, voiceData, duck }, startFrom, bodyEnd, fps);
+  const track = useSequence(src, (sequenceData as Playable | undefined) ?? null);
+  const spoken = useVoice({ voice, voiceData, duck }, track, startFrom, bodyEnd, fps);
+  const bed = useBed(track, { music, musicFrom, musicVolume });
   const clipVolume = (f: number) => spoken.duck(f) * videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
-      <MusicBed music={music} from={musicFrom} level={musicVolume} duck={spoken.duck} />
+      <MusicBed music={bed.music} from={bed.from} level={bed.level} duck={spoken.duck} />
       <Sequence durationInFrames={bodyEnd}>
         <AbsoluteFill style={{ opacity: bodyOut }}>
           {src ? (
-            <Stage src={src} startFrom={Math.round(startFrom * fps)} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push} segments={segments} slide={slide}>
+            <Stage src={src} startFrom={Math.round(startFrom * fps)} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push} sequence={track}>
               <BrandMark from={titleUntil} />
               <RecChip from={titleUntil + 6} top={chromeTop(format)} />
               {title ? <TitleReveal title={title} until={titleUntil} /> : null}

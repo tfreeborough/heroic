@@ -156,3 +156,10 @@ One trackable link per channel (App Store campaign links or a link
 shortener), weekly note of installs / Discord joins / D1 match count. If a
 channel does nothing for 4 weeks, drop it — the cadence above should cost
 ≤4 focused hours a week total.
+
+## Experiments (one-off big swings)
+
+Radical one-off videos to learn what the algorithm rewards while the account
+is small, built as throwaway Remotion compositions rather than templates.
+Design, the first one (the attention test, with its generated accelerating
+score) and how to measure them: [design/social-experiments.md](./design/social-experiments.md).

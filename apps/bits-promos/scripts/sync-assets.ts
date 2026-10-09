@@ -7,7 +7,8 @@
  *    cooldowns, charges, reach etc. can never drift from the shipped game —
  *    plus each item's one-liner, the same quote the War Table codex shows.
  *  - the battle music (assets/audio/music → public/music), listed in the
- *    roster so the Desk's music picker offers exactly the game's songs.
+ *    roster so the Desk's music picker offers the game's songs, plus any
+ *    promo-only beds (.mp3s dropped straight into public/music).
  *
  * Run via `bun run sync` (every studio/render script runs it first).
  */
@@ -46,7 +47,16 @@ cpSync(join(gameAssets, "ranks"), join(pub, "assets/ranks"), { recursive: true }
 mkdirSync(join(pub, "music"), { recursive: true });
 const songs = readdirSync(join(gameAssets, "audio/music")).filter((f) => f.endsWith(".mp3")).sort();
 for (const f of songs) cpSync(join(gameAssets, "audio/music", f), join(pub, "music", f));
-const music = songs.map((file) => ({ file, name: file[0]!.toUpperCase() + file.slice(1, -".mp3".length) }));
+// Promo-only beds: any other .mp3 dropped into public/music/ (they never ship
+// in the game, so they live here, gitignored like the footage). Listed after
+// the battle songs, named as the file is named.
+const beds = readdirSync(join(pub, "music"))
+  .filter((f) => f.endsWith(".mp3") && !songs.includes(f))
+  .sort((a, b) => a.slice(0, -".mp3".length).localeCompare(b.slice(0, -".mp3".length)));
+const music = [
+  ...songs.map((file) => ({ file, name: file[0]!.toUpperCase() + file.slice(1, -".mp3".length) })),
+  ...beds.map((file) => ({ file, name: file.slice(0, -".mp3".length) })),
+];
 
 const num = (n: number) =>
   Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
@@ -100,5 +110,5 @@ writeFileSync(
   JSON.stringify(roster, null, 2) + "\n",
 );
 console.log(
-  `synced ${roster.weapons.length} weapons + ${roster.abilities.length} abilities, ${music.length} songs, icons + font + app icon`,
+  `synced ${roster.weapons.length} weapons + ${roster.abilities.length} abilities, ${songs.length} songs + ${beds.length} promo beds, icons + font + app icon`,
 );

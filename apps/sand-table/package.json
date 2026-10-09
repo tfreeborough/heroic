@@ -1,0 +1,22 @@
+{
+  "name": "sand-table",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Sand Table — a hand-drawn whiteboard in the game's colours, for drawing explainers on camera: draw, replay the drawing, export it as a clip.",
+  "scripts": {
+    "start": "bun server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "roughjs": "^4.6.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  }
+}

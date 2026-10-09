@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { type Clip, type GameApi, fmtDate, fmtSeconds } from "./api";
+import { type Clip, type GameApi, fmtDate, fmtSeconds, kindOf, shelfLabel, thumbOf } from "./api";
 
 const stem = (file: string) => file.replace(/\.[^.]+$/, "");
 
-type Filter = "ready" | "rendered" | "raw" | "all";
+type Filter = "edits" | "raw" | "rendered" | "all";
 const FILTERS: { id: Filter; label: string; hint: string }[] = [
-  { id: "ready", label: "Cut, not rendered", hint: "Cuts you've cleaned up but haven't made a video from yet." },
-  { id: "rendered", label: "Already rendered", hint: "Cuts or recordings that some render already used." },
-  { id: "raw", label: "Untouched raws", hint: "Recordings with no cut yet — clean them up first, usually." },
-  { id: "all", label: "Everything", hint: "Every clip on disk, originals included." },
+  { id: "edits", label: "Edits, not rendered", hint: "Edits you haven't made a video from yet." },
+  { id: "raw", label: "Recordings", hint: "Raw footage, shelf by shelf. A video straight from one, or Edit it first." },
+  { id: "rendered", label: "Already rendered", hint: "Edits and recordings some render already used." },
+  { id: "all", label: "Everything", hint: "Every edit, recording and old cut on disk." },
 ];
 
 /**
  * The Make screen's clip chooser: the same cards as the Clips tab, filtered
- * down to what you'd actually pick (a cut nobody's rendered yet) with the
- * rest one tab away. Hover a card to play it.
+ * down to what you'd actually pick (an edit nobody's rendered yet) with the
+ * rest one tab away. Recordings come shelf by shelf, as on the Clips tab.
+ * Hover a card to play it.
  */
 export const ClipPicker: React.FC<{
   api: GameApi;
@@ -24,8 +25,11 @@ export const ClipPicker: React.FC<{
   current?: string;
   onPick: (file: string) => void;
   onClose: () => void;
-}> = ({ api, clips, renderedCount, current, onPick, onClose }) => {
-  const [filter, setFilter] = useState<Filter>("ready");
+  /** The tab it opens on (default: edits not rendered yet). */
+  initial?: Filter;
+  title?: string;
+}> = ({ api, clips, renderedCount, current, onPick, onClose, initial = "edits", title = "Pick a clip" }) => {
+  const [filter, setFilter] = useState<Filter>(initial);
   const [q, setQ] = useState("");
   const [hover, setHover] = useState<string | null>(null);
 
@@ -36,24 +40,29 @@ export const ClipPicker: React.FC<{
   }, [onClose]);
 
   const groups = useMemo(() => {
-    const hasCuts = new Set(clips.filter((c) => c.source).map((c) => c.source!));
     const newest = [...clips].sort((a, b) => (a.facts.recordedAt < b.facts.recordedAt ? 1 : -1));
+    // Recordings shelf by shelf (Unsorted first, then A–Z), newest first within one.
+    const shelfOrder = (a: Clip, b: Clip) => {
+      const x = a.shelf ?? "";
+      const y = b.shelf ?? "";
+      return x === y ? 0 : x === "" ? -1 : y === "" ? 1 : x.localeCompare(y);
+    };
     return {
-      ready: newest.filter((c) => c.source && !renderedCount.has(c.file)),
+      edits: newest.filter((c) => c.path && !renderedCount.has(c.file)),
+      raw: newest.filter((c) => !c.source && !c.path).sort(shelfOrder),
       rendered: newest.filter((c) => renderedCount.has(c.file)),
-      raw: newest.filter((c) => !c.source && !hasCuts.has(c.file) && !renderedCount.has(c.file)),
       all: newest,
     } satisfies Record<Filter, Clip[]>;
   }, [clips, renderedCount]);
 
   const needle = q.trim().toLowerCase();
-  const shown = groups[filter].filter((c) => !needle || `${c.title} ${c.file} ${c.source ?? ""}`.toLowerCase().includes(needle));
+  const shown = groups[filter].filter((c) => !needle || `${c.title} ${c.file} ${c.source ?? ""} ${c.shelf ?? ""} ${c.note}`.toLowerCase().includes(needle));
 
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="row between">
-          <h2>Pick a clip</h2>
+          <h2>{title}</h2>
           <button className="ghost small" onClick={onClose}>
             Close
           </button>
@@ -66,7 +75,7 @@ export const ClipPicker: React.FC<{
               </button>
             ))}
           </div>
-          <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="search title or file…" style={{ maxWidth: 260, marginLeft: "auto" }} autoFocus />
+          <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="search title, file, shelf or note…" style={{ maxWidth: 260, marginLeft: "auto" }} autoFocus />
         </div>
         <div className="small muted">{FILTERS.find((f) => f.id === filter)!.hint}</div>
         <div className="modal-body">
@@ -84,11 +93,11 @@ export const ClipPicker: React.FC<{
                     onMouseEnter={() => setHover(c.file)}
                     onMouseLeave={() => setHover((h) => (h === c.file ? null : h))}
                   >
-                    <div className="thumb">
+                    <div className={`thumb${!c.path && c.facts.width > c.facts.height ? " wide" : ""}`}>
                       {hover === c.file ? (
-                        <video src={api.clipUrl(c.file)} autoPlay muted loop playsInline poster={api.clipThumb(c.file, Math.min(c.facts.seconds * 0.3, 8))} />
+                        <video src={c.video ?? api.clipUrl(c.file)} autoPlay muted loop playsInline poster={thumbOf(api, c)} />
                       ) : (
-                        <img src={api.clipThumb(c.file, Math.min(c.facts.seconds * 0.3, 8))} alt="" loading="lazy" />
+                        <img src={thumbOf(api, c)} alt="" loading="lazy" />
                       )}
                     </div>
                     <div className="body">
@@ -99,10 +108,10 @@ export const ClipPicker: React.FC<{
                         {fmtSeconds(c.facts.seconds)} · {fmtDate(c.facts.recordedAt)}
                       </div>
                       <div className="small muted mono" title={c.file} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {c.source ? `cut from ${stem(c.source)}` : c.file}
+                        {c.path ? `edit · ${c.shots} shot${c.shots === 1 ? "" : "s"}, ${c.sources} recording${c.sources === 1 ? "" : "s"}` : c.source ? `old cut from ${stem(c.source)}` : `${shelfLabel(c.shelf)} · ${c.file}`}
                       </div>
                       <div className="row" style={{ gap: 6 }}>
-                        {c.source ? <span className="badge">cut</span> : <span className="badge">raw</span>}
+                        {c.path ? <span className="badge ok">edit</span> : c.source ? <span className="badge">old cut</span> : <span className="badge">{kindOf(c)}</span>}
                         {n ? <span className="badge ok">rendered{n > 1 ? ` ×${n}` : ""}</span> : null}
                         {c.file === current ? <span className="badge ok">selected</span> : null}
                       </div>

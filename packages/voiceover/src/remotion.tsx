@@ -11,7 +11,8 @@ import type * as React from "react";
 import { Audio, Sequence, continueRender, delayRender, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { activeWord, bareWord, pageAt, pagesOf } from "./captions";
 import { duckAt, piecesInVideo, placedWords } from "./timeline";
-import type { CaptionStyle, Piece, VoiceOver } from "./types";
+import type { Sequence as Seq } from "./sequence";
+import type { CaptionStyle, Piece, Take, VoiceOver } from "./types";
 
 /**
  * The voice-over at `path` (under public/, e.g. "voice/harpoon.json"), or
@@ -62,20 +63,26 @@ export const useDuck = (pieces: Piece[], depth = 0.35): ((frame: number) => numb
   return useMemo(() => (pieces.length && depth < 1 ? (frame: number) => duckAt(pieces, frame / fps, depth) : () => 1), [pieces, depth, fps]);
 };
 
-/** The voice itself: one <Audio> per piece, de-clicked at both ends. */
-export const VoiceTrack: React.FC<{ voice: VoiceOver; pieces: Piece[]; volume?: number }> = ({ voice, pieces, volume: asked = 1 }) => {
+/** What the players need of a voice: its takes and how it's set. A VoiceOver or a Sequence's `takes` + `voice` both fit. */
+export type Spoken = { takes: Take[]; captionNudgeMs: number; volume?: number };
+export const spokenOf = (v: VoiceOver | (Pick<Seq, "takes" | "voice"> & { pieces?: undefined })): Spoken => ("voice" in v && v.voice ? { takes: v.takes, captionNudgeMs: v.voice.captionNudgeMs, volume: v.voice.volume } : (v as VoiceOver));
+
+/** The voice itself: one <Audio> per piece, de-clicked at both ends. A piece's own `volume`/`muted` (an audio clip) count too. */
+export const VoiceTrack: React.FC<{ voice: Spoken; pieces: (Piece & { volume?: number; muted?: boolean })[]; volume?: number }> = ({ voice, pieces, volume: asked = 1 }) => {
   const { fps } = useVideoConfig();
-  // The voice-over's own level (set where it's edited) times the video's.
-  const volume = asked * Math.max(0, Math.min(1, voice.volume ?? 1));
+  // The voice's own level (set where it's edited) times the video's.
+  const base = asked * Math.max(0, Math.min(1, voice.volume ?? 1));
   return (
     <>
       {pieces.map((p) => {
         const take = voice.takes[p.take];
-        if (!take) return null;
+        if (!take || p.muted) return null;
+        const volume = base * Math.max(0, Math.min(2, p.volume ?? 1));
         const from = Math.round(p.at * fps);
         const frames = Math.round((p.at + (p.end - p.start)) * fps) - from;
         if (frames < 1) return null;
-        const fade = Math.min(2, Math.floor(frames / 2));
+        // The fades must leave a frame between them: interpolate throws on a repeated input (2 or 4 frames did that).
+        const fade = Math.min(2, Math.floor((frames - 1) / 2));
         const level = fade ? (f: number) => volume * interpolate(f, [0, fade, frames - fade, frames], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }) : volume;
         // Keyed by exactly what the Player's shared audio tags key it by (file, from, length). A new
         // <Audio> with the same id as one still mounted borrows its tag, then loses it when the old
@@ -116,7 +123,7 @@ export type CaptionPlacement = {
 };
 
 export const Captions: React.FC<{
-  voice: VoiceOver;
+  voice: Spoken;
   /** Already in video time (useVideoPieces). */
   pieces: Piece[];
   style: CaptionStyle;

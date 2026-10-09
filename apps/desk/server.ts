@@ -16,15 +16,20 @@ import index from "./index.html";
 import { type GameConfig } from "./game";
 import { GAMES, gameById } from "./games";
 import { type CleanupSpec, cleanupClip, ffprobe, filmstripAsync, thumbnail } from "./lib/ffmpeg";
-import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip, syncFootage, trashClip, writeSidecar } from "./lib/footage";
+import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip, safeShelf, syncFootage, trashClip, writeSidecar } from "./lib/footage";
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
 import { hasClaude } from "./lib/draft";
+import type { IdeaPatch } from "./lib/ideas";
+import { addIdea, readIdeas, removeIdea, updateIdea } from "./lib/ideasStore";
 import { type PostPatch, movePost, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
 import { type VoiceOver, voiceId } from "@heroic/voiceover";
-import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, saveTake, transcribeTake, voicePath, writeVoice } from "./lib/voice";
+import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, resoundTakes, saveTake, soundStrength, transcribeTake, voicePath, writeVoice } from "./lib/voice";
 import { installWhisper, whisperStatus } from "./lib/whisper";
+import { backupImports, importJobs, startImport } from "./lib/imports";
+import { createSequence, footageSrc, listSequences, readSequence, sequenceFrom, sequencePath, trashSequence, writeSequence } from "./lib/sequences";
+import type { Sequence, Take } from "@heroic/voiceover";
 
 const PORT = Number(process.env.DESK_PORT ?? 3400);
 
@@ -74,13 +79,15 @@ const server = Bun.serve({
   // which can be minutes; Bun's default 10s idle timeout would drop the socket
   // under them. 255 is the ceiling Bun allows.
   idleTimeout: 255,
+  // Screen recordings dropped on the page come up as one request body (Bun's default cap is 128 MB).
+  maxRequestBodySize: 32 * 1024 ** 3,
   // Full page reloads on change, not hot swaps: the templates load as a lazy
   // chunk and a hot-swapped screen would keep the old one until a reload.
   development: { hmr: false, console: true },
   routes: {
     "/": index,
     "/api/games": {
-      GET: () => json(GAMES.map((g) => ({ id: g.id, name: g.name, icon: `/g/${g.id}/${g.icon}`, fps: g.fps, formats: g.formats, footageFolderId: g.drive.footageFolderId, footageDir: g.footageDir, rendersDir: g.rendersDir }))),
+      GET: () => json(GAMES.map((g) => ({ id: g.id, name: g.name, icon: `/g/${g.id}/${g.icon}`, fps: g.fps, formats: g.formats, footageFolderId: g.drive.footageFolderId, footageDir: g.footageDir, rendersDir: g.rendersDir, footagePublic: footageSrc(g, "").replace(/\/$/, "") }))),
     },
 
     // ── raw clips ──
@@ -89,6 +96,29 @@ const server = Bun.serve({
       POST: withGame(async (g, req) => json(await syncFootage(g, { offline: new URL(req.url).searchParams.get("offline") === "1" }))),
     },
     /** What's been binned; restore puts a recording back (from .trash/, or off the ledger so Drive re-sends it). */
+    /** A recording from the Mac: the body is the file, `?name=` its name. Answers once it's on disk; the convert runs on (poll GET). */
+    "/api/:game/imports": {
+      GET: withGame((g) => json([...importJobs.values()].filter((j) => j.game === g.id).sort((a, b) => b.startedAt - a.startedAt).slice(0, 20))),
+      POST: withGame(async (g, req) => {
+        const q = new URL(req.url).searchParams;
+        const name = safeName(q.get("name") ?? "recording.mov");
+        if (!req.body) return json({ error: "no file" }, 400);
+        try {
+          return json(await startImport(g, name, req, safeShelf(q.get("shelf") ?? "")));
+        } catch (e) {
+          return fail(e, 400);
+        }
+      }),
+    },
+    "/api/:game/imports/backup": {
+      POST: withGame(async (g) => {
+        try {
+          return json(await backupImports(g));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
     "/api/:game/bin": { GET: withGame((g) => json(listBinned(g))) },
     "/api/:game/bin/:file/restore": { POST: withGame((g, req) => json(restoreClip(g, safeName(decodeURIComponent(req.params.file!))))) },
     "/api/:game/clips/:file": {
@@ -103,6 +133,12 @@ const server = Bun.serve({
         if (!prev) return json({ error: "no such clip" }, 404);
         const patch = (await req.json()) as Partial<FootageSidecar>;
         const next: FootageSidecar = { ...prev, ...patch, file: prev.file, facts: prev.facts };
+        // A shelf is a folder name; an empty one means unshelved (the key goes, not an empty string).
+        if ("shelf" in patch) {
+          const shelf = safeShelf(patch.shelf ?? "");
+          if (shelf) next.shelf = shelf;
+          else delete next.shelf;
+        }
         writeSidecar(g, next);
         return json(next);
       }),
@@ -112,11 +148,11 @@ const server = Bun.serve({
       }),
     },
     "/api/:game/clips/:file/thumb": {
-      GET: withGame((g, req) => {
+      GET: withGame(async (g, req) => {
         const name = safeName(decodeURIComponent(req.params.file!));
         const at = Number(new URL(req.url).searchParams.get("at") ?? 1);
         try {
-          return file(thumbnail(join(footageDir(g), name), Math.max(0, at)));
+          return file(await thumbnail(join(footageDir(g), name), Math.max(0, at), 480, req.signal));
         } catch (e) {
           return fail(e);
         }
@@ -181,6 +217,73 @@ const server = Bun.serve({
       }),
     },
 
+    // ── edits (sequences) ──
+    "/api/:game/sequences": {
+      GET: withGame((g) => json(listSequences(g))),
+      /** A new edit: `{ name? }` for an empty timeline (Make's Start a timeline), or `{ file, from?, fresh? }` for one started from a recording (see sequenceFrom). */
+      POST: withGame(async (g, req) => {
+        try {
+          const body = (await req.json()) as { file?: string; from?: string; fresh?: boolean; name?: string };
+          const s = body.file ? sequenceFrom(g, { file: body.file, from: body.from, fresh: body.fresh }) : createSequence(g, body.name);
+          return json({ ...s, path: sequencePath(g, s.id) });
+        } catch (e) {
+          return fail(e, 400);
+        }
+      }),
+    },
+    "/api/:game/sequences/:id": {
+      GET: withGame((g, req) => {
+        const s = readSequence(g, req.params.id!);
+        return s ? json({ ...s, path: sequencePath(g, s.id) }) : json({ error: "no such edit" }, 404);
+      }),
+      PUT: withGame(async (g, req) => {
+        try {
+          const s = writeSequence(g, { ...((await req.json()) as Sequence), id: req.params.id! });
+          return json({ ...s, path: sequencePath(g, s.id) });
+        } catch (e) {
+          return fail(e, 400);
+        }
+      }),
+      DELETE: withGame((g, req) => {
+        trashSequence(g, req.params.id!);
+        return json({ ok: true });
+      }),
+    },
+    /** A recording (the request body: a WAV off the mic, or any audio with `?ext=`) → a take for this edit, made to sound as `?tidy=`/`?denoise=` ask. The page adds it to the edit. */
+    "/api/:game/sequences/:id/takes": {
+      POST: withGame(async (g, req) => {
+        const q = new URL(req.url).searchParams;
+        try {
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          if (bytes.byteLength < 100) return json({ error: "that recording is empty" }, 400);
+          return json(await saveTake(g, req.params.id!, bytes, { ext: q.get("ext") ?? "wav", tidy: q.get("tidy") !== "0", denoise: Number(q.get("denoise")) || 0, signal: req.signal }));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Whisper over one take (the body): the same take back, with its words. */
+    "/api/:game/sequences/:id/transcribe": {
+      POST: withGame(async (g, req) => {
+        try {
+          return json(await transcribeTake(g, (await req.json()) as Take, req.signal));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** The edit's takes made to sound another way (tidied or not, the noise down or not) from the raw recordings: `{ takes, tidy, denoise }` → the takes, pointing at the new files. */
+    "/api/:game/sequences/:id/sound": {
+      POST: withGame(async (g, req) => {
+        try {
+          const body = (await req.json()) as { takes: Take[]; tidy?: boolean; denoise?: number };
+          return json(await resoundTakes(g, body.takes ?? [], { tidy: body.tidy !== false, denoise: soundStrength(body.denoise) }, req.signal));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+
     // ── voice-overs ──
     "/api/:game/voice": { GET: withGame((g) => json(listVoices(g))) },
     /** Is Whisper built and its model down? POST starts the install and answers at once; poll GET. */
@@ -220,6 +323,7 @@ const server = Bun.serve({
             tidy: body.tidy !== false,
             denoise: Math.max(0, Math.min(3, Math.round(Number(body.denoise) || 0))),
             volume: Number.isFinite(volume) && body.volume !== undefined ? Math.max(0, Math.min(1, volume)) : 1,
+            ...(body.against && Array.isArray((body.against as { shots?: unknown }).shots) ? { against: body.against } : {}),
           }),
         );
       }),
@@ -306,9 +410,9 @@ const server = Bun.serve({
       }),
     },
     "/api/:game/renders/:slug/thumb": {
-      GET: withGame((g, req) => {
+      GET: withGame(async (g, req) => {
         try {
-          return file(thumbnail(join(rendersDir(g), `${safeName(req.params.slug!)}.mp4`), 1.5));
+          return file(await thumbnail(join(rendersDir(g), `${safeName(req.params.slug!)}.mp4`), 1.5, 480, req.signal));
         } catch (e) {
           return fail(e);
         }
@@ -359,6 +463,24 @@ const server = Bun.serve({
         }
       }),
       DELETE: withGame((g, req) => json(removePost(g, req.params.id!))),
+    },
+    // ── video ideas ──
+    "/api/:game/ideas": {
+      GET: withGame((g) => json(readIdeas(g))),
+      POST: withGame(async (g, req) => {
+        const body = (await req.json()) as { title?: string; description?: string };
+        return json(addIdea(g, String(body.title ?? ""), String(body.description ?? "")));
+      }),
+    },
+    "/api/:game/ideas/:id": {
+      PUT: withGame(async (g, req) => {
+        try {
+          return json(updateIdea(g, req.params.id!, (await req.json()) as IdeaPatch));
+        } catch (e) {
+          return fail(e, 404);
+        }
+      }),
+      DELETE: withGame((g, req) => json(removeIdea(g, req.params.id!))),
     },
   },
   /** Static: /g/<game>/renders/<file>, /g/<game>/<public path>, then the cookie-selected game's public dir at the root. */

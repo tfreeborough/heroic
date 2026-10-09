@@ -642,6 +642,18 @@
     {
       "file": "warring.mp3",
       "name": "Warring"
+    },
+    {
+      "file": "Slow Piano Bed.mp3",
+      "name": "Slow Piano Bed"
+    },
+    {
+      "file": "Slow Piano Bed 2.mp3",
+      "name": "Slow Piano Bed 2"
+    },
+    {
+      "file": "The Last Salute.mp3",
+      "name": "The Last Salute"
     }
   ]
 }

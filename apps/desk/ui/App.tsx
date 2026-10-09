@@ -4,14 +4,23 @@ import { Clips } from "./Clips";
 import { Make } from "./Make";
 import { Queue } from "./Queue";
 import { Renders } from "./Renders";
-import { Edit } from "./Edit";
+import { Editor, OpenEdit } from "./edit/Editor";
+import { Ideas } from "./Ideas";
 
-/** Hash routes: #<game>/clips · #<game>/clean/<file>[?from=<cut>][&vo=<id>] · #<game>/make[/<file> | /batch:<id>] · #<game>/renders · #<game>/queue
- * `clean` is the editor (footage, voice, captions). `from` = the cut whose
- * edit it starts from; `vo` = which of the clip's voice-overs (default: the
- * one named after the clip). #<game>/voice/<file> is the address the
- * voice screen had before it moved into the editor. */
-export type Route = { name: "clips" } | { name: "clean"; file: string; from?: string; vo?: string } | { name: "make"; file?: string; batch?: string } | { name: "renders" } | { name: "queue" };
+/** Hash routes: #<game>/clips · #<game>/edit/<id> · #<game>/clean/<file>[?from=<cut>][&fresh=1] · #<game>/make[/<file> | /batch:<id>] · #<game>/renders · #<game>/queue · #<game>/ideas
+ * `edit` is the sequence editor (tracks of clips, the voice, the music,
+ * captions). `clean` opens the edit for a recording, starting one if there
+ * isn't one (`fresh`: always a new one); `from` = a cut the old editor
+ * made, whose pieces it starts from. #<game>/voice/<file> is an address
+ * from before the editor. */
+export type Route =
+  | { name: "clips" }
+  | { name: "edit"; id: string }
+  | { name: "clean"; file: string; from?: string; fresh?: boolean }
+  | { name: "make"; file?: string; batch?: string }
+  | { name: "renders" }
+  | { name: "queue" }
+  | { name: "ideas" };
 
 /** Where a clip is edited: a cut opens on the recording it came from, with its own edit loaded, so the footage it left out is still there to take. */
 export const editOf = (clip: { file: string; source?: string }, clips: { file: string }[]): Route =>
@@ -22,25 +31,38 @@ const parse = (hash: string): { game?: string; route: Route } => {
   const [rawArg, query] = rest.length ? rest.join("/").split("?") : [undefined, undefined];
   const arg = rawArg ? decodeURIComponent(rawArg) : undefined;
   const from = query ? new URLSearchParams(query).get("from") ?? undefined : undefined;
-  const vo = query ? new URLSearchParams(query).get("vo") ?? undefined : undefined;
+  const fresh = query ? new URLSearchParams(query).get("fresh") === "1" : false;
   let route: Route = { name: "clips" };
-  if ((name === "clean" || name === "voice") && arg) route = { name: "clean", file: arg, from, vo };
+  if (name === "edit" && arg) route = { name: "edit", id: arg };
+  else if ((name === "clean" || name === "voice") && arg) route = { name: "clean", file: arg, from, fresh };
   else if (name === "make") route = { name: "make", file: arg?.startsWith("batch:") ? undefined : arg, batch: arg?.startsWith("batch:") ? arg.slice(6) : undefined };
   else if (name === "renders") route = { name: "renders" };
   else if (name === "queue") route = { name: "queue" };
+  else if (name === "ideas") route = { name: "ideas" };
   return { game: game || undefined, route };
+};
+const query = (q: Record<string, string | undefined>) => {
+  const s = Object.entries(q)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v!)}`)
+    .join("&");
+  return s ? `?${s}` : "";
 };
 const hashFor = (game: string, r: Route) =>
   `#${game}/` +
-  (r.name === "clean"
-    ? `clean/${encodeURIComponent(r.file)}${r.from || r.vo ? `?${[r.from ? `from=${encodeURIComponent(r.from)}` : "", r.vo ? `vo=${encodeURIComponent(r.vo)}` : ""].filter(Boolean).join("&")}` : ""}`
+  (r.name === "edit"
+    ? `edit/${encodeURIComponent(r.id)}`
+    : r.name === "clean"
+    ? `clean/${encodeURIComponent(r.file)}${query({ from: r.from, fresh: r.fresh ? "1" : undefined })}`
     : r.name === "make"
       ? `make${r.batch ? `/batch:${encodeURIComponent(r.batch)}` : r.file ? `/${encodeURIComponent(r.file)}` : ""}`
       : r.name);
 
 let currentGame = "";
-export const go = (r: Route) => {
-  location.hash = hashFor(currentGame, r);
+/** `replace`: this address takes the place of the current one in the history (a redirect). */
+export const go = (r: Route, replace = false) => {
+  if (replace) location.replace(hashFor(currentGame, r));
+  else location.hash = hashFor(currentGame, r);
 };
 
 export const App = () => {
@@ -66,7 +88,7 @@ export const App = () => {
   if (!game || !api) return <div className="page muted">No games registered — add one to apps/desk/games.ts.</div>;
   const route = state.route;
   const tab = (name: Route["name"], label: string) => (
-    <a href={hashFor(game.id, { name } as Route)} className={route.name === name || (name === "clips" && route.name === "clean") ? "on" : ""}>
+    <a href={hashFor(game.id, { name } as Route)} className={route.name === name || (name === "clips" && (route.name === "clean" || route.name === "edit")) ? "on" : ""}>
       {label}
     </a>
   );
@@ -82,6 +104,7 @@ export const App = () => {
           {tab("make", "Make a video")}
           {tab("renders", "Renders")}
           {tab("queue", "Queue")}
+          {tab("ideas", "Ideas")}
         </nav>
         <div className="right">
           {list.length > 1 ? (
@@ -97,12 +120,14 @@ export const App = () => {
           )}
         </div>
       </header>
-      <main className="page" key={game.id}>
+      <main className={route.name === "edit" ? "page edit-page" : "page"} key={game.id}>
         {route.name === "clips" ? <Clips game={game} api={api} /> : null}
-        {route.name === "clean" ? <Edit game={game} api={api} file={route.file} from={route.from} vo={route.vo} key={`${route.file}|${route.from ?? ""}|${route.vo ?? ""}`} /> : null}
+        {route.name === "clean" ? <OpenEdit api={api} file={route.file} from={route.from} fresh={route.fresh} key={`${route.file}|${route.from ?? ""}|${route.fresh ? 1 : 0}`} /> : null}
+        {route.name === "edit" ? <Editor game={game} api={api} id={route.id} key={route.id} /> : null}
         {route.name === "make" ? <Make game={game} api={api} file={route.file} batch={route.batch} /> : null}
         {route.name === "renders" ? <Renders game={game} api={api} /> : null}
         {route.name === "queue" ? <Queue game={game} api={api} /> : null}
+        {route.name === "ideas" ? <Ideas game={game} api={api} /> : null}
       </main>
     </>
   );

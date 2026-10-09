@@ -1,17 +1,40 @@
 import type { FormatSpec } from "../game";
 import type { Binned } from "../lib/footage";
+import type { ImportJob } from "../lib/imports";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
+import type { Idea, IdeaPatch } from "../lib/ideas";
 import type { Platform, Post, Schedule } from "../lib/schedule";
 import type { CleanupSpec, FootageSidecar } from "../lib/sidecar";
-import type { Take, VoiceOver } from "@heroic/voiceover";
+import type { Sequence, Take, VoiceOver } from "@heroic/voiceover";
 import type { VoiceSummary } from "../lib/voice";
 import type { WhisperStatus } from "../lib/whisper";
 
-export type Clip = FootageSidecar;
-export type { Batch, Binned, Job, Platform, Post, Render, Schedule, VoiceSummary, WhisperStatus };
+/** A recording in the library, or (from asClips) an edit dressed as one so Make can pick it. */
+export type Clip = FootageSidecar & {
+  /** What a template's clip prop takes, when it isn't `<footagePublic>/<file>` (an edit's JSON). */
+  path?: string;
+  /** A picture for its card, when it isn't the file's own. */
+  thumb?: string;
+  /** The video to play on hover. */
+  video?: string;
+  /** An edit: how many clips, from how many recordings. */
+  shots?: number;
+  /** An edit: it has a music bed (Make hides its own music fields). */
+  music?: boolean;
+  /** An edit: it has voice on its audio tracks. */
+  voiced?: boolean;
+  /** An edit: its markers' times, in order. */
+  markers?: number[];
+  sources?: number;
+  /** An edit: the idea (Ideas tab) it's making, by id. */
+  idea?: string;
+};
+export type { Batch, Binned, Idea, IdeaPatch, ImportJob, Job, Platform, Post, Render, Schedule, VoiceSummary, WhisperStatus };
 /** What /api/games says about a game — enough for the page; templates load separately. */
-export type GameInfo = { id: string; name: string; icon: string; fps: number; formats: Record<string, FormatSpec>; footageFolderId: string; footageDir: string; rendersDir: string };
+export type GameInfo = { id: string; name: string; icon: string; fps: number; formats: Record<string, FormatSpec>; footageFolderId: string; footageDir: string; rendersDir: string; footagePublic: string };
+/** An edit as the server lists it: `path` is what a template's clip prop takes. */
+export type SavedSequence = Sequence & { path: string; seconds?: number };
 
 const j = async <T>(res: Response): Promise<T> => {
   const text = await res.text();
@@ -48,6 +71,42 @@ export const gameApi = (game: string) => {
     clipThumb: (file: string, at: number) => `${base}/clips/${enc(file)}/thumb?at=${at.toFixed(2)}`,
     clipStrip: (file: string, frames = 24) => `${base}/clips/${enc(file)}/strip?frames=${frames}`,
     clipUrl: (file: string) => `/g/${enc(game)}/footage/${enc(file)}`,
+
+    /** A file from the Mac into the footage library, onto `shelf` ("" = unshelved). Upload progress comes through `onProgress` (0–1); the convert is a job to poll with imports(). */
+    importFile: (file: File, onProgress?: (p: number) => void, shelf = "") =>
+      new Promise<ImportJob>((resolve, reject) => {
+        const x = new XMLHttpRequest();
+        x.open("POST", `${base}/imports?name=${enc(file.name)}${shelf ? `&shelf=${enc(shelf)}` : ""}`);
+        x.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+        x.onload = () => {
+          try {
+            const data = JSON.parse(x.responseText) as ImportJob & { error?: string };
+            if (x.status >= 400) reject(new Error(data.error ?? x.statusText));
+            else resolve(data);
+          } catch {
+            reject(new Error(x.status === 404 ? "The Desk's server doesn't know imports yet: stop it (Ctrl+C) and run `bun run desk` again." : x.responseText.slice(0, 200)));
+          }
+        };
+        x.onerror = () => reject(new Error("the upload failed"));
+        x.send(file);
+      }),
+    imports: () => fetch(`${base}/imports`).then((r) => j<ImportJob[]>(r)),
+    backupImports: () => post(`${base}/imports/backup`).then((r) => j<{ ok: boolean; log: string }>(r)),
+
+    sequences: () => fetch(`${base}/sequences`).then((r) => j<(SavedSequence & { seconds: number })[]>(r)),
+    sequence: (id: string) => fetch(`${base}/sequences/${enc(id)}`).then((r) => j<SavedSequence>(r)),
+    /** The edit a clip opens in (made if there isn't one; `fresh` = always a new one). */
+    sequenceFrom: (body: { file: string; from?: string; fresh?: boolean }) => post(`${base}/sequences`, body).then((r) => j<SavedSequence>(r)),
+    /** A new, empty edit (Make's Start a timeline). */
+    newSequence: (name?: string) => post(`${base}/sequences`, { name }).then((r) => j<SavedSequence>(r)),
+    /** A recording off the mic (or an audio file) → a take for this edit. The page puts it on a track. */
+    addSequenceTake: (id: string, audio: Blob, opts: { tidy: boolean; denoise?: number; ext?: string }) =>
+      fetch(`${base}/sequences/${enc(id)}/takes?tidy=${opts.tidy ? 1 : 0}&denoise=${opts.denoise ?? 0}&ext=${enc(opts.ext ?? "wav")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: audio }).then((r) => j<Take>(r)),
+    transcribeTake: (id: string, take: Take) => post(`${base}/sequences/${enc(id)}/transcribe`, take).then((r) => j<Take>(r)),
+    /** The edit's takes made to sound another way: tidied or not, the background noise down (0–3) or not. */
+    sequenceSound: (id: string, takes: Take[], want: { tidy: boolean; denoise?: number }) => post(`${base}/sequences/${enc(id)}/sound`, { takes, ...want }).then((r) => j<Take[]>(r)),
+    saveSequence: (seq: Sequence) => fetch(`${base}/sequences/${enc(seq.id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(seq) }).then((r) => j<SavedSequence>(r)),
+    trashSequence: (id: string) => fetch(`${base}/sequences/${enc(id)}`, { method: "DELETE" }).then((r) => j<{ ok: true }>(r)),
 
     voices: () => fetch(`${base}/voice`).then((r) => j<VoiceSummary[]>(r)),
     /** The saved voice-over, or an empty one for this clip. `path` is what a template's `voice` prop takes. */
@@ -91,10 +150,59 @@ export const gameApi = (game: string) => {
       fetch(`${base}/schedule/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Schedule>(r)),
     ignore: (batch: string, ignored: boolean) =>
       fetch(`${base}/batches/${enc(batch)}/ignore`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ignored }) }).then((r) => j<Schedule>(r)),
+
+    /** The ideas list (Ideas tab): every call returns the whole list, newest first. */
+    ideas: () => fetch(`${base}/ideas`).then((r) => j<Idea[]>(r)),
+    addIdea: (title: string, description = "") => post(`${base}/ideas`, { title, description }).then((r) => j<Idea[]>(r)),
+    updateIdea: (id: string, patch: IdeaPatch) =>
+      fetch(`${base}/ideas/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Idea[]>(r)),
+    removeIdea: (id: string) => fetch(`${base}/ideas/${enc(id)}`, { method: "DELETE" }).then((r) => j<Idea[]>(r)),
     unqueue: (id: string) => fetch(`${base}/schedule/${enc(id)}`, { method: "DELETE" }).then((r) => j<Schedule>(r)),
   };
 };
 export type GameApi = ReturnType<typeof gameApi>;
+
+/** The clip that opens an edit (the earliest on the bottom track), for its picture. */
+export const firstClipOf = (s: Pick<Sequence, "video">) => [...(s.video[0]?.clips ?? [])].sort((a, b) => a.at - b.at)[0];
+export const clipCount = (s: Pick<Sequence, "video">) => s.video.reduce((n, t) => n + t.clips.length, 0);
+export const sourceCount = (s: Pick<Sequence, "video">) => new Set(s.video.flatMap((t) => t.clips.map((c) => c.src))).size;
+export const isVoiced = (s: Pick<Sequence, "audio">) => s.audio.some((t) => !t.muted && t.clips.some((c) => !c.muted));
+/** Which recordings an edit uses. */
+export const usesRecording = (s: Pick<Sequence, "video">, src: string) => s.video.some((t) => t.clips.some((c) => c.src === src));
+
+/** Edits as library entries: file `seq:<id>`, the first clip's recording for the picture. */
+export const asClips = (api: GameApi, game: GameInfo, edits: (SavedSequence & { seconds: number })[]): Clip[] =>
+  edits.map((s) => {
+    const first = firstClipOf(s);
+    const file = first ? first.src.replace(`${game.footagePublic}/`, "") : "";
+    return {
+      file: `seq:${s.id}`,
+      facts: { seconds: s.seconds, width: 1080, height: 1920, fps: game.fps, recordedAt: s.updatedAt.slice(0, 19), bytes: 0 },
+      title: s.name,
+      line: "",
+      note: s.note ?? "",
+      cropTop: 0,
+      cropBottom: 0,
+      muted: false,
+      path: s.path,
+      thumb: file ? api.clipThumb(file, Math.min((first!.start + first!.end) / 2, first!.start + 3)) : undefined,
+      video: file ? api.clipUrl(file) : undefined,
+      shots: clipCount(s),
+      markers: (s.markers ?? []).map((m) => m.at),
+      ...(s.idea ? { idea: s.idea } : {}),
+      ...(s.music ? { music: true } : {}),
+      ...(isVoiced(s) ? { voiced: true } : {}),
+      sources: sourceCount(s),
+    };
+  });
+export const clipPath = (game: GameInfo, c: Clip) => c.path ?? `${game.footagePublic}/${c.file}`;
+/** A shelf's name on screen: the Drive folder's, or Unsorted for the top of the Drive folder. */
+export const shelfLabel = (shelf: string | undefined) => shelf || "Unsorted";
+/** What kind of recording a raw is, from its facts: a phone capture is tall, a screen capture wide. */
+export const kindOf = (c: Clip) => (c.imported ? "from the Mac" : c.facts.width > c.facts.height ? "screen" : "phone");
+/** A blank card for an edit with no footage yet. */
+const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+export const thumbOf = (api: GameApi, c: Clip) => c.thumb ?? (c.path ? BLANK : api.clipThumb(c.file, Math.min(c.facts.seconds * 0.3, 8)));
 
 export const fmtSeconds = (s: number) => {
   const m = Math.floor(s / 60);

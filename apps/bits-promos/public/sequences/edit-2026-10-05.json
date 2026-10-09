@@ -1,0 +1,51 @@
+{
+ "id": "edit-2026-10-05",
+ "name": "Edit 2026-10-05",
+ "video": [
+  {
+   "id": "v1",
+   "clips": []
+  },
+  {
+   "id": "v2-kzhi9jjv",
+   "clips": [
+    {
+     "id": "h4xvehx6",
+     "src": "footage/enter-the-gauntlet-old-footage.mp4",
+     "start": 0,
+     "end": 132.31,
+     "at": 0,
+     "sourceSeconds": 132.31,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     }
+    }
+   ]
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": []
+  }
+ ],
+ "takes": [],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true,
+  "denoise": 2,
+  "volume": 0.5
+ },
+ "music": {
+  "song": "cretan.mp3",
+  "from": 0,
+  "level": 0.1
+ },
+ "slide": 0.4,
+ "createdAt": "2026-10-05T22:29:36.923Z",
+ "updatedAt": "2026-10-05T22:31:08.219Z"
+}

@@ -33,7 +33,7 @@ export const ACCEPT_WINDOW_MS = 15_000;
 export const BOT_ACCEPT_MIN_MS = 1_000;
 export const BOT_ACCEPT_MAX_MS = 5_000;
 /** Queue lockout for the player who caused a void (never armed / bailed). */
-export const DODGE_LOCKOUT_MS = 30_000;
+export const DODGE_LOCKOUT_MS = 45_000;
 
 export interface QueueEntry {
   ws: Socket;

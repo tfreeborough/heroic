@@ -27,6 +27,14 @@ export type FootageSidecar = {
   cropTop: number;
   cropBottom: number;
   muted: boolean;
+  /** Dropped on the Desk from the Mac (not synced from Drive): its untouched original, under the footage dir. */
+  imported?: string;
+  /** The shelf the Clips screen files it on: the Drive folder it sits in
+   * ("B-ROLL", "gameplay/ranked"…). Unset = the top of the Drive folder. */
+  shelf?: string;
+  /** Where it was on Drive at the last sync. When that changes it's been
+   * moved there and the shelf follows; until then a shelf set here stays. */
+  drivePath?: string;
   /** For a clip the Desk cleaned up: the recording it was cut from + how. */
   source?: string;
   cleanup?: CleanupSpec;

@@ -1,0 +1,546 @@
+{
+ "id": "edit-2026-10-07",
+ "name": "Edit 2026-10-07",
+ "video": [
+  {
+   "id": "v1",
+   "clips": [
+    {
+     "id": "rbxsogdv",
+     "src": "footage/Brawl footage .mp4",
+     "start": 8.061,
+     "end": 101.411,
+     "at": 0,
+     "sourceSeconds": 114.78,
+     "aspect": 0.4552083333333333,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     },
+     "volume": 0.4
+    }
+   ]
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": [
+    {
+     "id": "j290txld",
+     "take": 2,
+     "start": 0.028,
+     "end": 11.728,
+     "at": 2.17
+    }
+   ]
+  }
+ ],
+ "takes": [
+  {
+   "file": "voice/takes/edit-2026-10-07-1.n2v1.wav",
+   "seconds": 4.309,
+   "recordedAt": "2026-10-07T22:28:36.161Z",
+   "words": [
+    {
+     "text": "Before",
+     "start": 0.59,
+     "end": 0.992
+    },
+    {
+     "text": "you",
+     "start": 0.992,
+     "end": 1.124
+    },
+    {
+     "text": "swipe,",
+     "start": 1.124,
+     "end": 1.465
+    },
+    {
+     "text": "help",
+     "start": 1.73,
+     "end": 1.942
+    },
+    {
+     "text": "me",
+     "start": 1.942,
+     "end": 2.123
+    },
+    {
+     "text": "do",
+     "start": 2.123,
+     "end": 2.362
+    },
+    {
+     "text": "this",
+     "start": 2.362,
+     "end": 2.595
+    },
+    {
+     "text": "experiment.",
+     "start": 2.595,
+     "end": 3.285
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-07-2.n2v1.wav",
+   "seconds": 14.832,
+   "recordedAt": "2026-10-07T22:37:04.582Z",
+   "words": [
+    {
+     "text": "Before",
+     "start": 0.42,
+     "end": 0.825
+    },
+    {
+     "text": "you",
+     "start": 0.825,
+     "end": 1.002
+    },
+    {
+     "text": "swipe,",
+     "start": 1.002,
+     "end": 1.338
+    },
+    {
+     "text": "this",
+     "start": 1.338,
+     "end": 1.535
+    },
+    {
+     "text": "is",
+     "start": 1.535,
+     "end": 1.634
+    },
+    {
+     "text": "an",
+     "start": 1.634,
+     "end": 1.753
+    },
+    {
+     "text": "experiment.",
+     "start": 1.753,
+     "end": 2.325
+    },
+    {
+     "text": "I'm",
+     "start": 2.66,
+     "end": 2.859
+    },
+    {
+     "text": "a",
+     "start": 2.859,
+     "end": 2.97
+    },
+    {
+     "text": "solo",
+     "start": 2.97,
+     "end": 3.268
+    },
+    {
+     "text": "game",
+     "start": 3.268,
+     "end": 3.526
+    },
+    {
+     "text": "dev,",
+     "start": 3.526,
+     "end": 3.795
+    },
+    {
+     "text": "I'm",
+     "start": 3.95,
+     "end": 4.123
+    },
+    {
+     "text": "matching",
+     "start": 4.123,
+     "end": 4.316
+    },
+    {
+     "text": "my",
+     "start": 4.316,
+     "end": 4.489
+    },
+    {
+     "text": "games",
+     "start": 4.489,
+     "end": 4.805
+    },
+    {
+     "text": "about",
+     "start": 4.805,
+     "end": 5.12
+    },
+    {
+     "text": "90",
+     "start": 5.12,
+     "end": 5.446
+    },
+    {
+     "text": "seconds,",
+     "start": 5.446,
+     "end": 5.873
+    },
+    {
+     "text": "and",
+     "start": 5.873,
+     "end": 5.996
+    },
+    {
+     "text": "most",
+     "start": 5.996,
+     "end": 6.199
+    },
+    {
+     "text": "people",
+     "start": 6.199,
+     "end": 6.484
+    },
+    {
+     "text": "swipe",
+     "start": 6.484,
+     "end": 6.769
+    },
+    {
+     "text": "my",
+     "start": 6.769,
+     "end": 6.911
+    },
+    {
+     "text": "clips",
+     "start": 6.911,
+     "end": 7.145
+    },
+    {
+     "text": "away",
+     "start": 7.145,
+     "end": 7.349
+    },
+    {
+     "text": "in",
+     "start": 7.349,
+     "end": 7.451
+    },
+    {
+     "text": "three.",
+     "start": 7.451,
+     "end": 7.695
+    },
+    {
+     "text": "Can",
+     "start": 8.27,
+     "end": 8.466
+    },
+    {
+     "text": "you",
+     "start": 8.466,
+     "end": 8.586
+    },
+    {
+     "text": "watch",
+     "start": 8.586,
+     "end": 8.812
+    },
+    {
+     "text": "one",
+     "start": 8.812,
+     "end": 8.975
+    },
+    {
+     "text": "match?",
+     "start": 8.975,
+     "end": 9.265
+    },
+    {
+     "text": "The",
+     "start": 9.81,
+     "end": 10.014
+    },
+    {
+     "text": "bar's",
+     "start": 10.014,
+     "end": 10.271
+    },
+    {
+     "text": "your",
+     "start": 10.271,
+     "end": 10.445
+    },
+    {
+     "text": "progress,",
+     "start": 10.445,
+     "end": 10.835
+    },
+    {
+     "text": "the",
+     "start": 10.92,
+     "end": 11.061
+    },
+    {
+     "text": "numbers",
+     "start": 11.061,
+     "end": 11.388
+    },
+    {
+     "text": "who's",
+     "start": 11.388,
+     "end": 11.604
+    },
+    {
+     "text": "still",
+     "start": 11.604,
+     "end": 11.812
+    },
+    {
+     "text": "here,",
+     "start": 11.812,
+     "end": 12.005
+    },
+    {
+     "text": "real",
+     "start": 12.44,
+     "end": 12.694
+    },
+    {
+     "text": "results",
+     "start": 12.694,
+     "end": 13.026
+    },
+    {
+     "text": "next",
+     "start": 13.026,
+     "end": 13.274
+    },
+    {
+     "text": "week.",
+     "start": 13.274,
+     "end": 13.575
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-07-3.n2v1.wav",
+   "seconds": 12.789,
+   "recordedAt": "2026-10-07T22:38:43.623Z",
+   "words": [
+    {
+     "text": "Before",
+     "start": 0.36,
+     "end": 0.745
+    },
+    {
+     "text": "you",
+     "start": 0.745,
+     "end": 0.896
+    },
+    {
+     "text": "swipe,",
+     "start": 0.896,
+     "end": 1.225
+    },
+    {
+     "text": "this",
+     "start": 1.35,
+     "end": 1.533
+    },
+    {
+     "text": "is",
+     "start": 1.533,
+     "end": 1.681
+    },
+    {
+     "text": "an",
+     "start": 1.681,
+     "end": 1.804
+    },
+    {
+     "text": "experiment.",
+     "start": 1.804,
+     "end": 2.415
+    },
+    {
+     "text": "A",
+     "start": 2.73,
+     "end": 2.839
+    },
+    {
+     "text": "match",
+     "start": 2.839,
+     "end": 3.034
+    },
+    {
+     "text": "in",
+     "start": 3.034,
+     "end": 3.192
+    },
+    {
+     "text": "my",
+     "start": 3.192,
+     "end": 3.377
+    },
+    {
+     "text": "game",
+     "start": 3.377,
+     "end": 3.637
+    },
+    {
+     "text": "lasts",
+     "start": 3.637,
+     "end": 3.931
+    },
+    {
+     "text": "90",
+     "start": 3.931,
+     "end": 4.235
+    },
+    {
+     "text": "seconds,",
+     "start": 4.235,
+     "end": 4.735
+    },
+    {
+     "text": "and",
+     "start": 4.81,
+     "end": 4.984
+    },
+    {
+     "text": "most",
+     "start": 4.984,
+     "end": 5.207
+    },
+    {
+     "text": "people",
+     "start": 5.207,
+     "end": 5.44
+    },
+    {
+     "text": "swipe",
+     "start": 5.44,
+     "end": 5.73
+    },
+    {
+     "text": "my",
+     "start": 5.73,
+     "end": 5.866
+    },
+    {
+     "text": "clips",
+     "start": 5.866,
+     "end": 6.156
+    },
+    {
+     "text": "away",
+     "start": 6.156,
+     "end": 6.389
+    },
+    {
+     "text": "in",
+     "start": 6.389,
+     "end": 6.524
+    },
+    {
+     "text": "three.",
+     "start": 6.524,
+     "end": 6.815
+    },
+    {
+     "text": "Can",
+     "start": 7.28,
+     "end": 7.471
+    },
+    {
+     "text": "you",
+     "start": 7.471,
+     "end": 7.68
+    },
+    {
+     "text": "watch",
+     "start": 7.68,
+     "end": 7.89
+    },
+    {
+     "text": "one",
+     "start": 7.89,
+     "end": 8.071
+    },
+    {
+     "text": "match?",
+     "start": 8.071,
+     "end": 8.395
+    },
+    {
+     "text": "The",
+     "start": 8.9,
+     "end": 9.106
+    },
+    {
+     "text": "bar",
+     "start": 9.106,
+     "end": 9.281
+    },
+    {
+     "text": "is",
+     "start": 9.281,
+     "end": 9.389
+    },
+    {
+     "text": "your",
+     "start": 9.389,
+     "end": 9.555
+    },
+    {
+     "text": "progress,",
+     "start": 9.555,
+     "end": 9.985
+    },
+    {
+     "text": "the",
+     "start": 10.29,
+     "end": 10.483
+    },
+    {
+     "text": "number",
+     "start": 10.483,
+     "end": 10.651
+    },
+    {
+     "text": "is",
+     "start": 10.651,
+     "end": 10.789
+    },
+    {
+     "text": "who's",
+     "start": 10.789,
+     "end": 11.032
+    },
+    {
+     "text": "still",
+     "start": 11.032,
+     "end": 11.284
+    },
+    {
+     "text": "here.",
+     "start": 11.284,
+     "end": 11.485
+    }
+   ],
+   "transcribed": true
+  }
+ ],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true,
+  "denoise": 2,
+  "volume": 0.5
+ },
+ "slide": 0.4,
+ "createdAt": "2026-10-07T22:19:10.378Z",
+ "updatedAt": "2026-10-07T23:09:14.199Z"
+}

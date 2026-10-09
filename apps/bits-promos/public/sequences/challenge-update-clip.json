@@ -1,6 +1,228 @@
 {
  "id": "challenge-update-clip",
- "clip": "Challenge Update Clip.mp4",
+ "name": "Challenge Update Clip",
+ "note": "Me giving an update on the challenges update with some background footage",
+ "video": [
+  {
+   "id": "v1",
+   "clips": [
+    {
+     "id": "yge035jk",
+     "src": "footage/Record_2026-09-29-11-02-43_cc36c1c9b1ca14a83351bc515c4a537f.mp4",
+     "start": 0,
+     "end": 25.532,
+     "sourceSeconds": 199.53,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     },
+     "at": 0
+    },
+    {
+     "id": "zkumjhfj",
+     "src": "footage/Record_2026-09-29-11-02-43_cc36c1c9b1ca14a83351bc515c4a537f.mp4",
+     "start": 42.794,
+     "end": 63.607,
+     "sourceSeconds": 199.53,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     },
+     "at": 25.132
+    },
+    {
+     "id": "546bk06p",
+     "src": "footage/Record_2026-09-29-11-02-43_cc36c1c9b1ca14a83351bc515c4a537f.mp4",
+     "start": 78.541,
+     "end": 108.496,
+     "sourceSeconds": 199.53,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     },
+     "at": 45.545
+    },
+    {
+     "id": "ptyaktch",
+     "src": "footage/Record_2026-09-29-11-02-43_cc36c1c9b1ca14a83351bc515c4a537f.mp4",
+     "start": 133.207,
+     "end": 188.649,
+     "sourceSeconds": 199.53,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     },
+     "at": 75.1
+    }
+   ]
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": [
+    {
+     "take": 4,
+     "start": 0.92,
+     "end": 4.237,
+     "at": 0,
+     "id": "yctt21np"
+    },
+    {
+     "take": 4,
+     "start": 4.757,
+     "end": 16.774,
+     "at": 3.317,
+     "id": "8qulym23"
+    },
+    {
+     "take": 6,
+     "start": 0.774,
+     "end": 10.573,
+     "at": 15.58,
+     "id": "y6zmy9jt"
+    },
+    {
+     "take": 9,
+     "start": 0.653,
+     "end": 10.993,
+     "at": 25.379,
+     "id": "dbd7fyry"
+    },
+    {
+     "take": 9,
+     "start": 11.428,
+     "end": 18.097,
+     "at": 35.778,
+     "id": "izcd7fen"
+    },
+    {
+     "take": 9,
+     "start": 18.405,
+     "end": 21.796,
+     "at": 42.506,
+     "id": "cc1mp870"
+    },
+    {
+     "take": 10,
+     "start": 0.98,
+     "end": 4.496,
+     "at": 45.897,
+     "id": "uy9j4i4c"
+    },
+    {
+     "take": 10,
+     "start": 4.861,
+     "end": 7.473,
+     "at": 49.413,
+     "id": "mztw2hxo"
+    },
+    {
+     "take": 10,
+     "start": 7.858,
+     "end": 17.977,
+     "at": 52.025,
+     "id": "vwp3cylq"
+    },
+    {
+     "take": 10,
+     "start": 18.357,
+     "end": 21.572,
+     "at": 62.198,
+     "id": "11vkd8uh"
+    },
+    {
+     "take": 10,
+     "start": 21.85,
+     "end": 31.966,
+     "at": 65.456,
+     "id": "i62s4m36"
+    },
+    {
+     "take": 14,
+     "start": 0.785,
+     "end": 5.755,
+     "at": 75.572,
+     "id": "go5ebjfg"
+    },
+    {
+     "take": 14,
+     "start": 6.208,
+     "end": 15.501,
+     "at": 80.542,
+     "id": "1d36x8ci"
+    },
+    {
+     "take": 14,
+     "start": 15.744,
+     "end": 16.795,
+     "at": 89.889,
+     "id": "w3omdjpy"
+    },
+    {
+     "take": 14,
+     "start": 17.152,
+     "end": 22.738,
+     "at": 90.999,
+     "id": "839vrccl"
+    },
+    {
+     "take": 14,
+     "start": 23.176,
+     "end": 28.845,
+     "at": 96.646,
+     "id": "zp9j76r8"
+    },
+    {
+     "take": 20,
+     "start": 0.772,
+     "end": 5.613,
+     "at": 102.452,
+     "id": "sw7c15ex"
+    },
+    {
+     "take": 20,
+     "start": 5.96,
+     "end": 10.296,
+     "at": 107.336,
+     "id": "g172uld5"
+    },
+    {
+     "take": 20,
+     "start": 10.705,
+     "end": 17.424,
+     "at": 111.706,
+     "id": "gq05hsla"
+    },
+    {
+     "take": 20,
+     "start": 17.883,
+     "end": 21.59,
+     "at": 118.459,
+     "id": "ycn1kcjo"
+    },
+    {
+     "take": 20,
+     "start": 21.946,
+     "end": 29.088,
+     "at": 122.188,
+     "id": "mo4koegt"
+    }
+   ]
+  }
+ ],
  "takes": [
   {
    "file": "voice/takes/record-2026-09-29-11-02-43-cc36c1c9b1ca14a83351bc515c4a537f-1.n1v1.wav",
@@ -8866,136 +9088,17 @@
    "transcribed": true
   }
  ],
- "pieces": [
-  {
-   "take": 4,
-   "start": 0.92,
-   "end": 4.237,
-   "at": 0
-  },
-  {
-   "take": 4,
-   "start": 4.757,
-   "end": 16.774,
-   "at": 3.317
-  },
-  {
-   "take": 6,
-   "start": 0.774,
-   "end": 10.573,
-   "at": 15.58
-  },
-  {
-   "take": 9,
-   "start": 0.653,
-   "end": 10.993,
-   "at": 25.379
-  },
-  {
-   "take": 9,
-   "start": 11.428,
-   "end": 18.097,
-   "at": 35.778
-  },
-  {
-   "take": 9,
-   "start": 18.405,
-   "end": 21.796,
-   "at": 42.506
-  },
-  {
-   "take": 10,
-   "start": 0.98,
-   "end": 4.496,
-   "at": 45.897
-  },
-  {
-   "take": 10,
-   "start": 4.861,
-   "end": 7.473,
-   "at": 49.413
-  },
-  {
-   "take": 10,
-   "start": 7.858,
-   "end": 17.977,
-   "at": 52.025
-  },
-  {
-   "take": 10,
-   "start": 18.357,
-   "end": 21.572,
-   "at": 62.198
-  },
-  {
-   "take": 10,
-   "start": 21.85,
-   "end": 31.966,
-   "at": 65.456
-  },
-  {
-   "take": 14,
-   "start": 0.785,
-   "end": 5.755,
-   "at": 75.572
-  },
-  {
-   "take": 14,
-   "start": 6.208,
-   "end": 15.501,
-   "at": 80.542
-  },
-  {
-   "take": 14,
-   "start": 15.744,
-   "end": 16.795,
-   "at": 89.889
-  },
-  {
-   "take": 14,
-   "start": 17.152,
-   "end": 22.738,
-   "at": 90.999
-  },
-  {
-   "take": 14,
-   "start": 23.176,
-   "end": 28.845,
-   "at": 96.646
-  },
-  {
-   "take": 20,
-   "start": 0.772,
-   "end": 5.613,
-   "at": 102.452
-  },
-  {
-   "take": 20,
-   "start": 5.96,
-   "end": 10.296,
-   "at": 107.336
-  },
-  {
-   "take": 20,
-   "start": 10.705,
-   "end": 17.424,
-   "at": 111.706
-  },
-  {
-   "take": 20,
-   "start": 17.883,
-   "end": 21.59,
-   "at": 118.459
-  },
-  {
-   "take": 20,
-   "start": 21.946,
-   "end": 29.088,
-   "at": 122.188
-  }
- ],
- "captionNudgeMs": -50,
- "tidy": true,
- "denoise": 1,
- "volume": 0.5
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true,
+  "denoise": 1,
+  "volume": 0.5
+ },
+ "slide": 0.4,
+ "origin": {
+  "file": "Record_2026-09-29-11-02-43_cc36c1c9b1ca14a83351bc515c4a537f.mp4",
+  "from": "Challenge Update Clip.mp4"
+ },
+ "createdAt": "2026-10-05T21:44:35.381Z",
+ "updatedAt": "2026-10-05T21:44:35.382Z"
 }

@@ -29,12 +29,12 @@ import {
 } from "@shopify/react-native-skia";
 import { teardropPath } from "./blood";
 
-const FLAME_OUT_MS = 420;
-const SMOKE_MS = 1350;
+const FLAME_OUT_MS = 560;
+const SMOKE_MS = 1450;
 export const SNUFFED_LIFE_MS = FLAME_OUT_MS + SMOKE_MS;
 
 const BODY_R = 19;
-const SHADOW_R = 92;
+const SHADOW_R = 98;
 
 const shadowPaint = Skia.Paint();
 shadowPaint.setAntiAlias(true);
@@ -42,7 +42,7 @@ shadowPaint.setShader(
   Skia.Shader.MakeRadialGradient(
     vec(0, 0),
     1,
-    [Skia.Color("rgba(8, 6, 5, 0.66)"), Skia.Color("rgba(8, 6, 5, 0.4)"), Skia.Color("rgba(8, 6, 5, 0)")],
+    [Skia.Color("rgba(8, 6, 5, 0.46)"), Skia.Color("rgba(8, 6, 5, 0.4)"), Skia.Color("rgba(8, 6, 5, 0)")],
     [0, 0.45, 1],
     TileMode.Clamp,
   ),
@@ -67,7 +67,7 @@ smoke.setStrokeCap(StrokeCap.Round);
 smoke.setStrokeJoin(StrokeJoin.Round);
 
 const C_SILHOUETTE = Skia.Color("#0b0908");
-const C_FLAME_OUT = Skia.Color("#ff8a1e");
+const C_FLAME_OUT = Skia.Color("#ac5203");
 const C_FLAME_IN = Skia.Color("#fff0b8");
 const C_SMOKE = Skia.Color("#2a2521");
 /** A flame, unit-ish: fat base at the origin, the tip 1 up-screen. */

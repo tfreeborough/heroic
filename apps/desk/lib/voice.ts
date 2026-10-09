@@ -192,16 +192,34 @@ export const saveTake = async (g: GameConfig, id: string, bytes: Uint8Array, opt
 };
 
 /** Point every take at its sound made this way (tidied or not, the noise down or not), making the file the first time it's asked for. Lengths don't change, so the edit stands. */
+export const resoundTakes = async (g: GameConfig, takes: Take[], sound: Sound, signal?: AbortSignal): Promise<Take[]> => {
+  ensure(g);
+  const out: Take[] = [];
+  for (const t of takes) {
+    const raw = rawOf(g, t);
+    const file = soundOf(g, stemOf(t), sound);
+    if (!existsSync(file) && raw) await makeWav(raw, file, sound, signal);
+    out.push(existsSync(file) ? { ...t, file: relative(publicDir(g), file) } : t);
+  }
+  return out;
+};
+/** The same for a voice-over file (a plain recording's). */
 export const resound = async (g: GameConfig, voice: VoiceOver, want: Partial<Sound>, signal?: AbortSignal): Promise<VoiceOver> => {
   const sound: Sound = { tidy: want.tidy ?? voice.tidy, denoise: strength(want.denoise ?? voice.denoise) };
-  const takes: Take[] = [];
-  for (const t of voice.takes) {
-    const raw = rawOf(g, t);
-    const out = soundOf(g, stemOf(t), sound);
-    if (!existsSync(out) && raw) await makeWav(raw, out, sound, signal);
-    takes.push(existsSync(out) ? { ...t, file: relative(publicDir(g), out) } : t);
+  return { ...voice, takes: await resoundTakes(g, voice.takes, sound, signal), ...sound };
+};
+export const soundStrength = strength;
+
+/** Takes nobody uses any more → the voice folder's .trash (every file of each: raw and made). */
+export const trashTakes = (g: GameConfig, takes: Take[]) => {
+  if (!takes.length) return;
+  ensure(g);
+  mkdirSync(trashDir(g), { recursive: true });
+  const keep = new Set(listVoices(g).flatMap((o) => readVoice(g, o.id)?.takes ?? []).map(stemOf));
+  for (const t of takes) {
+    if (keep.has(stemOf(t))) continue;
+    for (const f of readdirSync(takesDir(g)).filter((f) => f.startsWith(`${stemOf(t)}.`))) renameSync(join(takesDir(g), f), join(trashDir(g), f));
   }
-  return { ...voice, takes, ...sound };
 };
 
 /** The words of one take. Reads the raw recording when there is one: levelling changes nothing Whisper cares about. */

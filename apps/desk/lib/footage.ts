@@ -3,8 +3,8 @@
  * its footage dir (additively), probe every media file, keep a sidecar per
  * clip. Used by the server and by `bun cli.ts sync <game>`.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { GameConfig } from "../game";
 import { exec } from "./exec";
 import { ffprobe } from "./ffmpeg";
@@ -83,12 +83,41 @@ export const probeAll = (g: GameConfig): string[] => {
 
 export type SyncResult = { ok: boolean; log: string };
 
-/** Drive → footage dir (additive, media only), then probe. */
+/** A shelf name as the Drive folder path spells it: no leading/trailing
+ * slashes, no "..", nothing a path can walk out with. "" = unshelved. */
+export const safeShelf = (s: string): string =>
+  s
+    .split("/")
+    .map((x) => x.trim())
+    .filter((x) => x && x !== "." && x !== "..")
+    .join("/");
+
+/** The folders the library is shelved on: every shelf a sidecar names, sorted, unshelved ("") first. */
+export const listShelves = (g: GameConfig): string[] =>
+  [...new Set(listClips(g).map((c) => c.shelf ?? ""))].sort((a, b) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)));
+
+/** Subfolders rclone made on the way down (a file in Drive's B-ROLL lands
+ * in footage/B-ROLL/ before it's moved up) go once they're empty. The
+ * Desk's own folders (.trash, originals) are left alone. */
+const sweepEmptyDirs = (dir: string) => {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory() || e.name.startsWith(".") || e.name === "originals") continue;
+    const p = join(dir, e.name);
+    sweepEmptyDirs(p);
+    if (readdirSync(p).length === 0) rmdirSync(p);
+  }
+};
+
+/** Drive → footage dir (additive, media only), then probe. The Drive folder
+ * a file sits in is its shelf: the library stays flat on disk, the sidecar
+ * remembers the folder. */
 export const syncFootage = async (g: GameConfig, opts: { offline?: boolean; add?: string[] } = {}): Promise<SyncResult> => {
   const log: string[] = [];
   let ok = true;
   const dir = footageDir(g);
   mkdirSync(dir, { recursive: true });
+  /** Everything on Drive this sync saw: local name → its Drive path. */
+  const onDrive = new Map<string, string>();
   if (!opts.offline) {
     const remote = g.drive.footageRemote;
     const remotes = await exec(["rclone", "listremotes"], g.root);
@@ -122,6 +151,13 @@ export const syncFootage = async (g: GameConfig, opts: { offline?: boolean; add?
           }
           const local = f.Name + ext;
           if (binned.includes(local) || binned.includes(f.Name)) continue;
+          // The library is flat: two Drive folders holding the same name would collide here.
+          const twin = onDrive.get(local);
+          if (twin) {
+            log.push(`⚠ ${f.Path} has the same name as ${twin} — only the first comes down; rename one on Drive`);
+            continue;
+          }
+          onDrive.set(local, f.Path);
           const have = join(dir, local);
           if (existsSync(have) && statSync(have).size === f.Size) continue;
           want.push({ path: f.Path, local, size: f.Size });
@@ -138,10 +174,11 @@ export const syncFootage = async (g: GameConfig, opts: { offline?: boolean; add?
             ok = false;
           }
           for (const w of want) {
+            // rclone keeps Drive's folders and names; the library wants it flat, with an extension.
             const down = join(dir, w.path);
-            if (w.local !== basename(w.path) && existsSync(down)) {
+            if (w.path !== w.local && existsSync(down)) {
               renameSync(down, join(dir, w.local));
-              log.push(`⇣ ${w.path} → ${w.local} (no extension on Drive; it's a video, so it gets one here)`);
+              log.push(`⇣ ${w.path} → ${w.local}${w.local !== basename(w.path) ? " (no extension on Drive; it's a video, so it gets one here)" : ""}`);
             } else if (existsSync(join(dir, w.local))) log.push(`⇣ ${w.local}`);
           }
         } else log.push(`⇣ Drive folder up to date (${files.length - ignored.length} recording${files.length - ignored.length === 1 ? "" : "s"} there, all here${binned.length ? `, ${binned.length} binned` : ""})`);
@@ -149,6 +186,7 @@ export const syncFootage = async (g: GameConfig, opts: { offline?: boolean; add?
       }
     }
   }
+  sweepEmptyDirs(dir);
   for (const src of opts.add ?? []) {
     if (!existsSync(src)) {
       log.push(`⚠ --add: no such file ${src}`);
@@ -158,6 +196,21 @@ export const syncFootage = async (g: GameConfig, opts: { offline?: boolean; add?
     log.push(`+ imported ${basename(src)}`);
   }
   log.push(...probeAll(g));
+  // Shelve by Drive folder: a file that's new here or has moved on Drive
+  // takes the folder it's in now. One that hasn't moved keeps whatever shelf
+  // it has, so a shelf picked in the Desk isn't undone by the next sync.
+  for (const [local, path] of onDrive) {
+    const side = readSidecar(g, local);
+    if (!side || side.drivePath === path) continue;
+    const folder = dirname(path);
+    const shelf = folder === "." ? "" : safeShelf(folder);
+    const moved = side.drivePath !== undefined;
+    const next: FootageSidecar = { ...side, drivePath: path };
+    if (shelf) next.shelf = shelf;
+    else delete next.shelf;
+    writeSidecar(g, next);
+    if (moved || shelf) log.push(`▤ ${local} ${shelf ? `on the ${shelf} shelf` : "unshelved"} (${moved ? "moved" : "it's"} ${shelf ? `in Drive's ${shelf} folder` : "at the top of the Drive folder"})`);
+  }
   const files = mediaFiles(g);
   const orphans = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== LEDGER && !files.some((m) => sidecarName(m) === f));
   for (const o of orphans) log.push(`⚠ orphan sidecar ${o} — its recording isn't in the folder`);

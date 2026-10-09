@@ -38,9 +38,15 @@ export type DeskTemplate = {
    * picks one, and a Render press makes one batch per alternative, named
    * `<name>-<suffix><n>`. Each render gets a single string. */
   variants?: { key: string; suffix: string; placeholder?: string };
+  /** Fields that hold a list of lines (a list clip's items): shown as a row
+   * per line, Enter adds the next. The render gets the array. `number`
+   * labels row `i` of `n` filled ones (default: 1, 2, 3…). */
+  lists?: { key: string; label: string; placeholder?: string; hint?: string; number?: (i: number, n: number, props: Record<string, unknown>) => string }[];
   /** A caution under the form for these props (effective = what renders,
-   * typed = what's in the form), e.g. a loop that's too long. */
-  warn?: (effective: Record<string, unknown>, typed: Record<string, unknown>) => string | undefined;
+   * typed = what's in the form), e.g. a loop that's too long. `clip` = the
+   * chosen clip's facts the form doesn't hold: an edit's marker times
+   * (undefined for a plain recording). */
+  warn?: (effective: Record<string, unknown>, typed: Record<string, unknown>, clip?: { markers?: number[] }) => string | undefined;
   /** Selects instead of free text for some fields. */
   options?: Record<string, { value: string; label: string }[]>;
   /** Fields the screen handles itself. */

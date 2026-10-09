@@ -1,6 +1,9 @@
 /**
  * A voice-over: recordings of someone talking (takes), sliced and placed
  * along a clip (pieces), with the words that were said (from Whisper).
+ * Since 2026-10-05 an edit's voice lives IN its sequence (takes + audio
+ * tracks, see sequence.ts); this file shape remains for voice-overs made
+ * over a plain recording, and for reading old ones.
  *
  * Two clocks, never mixed:
  *  - TAKE time: seconds into a recording. Words and a piece's slice live here.
@@ -9,6 +12,7 @@
  * A word's place on the clip is always worked out from its piece, so moving
  * or cutting a piece carries its captions with it.
  */
+
 export type Word = {
   text: string;
   /** Seconds into the take. */
@@ -56,6 +60,8 @@ export type VoiceOver = {
   denoise?: number;
   /** The voice's own level, 0–1 (1 = as the takes are). A video can turn it down further (`voiceVolume`). */
   volume?: number;
+  /** From before 2026-10-05: the old edit's timing it was recorded against. Unused now. */
+  against?: unknown;
 };
 
 /** A caption that lands a frame or two ahead of its word reads as in time; one that lands with it reads as late. */

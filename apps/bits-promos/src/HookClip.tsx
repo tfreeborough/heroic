@@ -6,14 +6,15 @@ import { BrandMark, LowerThird, SignOff, chromeTop, clamp, goldText, useType } f
 import { Backdrop, MusicBed, Outro, RecChip, useFormat } from "./components";
 import { clipSrc } from "./GameplayClip";
 import { DEV } from "./data/copy";
-import { Stage, useSourceAspect, useStage } from "./stage";
-import { VoiceLayer, useVoice, voiceProps } from "./voice";
+import type { Playable } from "@heroic/voiceover";
+import { Stage, useSequence, useSourceAspect, useStage } from "./stage";
+import { VoiceLayer, useBed, useVoice, voiceProps } from "./voice";
 
 /** The props panel / Desk form for a hook clip. Every field described. */
 export const hookClipSchema = z.object({
   clip: z
     .string()
-    .describe('The recording, as a path under public/ (e.g. "footage/VID_1.mp4"); a bare filename means public/clips/. Empty = placeholder.'),
+    .describe('The recording or a Desk edit, as a path under public/ (e.g. "footage/VID_1.mp4" or "sequences/devlog-1.json"); a bare filename means public/clips/. Empty = placeholder.'),
   hook: z
     .string()
     .describe('The hook: on screen from the very first frame, big (e.g. "He had 1 HP. Then the Harpoon."). In the Desk, add several and each renders as its own video to test against each other'),
@@ -68,7 +69,7 @@ export const hookClipDurationSeconds = (p: Pick<HookClipProps, "durationSeconds"
  * the footage — clear of the platforms' header above and their caption /
  * buttons below — or in the column beside the play in landscape.
  */
-const HookCard: React.FC<{ hook: string; until: number; look: "bold" | "gold"; returnAt?: number }> = ({ hook, until, look, returnAt }) => {
+export const HookCard: React.FC<{ hook: string; until: number; look: "bold" | "gold"; returnAt?: number }> = ({ hook, until, look, returnAt }) => {
   const frame = useCurrentFrame();
   const { format, width, height } = useFormat();
   const { box, column } = useStage();
@@ -163,7 +164,7 @@ const HookCard: React.FC<{ hook: string; until: number; look: "bold" | "gold"; r
  * It is the match clip's sibling, kept separate so hook experiments never
  * disturb the premium cut. Everything after the hook is the same grammar.
  */
-export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_TIMING.hookFor, look = "bold", follow, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending, tail, loopBlend = HOOK_TIMING.blend, push, sourceAspect, voice, voiceData, captions, voiceVolume, duck, segments, slide }) => {
+export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_TIMING.hookFor, look = "bold", follow, startFrom = 0, muted = false, music, musicFrom, musicVolume, videoVolume = 1, cropTop, cropBottom, ending, tail, loopBlend = HOOK_TIMING.blend, push, sourceAspect, voice, voiceData, captions, voiceVolume, duck, sequenceData }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const { format } = useFormat();
@@ -176,7 +177,9 @@ export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_T
   const src = clip ? clipSrc(clip) : null;
   const aspect = useSourceAspect(src, sourceAspect);
   // A loop only de-clicks the last few frames; the replay picks the sound straight back up.
-  const spoken = useVoice({ voice, voiceData, duck }, startFrom, bodyEnd, fps);
+  const track = useSequence(src, (sequenceData as Playable | undefined) ?? null);
+  const spoken = useVoice({ voice, voiceData, duck }, track, startFrom, bodyEnd, fps);
+  const bed = useBed(track, { music, musicFrom, musicVolume });
   const clipVolume = loop ? (f: number) => spoken.duck(f) * videoVolume * interpolate(f, [bodyEnd - 4, bodyEnd], [1, 0], clamp) : (f: number) => spoken.duck(f) * videoVolume * interpolate(f, [bodyEnd - fps * 0.8, bodyEnd], [1, 0], clamp);
 
   // The loop's tail: the tail line (if there's room after the hook lifts) or
@@ -196,11 +199,11 @@ export const HookClip: React.FC<HookClipProps> = ({ clip, hook, hookFor = HOOK_T
 
   return (
     <AbsoluteFill style={{ backgroundColor: palette.night }}>
-      <MusicBed music={music} from={musicFrom} level={musicVolume} loop={loop} duck={spoken.duck} />
+      <MusicBed music={bed.music} from={bed.from} level={bed.level} loop={loop} duck={spoken.duck} />
       <Sequence durationInFrames={bodyEnd}>
         <AbsoluteFill style={{ opacity: bodyOut }}>
           {src ? (
-            <Stage src={src} startFrom={startFrame} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push} blend={blend} segments={segments} slide={slide}>
+            <Stage src={src} startFrom={startFrame} muted={muted} cropTop={cropTop} cropBottom={cropBottom} aspect={aspect} volume={clipVolume} push={push} blend={blend} sequence={track}>
               <AbsoluteFill style={{ opacity: chrome }}>
                 <BrandMark from={hookUntil} />
                 <RecChip from={hookUntil + 6} top={chromeTop(format)} />

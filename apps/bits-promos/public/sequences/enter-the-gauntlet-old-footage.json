@@ -1,0 +1,66 @@
+{
+ "id": "enter-the-gauntlet-old-footage",
+ "name": "enter-the-gauntlet-old-footage",
+ "video": [
+  {
+   "id": "v1",
+   "clips": [
+    {
+     "id": "xmj9ucoo",
+     "src": "footage/enter-the-gauntlet-old-footage.mp4",
+     "start": 0,
+     "end": 132.31,
+     "sourceSeconds": 132.31,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "at": 0
+    }
+   ]
+  },
+  {
+   "id": "v2",
+   "clips": [
+    {
+     "id": "30cuyoro",
+     "src": "footage/realmsmith-obelisk-editing.mov",
+     "start": 0,
+     "end": 119.7,
+     "sourceSeconds": 119.7,
+     "aspect": 1.7777777777777777,
+     "frames": {
+      "vertical:stacked": {
+       "x": 0.27262303896761136,
+       "y": 0.13,
+       "w": 0.45475392206477727,
+       "h": 0.71
+      }
+     },
+     "muted": true,
+     "at": 28.364
+    }
+   ]
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": []
+  }
+ ],
+ "takes": [],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true
+ },
+ "slide": 0.4,
+ "origin": {
+  "file": "enter-the-gauntlet-old-footage.mp4"
+ },
+ "createdAt": "2026-10-05T21:32:17.642Z",
+ "updatedAt": "2026-10-05T21:33:16.523Z"
+}

@@ -98,7 +98,9 @@ export const VariantList: React.FC<{
   placeholder?: string;
   onChange: (rows: string[]) => void;
   onFocusRow?: (i: number) => void;
-}> = ({ label, rows, placeholder, onChange, onFocusRow }) => {
+  /** A plain list rather than alternatives to test: its own hint, and each row labelled by `number` (blank rows get none). */
+  list?: { hint?: string; number?: (i: number, n: number) => string };
+}> = ({ label, rows, placeholder, onChange, onFocusRow, list }) => {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const focusNext = useRef<number | null>(null);
   useEffect(() => {
@@ -117,19 +119,24 @@ export const VariantList: React.FC<{
     onChange(next.length ? next : [""]);
   };
   const filled = rows.filter((r) => r.trim()).length;
+  // Row i's place among the filled rows, for the numbers a list shows.
+  const placeOf = (i: number) => rows.slice(0, i).filter((r) => r.trim()).length;
+  const label_ = (i: number) => (list ? (rows[i]!.trim() ? (list.number?.(placeOf(i), filled) ?? String(placeOf(i) + 1)) : "") : String(i + 1));
   return (
     <div className="field variants">
       <label>{label}</label>
       {rows.map((r, i) => (
         <div className="row variant" key={i}>
-          <span className="small muted mono">{i + 1}</span>
+          <span className="small muted mono" style={list ? { minWidth: 22, textAlign: "right" } : undefined}>
+            {label_(i)}
+          </span>
           <input
             ref={(el) => {
               inputs.current[i] = el;
             }}
             type="text"
             value={r}
-            placeholder={i === 0 ? placeholder : "another one to test"}
+            placeholder={i === 0 ? (list && rows.length === 1 ? `${placeholder ?? ""} (or leave empty for none)` : placeholder) : list ? "and the next" : "another one to test"}
             onChange={(e) => set(i, e.target.value)}
             onFocus={() => onFocusRow?.(i)}
             onKeyDown={(e) => {
@@ -142,7 +149,8 @@ export const VariantList: React.FC<{
               }
             }}
           />
-          {rows.length > 1 ? (
+          {/* the last row can be removed too (it becomes one blank row): a list may legitimately be empty */}
+          {rows.length > 1 || r.trim() ? (
             <button className="ghost small" title="Remove" onClick={() => remove(i)}>
               ×
             </button>
@@ -153,7 +161,7 @@ export const VariantList: React.FC<{
         <button className="ghost small" onClick={() => add(rows.length)}>
           + Add another
         </button>
-        <span className="hint">{filled > 1 ? `${filled} ${label}: one press renders each as its own video` : "Add more to test them against each other: each renders as its own video"}</span>
+        <span className="hint">{list ? list.hint : filled > 1 ? `${filled} ${label}: one press renders each as its own video` : "Add more to test them against each other: each renders as its own video"}</span>
       </div>
     </div>
   );

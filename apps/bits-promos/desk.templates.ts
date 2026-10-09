@@ -7,10 +7,13 @@
 import type { DeskTemplate, VoicePreview } from "../desk/game";
 import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from "./src/GameplayClip";
 import { HookClip, hookClipDurationSeconds, hookClipSchema, isLoop } from "./src/HookClip";
+import { ListClip, listClipDurationSeconds, listClipSchema } from "./src/ListClip";
+import { filledItems, markerWarning, numberOf } from "./src/listTiming";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
 import { MUSIC_LEVEL } from "./src/components";
 import { EDITOR_ONLY, voiceDefaults } from "./src/voice";
 import roster from "./src/data/roster.json";
+import { AttentionTest, attentionSchema, attentionSeconds } from "./src/experiments/attention/AttentionTest";
 
 const weaponIds = roster.weapons.map((w) => ({ value: w.id, label: w.name }));
 const spotlightClipProps: DeskTemplate["clipProps"] = (clip, clipSeconds, facts) => ({
@@ -78,6 +81,44 @@ export const TEMPLATES: DeskTemplate[] = [
     hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
   },
   {
+    id: "ListClip",
+    label: "List clip",
+    blurb: "You talking through a list (\"3 mistakes I made making my game\"). The title is the hook on the first frame, then the list shows with every slot blank, and each item lands on a marker you drop in the editor (M). The list fades away between items and the footage dims behind it while it's up. It counts down, so #1 stays blank until the end.",
+    component: ListClip,
+    schema: listClipSchema,
+    seconds: (p) => listClipDurationSeconds(p as never),
+    clipProps: (clip, _clipSeconds, facts) => ({
+      clip,
+      // Blank = the whole edit: a list runs as long as you talk.
+      durationSeconds: undefined,
+      startFrom: 0,
+      sourceAspect: facts && facts.width && facts.height ? facts.width / facts.height : undefined,
+    }),
+    clipKey: "clip",
+    uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
+    defaults: { hook: "", items: [""], order: "down", titleFor: 3, hold: 1.5, showFor: 9, dim: 0.6, look: "bold", durationSeconds: undefined, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "loop", push: 0, ...musicDefaults, ...voiceDefaults },
+    options: { music: songs },
+    needsClip: true,
+    variants: { key: "hook", suffix: "title", placeholder: "3 mistakes I made making my game" },
+    lists: [
+      {
+        key: "items",
+        label: "items, in the order you say them",
+        placeholder: "I built a map editor before I had a game",
+        hint: "Each lands on the next marker in the edit. Keep them short enough to read at a glance; long ones wrap to two lines and then shrink.",
+        number: (i, n, p) => `#${numberOf(i, n, p.order === "up" ? "up" : "down")}`,
+      },
+    ],
+    // Only the markers inside the stretch of the edit this video plays count.
+    warn: (p, _typed, clip) => {
+      const from = Number(p.startFrom) || 0;
+      const to = from + (Number(p.durationSeconds) || Infinity);
+      return markerWarning(filledItems(p.items).length, clip?.markers?.filter((m) => m >= from && m < to).length);
+    },
+    voice: true,
+    hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
+  },
+  {
     id: "WeaponSpotlight",
     label: "Weapon spotlight",
     blurb: "One weapon, forged: it slams in over the footage, the sim's numbers count up on a spec plate, the tagline follows.",
@@ -104,6 +145,28 @@ export const TEMPLATES: DeskTemplate[] = [
     defaults: { kind: "ability", id: abilityIds[0]?.value ?? "sinkhole", muted: false, cropTop: 0, cropBottom: 0, ending: "pitch", ...musicDefaults },
     options: { id: abilityIds, music: songs },
     hide: ["clip", "format", "kind", "sourceAspect"],
+  },
+  {
+    id: "AttentionTest",
+    label: "Experiment · attention test",
+    blurb: "The attention-span test: a bar up the left edge, a big 'still here' count with checkpoint bands as it drops, one fact at a time while you talk, revealed in two parts (on an edit, they land on your M markers), the match graded from black to colour, and the accelerating score. Generate the score for the length first: bun run attention:score -- --seconds N.",
+    component: AttentionTest,
+    schema: attentionSchema,
+    seconds: (p) => attentionSeconds(p as { durationSeconds: number }),
+    clipProps: (clip, clipSeconds, facts) => ({
+      clip,
+      durationSeconds: Math.min(90, Math.floor(clipSeconds)),
+      startFrom: 0,
+      sourceAspect: facts && facts.width && facts.height ? facts.width / facts.height : undefined,
+    }),
+    clipKey: "clip",
+    uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
+    defaults: { hook: "I'm running an experiment on attention. You're in it.", hookFor: 3, intro: 18, curve: 1.6, floor: 1, facts: [], reveal: 2.4, endHold: 2.5, final: "Comment 100 if you made it. Or the % where you nearly swiped.", credit: "That was one match of Blood in the Sand, my mobile game. It's free on the App Store and Google Play, just search the name.", score: true, drumsLevel: 0.9, padLevel: 0.15, padDuck: 0.15, crowdLevel: 0.6, quakeLevel: 0.7, shake: 10, videoVolume: 0.3, muted: false, cropTop: 0, cropBottom: 0, ...voiceDefaults, captions: "regular" },
+    variants: { key: "hook", suffix: "hook", placeholder: "I'm running an experiment on attention. You're in it." },
+    lists: [{ key: "facts", label: "Facts", placeholder: "A fact about attention, one per row", hint: "Optional (none by default). In speaking order; on an edit they land on your M markers, otherwise they spread evenly from the end of the intro to the cut. Checkpoint pills fire as the count falls through 50, 25, 10 and 3" }],
+    needsClip: true,
+    voice: true,
+    hide: ["clip", "format", "sourceAspect", "checkpoints", ...EDITOR_ONLY],
   },
 ];
 

@@ -1,6 +1,6 @@
 import { Player } from "@remotion/player";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type Batch, type Clip, type GameApi, type GameInfo, type Job, type VoiceSummary, fmtDate, fmtSeconds } from "./api";
+import { type Batch, type Clip, type GameApi, type GameInfo, type Idea, type Job, type VoiceSummary, asClips, clipPath, fmtDate, fmtSeconds, thumbOf } from "./api";
 import { editOf, go } from "./App";
 import { ClipPicker } from "./ClipPicker";
 import { SchemaForm, VariantList, listOf } from "./form";
@@ -22,7 +22,10 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   const [clips, setClips] = useState<Clip[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [voices, setVoices] = useState<VoiceSummary[]>([]);
+  // The ideas list, so an edit made from one says which (and can be ticked off from here once it's rendered).
+  const [ideas, setIdeas] = useState<Idea[]>([]);
   const [picking, setPicking] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [template, setTemplateState] = useState<Template | null>(null);
   const [clipFile, setClipFile] = useState<string | undefined>(file);
   const [props, setProps] = useState<Record<string, unknown>>({});
@@ -35,9 +38,11 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   const playerRef = useRef<{ getCurrentFrame: () => number } | null>(null);
 
   useEffect(() => {
-    void api.clips().then(setClips);
+    // Edits first: they're what you'd most likely make a video from.
+    void Promise.all([api.sequences().catch(() => []), api.clips()]).then(([edits, recs]) => setClips([...asClips(api, game, edits), ...recs]));
     void api.batches().then(setBatches);
     void api.voices().then(setVoices).catch(() => {});
+    void api.ideas().then(setIdeas).catch(() => {});
     void loadTemplates(game.id).then((ts) => {
       setTemplates(ts);
       if (ts[0]) {
@@ -47,16 +52,36 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     });
   }, [api, game.id]);
   const clip = clips.find((c) => c.file === clipFile);
-  // Which clips a render has used, and how many batches: any prop pointing into footage/ counts.
+  const idea = clip?.idea ? ideas.find((i) => i.id === clip.idea) : undefined;
+  // Which clips a render has used, and how many batches: any prop pointing into the footage or at an edit counts.
   const renderedCount = useMemo(() => {
     const m = new Map<string, number>();
     for (const b of batches) {
-      const used = new Set(b.renders.flatMap((r) => Object.values(r.props)).filter((v): v is string => typeof v === "string" && v.startsWith("footage/")));
-      for (const f of used) m.set(f.slice(8), (m.get(f.slice(8)) ?? 0) + 1);
+      const used = new Set(b.renders.flatMap((r) => Object.values(r.props)).flatMap((v) => (typeof v === "string" ? [fileOfPath(v)].filter((x): x is string => Boolean(x)) : [])));
+      for (const f of used) m.set(f, (m.get(f) ?? 0) + 1);
     }
     return m;
   }, [batches]);
   const setTemplate = (t: Template) => setTemplateState(t);
+  /** A clip prop → the library entry it names: a recording's file, or `seq:<id>` for an edit. */
+  function fileOfPath(v: string): string | undefined {
+    if (v.startsWith(`${game.footagePublic}/`)) return v.slice(game.footagePublic.length + 1);
+    const edit = /^sequences\/(.+)\.json$/.exec(v)?.[1];
+    return edit ? `seq:${edit}` : undefined;
+  }
+  /** Where a library entry is edited. */
+  const editRoute = (c: Clip) => (c.path ? { name: "edit" as const, id: c.file.slice(4) } : editOf(c, clips));
+  /** A new, empty edit, straight into the timeline editor. Done there comes back here with it chosen. */
+  const startTimeline = async () => {
+    setStarting(true);
+    try {
+      const s = await api.newSequence();
+      go({ name: "edit", id: s.id });
+    } catch (e) {
+      setMsg(`✖ ${(e as Error).message}`);
+      setStarting(false);
+    }
+  };
 
   // What the preview and the render actually get: a blank duration means
   // "to the end of the clip", and any duration is capped at what's left
@@ -87,8 +112,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
       setProps(r.props);
       setFormats(b.renders.map((x) => x.format as Format));
       setPreviewFormat(r.format as Format);
-      const c = String(r.props[t.clipKey] ?? "");
-      setClipFile(c.startsWith("footage/") ? c.slice(8) : undefined);
+      setClipFile(fileOfPath(String(r.props[t.clipKey] ?? "")));
       setName(b.name);
     });
   }, [batch, TEMPLATES, api]);
@@ -96,15 +120,15 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
   // Switching template or clip seeds the clip-derived props; the rest keeps what you typed where names overlap.
   const chooseTemplate = (t: Template) => {
     setTemplate(t);
-    setProps((p) => ({ ...t.defaults, ...pick(p, Object.keys(t.defaults)), ...(clip ? t.clipProps(`footage/${clip.file}`, clip.facts.seconds, clip.facts) : {}) }));
+    setProps((p) => ({ ...t.defaults, ...pick(p, Object.keys(t.defaults)), ...(clip ? t.clipProps(clipPath(game, clip), clip.facts.seconds, clip.facts) : {}) }));
   };
   const chooseClip = (f: string) => {
     setClipFile(f);
     const c = clips.find((x) => x.file === f);
     if (c && template) {
-      // A clip you've voiced brings its voice-over with it (the newest, if there are several).
-      const spoken = template.voice ? { voice: voices.find((v) => v.clip === c.file && v.pieces > 0)?.path ?? "" } : {};
-      setProps((p) => ({ ...p, ...template.clipProps(`footage/${c.file}`, c.facts.seconds, c.facts), cropTop: c.cropTop, cropBottom: c.cropBottom, muted: c.muted, ...(c.title && !p.title ? { title: c.title } : {}), ...(c.line && !p.line ? { line: c.line } : {}), ...spoken }));
+      // A plain recording you'd voiced before edits carried their own voice brings its voice-over with it; an edit's voice is in the edit.
+      const spoken = template.voice ? { voice: c.path ? "" : (voices.find((v) => v.clip === c.file && v.pieces > 0)?.path ?? "") } : {};
+      setProps((p) => ({ ...p, ...template.clipProps(clipPath(game, c), c.facts.seconds, c.facts), cropTop: c.cropTop, cropBottom: c.cropBottom, muted: c.muted, ...(c.title && !p.title ? { title: c.title } : {}), ...(c.line && !p.line ? { line: c.line } : {}), ...spoken }));
       if (!name) setName(c.title || c.file.replace(/\.[^.]+$/, ""));
     }
   };
@@ -127,13 +151,14 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     if (rows[i]?.trim()) setVariant(rows.slice(0, i).filter((r) => r.trim()).length);
   };
 
-  // The voice-overs recorded over this clip, as the `voice` field's choices.
-  const voiceOptions = useMemo(() => voices.filter((v) => v.clip === clipFile && v.pieces > 0).map((v) => ({ value: v.path, label: `${v.id} (${fmtSeconds(v.seconds)})` })), [voices, clipFile]);
-  // Voices load after the clip when the screen opens on one (Clips → Make): pick it up then.
+  // The voice-overs recorded over a plain recording, as the `voice` field's choices. An edit's voice is in the edit: no field.
+  const voiceOptions = useMemo(() => (clip?.path ? [] : voices.filter((v) => v.clip === clipFile && v.pieces > 0).map((v) => ({ value: v.path, label: `${v.id} (${fmtSeconds(v.seconds)})` }))), [voices, clipFile, clip?.path]);
   useEffect(() => {
     if (!template?.voice || batch || !voiceOptions.length) return;
     setProps((p) => (p.voice ? p : { ...p, voice: voiceOptions[0]!.value }));
   }, [voiceOptions, template, batch]);
+  // Fields the chosen edit settles itself: its voice, and its music bed when it has one.
+  const settled = useMemo(() => [...(clip?.path ? ["voice"] : []), ...(clip?.music ? ["music", "musicFrom", "musicVolume"] : [])], [clip?.path, clip?.music]);
 
   const seconds = useMemo(() => {
     try {
@@ -213,11 +238,16 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
       ) : null}
       <div className="row between">
         <h2>Make a video</h2>
-        {clip ? (
-          <button className="ghost small" onClick={() => go(editOf(clip, clips))}>
-            Edit this clip first
+        <div className="row">
+          {clip ? (
+            <button className="ghost small" onClick={() => go(editRoute(clip))}>
+              {clip.path ? "Open the timeline" : "Edit this recording"}
+            </button>
+          ) : null}
+          <button className="small" disabled={starting} onClick={() => void startTimeline()} title="An empty timeline: add footage, arrange it on tracks, record your voice over it, lay a song under it. Done brings you back here with it chosen.">
+            {starting ? "starting…" : "Start a timeline"}
           </button>
-        ) : null}
+        </div>
       </div>
       <div className="split">
         <div className="stack" style={{ gap: 18 }}>
@@ -226,23 +256,35 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
               <label>Clip</label>
               {clip ? (
                 <div className="clip-chosen">
-                  <img src={api.clipThumb(clip.file, Math.min(clip.facts.seconds * 0.3, 8))} alt="" />
+                  <img src={thumbOf(api, clip)} alt="" />
                   <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
                     <strong>{clip.title || clip.file.replace(/\.[^.]+$/, "")}</strong>
-                    <span className="small muted mono">{clip.file}</span>
+                    <span className="small muted mono">{clip.path ? `edit · ${clip.shots} shot${clip.shots === 1 ? "" : "s"}` : clip.file}</span>
                     <span className="small muted">
                       {fmtSeconds(clip.facts.seconds)} · {fmtDate(clip.facts.recordedAt)}
                       {renderedCount.has(clip.file) ? " · already rendered" : ""}
                     </span>
+                    {idea ? (
+                      <span className="small muted">
+                        idea: {idea.done ? <s>{idea.title}</s> : idea.title}
+                        {" · "}
+                        <button className="link small" onClick={() => void api.updateIdea(idea.id, { done: !idea.done }).then(setIdeas).catch(() => {})}>
+                          {idea.done ? "not made after all" : "tick it off: made"}
+                        </button>
+                      </span>
+                    ) : null}
                   </div>
                   <button className="ghost small" onClick={() => setPicking(true)}>
                     Change…
                   </button>
                 </div>
               ) : (
-                <button className="ghost" onClick={() => setPicking(true)}>
-                  Pick a clip…
-                </button>
+                <div className="row">
+                  <button className="ghost" onClick={() => setPicking(true)}>
+                    Pick a clip…
+                  </button>
+                  <span className="small muted">an edit from the timeline editor, or a plain recording</span>
+                </div>
               )}
             </div>
             <div className="field">
@@ -268,12 +310,23 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
                 onFocusRow={focusRow}
               />
             ) : null}
-            <SchemaForm schema={template.schema} value={props} onChange={setProps} hide={[...(template.hide ?? []), ...(template.variants ? [template.variants.key] : [])]} options={template.voice ? { ...template.options, voice: voiceOptions } : template.options} />
+            {(template.lists ?? []).map((l) => (
+              <VariantList
+                key={l.key}
+                label={l.label}
+                rows={listOf(props[l.key])}
+                placeholder={l.placeholder}
+                onChange={(next) => setProps((p) => ({ ...p, [l.key]: next }))}
+                list={{ hint: l.hint, number: l.number ? (i, n) => l.number!(i, n, props) : undefined }}
+              />
+            ))}
+            <SchemaForm schema={template.schema} value={props} onChange={setProps} hide={[...(template.hide ?? []), ...settled, ...(template.variants ? [template.variants.key] : []), ...(template.lists ?? []).map((l) => l.key)]} options={template.voice ? { ...template.options, voice: voiceOptions } : template.options} />
             {template.voice && clip ? (
               <div className="small muted">
-                {voiceOptions.length ? (props.voice ? "This clip's voice-over is on. " : "This clip has a voice-over: pick it under voice. ") : "No voice-over for this clip yet. "}
-                <button className="link small" onClick={() => go(editOf(clip, clips))}>
-                  {voiceOptions.length ? "Edit it in the editor" : "Record one in the editor"}
+                {clip.path ? (clip.voiced ? "The edit's voice and captions come with it. " : "No voice on this edit yet. ") : voiceOptions.length ? (props.voice ? "This clip's voice-over is on. " : "This clip has a voice-over: pick it under voice. ") : "No voice-over for this recording yet. "}
+                {clip.music ? "Its music bed plays under the video (the music fields are the edit's). " : ""}
+                <button className="link small" onClick={() => go(editRoute(clip))}>
+                  {clip.path ? (clip.voiced ? "Change it in the timeline" : "Record it in the timeline") : voiceOptions.length ? "Edit it in the editor" : "Record one in the editor"}
                 </button>
               </div>
             ) : null}
@@ -283,7 +336,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
                 the cut runs {fmtSeconds(Number(effective[template.uncapped.startKey]))} → {fmtSeconds(Number(effective[template.uncapped.startKey]) + Number(effective[template.uncapped.durationKey]))} of {fmtSeconds(clip.facts.seconds)}.
               </div>
             ) : null}
-            {template.warn?.(effective, props) ? <div className="small warn">{template.warn(effective, props)}</div> : null}
+            {template.warn?.(effective, props, clip) ? <div className="small warn">{template.warn(effective, props, clip)}</div> : null}
           </div>
           <div className="panel stack">
             <h3>Render</h3>
@@ -362,6 +415,8 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
                 compositionWidth={size.width}
                 compositionHeight={size.height}
                 controls
+                // The attention experiment plays six stems at once; the Player's default cap is five <Audio> tags.
+                numberOfSharedAudioTags={12}
                 loop
                 style={{ width: "100%", aspectRatio: `${size.width} / ${size.height}` }}
               />

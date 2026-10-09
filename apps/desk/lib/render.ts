@@ -124,7 +124,7 @@ export const startRender = (g: GameConfig, req: { template: string; props: Recor
         renderedAt: new Date().toISOString(),
       };
       writeFileSync(join(dir, `${slug}.json`), JSON.stringify(manifest, null, 2) + "\n");
-      thumbnail(out, Math.min(1.5, manifest.seconds * 0.2)); // early in the body: footage + banner, never the outro
+      await thumbnail(out, Math.min(1.5, manifest.seconds * 0.2)); // early in the body: footage + banner, never the outro
       job.progress = 1;
       job.state = "done";
     } catch (e) {

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { GameConfig } from "../game";
 import { type DraftInput, draftWithClaude, hasClaude } from "./draft";
 import { readSidecar } from "./footage";
+import { readSequence } from "./sequences";
 import { rendersDir } from "./render";
 import { type Batch, listBatches } from "./renders";
 import { DEFAULT_SETTINGS, type Post, type Schedule, type Settings, isDone, placeOne, today } from "./schedule";
@@ -50,8 +51,9 @@ const draftInput = (g: GameConfig, b: Batch): DraftInput => {
   const props = b.renders[0]?.props ?? {};
   const footage = clipOf(b);
   const side = footage.startsWith("footage/") ? readSidecar(g, footage.slice(8)) : undefined;
+  const edit = /^sequences\/(.+)\.json$/.exec(footage)?.[1];
   const hook = hookOf(b);
-  return { template: b.template, hook, note: side?.note ?? "" };
+  return { template: b.template, hook, note: side?.note ?? (edit ? readSequence(g, edit)?.note : undefined) ?? "" };
 };
 
 /**

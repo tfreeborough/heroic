@@ -1,0 +1,3951 @@
+{
+ "id": "edit-2026-10-05-2",
+ "name": "Edit 2026-10-05",
+ "idea": "1c9dc81a-f5b1-4eac-b168-02bc435cf824",
+ "video": [
+  {
+   "id": "v1",
+   "muted": true,
+   "clips": [
+    {
+     "id": "fnx9r0th",
+     "src": "footage/webstorm-code-3.mov",
+     "start": 0,
+     "end": 11.746,
+     "at": 20.121,
+     "sourceSeconds": 40.62,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0.25270014759771986,
+       "y": 0.10160242490047046,
+       "w": 0.23414062500000002,
+       "h": 0.74
+      }
+     }
+    },
+    {
+     "id": "yaw4egui",
+     "src": "footage/webstorm-code-3.mov",
+     "start": 11.746,
+     "end": 30.539,
+     "at": 31.867,
+     "sourceSeconds": 40.62,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0.25270014759771986,
+       "y": 0.10160242490047046,
+       "w": 0.23414062500000002,
+       "h": 0.74
+      }
+     }
+    },
+    {
+     "id": "hyzdbboh",
+     "src": "footage/scorpion raw.mp4",
+     "start": 32.859,
+     "end": 58.783,
+     "at": 61.243,
+     "sourceSeconds": 158.91,
+     "aspect": 0.45454545454545453,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0,
+       "y": 0.032835970593027064,
+       "w": 1,
+       "h": 0.8080808080808081
+      }
+     }
+    },
+    {
+     "id": "hnsyh13e",
+     "src": "footage/Challenge Update Clip.mp4",
+     "start": 0,
+     "end": 3.092,
+     "at": 87.167,
+     "sourceSeconds": 130.54,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "em3lcszx",
+     "src": "footage/Challenge Update Clip.mp4",
+     "start": 11.431,
+     "end": 17.239,
+     "at": 90.259,
+     "sourceSeconds": 130.54,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "28kjdq2b",
+     "src": "footage/Challenge Update Clip.mp4",
+     "start": 27.939,
+     "end": 45.305,
+     "at": 95.667,
+     "sourceSeconds": 130.54,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "wejntbxh",
+     "src": "footage/Challenge Update Clip.mp4",
+     "start": 50.639,
+     "end": 65.073,
+     "at": 113.033,
+     "sourceSeconds": 130.54,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "kzixfjgf",
+     "src": "footage/Challenge Update Clip.mp4",
+     "start": 65.073,
+     "end": 91.106,
+     "at": 127.467,
+     "sourceSeconds": 130.54,
+     "aspect": 0.48128342245989303
+    }
+   ]
+  },
+  {
+   "id": "v2-9po4e1nl",
+   "muted": true,
+   "clips": [
+    {
+     "id": "17sx3yli",
+     "src": "footage/realmsmith-obelisk-editing.mov",
+     "start": 15.467,
+     "end": 18.7,
+     "at": 0,
+     "sourceSeconds": 119.7,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0.3208282013436482,
+       "y": 0.11730003619254434,
+       "w": 0.259453125,
+       "h": 0.82
+      }
+     }
+    },
+    {
+     "id": "dd84llkz",
+     "src": "footage/realmsmith-obelisk-editing.mov",
+     "start": 56.167,
+     "end": 60.167,
+     "at": 2.833,
+     "sourceSeconds": 119.7,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     }
+    },
+    {
+     "id": "iyy3xfcg",
+     "src": "footage/realmsmith-obelisk-editing.mov",
+     "start": 94.2,
+     "end": 100,
+     "at": 6.833,
+     "sourceSeconds": 119.7,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0.3208282013436482,
+       "y": 0.11730003619254434,
+       "w": 0.259453125,
+       "h": 0.82
+      }
+     }
+    },
+    {
+     "id": "eeunik5p",
+     "src": "footage/webstorm-code-1.mov",
+     "start": 0,
+     "end": 7.488,
+     "at": 12.633,
+     "sourceSeconds": 81.97,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0.16155416581840387,
+       "y": 0.0569752081071299,
+       "w": 0.25628906250000005,
+       "h": 0.81
+      }
+     }
+    },
+    {
+     "id": "zxiuewf1",
+     "src": "footage/realmsmith-obelisk-editing.mov",
+     "start": 18.7,
+     "end": 36.2,
+     "at": 31.867,
+     "sourceSeconds": 119.7,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     },
+     "frames": {
+      "vertical": {
+       "x": 0.3208282013436482,
+       "y": 0.11730003619254434,
+       "w": 0.259453125,
+       "h": 0.82
+      }
+     }
+    },
+    {
+     "id": "oxlnyi1e",
+     "src": "footage/Tall order.mp4",
+     "start": 0,
+     "end": 32.12,
+     "at": 50.634,
+     "sourceSeconds": 32.12,
+     "aspect": 0.48128342245989303,
+     "muted": true
+    },
+    {
+     "id": "uktphmq6",
+     "src": "footage/Challenge Update Clip.mp4",
+     "start": 91.106,
+     "end": 130.54,
+     "at": 127.467,
+     "sourceSeconds": 130.54,
+     "aspect": 0.48128342245989303
+    }
+   ]
+  },
+  {
+   "id": "v3-qu1e9ph4",
+   "clips": []
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": [
+    {
+     "id": "3wp5jj15",
+     "take": 7,
+     "start": 0.4,
+     "end": 6.466,
+     "at": 0
+    },
+    {
+     "id": "ehdfx84j",
+     "take": 8,
+     "start": 0.561,
+     "end": 1.428,
+     "at": 6.066
+    },
+    {
+     "id": "cs7v9urd",
+     "take": 11,
+     "start": 0.728,
+     "end": 29.529,
+     "at": 6.933
+    },
+    {
+     "id": "297zscw6",
+     "take": 12,
+     "start": 0.336,
+     "end": 15.236,
+     "at": 35.734
+    },
+    {
+     "id": "dt69ec6v",
+     "take": 9,
+     "start": 0.5,
+     "end": 1.333,
+     "at": 51.29
+    },
+    {
+     "id": "n12aji7u",
+     "take": 13,
+     "start": 0.677,
+     "end": 9.797,
+     "at": 52.123
+    },
+    {
+     "id": "98e2uke6",
+     "take": 13,
+     "start": 11.363,
+     "end": 12.329,
+     "at": 61.243
+    },
+    {
+     "id": "qq5vtd3i",
+     "take": 13,
+     "start": 12.763,
+     "end": 23.597,
+     "at": 62.209
+    },
+    {
+     "id": "urktpjkr",
+     "take": 13,
+     "start": 24.297,
+     "end": 36.23,
+     "at": 73.043
+    },
+    {
+     "id": "k8irx8w4",
+     "take": 10,
+     "start": 0.339,
+     "end": 3.105,
+     "at": 87.167
+    },
+    {
+     "id": "9edxxd6z",
+     "take": 14,
+     "start": 0.039,
+     "end": 65.772,
+     "at": 89.933
+    },
+    {
+     "id": "8ovuxc77",
+     "take": 15,
+     "start": 0.033,
+     "end": 5.248,
+     "at": 155.666
+    }
+   ]
+  },
+  {
+   "id": "a2-oga55v9e",
+   "clips": []
+  }
+ ],
+ "takes": [
+  {
+   "file": "voice/takes/edit-2026-10-05-2-1.n2v1.wav",
+   "seconds": 7.013,
+   "recordedAt": "2026-10-06T08:19:01.426Z",
+   "words": [
+    {
+     "text": "Hello",
+     "start": 0.86,
+     "end": 1.184
+    },
+    {
+     "text": "there,",
+     "start": 1.184,
+     "end": 1.444
+    },
+    {
+     "text": "my",
+     "start": 1.444,
+     "end": 1.578
+    },
+    {
+     "text": "name's",
+     "start": 1.578,
+     "end": 1.902
+    },
+    {
+     "text": "Tom",
+     "start": 1.902,
+     "end": 2.116
+    },
+    {
+     "text": "and",
+     "start": 2.116,
+     "end": 2.319
+    },
+    {
+     "text": "here's",
+     "start": 2.319,
+     "end": 2.644
+    },
+    {
+     "text": "three",
+     "start": 2.644,
+     "end": 2.968
+    },
+    {
+     "text": "valuable",
+     "start": 2.968,
+     "end": 3.459
+    },
+    {
+     "text": "lessons",
+     "start": 3.459,
+     "end": 3.895
+    },
+    {
+     "text": "I",
+     "start": 3.895,
+     "end": 3.996
+    },
+    {
+     "text": "learned",
+     "start": 3.996,
+     "end": 4.423
+    },
+    {
+     "text": "building",
+     "start": 4.423,
+     "end": 4.914
+    },
+    {
+     "text": "my",
+     "start": 4.914,
+     "end": 5.071
+    },
+    {
+     "text": "indie",
+     "start": 5.071,
+     "end": 5.386
+    },
+    {
+     "text": "game.",
+     "start": 5.386,
+     "end": 5.655
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-2.n2v1.wav",
+   "seconds": 6.389,
+   "recordedAt": "2026-10-06T08:19:51.202Z",
+   "words": [
+    {
+     "text": "Hello",
+     "start": 0.66,
+     "end": 0.985
+    },
+    {
+     "text": "there,",
+     "start": 0.985,
+     "end": 1.245
+    },
+    {
+     "text": "my",
+     "start": 1.245,
+     "end": 1.347
+    },
+    {
+     "text": "name's",
+     "start": 1.347,
+     "end": 1.532
+    },
+    {
+     "text": "Tom",
+     "start": 1.532,
+     "end": 1.746
+    },
+    {
+     "text": "and",
+     "start": 1.746,
+     "end": 1.932
+    },
+    {
+     "text": "here's",
+     "start": 1.932,
+     "end": 2.247
+    },
+    {
+     "text": "three",
+     "start": 2.247,
+     "end": 2.516
+    },
+    {
+     "text": "valuable",
+     "start": 2.516,
+     "end": 2.953
+    },
+    {
+     "text": "lessons",
+     "start": 2.953,
+     "end": 3.333
+    },
+    {
+     "text": "I",
+     "start": 3.333,
+     "end": 3.435
+    },
+    {
+     "text": "learned",
+     "start": 3.435,
+     "end": 3.816
+    },
+    {
+     "text": "whilst",
+     "start": 3.816,
+     "end": 4.141
+    },
+    {
+     "text": "building",
+     "start": 4.141,
+     "end": 4.577
+    },
+    {
+     "text": "my",
+     "start": 4.577,
+     "end": 4.735
+    },
+    {
+     "text": "indie",
+     "start": 4.735,
+     "end": 4.976
+    },
+    {
+     "text": "game.",
+     "start": 4.976,
+     "end": 5.245
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-3.n2v1.wav",
+   "seconds": 7.216,
+   "recordedAt": "2026-10-06T08:20:17.191Z",
+   "words": [
+    {
+     "text": "Hi",
+     "start": 0.46,
+     "end": 0.605
+    },
+    {
+     "text": "there,",
+     "start": 0.605,
+     "end": 0.89
+    },
+    {
+     "text": "I'm",
+     "start": 0.89,
+     "end": 1.024
+    },
+    {
+     "text": "Tom,",
+     "start": 1.024,
+     "end": 1.262
+    },
+    {
+     "text": "an",
+     "start": 1.262,
+     "end": 1.407
+    },
+    {
+     "text": "indie",
+     "start": 1.407,
+     "end": 1.697
+    },
+    {
+     "text": "game",
+     "start": 1.697,
+     "end": 1.936
+    },
+    {
+     "text": "developer,",
+     "start": 1.936,
+     "end": 2.453
+    },
+    {
+     "text": "and",
+     "start": 2.453,
+     "end": 2.557
+    },
+    {
+     "text": "here's",
+     "start": 2.557,
+     "end": 2.878
+    },
+    {
+     "text": "three",
+     "start": 2.878,
+     "end": 3.147
+    },
+    {
+     "text": "valuable",
+     "start": 3.147,
+     "end": 3.582
+    },
+    {
+     "text": "lessons",
+     "start": 3.582,
+     "end": 3.975
+    },
+    {
+     "text": "I",
+     "start": 3.975,
+     "end": 4.089
+    },
+    {
+     "text": "learned",
+     "start": 4.089,
+     "end": 4.504
+    },
+    {
+     "text": "building",
+     "start": 4.504,
+     "end": 4.969
+    },
+    {
+     "text": "my",
+     "start": 4.969,
+     "end": 5.145
+    },
+    {
+     "text": "indie",
+     "start": 5.145,
+     "end": 5.425
+    },
+    {
+     "text": "game.",
+     "start": 5.425,
+     "end": 5.715
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-4.n2v1.wav",
+   "seconds": 2.507,
+   "recordedAt": "2026-10-06T08:20:40.244Z",
+   "words": [
+    {
+     "text": "Hi",
+     "start": 0.42,
+     "end": 0.668
+    },
+    {
+     "text": "there,",
+     "start": 0.668,
+     "end": 1.043
+    },
+    {
+     "text": "I'm",
+     "start": 1.043,
+     "end": 1.27
+    },
+    {
+     "text": "Tom",
+     "start": 1.27,
+     "end": 1.645
+    },
+    {
+     "text": "and",
+     "start": 1.71,
+     "end": 2.038
+    },
+    {
+     "text": "I'm...",
+     "start": 2.038,
+     "end": 2.275
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-5.n2v1.wav",
+   "seconds": 4.688,
+   "recordedAt": "2026-10-06T08:20:50.562Z",
+   "words": [
+    {
+     "text": "Hi",
+     "start": 0.5,
+     "end": 0.678
+    },
+    {
+     "text": "there,",
+     "start": 0.678,
+     "end": 0.987
+    },
+    {
+     "text": "I'm",
+     "start": 0.987,
+     "end": 1.165
+    },
+    {
+     "text": "Tom,",
+     "start": 1.165,
+     "end": 1.406
+    },
+    {
+     "text": "an",
+     "start": 1.406,
+     "end": 1.574
+    },
+    {
+     "text": "indie",
+     "start": 1.574,
+     "end": 1.94
+    },
+    {
+     "text": "game",
+     "start": 1.94,
+     "end": 2.244
+    },
+    {
+     "text": "developer,",
+     "start": 2.244,
+     "end": 2.862
+    },
+    {
+     "text": "and",
+     "start": 2.862,
+     "end": 3.103
+    },
+    {
+     "text": "here's",
+     "start": 3.103,
+     "end": 3.355
+    },
+    {
+     "text": "three",
+     "start": 3.355,
+     "end": 3.575
+    },
+    {
+     "text": "lessons",
+     "start": 3.575,
+     "end": 4.015
+    },
+    {
+     "text": "I",
+     "start": 4.015,
+     "end": 4.13
+    },
+    {
+     "text": "built",
+     "start": 4.13,
+     "end": 4.465
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-6.n2v1.wav",
+   "seconds": 7.813,
+   "recordedAt": "2026-10-06T08:21:22.195Z",
+   "words": [
+    {
+     "text": "Hi",
+     "start": 0.35,
+     "end": 0.495
+    },
+    {
+     "text": "there,",
+     "start": 0.495,
+     "end": 0.745
+    },
+    {
+     "text": "I'm",
+     "start": 0.745,
+     "end": 0.9
+    },
+    {
+     "text": "Tom,",
+     "start": 0.9,
+     "end": 1.139
+    },
+    {
+     "text": "an",
+     "start": 1.139,
+     "end": 1.284
+    },
+    {
+     "text": "indie",
+     "start": 1.284,
+     "end": 1.554
+    },
+    {
+     "text": "game",
+     "start": 1.554,
+     "end": 1.772
+    },
+    {
+     "text": "developer,",
+     "start": 1.772,
+     "end": 2.281
+    },
+    {
+     "text": "and",
+     "start": 2.281,
+     "end": 2.447
+    },
+    {
+     "text": "here's",
+     "start": 2.447,
+     "end": 2.769
+    },
+    {
+     "text": "three",
+     "start": 2.769,
+     "end": 2.977
+    },
+    {
+     "text": "valuable",
+     "start": 2.977,
+     "end": 3.392
+    },
+    {
+     "text": "lessons",
+     "start": 3.392,
+     "end": 3.786
+    },
+    {
+     "text": "I",
+     "start": 3.786,
+     "end": 3.901
+    },
+    {
+     "text": "learned",
+     "start": 3.901,
+     "end": 4.295
+    },
+    {
+     "text": "building",
+     "start": 4.295,
+     "end": 4.742
+    },
+    {
+     "text": "my",
+     "start": 4.742,
+     "end": 4.918
+    },
+    {
+     "text": "mobile",
+     "start": 4.918,
+     "end": 5.313
+    },
+    {
+     "text": "game,",
+     "start": 5.313,
+     "end": 5.614
+    },
+    {
+     "text": "Blood",
+     "start": 5.614,
+     "end": 5.894
+    },
+    {
+     "text": "in",
+     "start": 5.894,
+     "end": 6.039
+    },
+    {
+     "text": "the",
+     "start": 6.039,
+     "end": 6.174
+    },
+    {
+     "text": "Sand.",
+     "start": 6.174,
+     "end": 6.465
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-7.n2v1.wav",
+   "seconds": 1.371,
+   "recordedAt": "2026-10-06T08:21:47.945Z",
+   "words": [
+    {
+     "text": "Heim,",
+     "start": 0.45,
+     "end": 0.915
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-8.n2v1.wav",
+   "seconds": 7.712,
+   "recordedAt": "2026-10-06T08:22:08.236Z",
+   "words": [
+    {
+     "text": "Hi,",
+     "start": 0.45,
+     "end": 0.661
+    },
+    {
+     "text": "I'm",
+     "start": 0.661,
+     "end": 0.908
+    },
+    {
+     "text": "Tom,",
+     "start": 0.908,
+     "end": 1.199
+    },
+    {
+     "text": "a",
+     "start": 1.199,
+     "end": 1.286
+    },
+    {
+     "text": "game",
+     "start": 1.286,
+     "end": 1.49
+    },
+    {
+     "text": "developer,",
+     "start": 1.49,
+     "end": 2.275
+    },
+    {
+     "text": "and",
+     "start": 2.36,
+     "end": 2.539
+    },
+    {
+     "text": "here's",
+     "start": 2.539,
+     "end": 2.78
+    },
+    {
+     "text": "three",
+     "start": 2.78,
+     "end": 2.959
+    },
+    {
+     "text": "valuable",
+     "start": 2.959,
+     "end": 3.387
+    },
+    {
+     "text": "lessons",
+     "start": 3.387,
+     "end": 3.754
+    },
+    {
+     "text": "I",
+     "start": 3.754,
+     "end": 3.852
+    },
+    {
+     "text": "learned",
+     "start": 3.852,
+     "end": 4.227
+    },
+    {
+     "text": "building",
+     "start": 4.227,
+     "end": 4.656
+    },
+    {
+     "text": "my",
+     "start": 4.656,
+     "end": 4.808
+    },
+    {
+     "text": "indie",
+     "start": 4.808,
+     "end": 5.076
+    },
+    {
+     "text": "game,",
+     "start": 5.076,
+     "end": 5.335
+    },
+    {
+     "text": "Blood",
+     "start": 5.53,
+     "end": 5.72
+    },
+    {
+     "text": "in",
+     "start": 5.72,
+     "end": 5.868
+    },
+    {
+     "text": "the",
+     "start": 5.868,
+     "end": 6.058
+    },
+    {
+     "text": "Sand.",
+     "start": 6.058,
+     "end": 6.365
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-9.n2v1.wav",
+   "seconds": 2.293,
+   "recordedAt": "2026-10-06T08:22:37.687Z",
+   "words": [
+    {
+     "text": "Number",
+     "start": 0.58,
+     "end": 1.003
+    },
+    {
+     "text": "3",
+     "start": 1.003,
+     "end": 1.285
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-10.n2v1.wav",
+   "seconds": 2.112,
+   "recordedAt": "2026-10-06T08:22:54.201Z",
+   "words": [
+    {
+     "text": "Number",
+     "start": 0.52,
+     "end": 0.968
+    },
+    {
+     "text": "2.",
+     "start": 0.968,
+     "end": 1.195
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-11.n2v1.wav",
+   "seconds": 3.851,
+   "recordedAt": "2026-10-06T08:23:26.889Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.44,
+     "end": 0.715
+    },
+    {
+     "text": "finally,",
+     "start": 0.715,
+     "end": 1.255
+    },
+    {
+     "text": "valuable",
+     "start": 1.71,
+     "end": 2.009
+    },
+    {
+     "text": "lesson",
+     "start": 2.009,
+     "end": 2.347
+    },
+    {
+     "text": "number",
+     "start": 2.347,
+     "end": 2.756
+    },
+    {
+     "text": "one.",
+     "start": 2.756,
+     "end": 2.985
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-12.n2v1.wav",
+   "seconds": 31.28,
+   "recordedAt": "2026-10-06T08:24:48.196Z",
+   "words": [
+    {
+     "text": "One",
+     "start": 0.81,
+     "end": 1.006
+    },
+    {
+     "text": "thing",
+     "start": 1.006,
+     "end": 1.223
+    },
+    {
+     "text": "I",
+     "start": 1.223,
+     "end": 1.32
+    },
+    {
+     "text": "never",
+     "start": 1.32,
+     "end": 1.559
+    },
+    {
+     "text": "expected",
+     "start": 1.559,
+     "end": 1.997
+    },
+    {
+     "text": "when",
+     "start": 1.997,
+     "end": 2.184
+    },
+    {
+     "text": "I",
+     "start": 2.184,
+     "end": 2.265
+    },
+    {
+     "text": "was",
+     "start": 2.265,
+     "end": 2.393
+    },
+    {
+     "text": "first",
+     "start": 2.393,
+     "end": 2.639
+    },
+    {
+     "text": "writing",
+     "start": 2.639,
+     "end": 2.92
+    },
+    {
+     "text": "down",
+     "start": 2.92,
+     "end": 3.107
+    },
+    {
+     "text": "those",
+     "start": 3.107,
+     "end": 3.294
+    },
+    {
+     "text": "initial",
+     "start": 3.294,
+     "end": 3.643
+    },
+    {
+     "text": "thoughts",
+     "start": 3.643,
+     "end": 4.035
+    },
+    {
+     "text": "about",
+     "start": 4.035,
+     "end": 4.273
+    },
+    {
+     "text": "my",
+     "start": 4.273,
+     "end": 4.409
+    },
+    {
+     "text": "mobile",
+     "start": 4.409,
+     "end": 4.673
+    },
+    {
+     "text": "game",
+     "start": 4.673,
+     "end": 4.945
+    },
+    {
+     "text": "was",
+     "start": 5.46,
+     "end": 5.648
+    },
+    {
+     "text": "just",
+     "start": 5.648,
+     "end": 5.827
+    },
+    {
+     "text": "how",
+     "start": 5.827,
+     "end": 5.958
+    },
+    {
+     "text": "much",
+     "start": 5.958,
+     "end": 6.158
+    },
+    {
+     "text": "time",
+     "start": 6.158,
+     "end": 6.387
+    },
+    {
+     "text": "would",
+     "start": 6.387,
+     "end": 6.517
+    },
+    {
+     "text": "eventually",
+     "start": 6.517,
+     "end": 6.942
+    },
+    {
+     "text": "get",
+     "start": 6.942,
+     "end": 7.105
+    },
+    {
+     "text": "taken",
+     "start": 7.105,
+     "end": 7.326
+    },
+    {
+     "text": "up",
+     "start": 7.326,
+     "end": 7.456
+    },
+    {
+     "text": "with",
+     "start": 7.456,
+     "end": 7.636
+    },
+    {
+     "text": "building",
+     "start": 7.636,
+     "end": 7.995
+    },
+    {
+     "text": "not",
+     "start": 8.08,
+     "end": 8.282
+    },
+    {
+     "text": "the",
+     "start": 8.282,
+     "end": 8.422
+    },
+    {
+     "text": "game",
+     "start": 8.422,
+     "end": 8.615
+    },
+    {
+     "text": "itself,",
+     "start": 8.615,
+     "end": 8.965
+    },
+    {
+     "text": "but",
+     "start": 9.33,
+     "end": 9.538
+    },
+    {
+     "text": "all",
+     "start": 9.538,
+     "end": 9.647
+    },
+    {
+     "text": "of",
+     "start": 9.647,
+     "end": 9.719
+    },
+    {
+     "text": "the",
+     "start": 9.719,
+     "end": 9.81
+    },
+    {
+     "text": "software",
+     "start": 9.81,
+     "end": 10.194
+    },
+    {
+     "text": "and",
+     "start": 10.194,
+     "end": 10.403
+    },
+    {
+     "text": "tools",
+     "start": 10.403,
+     "end": 10.692
+    },
+    {
+     "text": "needed",
+     "start": 10.692,
+     "end": 10.955
+    },
+    {
+     "text": "to",
+     "start": 10.955,
+     "end": 11.063
+    },
+    {
+     "text": "make",
+     "start": 11.063,
+     "end": 11.217
+    },
+    {
+     "text": "stuff",
+     "start": 11.217,
+     "end": 11.407
+    },
+    {
+     "text": "happen",
+     "start": 11.407,
+     "end": 11.679
+    },
+    {
+     "text": "behind",
+     "start": 11.679,
+     "end": 11.932
+    },
+    {
+     "text": "the",
+     "start": 11.932,
+     "end": 12.077
+    },
+    {
+     "text": "scenes.",
+     "start": 12.077,
+     "end": 12.385
+    },
+    {
+     "text": "Take",
+     "start": 13.04,
+     "end": 13.282
+    },
+    {
+     "text": "my",
+     "start": 13.282,
+     "end": 13.416
+    },
+    {
+     "text": "game",
+     "start": 13.416,
+     "end": 13.6
+    },
+    {
+     "text": "Blood",
+     "start": 13.6,
+     "end": 13.804
+    },
+    {
+     "text": "in",
+     "start": 13.804,
+     "end": 13.921
+    },
+    {
+     "text": "the",
+     "start": 13.921,
+     "end": 14.063
+    },
+    {
+     "text": "Sand,",
+     "start": 14.063,
+     "end": 14.247
+    },
+    {
+     "text": "for",
+     "start": 14.247,
+     "end": 14.389
+    },
+    {
+     "text": "example.",
+     "start": 14.389,
+     "end": 14.715
+    },
+    {
+     "text": "I",
+     "start": 15.27,
+     "end": 15.364
+    },
+    {
+     "text": "have",
+     "start": 15.364,
+     "end": 15.552
+    },
+    {
+     "text": "around",
+     "start": 15.552,
+     "end": 15.842
+    },
+    {
+     "text": "seven",
+     "start": 15.842,
+     "end": 16.098
+    },
+    {
+     "text": "different",
+     "start": 16.098,
+     "end": 16.525
+    },
+    {
+     "text": "applications",
+     "start": 16.525,
+     "end": 17.113
+    },
+    {
+     "text": "I've",
+     "start": 17.113,
+     "end": 17.31
+    },
+    {
+     "text": "written",
+     "start": 17.31,
+     "end": 17.634
+    },
+    {
+     "text": "for",
+     "start": 17.634,
+     "end": 17.77
+    },
+    {
+     "text": "my",
+     "start": 17.77,
+     "end": 17.894
+    },
+    {
+     "text": "game",
+     "start": 17.894,
+     "end": 18.116
+    },
+    {
+     "text": "to",
+     "start": 18.116,
+     "end": 18.257
+    },
+    {
+     "text": "make",
+     "start": 18.257,
+     "end": 18.436
+    },
+    {
+     "text": "my",
+     "start": 18.436,
+     "end": 18.539
+    },
+    {
+     "text": "life",
+     "start": 18.539,
+     "end": 18.718
+    },
+    {
+     "text": "easier.",
+     "start": 18.718,
+     "end": 19.025
+    },
+    {
+     "text": "Server",
+     "start": 19.53,
+     "end": 19.938
+    },
+    {
+     "text": "code",
+     "start": 19.938,
+     "end": 20.226
+    },
+    {
+     "text": "that",
+     "start": 20.226,
+     "end": 20.425
+    },
+    {
+     "text": "handles",
+     "start": 20.425,
+     "end": 20.763
+    },
+    {
+     "text": "matches",
+     "start": 20.763,
+     "end": 21.061
+    },
+    {
+     "text": "between",
+     "start": 21.061,
+     "end": 21.339
+    },
+    {
+     "text": "players",
+     "start": 21.339,
+     "end": 21.797
+    },
+    {
+     "text": "is",
+     "start": 21.797,
+     "end": 21.956
+    },
+    {
+     "text": "kept",
+     "start": 21.956,
+     "end": 22.135
+    },
+    {
+     "text": "deliberately",
+     "start": 22.135,
+     "end": 22.532
+    },
+    {
+     "text": "separate",
+     "start": 22.532,
+     "end": 22.93
+    },
+    {
+     "text": "from",
+     "start": 22.93,
+     "end": 23.218
+    },
+    {
+     "text": "the",
+     "start": 23.218,
+     "end": 23.338
+    },
+    {
+     "text": "server",
+     "start": 23.338,
+     "end": 23.626
+    },
+    {
+     "text": "that",
+     "start": 23.626,
+     "end": 23.815
+    },
+    {
+     "text": "manages",
+     "start": 23.815,
+     "end": 24.113
+    },
+    {
+     "text": "players'",
+     "start": 24.113,
+     "end": 24.431
+    },
+    {
+     "text": "purchases",
+     "start": 24.431,
+     "end": 24.859
+    },
+    {
+     "text": "and",
+     "start": 24.859,
+     "end": 25.038
+    },
+    {
+     "text": "achievements.",
+     "start": 25.038,
+     "end": 25.475
+    },
+    {
+     "text": "To",
+     "start": 26.05,
+     "end": 26.217
+    },
+    {
+     "text": "make",
+     "start": 26.217,
+     "end": 26.403
+    },
+    {
+     "text": "maps",
+     "start": 26.403,
+     "end": 26.678
+    },
+    {
+     "text": "easier",
+     "start": 26.678,
+     "end": 27.016
+    },
+    {
+     "text": "to",
+     "start": 27.016,
+     "end": 27.169
+    },
+    {
+     "text": "build,",
+     "start": 27.169,
+     "end": 27.404
+    },
+    {
+     "text": "I",
+     "start": 27.404,
+     "end": 27.453
+    },
+    {
+     "text": "built",
+     "start": 27.453,
+     "end": 27.689
+    },
+    {
+     "text": "my",
+     "start": 27.689,
+     "end": 27.826
+    },
+    {
+     "text": "own",
+     "start": 27.826,
+     "end": 27.963
+    },
+    {
+     "text": "specialized",
+     "start": 27.963,
+     "end": 28.474
+    },
+    {
+     "text": "map",
+     "start": 28.474,
+     "end": 28.699
+    },
+    {
+     "text": "editing",
+     "start": 28.699,
+     "end": 28.994
+    },
+    {
+     "text": "software,",
+     "start": 28.994,
+     "end": 29.445
+    },
+    {
+     "text": "and",
+     "start": 29.84,
+     "end": 29.98
+    },
+    {
+     "text": "nothing",
+     "start": 29.98,
+     "end": 30.265
+    },
+    {
+     "text": "on",
+     "start": 30.265,
+     "end": 30.35
+    },
+    {
+     "text": "the",
+     "start": 30.35,
+     "end": 30.477
+    },
+    {
+     "text": "mark...",
+     "start": 30.477,
+     "end": 30.635
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-13.n2v1.wav",
+   "seconds": 16.208,
+   "recordedAt": "2026-10-06T08:25:55.168Z",
+   "words": [
+    {
+     "text": "As",
+     "start": 0.4,
+     "end": 0.532
+    },
+    {
+     "text": "nothing",
+     "start": 0.532,
+     "end": 0.751
+    },
+    {
+     "text": "on",
+     "start": 0.751,
+     "end": 0.879
+    },
+    {
+     "text": "the",
+     "start": 0.879,
+     "end": 1.043
+    },
+    {
+     "text": "market",
+     "start": 1.043,
+     "end": 1.372
+    },
+    {
+     "text": "did",
+     "start": 1.372,
+     "end": 1.582
+    },
+    {
+     "text": "what",
+     "start": 1.582,
+     "end": 1.801
+    },
+    {
+     "text": "I",
+     "start": 1.801,
+     "end": 1.897
+    },
+    {
+     "text": "needed",
+     "start": 1.897,
+     "end": 2.225
+    },
+    {
+     "text": "it",
+     "start": 2.225,
+     "end": 2.38
+    },
+    {
+     "text": "to",
+     "start": 2.38,
+     "end": 2.49
+    },
+    {
+     "text": "do.",
+     "start": 2.49,
+     "end": 2.645
+    },
+    {
+     "text": "At",
+     "start": 3.37,
+     "end": 3.654
+    },
+    {
+     "text": "first",
+     "start": 3.654,
+     "end": 3.903
+    },
+    {
+     "text": "I",
+     "start": 3.903,
+     "end": 4.008
+    },
+    {
+     "text": "thought",
+     "start": 4.008,
+     "end": 4.131
+    },
+    {
+     "text": "it",
+     "start": 4.131,
+     "end": 4.201
+    },
+    {
+     "text": "was",
+     "start": 4.201,
+     "end": 4.367
+    },
+    {
+     "text": "incredibly",
+     "start": 4.367,
+     "end": 4.935
+    },
+    {
+     "text": "frustrating,",
+     "start": 4.935,
+     "end": 5.425
+    },
+    {
+     "text": "but",
+     "start": 5.425,
+     "end": 5.582
+    },
+    {
+     "text": "over",
+     "start": 5.582,
+     "end": 5.774
+    },
+    {
+     "text": "time",
+     "start": 5.774,
+     "end": 5.967
+    },
+    {
+     "text": "I",
+     "start": 5.967,
+     "end": 6.063
+    },
+    {
+     "text": "realised",
+     "start": 6.063,
+     "end": 6.456
+    },
+    {
+     "text": "that",
+     "start": 6.456,
+     "end": 6.649
+    },
+    {
+     "text": "investing",
+     "start": 6.649,
+     "end": 7.094
+    },
+    {
+     "text": "in",
+     "start": 7.094,
+     "end": 7.234
+    },
+    {
+     "text": "those",
+     "start": 7.234,
+     "end": 7.453
+    },
+    {
+     "text": "tools",
+     "start": 7.453,
+     "end": 7.689
+    },
+    {
+     "text": "early",
+     "start": 7.689,
+     "end": 7.995
+    },
+    {
+     "text": "has",
+     "start": 8.23,
+     "end": 8.45
+    },
+    {
+     "text": "paid",
+     "start": 8.45,
+     "end": 8.622
+    },
+    {
+     "text": "off",
+     "start": 8.622,
+     "end": 8.784
+    },
+    {
+     "text": "long",
+     "start": 8.784,
+     "end": 9.013
+    },
+    {
+     "text": "term",
+     "start": 9.013,
+     "end": 9.281
+    },
+    {
+     "text": "and",
+     "start": 9.281,
+     "end": 9.501
+    },
+    {
+     "text": "is",
+     "start": 9.501,
+     "end": 9.615
+    },
+    {
+     "text": "now",
+     "start": 9.615,
+     "end": 9.778
+    },
+    {
+     "text": "super",
+     "start": 9.778,
+     "end": 10.112
+    },
+    {
+     "text": "easy",
+     "start": 10.112,
+     "end": 10.332
+    },
+    {
+     "text": "for",
+     "start": 10.332,
+     "end": 10.494
+    },
+    {
+     "text": "me",
+     "start": 10.494,
+     "end": 10.609
+    },
+    {
+     "text": "to",
+     "start": 10.609,
+     "end": 10.714
+    },
+    {
+     "text": "create",
+     "start": 10.714,
+     "end": 11.049
+    },
+    {
+     "text": "more",
+     "start": 11.049,
+     "end": 11.278
+    },
+    {
+     "text": "maps,",
+     "start": 11.278,
+     "end": 11.555
+    },
+    {
+     "text": "make",
+     "start": 11.65,
+     "end": 11.9
+    },
+    {
+     "text": "balancing",
+     "start": 11.9,
+     "end": 12.465
+    },
+    {
+     "text": "changes,",
+     "start": 12.465,
+     "end": 12.975
+    },
+    {
+     "text": "and",
+     "start": 13.07,
+     "end": 13.285
+    },
+    {
+     "text": "even",
+     "start": 13.285,
+     "end": 13.434
+    },
+    {
+     "text": "add",
+     "start": 13.434,
+     "end": 13.584
+    },
+    {
+     "text": "new",
+     "start": 13.584,
+     "end": 13.752
+    },
+    {
+     "text": "spells",
+     "start": 13.752,
+     "end": 14.022
+    },
+    {
+     "text": "and",
+     "start": 14.022,
+     "end": 14.181
+    },
+    {
+     "text": "weapons",
+     "start": 14.181,
+     "end": 14.564
+    },
+    {
+     "text": "to",
+     "start": 14.564,
+     "end": 14.723
+    },
+    {
+     "text": "the",
+     "start": 14.723,
+     "end": 14.835
+    },
+    {
+     "text": "store.",
+     "start": 14.835,
+     "end": 15.115
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-14.n2v1.wav",
+   "seconds": 37.835,
+   "recordedAt": "2026-10-06T08:27:42.014Z",
+   "words": [
+    {
+     "text": "What",
+     "start": 0.78,
+     "end": 0.998
+    },
+    {
+     "text": "could",
+     "start": 0.998,
+     "end": 1.237
+    },
+    {
+     "text": "sound",
+     "start": 1.237,
+     "end": 1.481
+    },
+    {
+     "text": "better",
+     "start": 1.481,
+     "end": 1.754
+    },
+    {
+     "text": "than",
+     "start": 1.754,
+     "end": 1.942
+    },
+    {
+     "text": "spending",
+     "start": 1.942,
+     "end": 2.318
+    },
+    {
+     "text": "hours",
+     "start": 2.318,
+     "end": 2.617
+    },
+    {
+     "text": "every",
+     "start": 2.617,
+     "end": 2.874
+    },
+    {
+     "text": "night",
+     "start": 2.874,
+     "end": 3.113
+    },
+    {
+     "text": "playing",
+     "start": 3.113,
+     "end": 3.412
+    },
+    {
+     "text": "your",
+     "start": 3.412,
+     "end": 3.549
+    },
+    {
+     "text": "dream",
+     "start": 3.549,
+     "end": 3.788
+    },
+    {
+     "text": "video",
+     "start": 3.788,
+     "end": 4.027
+    },
+    {
+     "text": "game?",
+     "start": 4.027,
+     "end": 4.275
+    },
+    {
+     "text": "Well,",
+     "start": 4.84,
+     "end": 5.11
+    },
+    {
+     "text": "the",
+     "start": 5.11,
+     "end": 5.315
+    },
+    {
+     "text": "catch",
+     "start": 5.315,
+     "end": 5.521
+    },
+    {
+     "text": "is",
+     "start": 5.521,
+     "end": 5.679
+    },
+    {
+     "text": "you'll",
+     "start": 5.679,
+     "end": 6.005
+    },
+    {
+     "text": "be",
+     "start": 6.005,
+     "end": 6.136
+    },
+    {
+     "text": "playing",
+     "start": 6.136,
+     "end": 6.574
+    },
+    {
+     "text": "the",
+     "start": 6.574,
+     "end": 6.779
+    },
+    {
+     "text": "same",
+     "start": 6.779,
+     "end": 7.05
+    },
+    {
+     "text": "levels",
+     "start": 7.05,
+     "end": 7.46
+    },
+    {
+     "text": "over",
+     "start": 7.46,
+     "end": 7.73
+    },
+    {
+     "text": "and",
+     "start": 7.73,
+     "end": 7.945
+    },
+    {
+     "text": "over",
+     "start": 7.945,
+     "end": 8.215
+    },
+    {
+     "text": "and",
+     "start": 8.26,
+     "end": 8.528
+    },
+    {
+     "text": "over",
+     "start": 8.528,
+     "end": 8.866
+    },
+    {
+     "text": "and",
+     "start": 8.866,
+     "end": 9.157
+    },
+    {
+     "text": "over",
+     "start": 9.157,
+     "end": 9.495
+    },
+    {
+     "text": "and...",
+     "start": 9.58,
+     "end": 9.821
+    },
+    {
+     "text": "over.",
+     "start": 9.821,
+     "end": 10.125
+    },
+    {
+     "text": "You",
+     "start": 11.45,
+     "end": 11.725
+    },
+    {
+     "text": "get",
+     "start": 11.725,
+     "end": 11.848
+    },
+    {
+     "text": "the",
+     "start": 11.848,
+     "end": 12.011
+    },
+    {
+     "text": "idea.",
+     "start": 12.011,
+     "end": 12.215
+    },
+    {
+     "text": "I",
+     "start": 12.92,
+     "end": 13.011
+    },
+    {
+     "text": "didn't",
+     "start": 13.011,
+     "end": 13.302
+    },
+    {
+     "text": "actually",
+     "start": 13.302,
+     "end": 13.726
+    },
+    {
+     "text": "realise",
+     "start": 13.726,
+     "end": 14.107
+    },
+    {
+     "text": "how",
+     "start": 14.107,
+     "end": 14.274
+    },
+    {
+     "text": "much",
+     "start": 14.274,
+     "end": 14.498
+    },
+    {
+     "text": "time",
+     "start": 14.498,
+     "end": 14.672
+    },
+    {
+     "text": "I'd",
+     "start": 14.672,
+     "end": 14.813
+    },
+    {
+     "text": "be",
+     "start": 14.813,
+     "end": 14.93
+    },
+    {
+     "text": "spending",
+     "start": 14.93,
+     "end": 15.295
+    },
+    {
+     "text": "hopping",
+     "start": 15.34,
+     "end": 15.821
+    },
+    {
+     "text": "in",
+     "start": 15.821,
+     "end": 15.995
+    },
+    {
+     "text": "and",
+     "start": 15.995,
+     "end": 16.23
+    },
+    {
+     "text": "out",
+     "start": 16.23,
+     "end": 16.414
+    },
+    {
+     "text": "of",
+     "start": 16.414,
+     "end": 16.527
+    },
+    {
+     "text": "matches,",
+     "start": 16.527,
+     "end": 16.834
+    },
+    {
+     "text": "testing",
+     "start": 16.834,
+     "end": 17.182
+    },
+    {
+     "text": "bits",
+     "start": 17.182,
+     "end": 17.427
+    },
+    {
+     "text": "of",
+     "start": 17.427,
+     "end": 17.57
+    },
+    {
+     "text": "the",
+     "start": 17.57,
+     "end": 17.724
+    },
+    {
+     "text": "menu",
+     "start": 17.724,
+     "end": 18.01
+    },
+    {
+     "text": "and",
+     "start": 18.01,
+     "end": 18.235
+    },
+    {
+     "text": "making",
+     "start": 18.235,
+     "end": 18.542
+    },
+    {
+     "text": "sure",
+     "start": 18.542,
+     "end": 18.767
+    },
+    {
+     "text": "they",
+     "start": 18.767,
+     "end": 18.931
+    },
+    {
+     "text": "were",
+     "start": 18.931,
+     "end": 19.136
+    },
+    {
+     "text": "behaving,",
+     "start": 19.136,
+     "end": 19.545
+    },
+    {
+     "text": "and",
+     "start": 19.64,
+     "end": 19.855
+    },
+    {
+     "text": "also",
+     "start": 19.855,
+     "end": 20.023
+    },
+    {
+     "text": "trying",
+     "start": 20.023,
+     "end": 20.303
+    },
+    {
+     "text": "to",
+     "start": 20.303,
+     "end": 20.452
+    },
+    {
+     "text": "debug",
+     "start": 20.452,
+     "end": 20.769
+    },
+    {
+     "text": "obscure",
+     "start": 20.769,
+     "end": 21.292
+    },
+    {
+     "text": "issues",
+     "start": 21.292,
+     "end": 21.628
+    },
+    {
+     "text": "that",
+     "start": 21.628,
+     "end": 21.852
+    },
+    {
+     "text": "seemed",
+     "start": 21.852,
+     "end": 22.057
+    },
+    {
+     "text": "to",
+     "start": 22.057,
+     "end": 22.188
+    },
+    {
+     "text": "only",
+     "start": 22.188,
+     "end": 22.365
+    },
+    {
+     "text": "happen",
+     "start": 22.365,
+     "end": 22.57
+    },
+    {
+     "text": "once",
+     "start": 22.57,
+     "end": 22.846
+    },
+    {
+     "text": "in",
+     "start": 22.846,
+     "end": 22.976
+    },
+    {
+     "text": "a",
+     "start": 22.976,
+     "end": 23.032
+    },
+    {
+     "text": "blue",
+     "start": 23.032,
+     "end": 23.242
+    },
+    {
+     "text": "moon.",
+     "start": 23.242,
+     "end": 23.485
+    },
+    {
+     "text": "All",
+     "start": 24.37,
+     "end": 24.573
+    },
+    {
+     "text": "of",
+     "start": 24.573,
+     "end": 24.67
+    },
+    {
+     "text": "this",
+     "start": 24.67,
+     "end": 24.865
+    },
+    {
+     "text": "playtime",
+     "start": 24.865,
+     "end": 25.289
+    },
+    {
+     "text": "and",
+     "start": 25.289,
+     "end": 25.43
+    },
+    {
+     "text": "endless",
+     "start": 25.43,
+     "end": 25.766
+    },
+    {
+     "text": "obsessing",
+     "start": 25.766,
+     "end": 26.208
+    },
+    {
+     "text": "over",
+     "start": 26.208,
+     "end": 26.402
+    },
+    {
+     "text": "particular",
+     "start": 26.402,
+     "end": 26.88
+    },
+    {
+     "text": "features",
+     "start": 26.88,
+     "end": 27.304
+    },
+    {
+     "text": "has",
+     "start": 27.304,
+     "end": 27.498
+    },
+    {
+     "text": "meant",
+     "start": 27.498,
+     "end": 27.737
+    },
+    {
+     "text": "I",
+     "start": 27.737,
+     "end": 27.834
+    },
+    {
+     "text": "now",
+     "start": 27.834,
+     "end": 27.975
+    },
+    {
+     "text": "look",
+     "start": 27.975,
+     "end": 28.17
+    },
+    {
+     "text": "at",
+     "start": 28.17,
+     "end": 28.267
+    },
+    {
+     "text": "everything",
+     "start": 28.267,
+     "end": 28.514
+    },
+    {
+     "text": "in",
+     "start": 28.514,
+     "end": 28.687
+    },
+    {
+     "text": "my",
+     "start": 28.687,
+     "end": 28.81
+    },
+    {
+     "text": "game",
+     "start": 28.81,
+     "end": 28.996
+    },
+    {
+     "text": "with",
+     "start": 28.996,
+     "end": 29.164
+    },
+    {
+     "text": "a",
+     "start": 29.164,
+     "end": 29.217
+    },
+    {
+     "text": "fine-tooth",
+     "start": 29.217,
+     "end": 29.659
+    },
+    {
+     "text": "comb.",
+     "start": 29.659,
+     "end": 29.915
+    },
+    {
+     "text": "and",
+     "start": 30.49,
+     "end": 30.693
+    },
+    {
+     "text": "probably",
+     "start": 30.693,
+     "end": 31.065
+    },
+    {
+     "text": "worry",
+     "start": 31.065,
+     "end": 31.348
+    },
+    {
+     "text": "about",
+     "start": 31.348,
+     "end": 31.578
+    },
+    {
+     "text": "things",
+     "start": 31.578,
+     "end": 31.861
+    },
+    {
+     "text": "most",
+     "start": 31.861,
+     "end": 32.108
+    },
+    {
+     "text": "people",
+     "start": 32.108,
+     "end": 32.391
+    },
+    {
+     "text": "will",
+     "start": 32.391,
+     "end": 32.577
+    },
+    {
+     "text": "never",
+     "start": 32.577,
+     "end": 32.807
+    },
+    {
+     "text": "even",
+     "start": 32.807,
+     "end": 32.992
+    },
+    {
+     "text": "notice,",
+     "start": 32.992,
+     "end": 33.355
+    },
+    {
+     "text": "like",
+     "start": 33.48,
+     "end": 33.712
+    },
+    {
+     "text": "the",
+     "start": 33.712,
+     "end": 33.867
+    },
+    {
+     "text": "inertia",
+     "start": 33.867,
+     "end": 34.254
+    },
+    {
+     "text": "in",
+     "start": 34.254,
+     "end": 34.409
+    },
+    {
+     "text": "the",
+     "start": 34.409,
+     "end": 34.564
+    },
+    {
+     "text": "blood",
+     "start": 34.564,
+     "end": 34.757
+    },
+    {
+     "text": "splatter",
+     "start": 34.757,
+     "end": 35.144
+    },
+    {
+     "text": "when",
+     "start": 35.144,
+     "end": 35.319
+    },
+    {
+     "text": "the",
+     "start": 35.319,
+     "end": 35.473
+    },
+    {
+     "text": "player",
+     "start": 35.473,
+     "end": 35.744
+    },
+    {
+     "text": "dies.",
+     "start": 35.744,
+     "end": 36.025
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-15.n2v1.wav",
+   "seconds": 66.384,
+   "recordedAt": "2026-10-06T08:32:16.291Z",
+   "words": [
+    {
+     "text": "I",
+     "start": 0.66,
+     "end": 0.731
+    },
+    {
+     "text": "think",
+     "start": 0.731,
+     "end": 0.991
+    },
+    {
+     "text": "I've",
+     "start": 0.991,
+     "end": 1.184
+    },
+    {
+     "text": "saved",
+     "start": 1.184,
+     "end": 1.394
+    },
+    {
+     "text": "the",
+     "start": 1.394,
+     "end": 1.545
+    },
+    {
+     "text": "best",
+     "start": 1.545,
+     "end": 1.729
+    },
+    {
+     "text": "till",
+     "start": 1.729,
+     "end": 1.922
+    },
+    {
+     "text": "last.",
+     "start": 1.922,
+     "end": 2.165
+    },
+    {
+     "text": "But",
+     "start": 2.7,
+     "end": 2.835
+    },
+    {
+     "text": "I've",
+     "start": 3.03,
+     "end": 3.272
+    },
+    {
+     "text": "been",
+     "start": 3.272,
+     "end": 3.383
+    },
+    {
+     "text": "making",
+     "start": 3.383,
+     "end": 3.588
+    },
+    {
+     "text": "software",
+     "start": 3.588,
+     "end": 4.081
+    },
+    {
+     "text": "for",
+     "start": 4.081,
+     "end": 4.295
+    },
+    {
+     "text": "a",
+     "start": 4.295,
+     "end": 4.388
+    },
+    {
+     "text": "while,",
+     "start": 4.388,
+     "end": 4.695
+    },
+    {
+     "text": "and",
+     "start": 4.75,
+     "end": 4.946
+    },
+    {
+     "text": "success",
+     "start": 4.946,
+     "end": 5.329
+    },
+    {
+     "text": "is",
+     "start": 5.329,
+     "end": 5.496
+    },
+    {
+     "text": "never",
+     "start": 5.496,
+     "end": 5.78
+    },
+    {
+     "text": "taking",
+     "start": 5.78,
+     "end": 6.074
+    },
+    {
+     "text": "for",
+     "start": 6.074,
+     "end": 6.271
+    },
+    {
+     "text": "granted.",
+     "start": 6.271,
+     "end": 6.565
+    },
+    {
+     "text": "You",
+     "start": 6.95,
+     "end": 7.159
+    },
+    {
+     "text": "can",
+     "start": 7.159,
+     "end": 7.269
+    },
+    {
+     "text": "spend",
+     "start": 7.269,
+     "end": 7.565
+    },
+    {
+     "text": "two",
+     "start": 7.565,
+     "end": 7.774
+    },
+    {
+     "text": "years",
+     "start": 7.774,
+     "end": 8.093
+    },
+    {
+     "text": "writing",
+     "start": 8.093,
+     "end": 8.438
+    },
+    {
+     "text": "the",
+     "start": 8.438,
+     "end": 8.584
+    },
+    {
+     "text": "most",
+     "start": 8.584,
+     "end": 8.784
+    },
+    {
+     "text": "perfect",
+     "start": 8.784,
+     "end": 9.13
+    },
+    {
+     "text": "code,",
+     "start": 9.13,
+     "end": 9.394
+    },
+    {
+     "text": "only",
+     "start": 9.394,
+     "end": 9.595
+    },
+    {
+     "text": "for",
+     "start": 9.595,
+     "end": 9.713
+    },
+    {
+     "text": "nobody",
+     "start": 9.713,
+     "end": 10.013
+    },
+    {
+     "text": "to",
+     "start": 10.013,
+     "end": 10.168
+    },
+    {
+     "text": "want",
+     "start": 10.168,
+     "end": 10.368
+    },
+    {
+     "text": "to",
+     "start": 10.368,
+     "end": 10.478
+    },
+    {
+     "text": "use",
+     "start": 10.478,
+     "end": 10.623
+    },
+    {
+     "text": "your",
+     "start": 10.623,
+     "end": 10.824
+    },
+    {
+     "text": "product.",
+     "start": 10.824,
+     "end": 11.115
+    },
+    {
+     "text": "And",
+     "start": 11.86,
+     "end": 12.071
+    },
+    {
+     "text": "I",
+     "start": 12.071,
+     "end": 12.167
+    },
+    {
+     "text": "may",
+     "start": 12.167,
+     "end": 12.336
+    },
+    {
+     "text": "be",
+     "start": 12.336,
+     "end": 12.446
+    },
+    {
+     "text": "foolishly",
+     "start": 12.446,
+     "end": 12.831
+    },
+    {
+     "text": "expected",
+     "start": 12.831,
+     "end": 13.215
+    },
+    {
+     "text": "a",
+     "start": 13.215,
+     "end": 13.357
+    },
+    {
+     "text": "video",
+     "start": 13.357,
+     "end": 13.577
+    },
+    {
+     "text": "game",
+     "start": 13.577,
+     "end": 13.751
+    },
+    {
+     "text": "to",
+     "start": 13.751,
+     "end": 13.879
+    },
+    {
+     "text": "be",
+     "start": 13.879,
+     "end": 13.97
+    },
+    {
+     "text": "different.",
+     "start": 13.97,
+     "end": 14.355
+    },
+    {
+     "text": "Surely",
+     "start": 14.91,
+     "end": 15.274
+    },
+    {
+     "text": "if",
+     "start": 15.274,
+     "end": 15.43
+    },
+    {
+     "text": "it's",
+     "start": 15.43,
+     "end": 15.563
+    },
+    {
+     "text": "enjoyable",
+     "start": 15.563,
+     "end": 15.994
+    },
+    {
+     "text": "enough,",
+     "start": 15.994,
+     "end": 16.225
+    },
+    {
+     "text": "people",
+     "start": 16.27,
+     "end": 16.549
+    },
+    {
+     "text": "will",
+     "start": 16.549,
+     "end": 16.721
+    },
+    {
+     "text": "shout",
+     "start": 16.721,
+     "end": 16.942
+    },
+    {
+     "text": "about",
+     "start": 16.942,
+     "end": 17.163
+    },
+    {
+     "text": "it",
+     "start": 17.163,
+     "end": 17.303
+    },
+    {
+     "text": "from",
+     "start": 17.303,
+     "end": 17.458
+    },
+    {
+     "text": "the",
+     "start": 17.458,
+     "end": 17.59
+    },
+    {
+     "text": "rooftops",
+     "start": 17.59,
+     "end": 17.983
+    },
+    {
+     "text": "and",
+     "start": 17.983,
+     "end": 18.098
+    },
+    {
+     "text": "tell",
+     "start": 18.098,
+     "end": 18.27
+    },
+    {
+     "text": "all",
+     "start": 18.27,
+     "end": 18.401
+    },
+    {
+     "text": "their",
+     "start": 18.401,
+     "end": 18.622
+    },
+    {
+     "text": "friends",
+     "start": 18.622,
+     "end": 18.925
+    },
+    {
+     "text": "I",
+     "start": 18.925,
+     "end": 19.016
+    },
+    {
+     "text": "thought",
+     "start": 19.016,
+     "end": 19.319
+    },
+    {
+     "text": "to",
+     "start": 19.319,
+     "end": 19.434
+    },
+    {
+     "text": "myself.",
+     "start": 19.434,
+     "end": 19.745
+    },
+    {
+     "text": "Well,",
+     "start": 20.59,
+     "end": 21.005
+    },
+    {
+     "text": "it",
+     "start": 21.12,
+     "end": 21.267
+    },
+    {
+     "text": "turns",
+     "start": 21.267,
+     "end": 21.509
+    },
+    {
+     "text": "out",
+     "start": 21.509,
+     "end": 21.647
+    },
+    {
+     "text": "that",
+     "start": 21.647,
+     "end": 21.75
+    },
+    {
+     "text": "making",
+     "start": 21.75,
+     "end": 21.992
+    },
+    {
+     "text": "a",
+     "start": 21.992,
+     "end": 22.117
+    },
+    {
+     "text": "game",
+     "start": 22.117,
+     "end": 22.29
+    },
+    {
+     "text": "is",
+     "start": 22.29,
+     "end": 22.437
+    },
+    {
+     "text": "no",
+     "start": 22.437,
+     "end": 22.541
+    },
+    {
+     "text": "different",
+     "start": 22.541,
+     "end": 22.972
+    },
+    {
+     "text": "to",
+     "start": 22.972,
+     "end": 23.119
+    },
+    {
+     "text": "any",
+     "start": 23.119,
+     "end": 23.257
+    },
+    {
+     "text": "other",
+     "start": 23.257,
+     "end": 23.499
+    },
+    {
+     "text": "piece",
+     "start": 23.499,
+     "end": 23.689
+    },
+    {
+     "text": "of",
+     "start": 23.689,
+     "end": 23.776
+    },
+    {
+     "text": "software,",
+     "start": 23.776,
+     "end": 24.156
+    },
+    {
+     "text": "and",
+     "start": 24.156,
+     "end": 24.294
+    },
+    {
+     "text": "releasing",
+     "start": 24.294,
+     "end": 24.726
+    },
+    {
+     "text": "it",
+     "start": 24.726,
+     "end": 24.872
+    },
+    {
+     "text": "is",
+     "start": 24.872,
+     "end": 25.019
+    },
+    {
+     "text": "only",
+     "start": 25.019,
+     "end": 25.209
+    },
+    {
+     "text": "the",
+     "start": 25.209,
+     "end": 25.347
+    },
+    {
+     "text": "beginning",
+     "start": 25.347,
+     "end": 25.779
+    },
+    {
+     "text": "of",
+     "start": 25.779,
+     "end": 25.917
+    },
+    {
+     "text": "the",
+     "start": 25.917,
+     "end": 26.055
+    },
+    {
+     "text": "journey.",
+     "start": 26.055,
+     "end": 26.375
+    },
+    {
+     "text": "In",
+     "start": 27.31,
+     "end": 27.462
+    },
+    {
+     "text": "the",
+     "start": 27.462,
+     "end": 27.605
+    },
+    {
+     "text": "wise",
+     "start": 27.605,
+     "end": 27.801
+    },
+    {
+     "text": "words",
+     "start": 27.801,
+     "end": 28.087
+    },
+    {
+     "text": "of",
+     "start": 28.087,
+     "end": 28.229
+    },
+    {
+     "text": "famous",
+     "start": 28.229,
+     "end": 28.569
+    },
+    {
+     "text": "author",
+     "start": 28.569,
+     "end": 28.845
+    },
+    {
+     "text": "and",
+     "start": 28.845,
+     "end": 29.006
+    },
+    {
+     "text": "marketing",
+     "start": 29.006,
+     "end": 29.443
+    },
+    {
+     "text": "extraordinaire",
+     "start": 29.443,
+     "end": 30.05
+    },
+    {
+     "text": "Seth",
+     "start": 30.05,
+     "end": 30.283
+    },
+    {
+     "text": "Godin,",
+     "start": 30.283,
+     "end": 30.595
+    },
+    {
+     "text": "Marketing",
+     "start": 31.16,
+     "end": 31.628
+    },
+    {
+     "text": "is",
+     "start": 31.628,
+     "end": 31.79
+    },
+    {
+     "text": "no",
+     "start": 31.79,
+     "end": 31.901
+    },
+    {
+     "text": "longer",
+     "start": 31.901,
+     "end": 32.194
+    },
+    {
+     "text": "about",
+     "start": 32.194,
+     "end": 32.432
+    },
+    {
+     "text": "the",
+     "start": 32.432,
+     "end": 32.575
+    },
+    {
+     "text": "stuff",
+     "start": 32.575,
+     "end": 32.813
+    },
+    {
+     "text": "you",
+     "start": 32.813,
+     "end": 32.955
+    },
+    {
+     "text": "make,",
+     "start": 32.955,
+     "end": 33.205
+    },
+    {
+     "text": "but",
+     "start": 33.53,
+     "end": 33.76
+    },
+    {
+     "text": "about",
+     "start": 33.76,
+     "end": 33.933
+    },
+    {
+     "text": "the",
+     "start": 33.933,
+     "end": 34.055
+    },
+    {
+     "text": "stories",
+     "start": 34.055,
+     "end": 34.427
+    },
+    {
+     "text": "you",
+     "start": 34.427,
+     "end": 34.584
+    },
+    {
+     "text": "tell.",
+     "start": 34.584,
+     "end": 34.835
+    },
+    {
+     "text": "And",
+     "start": 35.39,
+     "end": 35.575
+    },
+    {
+     "text": "this",
+     "start": 35.575,
+     "end": 35.688
+    },
+    {
+     "text": "is",
+     "start": 35.688,
+     "end": 35.785
+    },
+    {
+     "text": "especially",
+     "start": 35.785,
+     "end": 36.308
+    },
+    {
+     "text": "true",
+     "start": 36.308,
+     "end": 36.542
+    },
+    {
+     "text": "in",
+     "start": 36.542,
+     "end": 36.671
+    },
+    {
+     "text": "the",
+     "start": 36.671,
+     "end": 36.784
+    },
+    {
+     "text": "modern",
+     "start": 36.784,
+     "end": 36.993
+    },
+    {
+     "text": "world.",
+     "start": 36.993,
+     "end": 37.275
+    },
+    {
+     "text": "Games",
+     "start": 37.8,
+     "end": 38.087
+    },
+    {
+     "text": "have",
+     "start": 38.087,
+     "end": 38.25
+    },
+    {
+     "text": "never",
+     "start": 38.25,
+     "end": 38.431
+    },
+    {
+     "text": "been",
+     "start": 38.431,
+     "end": 38.635
+    },
+    {
+     "text": "easier",
+     "start": 38.635,
+     "end": 38.946
+    },
+    {
+     "text": "to",
+     "start": 38.946,
+     "end": 39.078
+    },
+    {
+     "text": "make,",
+     "start": 39.078,
+     "end": 39.315
+    },
+    {
+     "text": "and",
+     "start": 39.39,
+     "end": 39.553
+    },
+    {
+     "text": "with",
+     "start": 39.553,
+     "end": 39.726
+    },
+    {
+     "text": "social",
+     "start": 39.726,
+     "end": 40.041
+    },
+    {
+     "text": "media",
+     "start": 40.041,
+     "end": 40.347
+    },
+    {
+     "text": "drowning",
+     "start": 40.347,
+     "end": 40.754
+    },
+    {
+     "text": "us",
+     "start": 40.754,
+     "end": 40.927
+    },
+    {
+     "text": "in",
+     "start": 40.927,
+     "end": 41.029
+    },
+    {
+     "text": "content",
+     "start": 41.029,
+     "end": 41.375
+    },
+    {
+     "text": "and",
+     "start": 41.375,
+     "end": 41.558
+    },
+    {
+     "text": "products",
+     "start": 41.558,
+     "end": 41.863
+    },
+    {
+     "text": "to",
+     "start": 41.863,
+     "end": 42.021
+    },
+    {
+     "text": "buy,",
+     "start": 42.021,
+     "end": 42.255
+    },
+    {
+     "text": "it's",
+     "start": 42.73,
+     "end": 42.928
+    },
+    {
+     "text": "no",
+     "start": 42.928,
+     "end": 43.049
+    },
+    {
+     "text": "wonder",
+     "start": 43.049,
+     "end": 43.333
+    },
+    {
+     "text": "almost",
+     "start": 43.333,
+     "end": 43.617
+    },
+    {
+     "text": "everyone",
+     "start": 43.617,
+     "end": 43.996
+    },
+    {
+     "text": "stumbles",
+     "start": 43.996,
+     "end": 44.341
+    },
+    {
+     "text": "at",
+     "start": 44.341,
+     "end": 44.461
+    },
+    {
+     "text": "the",
+     "start": 44.461,
+     "end": 44.582
+    },
+    {
+     "text": "marketing",
+     "start": 44.582,
+     "end": 44.995
+    },
+    {
+     "text": "step.",
+     "start": 44.995,
+     "end": 45.245
+    },
+    {
+     "text": "Hell,",
+     "start": 45.93,
+     "end": 46.205
+    },
+    {
+     "text": "even",
+     "start": 46.32,
+     "end": 46.57
+    },
+    {
+     "text": "I",
+     "start": 46.57,
+     "end": 46.71
+    },
+    {
+     "text": "have",
+     "start": 46.71,
+     "end": 46.866
+    },
+    {
+     "text": "no",
+     "start": 46.866,
+     "end": 46.991
+    },
+    {
+     "text": "idea",
+     "start": 46.991,
+     "end": 47.24
+    },
+    {
+     "text": "what",
+     "start": 47.24,
+     "end": 47.427
+    },
+    {
+     "text": "I'm",
+     "start": 47.427,
+     "end": 47.594
+    },
+    {
+     "text": "doing.",
+     "start": 47.594,
+     "end": 47.885
+    },
+    {
+     "text": "This",
+     "start": 48.02,
+     "end": 48.274
+    },
+    {
+     "text": "video",
+     "start": 48.274,
+     "end": 48.515
+    },
+    {
+     "text": "you're",
+     "start": 48.515,
+     "end": 48.673
+    },
+    {
+     "text": "watching",
+     "start": 48.673,
+     "end": 48.883
+    },
+    {
+     "text": "right",
+     "start": 48.883,
+     "end": 49.129
+    },
+    {
+     "text": "now",
+     "start": 49.129,
+     "end": 49.278
+    },
+    {
+     "text": "is",
+     "start": 49.278,
+     "end": 49.4
+    },
+    {
+     "text": "proof",
+     "start": 49.4,
+     "end": 49.576
+    },
+    {
+     "text": "of",
+     "start": 49.576,
+     "end": 49.716
+    },
+    {
+     "text": "it.",
+     "start": 49.716,
+     "end": 49.865
+    },
+    {
+     "text": "I",
+     "start": 50.93,
+     "end": 51.031
+    },
+    {
+     "text": "don't",
+     "start": 51.031,
+     "end": 51.234
+    },
+    {
+     "text": "have",
+     "start": 51.234,
+     "end": 51.382
+    },
+    {
+     "text": "much",
+     "start": 51.382,
+     "end": 51.599
+    },
+    {
+     "text": "wisdom",
+     "start": 51.599,
+     "end": 51.839
+    },
+    {
+     "text": "to",
+     "start": 51.839,
+     "end": 51.968
+    },
+    {
+     "text": "offer",
+     "start": 51.968,
+     "end": 52.171
+    },
+    {
+     "text": "on",
+     "start": 52.171,
+     "end": 52.282
+    },
+    {
+     "text": "this",
+     "start": 52.282,
+     "end": 52.439
+    },
+    {
+     "text": "last",
+     "start": 52.439,
+     "end": 52.623
+    },
+    {
+     "text": "lesson",
+     "start": 52.623,
+     "end": 52.872
+    },
+    {
+     "text": "I've",
+     "start": 52.872,
+     "end": 53.075
+    },
+    {
+     "text": "learned,",
+     "start": 53.075,
+     "end": 53.315
+    },
+    {
+     "text": "except",
+     "start": 53.37,
+     "end": 53.606
+    },
+    {
+     "text": "keep",
+     "start": 53.606,
+     "end": 53.891
+    },
+    {
+     "text": "plugging",
+     "start": 53.891,
+     "end": 54.304
+    },
+    {
+     "text": "away",
+     "start": 54.304,
+     "end": 54.52
+    },
+    {
+     "text": "at",
+     "start": 54.52,
+     "end": 54.658
+    },
+    {
+     "text": "things,",
+     "start": 54.658,
+     "end": 54.953
+    },
+    {
+     "text": "and",
+     "start": 54.953,
+     "end": 55.101
+    },
+    {
+     "text": "try",
+     "start": 55.101,
+     "end": 55.297
+    },
+    {
+     "text": "as",
+     "start": 55.297,
+     "end": 55.435
+    },
+    {
+     "text": "much",
+     "start": 55.435,
+     "end": 55.592
+    },
+    {
+     "text": "as",
+     "start": 55.592,
+     "end": 55.71
+    },
+    {
+     "text": "possible",
+     "start": 55.71,
+     "end": 56.113
+    },
+    {
+     "text": "to",
+     "start": 56.113,
+     "end": 56.281
+    },
+    {
+     "text": "bring",
+     "start": 56.281,
+     "end": 56.536
+    },
+    {
+     "text": "your",
+     "start": 56.536,
+     "end": 56.694
+    },
+    {
+     "text": "story",
+     "start": 56.694,
+     "end": 56.989
+    },
+    {
+     "text": "to",
+     "start": 56.989,
+     "end": 57.156
+    },
+    {
+     "text": "the",
+     "start": 57.156,
+     "end": 57.303
+    },
+    {
+     "text": "ones",
+     "start": 57.303,
+     "end": 57.559
+    },
+    {
+     "text": "who",
+     "start": 57.559,
+     "end": 57.756
+    },
+    {
+     "text": "want",
+     "start": 57.756,
+     "end": 57.933
+    },
+    {
+     "text": "to",
+     "start": 57.933,
+     "end": 58.07
+    },
+    {
+     "text": "listen.",
+     "start": 58.07,
+     "end": 58.375
+    },
+    {
+     "text": "Nothing",
+     "start": 59.12,
+     "end": 59.508
+    },
+    {
+     "text": "is",
+     "start": 59.508,
+     "end": 59.648
+    },
+    {
+     "text": "ever",
+     "start": 59.648,
+     "end": 59.797
+    },
+    {
+     "text": "a",
+     "start": 59.797,
+     "end": 59.888
+    },
+    {
+     "text": "success",
+     "start": 59.888,
+     "end": 60.209
+    },
+    {
+     "text": "overnight,",
+     "start": 60.209,
+     "end": 60.655
+    },
+    {
+     "text": "and",
+     "start": 60.8,
+     "end": 61.05
+    },
+    {
+     "text": "much",
+     "start": 61.05,
+     "end": 61.225
+    },
+    {
+     "text": "like",
+     "start": 61.225,
+     "end": 61.541
+    },
+    {
+     "text": "making",
+     "start": 61.541,
+     "end": 61.845
+    },
+    {
+     "text": "a",
+     "start": 61.845,
+     "end": 61.96
+    },
+    {
+     "text": "video",
+     "start": 61.96,
+     "end": 62.232
+    },
+    {
+     "text": "game,",
+     "start": 62.232,
+     "end": 62.548
+    },
+    {
+     "text": "it",
+     "start": 62.548,
+     "end": 62.668
+    },
+    {
+     "text": "takes",
+     "start": 62.668,
+     "end": 62.907
+    },
+    {
+     "text": "time,",
+     "start": 62.907,
+     "end": 63.223
+    },
+    {
+     "text": "effort,",
+     "start": 63.223,
+     "end": 63.615
+    },
+    {
+     "text": "and",
+     "start": 63.67,
+     "end": 63.835
+    },
+    {
+     "text": "a",
+     "start": 63.835,
+     "end": 63.926
+    },
+    {
+     "text": "lot",
+     "start": 63.926,
+     "end": 64.091
+    },
+    {
+     "text": "of",
+     "start": 64.091,
+     "end": 64.201
+    },
+    {
+     "text": "balancing",
+     "start": 64.201,
+     "end": 64.695
+    },
+    {
+     "text": "to",
+     "start": 64.695,
+     "end": 64.851
+    },
+    {
+     "text": "get",
+     "start": 64.851,
+     "end": 64.979
+    },
+    {
+     "text": "things",
+     "start": 64.979,
+     "end": 65.208
+    },
+    {
+     "text": "right.",
+     "start": 65.208,
+     "end": 65.505
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/edit-2026-10-05-2-16.n2v1.wav",
+   "seconds": 5.248,
+   "recordedAt": "2026-10-06T08:32:32.421Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.66,
+     "end": 0.794
+    },
+    {
+     "text": "you",
+     "start": 0.794,
+     "end": 0.956
+    },
+    {
+     "text": "enjoyed",
+     "start": 0.956,
+     "end": 1.285
+    },
+    {
+     "text": "these",
+     "start": 1.285,
+     "end": 1.562
+    },
+    {
+     "text": "insights,",
+     "start": 1.562,
+     "end": 2.01
+    },
+    {
+     "text": "follow",
+     "start": 2.01,
+     "end": 2.278
+    },
+    {
+     "text": "me",
+     "start": 2.278,
+     "end": 2.445
+    },
+    {
+     "text": "for",
+     "start": 2.445,
+     "end": 2.578
+    },
+    {
+     "text": "more",
+     "start": 2.578,
+     "end": 2.798
+    },
+    {
+     "text": "content",
+     "start": 2.798,
+     "end": 3.189
+    },
+    {
+     "text": "like",
+     "start": 3.189,
+     "end": 3.418
+    },
+    {
+     "text": "this.",
+     "start": 3.418,
+     "end": 3.695
+    }
+   ],
+   "transcribed": true
+  }
+ ],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true,
+  "denoise": 2,
+  "volume": 0.5
+ },
+ "markers": [
+  {
+   "id": "n9zaax7m",
+   "at": 6.933
+  },
+  {
+   "id": "bfyybj93",
+   "at": 51.23
+  },
+  {
+   "id": "m8nhetmi",
+   "at": 87.3
+  }
+ ],
+ "slide": 0.4,
+ "createdAt": "2026-10-05T22:53:31.362Z",
+ "updatedAt": "2026-10-06T15:29:18.215Z"
+}

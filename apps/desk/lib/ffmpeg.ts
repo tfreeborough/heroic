@@ -5,7 +5,7 @@
  * build without setpts / xfade / acrossfade, so it can't join segments.
  * Thumbnails are cached under apps/desk/.cache/.
  */
-import { existsSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import { exec } from "./exec";
@@ -36,13 +36,24 @@ export const ffprobe = (file: string): { seconds: number; width: number; height:
   return { seconds: Math.round(Number(json.format.duration) * 100) / 100, width: v.width, height: v.height, fps: Math.round((num ?? 0) / (den || 1)) };
 };
 
-/** A JPEG of one frame, cached by file + mtime + time. Returns the cache path. */
-export const thumbnail = (file: string, at: number, maxH = 480): string => {
+/**
+ * A JPEG of one frame, cached by file + mtime + time. Returns the cache path.
+ * Async, and killed when the browser drops the request: the editor's framing
+ * panel asks for a new frame on every step of a trim, and a spawnSync per
+ * request here froze the loop under the playing videos until Bun crashed.
+ */
+export const thumbnail = async (file: string, at: number, maxH = 480, signal?: AbortSignal): Promise<string> => {
   const key = `${basename(file).replace(/[^a-z0-9]+/gi, "-")}-${statSync(file).mtimeMs | 0}-${at.toFixed(2)}-${maxH}.jpg`;
   const out = join(CACHE_DIR, "thumbs", key);
   if (existsSync(out)) return out;
-  const r = run("ffmpeg", ["-y", "-v", "error", "-ss", String(at), "-i", file, "-frames:v", "1", "-vf", `scale=-2:${maxH}`, "-q:v", "4", out]);
-  if (!r.ok) throw new Error(`thumbnail failed for ${basename(file)}: ${r.err.trim()}`);
+  // Its own temp name: two requests for the same frame can be in flight at once, and a killed one must not leave half a JPEG in the cache.
+  const tmp = `${out}.${crypto.randomUUID().slice(0, 8)}.partial.jpg`;
+  const r = await runAsync("ffmpeg", ["-y", "-nostdin", "-v", "error", "-ss", String(at), "-i", file, "-frames:v", "1", "-vf", `scale=-2:${maxH}`, "-q:v", "4", tmp], signal);
+  if (!r.ok || !existsSync(tmp)) {
+    rmSync(tmp, { force: true });
+    throw new Error(`thumbnail failed for ${basename(file)}: ${r.err.trim()}`);
+  }
+  renameSync(tmp, out);
   return out;
 };
 

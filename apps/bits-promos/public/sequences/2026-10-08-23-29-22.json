@@ -1,0 +1,4572 @@
+{
+ "id": "2026-10-08-23-29-22",
+ "name": "How does cheating work in multiplayer games?",
+ "video": [
+  {
+   "id": "v1",
+   "clips": [
+    {
+     "id": "wepifme4",
+     "src": "footage/Obelisk Brawl 1 cut.mp4",
+     "start": 5.267,
+     "end": 17.767,
+     "at": 0,
+     "sourceSeconds": 42.9,
+     "aspect": 0.48717948717948717
+    },
+    {
+     "id": "e77kq1xv",
+     "src": "footage/Hammer Showcase.mp4",
+     "start": 0,
+     "end": 26.38,
+     "at": 12.5,
+     "sourceSeconds": 26.38,
+     "aspect": 0.4864864864864865
+    },
+    {
+     "id": "pmrn6o9o",
+     "src": "footage/fang arena fight.mp4",
+     "start": 0,
+     "end": 19.63,
+     "at": 38.88,
+     "sourceSeconds": 19.63,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "qyfxghbj",
+     "src": "footage/Player vs godlike (trident).mp4",
+     "start": 0,
+     "end": 26.4,
+     "at": 58.51,
+     "sourceSeconds": 26.4,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "xhssjfd1",
+     "src": "footage/Brawl footage .mp4",
+     "start": 0,
+     "end": 40.023,
+     "at": 84.91,
+     "sourceSeconds": 114.78,
+     "aspect": 0.4552083333333333,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     }
+    },
+    {
+     "id": "q6mgqwv7",
+     "src": "footage/Tall order.mp4",
+     "start": 0,
+     "end": 32.12,
+     "at": 124.933,
+     "sourceSeconds": 32.12,
+     "aspect": 0.48128342245989303
+    },
+    {
+     "id": "i55b1jpt",
+     "src": "footage/Brawl footage .mp4",
+     "start": 66.877,
+     "end": 98.158,
+     "at": 157.053,
+     "sourceSeconds": 114.78,
+     "aspect": 0.4552083333333333,
+     "crop": {
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 0.945
+     }
+    }
+   ]
+  },
+  {
+   "id": "v2-lgtrrdcg",
+   "clips": [
+    {
+     "id": "shje4g1l",
+     "src": "footage/Bow Showcase.mp4",
+     "start": 0,
+     "end": 26.22,
+     "at": 23.243,
+     "sourceSeconds": 26.22,
+     "aspect": 0.4864864864864865
+    },
+    {
+     "id": "b1iojljr",
+     "src": "footage/webstorm-code-1.mov",
+     "start": 32.647,
+     "end": 51.196,
+     "at": 58.51,
+     "sourceSeconds": 81.97,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     }
+    },
+    {
+     "id": "9bbw2c3f",
+     "src": "footage/Ranked explainer.mp4",
+     "start": 0,
+     "end": 51.166,
+     "at": 105.887,
+     "sourceSeconds": 95.48,
+     "aspect": 0.48128342245989303,
+     "muted": true
+    },
+    {
+     "id": "wrl73mc6",
+     "src": "footage/webstorm-code-3.mov",
+     "start": 0,
+     "end": 29.8,
+     "at": 156.653,
+     "sourceSeconds": 40.62,
+     "aspect": 1.7777777777777777,
+     "crop": {
+      "x": 0,
+      "y": 0.035,
+      "w": 1,
+      "h": 0.8999999999999999
+     }
+    }
+   ]
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": [
+    {
+     "id": "rnego537",
+     "take": 0,
+     "start": 0.028,
+     "end": 5.205,
+     "at": 0
+    },
+    {
+     "id": "nbbt86es",
+     "take": 0,
+     "start": 8.171,
+     "end": 12.938,
+     "at": 5.177
+    },
+    {
+     "id": "gsa23a2m",
+     "take": 1,
+     "start": 0.666,
+     "end": 12.566,
+     "at": 11.343
+    },
+    {
+     "id": "ffe6fhdd",
+     "take": 5,
+     "start": 1.039,
+     "end": 24.373,
+     "at": 24.447
+    },
+    {
+     "id": "lywuk9h8",
+     "take": 7,
+     "start": 0.584,
+     "end": 25.866,
+     "at": 52.434
+    },
+    {
+     "id": "09qiyql0",
+     "take": 9,
+     "start": 2.558,
+     "end": 25.841,
+     "at": 78.977
+    },
+    {
+     "id": "ihlpva9v",
+     "take": 11,
+     "start": 0.871,
+     "end": 34.136,
+     "at": 102.795
+    },
+    {
+     "id": "0kzcphmh",
+     "take": 12,
+     "start": 0.6,
+     "end": 4.666,
+     "at": 136.06
+    },
+    {
+     "id": "g3whec0w",
+     "take": 14,
+     "start": 0.065,
+     "end": 23.365,
+     "at": 141.223
+    },
+    {
+     "id": "j5tiiink",
+     "take": 15,
+     "start": 0.049,
+     "end": 14.604,
+     "at": 164.523
+    },
+    {
+     "id": "2cc75bc7",
+     "take": 16,
+     "start": 0.044,
+     "end": 6.678,
+     "at": 179.819
+    }
+   ]
+  }
+ ],
+ "takes": [
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-1.n2v1.wav",
+   "seconds": 13.813,
+   "recordedAt": "2026-10-08T22:34:47.933Z",
+   "words": [
+    {
+     "text": "Have",
+     "start": 1.01,
+     "end": 1.243
+    },
+    {
+     "text": "you",
+     "start": 1.243,
+     "end": 1.401
+    },
+    {
+     "text": "ever",
+     "start": 1.401,
+     "end": 1.613
+    },
+    {
+     "text": "wondered",
+     "start": 1.613,
+     "end": 1.876
+    },
+    {
+     "text": "why",
+     "start": 1.876,
+     "end": 2.035
+    },
+    {
+     "text": "some",
+     "start": 2.035,
+     "end": 2.246
+    },
+    {
+     "text": "of",
+     "start": 2.246,
+     "end": 2.352
+    },
+    {
+     "text": "your",
+     "start": 2.352,
+     "end": 2.563
+    },
+    {
+     "text": "favourite",
+     "start": 2.563,
+     "end": 3.046
+    },
+    {
+     "text": "online",
+     "start": 3.046,
+     "end": 3.372
+    },
+    {
+     "text": "games",
+     "start": 3.372,
+     "end": 3.68
+    },
+    {
+     "text": "contain",
+     "start": 3.68,
+     "end": 4.067
+    },
+    {
+     "text": "tons",
+     "start": 4.067,
+     "end": 4.313
+    },
+    {
+     "text": "of",
+     "start": 4.313,
+     "end": 4.463
+    },
+    {
+     "text": "cheaters?",
+     "start": 4.463,
+     "end": 4.885
+    },
+    {
+     "text": "Let's",
+     "start": 5.65,
+     "end": 6.115
+    },
+    {
+     "text": "lets explore",
+     "start": 8.31,
+     "end": 8.55
+    },
+    {
+     "text": "the",
+     "start": 8.55,
+     "end": 8.754
+    },
+    {
+     "text": "two",
+     "start": 8.754,
+     "end": 8.958
+    },
+    {
+     "text": "different",
+     "start": 8.958,
+     "end": 9.481
+    },
+    {
+     "text": "ways",
+     "start": 9.481,
+     "end": 9.739
+    },
+    {
+     "text": "multiplayer",
+     "start": 9.739,
+     "end": 10.369
+    },
+    {
+     "text": "games",
+     "start": 10.369,
+     "end": 10.706
+    },
+    {
+     "text": "communicate",
+     "start": 10.706,
+     "end": 11.185
+    },
+    {
+     "text": "and",
+     "start": 11.24,
+     "end": 11.452
+    },
+    {
+     "text": "how",
+     "start": 11.452,
+     "end": 11.594
+    },
+    {
+     "text": "hackers",
+     "start": 11.594,
+     "end": 11.913
+    },
+    {
+     "text": "exploit",
+     "start": 11.913,
+     "end": 12.328
+    },
+    {
+     "text": "them.",
+     "start": 12.328,
+     "end": 12.585
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-2.n2v1.wav",
+   "seconds": 13.963,
+   "recordedAt": "2026-10-08T22:36:19.970Z",
+   "words": [
+    {
+     "text": "Firstly,",
+     "start": 0.88,
+     "end": 1.415
+    },
+    {
+     "text": "imagine",
+     "start": 1.55,
+     "end": 1.882
+    },
+    {
+     "text": "four",
+     "start": 1.882,
+     "end": 2.166
+    },
+    {
+     "text": "players",
+     "start": 2.166,
+     "end": 2.576
+    },
+    {
+     "text": "connected",
+     "start": 2.576,
+     "end": 3.152
+    },
+    {
+     "text": "in",
+     "start": 3.152,
+     "end": 3.318
+    },
+    {
+     "text": "a",
+     "start": 3.318,
+     "end": 3.411
+    },
+    {
+     "text": "competitive",
+     "start": 3.411,
+     "end": 4.105
+    },
+    {
+     "text": "PvP",
+     "start": 4.16,
+     "end": 4.469
+    },
+    {
+     "text": "mobile",
+     "start": 4.469,
+     "end": 4.996
+    },
+    {
+     "text": "game.",
+     "start": 4.996,
+     "end": 5.395
+    },
+    {
+     "text": "The",
+     "start": 5.98,
+     "end": 6.196
+    },
+    {
+     "text": "aim",
+     "start": 6.196,
+     "end": 6.327
+    },
+    {
+     "text": "of",
+     "start": 6.327,
+     "end": 6.486
+    },
+    {
+     "text": "this",
+     "start": 6.486,
+     "end": 6.618
+    },
+    {
+     "text": "game",
+     "start": 6.618,
+     "end": 6.815
+    },
+    {
+     "text": "is",
+     "start": 6.815,
+     "end": 6.965
+    },
+    {
+     "text": "to",
+     "start": 6.965,
+     "end": 7.04
+    },
+    {
+     "text": "be",
+     "start": 7.04,
+     "end": 7.133
+    },
+    {
+     "text": "the",
+     "start": 7.133,
+     "end": 7.284
+    },
+    {
+     "text": "last",
+     "start": 7.284,
+     "end": 7.471
+    },
+    {
+     "text": "one",
+     "start": 7.471,
+     "end": 7.621
+    },
+    {
+     "text": "standing,",
+     "start": 7.621,
+     "end": 8.015
+    },
+    {
+     "text": "and",
+     "start": 8.45,
+     "end": 8.669
+    },
+    {
+     "text": "as",
+     "start": 8.669,
+     "end": 8.799
+    },
+    {
+     "text": "the",
+     "start": 8.799,
+     "end": 8.993
+    },
+    {
+     "text": "game",
+     "start": 8.993,
+     "end": 9.237
+    },
+    {
+     "text": "starts",
+     "start": 9.237,
+     "end": 9.59
+    },
+    {
+     "text": "each",
+     "start": 9.59,
+     "end": 9.859
+    },
+    {
+     "text": "player",
+     "start": 9.859,
+     "end": 10.204
+    },
+    {
+     "text": "makes",
+     "start": 10.204,
+     "end": 10.499
+    },
+    {
+     "text": "a",
+     "start": 10.499,
+     "end": 10.592
+    },
+    {
+     "text": "choice",
+     "start": 10.592,
+     "end": 10.937
+    },
+    {
+     "text": "about",
+     "start": 10.937,
+     "end": 11.231
+    },
+    {
+     "text": "moving",
+     "start": 11.231,
+     "end": 11.58
+    },
+    {
+     "text": "or",
+     "start": 11.58,
+     "end": 11.749
+    },
+    {
+     "text": "attacking.",
+     "start": 11.749,
+     "end": 12.245
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-3.n2v1.wav",
+   "seconds": 3.659,
+   "recordedAt": "2026-10-08T22:37:02.969Z",
+   "words": [
+    {
+     "text": "The",
+     "start": 0.81,
+     "end": 1.072
+    },
+    {
+     "text": "Client",
+     "start": 1.072,
+     "end": 1.556
+    },
+    {
+     "text": "Authority",
+     "start": 1.556,
+     "end": 2.128
+    },
+    {
+     "text": "Model",
+     "start": 2.128,
+     "end": 2.555
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-4.n2v1.wav",
+   "seconds": 30.123,
+   "recordedAt": "2026-10-08T22:37:58.216Z",
+   "words": []
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-5.n2v1.wav",
+   "seconds": 3.573,
+   "recordedAt": "2026-10-08T22:40:14.213Z",
+   "words": [
+    {
+     "text": "Testing,",
+     "start": 0.61,
+     "end": 1.183
+    },
+    {
+     "text": "testing.",
+     "start": 1.183,
+     "end": 1.755
+    },
+    {
+     "text": "I",
+     "start": 2.03,
+     "end": 2.179
+    },
+    {
+     "text": "am",
+     "start": 2.179,
+     "end": 2.457
+    },
+    {
+     "text": "testing.",
+     "start": 2.457,
+     "end": 3.095
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-6.n2v1.wav",
+   "seconds": 25.477,
+   "recordedAt": "2026-10-08T22:41:01.518Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 1.22,
+     "end": 1.353
+    },
+    {
+     "text": "the",
+     "start": 1.353,
+     "end": 1.543
+    },
+    {
+     "text": "game",
+     "start": 1.543,
+     "end": 1.783
+    },
+    {
+     "text": "was",
+     "start": 1.783,
+     "end": 1.974
+    },
+    {
+     "text": "written",
+     "start": 1.974,
+     "end": 2.206
+    },
+    {
+     "text": "with",
+     "start": 2.206,
+     "end": 2.446
+    },
+    {
+     "text": "a",
+     "start": 2.446,
+     "end": 2.512
+    },
+    {
+     "text": "client",
+     "start": 2.512,
+     "end": 2.852
+    },
+    {
+     "text": "authority",
+     "start": 2.852,
+     "end": 3.34
+    },
+    {
+     "text": "model,",
+     "start": 3.34,
+     "end": 3.655
+    },
+    {
+     "text": "each",
+     "start": 4.06,
+     "end": 4.329
+    },
+    {
+     "text": "player",
+     "start": 4.329,
+     "end": 4.588
+    },
+    {
+     "text": "essentially",
+     "start": 4.588,
+     "end": 5.245
+    },
+    {
+     "text": "broadcasts",
+     "start": 5.245,
+     "end": 5.903
+    },
+    {
+     "text": "their",
+     "start": 5.903,
+     "end": 6.069
+    },
+    {
+     "text": "actions",
+     "start": 6.069,
+     "end": 6.458
+    },
+    {
+     "text": "to",
+     "start": 6.458,
+     "end": 6.615
+    },
+    {
+     "text": "everybody",
+     "start": 6.615,
+     "end": 7.004
+    },
+    {
+     "text": "else",
+     "start": 7.004,
+     "end": 7.245
+    },
+    {
+     "text": "in",
+     "start": 7.245,
+     "end": 7.375
+    },
+    {
+     "text": "the",
+     "start": 7.375,
+     "end": 7.504
+    },
+    {
+     "text": "game.",
+     "start": 7.504,
+     "end": 7.745
+    },
+    {
+     "text": "Players",
+     "start": 8.4,
+     "end": 8.896
+    },
+    {
+     "text": "1,",
+     "start": 8.896,
+     "end": 9.059
+    },
+    {
+     "text": "2,",
+     "start": 9.059,
+     "end": 9.175
+    },
+    {
+     "text": "and",
+     "start": 9.175,
+     "end": 9.344
+    },
+    {
+     "text": "3",
+     "start": 9.344,
+     "end": 9.513
+    },
+    {
+     "text": "might",
+     "start": 9.513,
+     "end": 9.861
+    },
+    {
+     "text": "say,",
+     "start": 9.861,
+     "end": 10.104
+    },
+    {
+     "text": "hey,",
+     "start": 10.104,
+     "end": 10.315
+    },
+    {
+     "text": "I'm",
+     "start": 10.37,
+     "end": 10.56
+    },
+    {
+     "text": "moving",
+     "start": 10.56,
+     "end": 10.941
+    },
+    {
+     "text": "left,",
+     "start": 10.941,
+     "end": 11.265
+    },
+    {
+     "text": "up,",
+     "start": 11.65,
+     "end": 11.825
+    },
+    {
+     "text": "or",
+     "start": 11.825,
+     "end": 11.907
+    },
+    {
+     "text": "down.",
+     "start": 11.907,
+     "end": 12.205
+    },
+    {
+     "text": "And",
+     "start": 12.84,
+     "end": 13.067
+    },
+    {
+     "text": "player",
+     "start": 13.067,
+     "end": 13.362
+    },
+    {
+     "text": "4",
+     "start": 13.362,
+     "end": 13.534
+    },
+    {
+     "text": "might",
+     "start": 13.534,
+     "end": 13.81
+    },
+    {
+     "text": "say,",
+     "start": 13.81,
+     "end": 13.987
+    },
+    {
+     "text": "hey,",
+     "start": 13.987,
+     "end": 14.145
+    },
+    {
+     "text": "I'm",
+     "start": 14.45,
+     "end": 14.634
+    },
+    {
+     "text": "making",
+     "start": 14.634,
+     "end": 14.818
+    },
+    {
+     "text": "an",
+     "start": 14.818,
+     "end": 14.987
+    },
+    {
+     "text": "attack",
+     "start": 14.987,
+     "end": 15.325
+    },
+    {
+     "text": "towards",
+     "start": 15.325,
+     "end": 15.765
+    },
+    {
+     "text": "player",
+     "start": 15.765,
+     "end": 16.072
+    },
+    {
+     "text": "1.",
+     "start": 16.072,
+     "end": 16.185
+    },
+    {
+     "text": "As",
+     "start": 16.92,
+     "end": 17.078
+    },
+    {
+     "text": "these",
+     "start": 17.078,
+     "end": 17.314
+    },
+    {
+     "text": "messages",
+     "start": 17.314,
+     "end": 17.647
+    },
+    {
+     "text": "are",
+     "start": 17.647,
+     "end": 17.851
+    },
+    {
+     "text": "sent,",
+     "start": 17.851,
+     "end": 18.055
+    },
+    {
+     "text": "each",
+     "start": 18.18,
+     "end": 18.433
+    },
+    {
+     "text": "client",
+     "start": 18.433,
+     "end": 18.685
+    },
+    {
+     "text": "takes",
+     "start": 18.685,
+     "end": 19.001
+    },
+    {
+     "text": "them,",
+     "start": 19.001,
+     "end": 19.275
+    },
+    {
+     "text": "processes",
+     "start": 19.76,
+     "end": 20.287
+    },
+    {
+     "text": "them,",
+     "start": 20.287,
+     "end": 20.605
+    },
+    {
+     "text": "and",
+     "start": 20.91,
+     "end": 21.104
+    },
+    {
+     "text": "makes",
+     "start": 21.104,
+     "end": 21.366
+    },
+    {
+     "text": "all",
+     "start": 21.366,
+     "end": 21.518
+    },
+    {
+     "text": "the",
+     "start": 21.518,
+     "end": 21.653
+    },
+    {
+     "text": "corresponding",
+     "start": 21.653,
+     "end": 22.05
+    },
+    {
+     "text": "changes",
+     "start": 22.05,
+     "end": 22.421
+    },
+    {
+     "text": "on",
+     "start": 22.421,
+     "end": 22.565
+    },
+    {
+     "text": "screen",
+     "start": 22.565,
+     "end": 22.877
+    },
+    {
+     "text": "that",
+     "start": 22.877,
+     "end": 23.08
+    },
+    {
+     "text": "the",
+     "start": 23.08,
+     "end": 23.232
+    },
+    {
+     "text": "player",
+     "start": 23.232,
+     "end": 23.527
+    },
+    {
+     "text": "would",
+     "start": 23.527,
+     "end": 23.781
+    },
+    {
+     "text": "see.",
+     "start": 23.781,
+     "end": 23.975
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-7.n2v1.wav",
+   "seconds": 3.776,
+   "recordedAt": "2026-10-08T22:41:54.334Z",
+   "words": [
+    {
+     "text": "The",
+     "start": 0.62,
+     "end": 0.967
+    },
+    {
+     "text": "server",
+     "start": 0.967,
+     "end": 1.372
+    },
+    {
+     "text": "authority",
+     "start": 1.372,
+     "end": 1.95
+    },
+    {
+     "text": "model.",
+     "start": 1.95,
+     "end": 2.335
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-8.n2v1.wav",
+   "seconds": 26.997,
+   "recordedAt": "2026-10-08T22:42:45.132Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.69,
+     "end": 0.815
+    },
+    {
+     "text": "the",
+     "start": 0.815,
+     "end": 0.973
+    },
+    {
+     "text": "game",
+     "start": 0.973,
+     "end": 1.19
+    },
+    {
+     "text": "was",
+     "start": 1.19,
+     "end": 1.323
+    },
+    {
+     "text": "written",
+     "start": 1.323,
+     "end": 1.698
+    },
+    {
+     "text": "with",
+     "start": 1.698,
+     "end": 1.907
+    },
+    {
+     "text": "a",
+     "start": 1.907,
+     "end": 1.998
+    },
+    {
+     "text": "Server",
+     "start": 1.998,
+     "end": 2.323
+    },
+    {
+     "text": "Authority",
+     "start": 2.323,
+     "end": 2.807
+    },
+    {
+     "text": "Model,",
+     "start": 2.807,
+     "end": 3.065
+    },
+    {
+     "text": "each",
+     "start": 3.5,
+     "end": 3.742
+    },
+    {
+     "text": "player",
+     "start": 3.742,
+     "end": 3.993
+    },
+    {
+     "text": "would",
+     "start": 3.993,
+     "end": 4.185
+    },
+    {
+     "text": "tell",
+     "start": 4.27,
+     "end": 4.503
+    },
+    {
+     "text": "a",
+     "start": 4.503,
+     "end": 4.598
+    },
+    {
+     "text": "single",
+     "start": 4.598,
+     "end": 4.952
+    },
+    {
+     "text": "game",
+     "start": 4.952,
+     "end": 5.203
+    },
+    {
+     "text": "server",
+     "start": 5.203,
+     "end": 5.548
+    },
+    {
+     "text": "what",
+     "start": 5.548,
+     "end": 5.79
+    },
+    {
+     "text": "they'd",
+     "start": 5.79,
+     "end": 6.092
+    },
+    {
+     "text": "like",
+     "start": 6.092,
+     "end": 6.326
+    },
+    {
+     "text": "to",
+     "start": 6.326,
+     "end": 6.429
+    },
+    {
+     "text": "do.",
+     "start": 6.429,
+     "end": 6.615
+    },
+    {
+     "text": "The",
+     "start": 7.26,
+     "end": 7.483
+    },
+    {
+     "text": "game",
+     "start": 7.483,
+     "end": 7.677
+    },
+    {
+     "text": "server",
+     "start": 7.677,
+     "end": 7.93
+    },
+    {
+     "text": "would",
+     "start": 7.93,
+     "end": 8.104
+    },
+    {
+     "text": "take",
+     "start": 8.104,
+     "end": 8.299
+    },
+    {
+     "text": "the",
+     "start": 8.299,
+     "end": 8.415
+    },
+    {
+     "text": "action",
+     "start": 8.415,
+     "end": 8.687
+    },
+    {
+     "text": "from",
+     "start": 8.687,
+     "end": 8.881
+    },
+    {
+     "text": "each",
+     "start": 8.881,
+     "end": 9.056
+    },
+    {
+     "text": "player,",
+     "start": 9.056,
+     "end": 9.405
+    },
+    {
+     "text": "work",
+     "start": 9.68,
+     "end": 9.946
+    },
+    {
+     "text": "out",
+     "start": 9.946,
+     "end": 10.156
+    },
+    {
+     "text": "what",
+     "start": 10.156,
+     "end": 10.394
+    },
+    {
+     "text": "happens,",
+     "start": 10.394,
+     "end": 10.825
+    },
+    {
+     "text": "and",
+     "start": 11.11,
+     "end": 11.299
+    },
+    {
+     "text": "then",
+     "start": 11.299,
+     "end": 11.505
+    },
+    {
+     "text": "send",
+     "start": 11.505,
+     "end": 11.735
+    },
+    {
+     "text": "each",
+     "start": 11.735,
+     "end": 11.941
+    },
+    {
+     "text": "player",
+     "start": 11.941,
+     "end": 12.246
+    },
+    {
+     "text": "a",
+     "start": 12.246,
+     "end": 12.336
+    },
+    {
+     "text": "snapshot",
+     "start": 12.336,
+     "end": 12.715
+    },
+    {
+     "text": "of",
+     "start": 12.715,
+     "end": 12.855
+    },
+    {
+     "text": "what",
+     "start": 12.855,
+     "end": 13.044
+    },
+    {
+     "text": "the",
+     "start": 13.044,
+     "end": 13.184
+    },
+    {
+     "text": "match",
+     "start": 13.184,
+     "end": 13.365
+    },
+    {
+     "text": "currently",
+     "start": 13.42,
+     "end": 13.778
+    },
+    {
+     "text": "looks",
+     "start": 13.778,
+     "end": 14.096
+    },
+    {
+     "text": "like.",
+     "start": 14.096,
+     "end": 14.385
+    },
+    {
+     "text": "My",
+     "start": 15.08,
+     "end": 15.245
+    },
+    {
+     "text": "own",
+     "start": 15.245,
+     "end": 15.41
+    },
+    {
+     "text": "PvP",
+     "start": 15.41,
+     "end": 15.633
+    },
+    {
+     "text": "mobile",
+     "start": 15.633,
+     "end": 15.905
+    },
+    {
+     "text": "game",
+     "start": 15.905,
+     "end": 16.187
+    },
+    {
+     "text": "Blood",
+     "start": 16.187,
+     "end": 16.458
+    },
+    {
+     "text": "in",
+     "start": 16.458,
+     "end": 16.614
+    },
+    {
+     "text": "the",
+     "start": 16.614,
+     "end": 16.779
+    },
+    {
+     "text": "Sand",
+     "start": 16.779,
+     "end": 17.002
+    },
+    {
+     "text": "uses",
+     "start": 17.002,
+     "end": 17.283
+    },
+    {
+     "text": "the",
+     "start": 17.283,
+     "end": 17.478
+    },
+    {
+     "text": "Server",
+     "start": 17.478,
+     "end": 17.808
+    },
+    {
+     "text": "Authority",
+     "start": 17.808,
+     "end": 18.273
+    },
+    {
+     "text": "Model",
+     "start": 18.273,
+     "end": 18.57
+    },
+    {
+     "text": "for",
+     "start": 18.57,
+     "end": 18.759
+    },
+    {
+     "text": "example,",
+     "start": 18.759,
+     "end": 19.215
+    },
+    {
+     "text": "and",
+     "start": 19.84,
+     "end": 20.041
+    },
+    {
+     "text": "this",
+     "start": 20.041,
+     "end": 20.225
+    },
+    {
+     "text": "is",
+     "start": 20.225,
+     "end": 20.322
+    },
+    {
+     "text": "primarily",
+     "start": 20.322,
+     "end": 20.751
+    },
+    {
+     "text": "because",
+     "start": 20.751,
+     "end": 21.074
+    },
+    {
+     "text": "I",
+     "start": 21.074,
+     "end": 21.171
+    },
+    {
+     "text": "needed",
+     "start": 21.171,
+     "end": 21.46
+    },
+    {
+     "text": "to",
+     "start": 21.46,
+     "end": 21.608
+    },
+    {
+     "text": "ensure",
+     "start": 21.608,
+     "end": 21.871
+    },
+    {
+     "text": "online",
+     "start": 21.871,
+     "end": 22.125
+    },
+    {
+     "text": "matches",
+     "start": 22.125,
+     "end": 22.48
+    },
+    {
+     "text": "are",
+     "start": 22.48,
+     "end": 22.672
+    },
+    {
+     "text": "fairly",
+     "start": 22.672,
+     "end": 22.917
+    },
+    {
+     "text": "fought,",
+     "start": 22.917,
+     "end": 23.215
+    },
+    {
+     "text": "despite",
+     "start": 23.56,
+     "end": 23.903
+    },
+    {
+     "text": "the",
+     "start": 23.903,
+     "end": 24.071
+    },
+    {
+     "text": "added",
+     "start": 24.071,
+     "end": 24.275
+    },
+    {
+     "text": "complexity",
+     "start": 24.275,
+     "end": 24.749
+    },
+    {
+     "text": "of",
+     "start": 24.749,
+     "end": 24.873
+    },
+    {
+     "text": "building",
+     "start": 24.873,
+     "end": 25.26
+    },
+    {
+     "text": "it.",
+     "start": 25.26,
+     "end": 25.435
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-9.n2v1.wav",
+   "seconds": 4.64,
+   "recordedAt": "2026-10-08T22:43:38.920Z",
+   "words": [
+    {
+     "text": "The",
+     "start": 0.71,
+     "end": 0.913
+    },
+    {
+     "text": "difference",
+     "start": 0.913,
+     "end": 1.169
+    },
+    {
+     "text": "between",
+     "start": 1.169,
+     "end": 1.545
+    },
+    {
+     "text": "them",
+     "start": 1.545,
+     "end": 1.782
+    },
+    {
+     "text": "is",
+     "start": 1.782,
+     "end": 1.901
+    },
+    {
+     "text": "obvious,",
+     "start": 1.901,
+     "end": 2.365
+    },
+    {
+     "text": "and",
+     "start": 2.54,
+     "end": 2.664
+    },
+    {
+     "text": "the",
+     "start": 2.664,
+     "end": 2.779
+    },
+    {
+     "text": "old",
+     "start": 2.779,
+     "end": 2.862
+    },
+    {
+     "text": "client...",
+     "start": 2.862,
+     "end": 3.145
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-10.n2v1.wav",
+   "seconds": 27.269,
+   "recordedAt": "2026-10-08T22:44:16.476Z",
+   "words": [
+    {
+     "text": "The",
+     "start": 0.72,
+     "end": 0.926
+    },
+    {
+     "text": "difference",
+     "start": 0.926,
+     "end": 1.228
+    },
+    {
+     "text": "between",
+     "start": 1.228,
+     "end": 1.62
+    },
+    {
+     "text": "them",
+     "start": 1.62,
+     "end": 1.802
+    },
+    {
+     "text": "is",
+     "start": 1.802,
+     "end": 1.942
+    },
+    {
+     "text": "obvious.",
+     "start": 1.942,
+     "end": 2.365
+    },
+    {
+     "text": "In",
+     "start": 2.63,
+     "end": 2.735
+    },
+    {
+     "text": "the",
+     "start": 2.735,
+     "end": 2.892
+    },
+    {
+     "text": "client",
+     "start": 2.892,
+     "end": 3.14
+    },
+    {
+     "text": "authority",
+     "start": 3.14,
+     "end": 3.597
+    },
+    {
+     "text": "model,",
+     "start": 3.597,
+     "end": 3.931
+    },
+    {
+     "text": "there",
+     "start": 3.931,
+     "end": 4.207
+    },
+    {
+     "text": "is",
+     "start": 4.207,
+     "end": 4.321
+    },
+    {
+     "text": "no",
+     "start": 4.321,
+     "end": 4.474
+    },
+    {
+     "text": "central",
+     "start": 4.474,
+     "end": 4.817
+    },
+    {
+     "text": "server",
+     "start": 4.817,
+     "end": 5.179
+    },
+    {
+     "text": "that",
+     "start": 5.179,
+     "end": 5.35
+    },
+    {
+     "text": "decides",
+     "start": 5.35,
+     "end": 5.732
+    },
+    {
+     "text": "what",
+     "start": 5.732,
+     "end": 5.941
+    },
+    {
+     "text": "can",
+     "start": 5.941,
+     "end": 6.16
+    },
+    {
+     "text": "and",
+     "start": 6.16,
+     "end": 6.265
+    },
+    {
+     "text": "cannot",
+     "start": 6.265,
+     "end": 6.551
+    },
+    {
+     "text": "happen.",
+     "start": 6.551,
+     "end": 6.875
+    },
+    {
+     "text": "Therefore,",
+     "start": 7.43,
+     "end": 7.942
+    },
+    {
+     "text": "a",
+     "start": 7.942,
+     "end": 8.037
+    },
+    {
+     "text": "player",
+     "start": 8.037,
+     "end": 8.366
+    },
+    {
+     "text": "can",
+     "start": 8.366,
+     "end": 8.576
+    },
+    {
+     "text": "send",
+     "start": 8.576,
+     "end": 8.841
+    },
+    {
+     "text": "literally",
+     "start": 8.841,
+     "end": 9.344
+    },
+    {
+     "text": "anything",
+     "start": 9.344,
+     "end": 9.727
+    },
+    {
+     "text": "they'd",
+     "start": 9.727,
+     "end": 10.038
+    },
+    {
+     "text": "like",
+     "start": 10.038,
+     "end": 10.23
+    },
+    {
+     "text": "to.",
+     "start": 10.23,
+     "end": 10.385
+    },
+    {
+     "text": "For",
+     "start": 10.47,
+     "end": 10.67
+    },
+    {
+     "text": "example,",
+     "start": 10.67,
+     "end": 11.145
+    },
+    {
+     "text": "player",
+     "start": 11.64,
+     "end": 11.987
+    },
+    {
+     "text": "one",
+     "start": 11.987,
+     "end": 12.181
+    },
+    {
+     "text": "might",
+     "start": 12.181,
+     "end": 12.477
+    },
+    {
+     "text": "send,",
+     "start": 12.477,
+     "end": 12.765
+    },
+    {
+     "text": "I",
+     "start": 13.03,
+     "end": 13.2
+    },
+    {
+     "text": "attack",
+     "start": 13.2,
+     "end": 13.441
+    },
+    {
+     "text": "player",
+     "start": 13.441,
+     "end": 13.682
+    },
+    {
+     "text": "four",
+     "start": 13.682,
+     "end": 13.898
+    },
+    {
+     "text": "and",
+     "start": 13.898,
+     "end": 14.014
+    },
+    {
+     "text": "they",
+     "start": 14.014,
+     "end": 14.176
+    },
+    {
+     "text": "lose",
+     "start": 14.176,
+     "end": 14.358
+    },
+    {
+     "text": "all",
+     "start": 14.358,
+     "end": 14.512
+    },
+    {
+     "text": "of",
+     "start": 14.512,
+     "end": 14.628
+    },
+    {
+     "text": "their",
+     "start": 14.628,
+     "end": 14.836
+    },
+    {
+     "text": "health.",
+     "start": 14.836,
+     "end": 15.085
+    },
+    {
+     "text": "Because",
+     "start": 16.04,
+     "end": 16.49
+    },
+    {
+     "text": "there's",
+     "start": 16.49,
+     "end": 16.663
+    },
+    {
+     "text": "no",
+     "start": 16.663,
+     "end": 16.778
+    },
+    {
+     "text": "central",
+     "start": 16.778,
+     "end": 17.094
+    },
+    {
+     "text": "server",
+     "start": 17.094,
+     "end": 17.439
+    },
+    {
+     "text": "to",
+     "start": 17.439,
+     "end": 17.593
+    },
+    {
+     "text": "say",
+     "start": 17.593,
+     "end": 17.756
+    },
+    {
+     "text": "what",
+     "start": 17.756,
+     "end": 17.995
+    },
+    {
+     "text": "truly",
+     "start": 17.995,
+     "end": 18.269
+    },
+    {
+     "text": "happens,",
+     "start": 18.269,
+     "end": 18.642
+    },
+    {
+     "text": "it's",
+     "start": 18.642,
+     "end": 18.863
+    },
+    {
+     "text": "just",
+     "start": 18.863,
+     "end": 19.093
+    },
+    {
+     "text": "accepted",
+     "start": 19.093,
+     "end": 19.572
+    },
+    {
+     "text": "as",
+     "start": 19.572,
+     "end": 19.735
+    },
+    {
+     "text": "fact.",
+     "start": 19.85,
+     "end": 19.935
+    },
+    {
+     "text": "In",
+     "start": 20.47,
+     "end": 20.638
+    },
+    {
+     "text": "the",
+     "start": 20.638,
+     "end": 20.796
+    },
+    {
+     "text": "server",
+     "start": 20.796,
+     "end": 21.111
+    },
+    {
+     "text": "authority",
+     "start": 21.111,
+     "end": 21.486
+    },
+    {
+     "text": "model,",
+     "start": 21.486,
+     "end": 21.782
+    },
+    {
+     "text": "the",
+     "start": 21.782,
+     "end": 21.93
+    },
+    {
+     "text": "game",
+     "start": 21.93,
+     "end": 22.147
+    },
+    {
+     "text": "server",
+     "start": 22.147,
+     "end": 22.443
+    },
+    {
+     "text": "would",
+     "start": 22.443,
+     "end": 22.65
+    },
+    {
+     "text": "just",
+     "start": 22.65,
+     "end": 22.872
+    },
+    {
+     "text": "ignore",
+     "start": 22.872,
+     "end": 23.188
+    },
+    {
+     "text": "the",
+     "start": 23.188,
+     "end": 23.336
+    },
+    {
+     "text": "message",
+     "start": 23.336,
+     "end": 23.681
+    },
+    {
+     "text": "entirely,",
+     "start": 23.681,
+     "end": 24.135
+    },
+    {
+     "text": "so",
+     "start": 24.45,
+     "end": 24.59
+    },
+    {
+     "text": "player",
+     "start": 24.59,
+     "end": 24.904
+    },
+    {
+     "text": "one",
+     "start": 24.904,
+     "end": 25.019
+    },
+    {
+     "text": "would",
+     "start": 25.019,
+     "end": 25.242
+    },
+    {
+     "text": "do",
+     "start": 25.242,
+     "end": 25.341
+    },
+    {
+     "text": "nothing.",
+     "start": 25.341,
+     "end": 25.655
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-11.n2v1.wav",
+   "seconds": 40.325,
+   "recordedAt": "2026-10-08T22:45:56.678Z",
+   "words": [
+    {
+     "text": "Why",
+     "start": 0.77,
+     "end": 0.975
+    },
+    {
+     "text": "then",
+     "start": 0.975,
+     "end": 1.219
+    },
+    {
+     "text": "you",
+     "start": 1.219,
+     "end": 1.405
+    },
+    {
+     "text": "might",
+     "start": 1.405,
+     "end": 1.58
+    },
+    {
+     "text": "ask,",
+     "start": 1.58,
+     "end": 1.805
+    },
+    {
+     "text": "would",
+     "start": 1.86,
+     "end": 2.137
+    },
+    {
+     "text": "anybody",
+     "start": 2.137,
+     "end": 2.531
+    },
+    {
+     "text": "ever",
+     "start": 2.531,
+     "end": 2.79
+    },
+    {
+     "text": "use",
+     "start": 2.79,
+     "end": 2.996
+    },
+    {
+     "text": "a",
+     "start": 2.996,
+     "end": 3.085
+    },
+    {
+     "text": "client",
+     "start": 3.085,
+     "end": 3.425
+    },
+    {
+     "text": "authority",
+     "start": 3.425,
+     "end": 3.872
+    },
+    {
+     "text": "model?",
+     "start": 3.872,
+     "end": 4.185
+    },
+    {
+     "text": "Well,",
+     "start": 4.66,
+     "end": 5.065
+    },
+    {
+     "text": "building",
+     "start": 5.58,
+     "end": 5.912
+    },
+    {
+     "text": "multiplayer",
+     "start": 5.912,
+     "end": 6.466
+    },
+    {
+     "text": "games",
+     "start": 6.466,
+     "end": 6.836
+    },
+    {
+     "text": "is",
+     "start": 6.836,
+     "end": 7.168
+    },
+    {
+     "text": "much",
+     "start": 7.168,
+     "end": 7.436
+    },
+    {
+     "text": "more",
+     "start": 7.436,
+     "end": 7.62
+    },
+    {
+     "text": "than",
+     "start": 7.62,
+     "end": 7.768
+    },
+    {
+     "text": "just",
+     "start": 7.768,
+     "end": 7.925
+    },
+    {
+     "text": "safeguarding",
+     "start": 7.925,
+     "end": 8.423
+    },
+    {
+     "text": "against",
+     "start": 8.423,
+     "end": 8.7
+    },
+    {
+     "text": "cheaters.",
+     "start": 8.7,
+     "end": 9.125
+    },
+    {
+     "text": "Take",
+     "start": 9.5,
+     "end": 9.723
+    },
+    {
+     "text": "co-op",
+     "start": 9.723,
+     "end": 10.005
+    },
+    {
+     "text": "games",
+     "start": 10.005,
+     "end": 10.302
+    },
+    {
+     "text": "for",
+     "start": 10.302,
+     "end": 10.467
+    },
+    {
+     "text": "example.",
+     "start": 10.467,
+     "end": 10.865
+    },
+    {
+     "text": "By",
+     "start": 11.45,
+     "end": 11.612
+    },
+    {
+     "text": "using",
+     "start": 11.612,
+     "end": 11.889
+    },
+    {
+     "text": "client",
+     "start": 11.889,
+     "end": 12.222
+    },
+    {
+     "text": "authority,",
+     "start": 12.222,
+     "end": 12.718
+    },
+    {
+     "text": "two",
+     "start": 12.718,
+     "end": 12.813
+    },
+    {
+     "text": "players",
+     "start": 12.813,
+     "end": 13.185
+    },
+    {
+     "text": "can",
+     "start": 13.185,
+     "end": 13.357
+    },
+    {
+     "text": "connect",
+     "start": 13.357,
+     "end": 13.738
+    },
+    {
+     "text": "directly",
+     "start": 13.738,
+     "end": 14.043
+    },
+    {
+     "text": "to",
+     "start": 14.043,
+     "end": 14.21
+    },
+    {
+     "text": "each",
+     "start": 14.21,
+     "end": 14.4
+    },
+    {
+     "text": "other",
+     "start": 14.4,
+     "end": 14.591
+    },
+    {
+     "text": "and",
+     "start": 14.591,
+     "end": 14.801
+    },
+    {
+     "text": "they",
+     "start": 14.801,
+     "end": 14.987
+    },
+    {
+     "text": "don't",
+     "start": 14.987,
+     "end": 15.225
+    },
+    {
+     "text": "need",
+     "start": 15.225,
+     "end": 15.378
+    },
+    {
+     "text": "to",
+     "start": 15.378,
+     "end": 15.492
+    },
+    {
+     "text": "rely",
+     "start": 15.492,
+     "end": 15.711
+    },
+    {
+     "text": "on",
+     "start": 15.711,
+     "end": 15.864
+    },
+    {
+     "text": "being",
+     "start": 15.864,
+     "end": 16.14
+    },
+    {
+     "text": "connected",
+     "start": 16.14,
+     "end": 16.636
+    },
+    {
+     "text": "to",
+     "start": 16.636,
+     "end": 16.789
+    },
+    {
+     "text": "an",
+     "start": 16.789,
+     "end": 16.922
+    },
+    {
+     "text": "always-on",
+     "start": 16.922,
+     "end": 17.427
+    },
+    {
+     "text": "game",
+     "start": 17.427,
+     "end": 17.704
+    },
+    {
+     "text": "server.",
+     "start": 17.704,
+     "end": 18.085
+    },
+    {
+     "text": "The",
+     "start": 18.76,
+     "end": 18.977
+    },
+    {
+     "text": "client",
+     "start": 18.977,
+     "end": 19.289
+    },
+    {
+     "text": "authority",
+     "start": 19.289,
+     "end": 19.648
+    },
+    {
+     "text": "model",
+     "start": 19.648,
+     "end": 19.912
+    },
+    {
+     "text": "is",
+     "start": 19.912,
+     "end": 20.063
+    },
+    {
+     "text": "often",
+     "start": 20.063,
+     "end": 20.318
+    },
+    {
+     "text": "a",
+     "start": 20.318,
+     "end": 20.422
+    },
+    {
+     "text": "lot",
+     "start": 20.422,
+     "end": 20.488
+    },
+    {
+     "text": "quicker",
+     "start": 20.488,
+     "end": 20.8
+    },
+    {
+     "text": "too,",
+     "start": 20.8,
+     "end": 21.017
+    },
+    {
+     "text": "as",
+     "start": 21.017,
+     "end": 21.111
+    },
+    {
+     "text": "each",
+     "start": 21.111,
+     "end": 21.319
+    },
+    {
+     "text": "client",
+     "start": 21.319,
+     "end": 21.63
+    },
+    {
+     "text": "is",
+     "start": 21.63,
+     "end": 21.763
+    },
+    {
+     "text": "responsible",
+     "start": 21.763,
+     "end": 22.339
+    },
+    {
+     "text": "for",
+     "start": 22.339,
+     "end": 22.546
+    },
+    {
+     "text": "their",
+     "start": 22.546,
+     "end": 22.669
+    },
+    {
+     "text": "own",
+     "start": 22.669,
+     "end": 22.82
+    },
+    {
+     "text": "updates",
+     "start": 22.82,
+     "end": 23.16
+    },
+    {
+     "text": "in",
+     "start": 23.16,
+     "end": 23.321
+    },
+    {
+     "text": "real",
+     "start": 23.321,
+     "end": 23.491
+    },
+    {
+     "text": "time.",
+     "start": 23.491,
+     "end": 23.755
+    },
+    {
+     "text": "There",
+     "start": 24.69,
+     "end": 24.998
+    },
+    {
+     "text": "are",
+     "start": 24.998,
+     "end": 25.13
+    },
+    {
+     "text": "many",
+     "start": 25.13,
+     "end": 25.306
+    },
+    {
+     "text": "valid",
+     "start": 25.306,
+     "end": 25.614
+    },
+    {
+     "text": "use",
+     "start": 25.614,
+     "end": 25.817
+    },
+    {
+     "text": "cases",
+     "start": 25.817,
+     "end": 26.125
+    },
+    {
+     "text": "for",
+     "start": 26.125,
+     "end": 26.301
+    },
+    {
+     "text": "allowing",
+     "start": 26.301,
+     "end": 26.591
+    },
+    {
+     "text": "clients",
+     "start": 26.591,
+     "end": 26.89
+    },
+    {
+     "text": "to",
+     "start": 26.89,
+     "end": 26.996
+    },
+    {
+     "text": "talk",
+     "start": 26.996,
+     "end": 27.181
+    },
+    {
+     "text": "directly",
+     "start": 27.181,
+     "end": 27.551
+    },
+    {
+     "text": "to",
+     "start": 27.551,
+     "end": 27.7
+    },
+    {
+     "text": "each",
+     "start": 27.7,
+     "end": 27.876
+    },
+    {
+     "text": "other,",
+     "start": 27.876,
+     "end": 28.105
+    },
+    {
+     "text": "and",
+     "start": 28.61,
+     "end": 28.836
+    },
+    {
+     "text": "this",
+     "start": 28.836,
+     "end": 29.063
+    },
+    {
+     "text": "is",
+     "start": 29.063,
+     "end": 29.215
+    },
+    {
+     "text": "the",
+     "start": 29.34,
+     "end": 29.548
+    },
+    {
+     "text": "way",
+     "start": 29.548,
+     "end": 29.657
+    },
+    {
+     "text": "that",
+     "start": 29.657,
+     "end": 29.874
+    },
+    {
+     "text": "old",
+     "start": 29.874,
+     "end": 30.041
+    },
+    {
+     "text": "PC",
+     "start": 30.041,
+     "end": 30.348
+    },
+    {
+     "text": "games",
+     "start": 30.348,
+     "end": 30.602
+    },
+    {
+     "text": "used",
+     "start": 30.602,
+     "end": 30.837
+    },
+    {
+     "text": "to",
+     "start": 30.837,
+     "end": 30.927
+    },
+    {
+     "text": "be",
+     "start": 30.927,
+     "end": 31.018
+    },
+    {
+     "text": "coded,",
+     "start": 31.018,
+     "end": 31.325
+    },
+    {
+     "text": "before",
+     "start": 31.88,
+     "end": 32.279
+    },
+    {
+     "text": "most",
+     "start": 32.279,
+     "end": 32.552
+    },
+    {
+     "text": "of",
+     "start": 32.552,
+     "end": 32.669
+    },
+    {
+     "text": "us",
+     "start": 32.669,
+     "end": 32.776
+    },
+    {
+     "text": "had",
+     "start": 32.776,
+     "end": 32.961
+    },
+    {
+     "text": "stable",
+     "start": 32.961,
+     "end": 33.322
+    },
+    {
+     "text": "internet",
+     "start": 33.322,
+     "end": 33.799
+    },
+    {
+     "text": "connections",
+     "start": 33.799,
+     "end": 34.286
+    },
+    {
+     "text": "24x7.",
+     "start": 34.286,
+     "end": 34.695
+    },
+    {
+     "text": "You",
+     "start": 35.35,
+     "end": 35.515
+    },
+    {
+     "text": "just",
+     "start": 35.515,
+     "end": 35.695
+    },
+    {
+     "text": "trusted",
+     "start": 35.76,
+     "end": 36.445
+    },
+    {
+     "text": "that",
+     "start": 36.57,
+     "end": 36.748
+    },
+    {
+     "text": "people",
+     "start": 36.748,
+     "end": 36.945
+    },
+    {
+     "text": "were",
+     "start": 36.945,
+     "end": 37.105
+    },
+    {
+     "text": "playing",
+     "start": 37.15,
+     "end": 37.525
+    },
+    {
+     "text": "and",
+     "start": 37.525,
+     "end": 37.73
+    },
+    {
+     "text": "they",
+     "start": 37.73,
+     "end": 37.953
+    },
+    {
+     "text": "were",
+     "start": 37.953,
+     "end": 38.176
+    },
+    {
+     "text": "not",
+     "start": 38.176,
+     "end": 38.265
+    },
+    {
+     "text": "going",
+     "start": 38.265,
+     "end": 38.515
+    },
+    {
+     "text": "to",
+     "start": 38.515,
+     "end": 38.666
+    },
+    {
+     "text": "try",
+     "start": 38.666,
+     "end": 38.818
+    },
+    {
+     "text": "and",
+     "start": 38.818,
+     "end": 38.978
+    },
+    {
+     "text": "cheat",
+     "start": 38.978,
+     "end": 39.193
+    },
+    {
+     "text": "the",
+     "start": 39.193,
+     "end": 39.358
+    },
+    {
+     "text": "game.",
+     "start": 39.358,
+     "end": 39.585
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-12.n2v1.wav",
+   "seconds": 39.704,
+   "recordedAt": "2026-10-08T22:48:18.618Z",
+   "words": [
+    {
+     "text": "Why",
+     "start": 1.04,
+     "end": 1.254
+    },
+    {
+     "text": "then,",
+     "start": 1.254,
+     "end": 1.509
+    },
+    {
+     "text": "you",
+     "start": 1.509,
+     "end": 1.709
+    },
+    {
+     "text": "might",
+     "start": 1.709,
+     "end": 2.006
+    },
+    {
+     "text": "ask,",
+     "start": 2.006,
+     "end": 2.219
+    },
+    {
+     "text": "would",
+     "start": 2.219,
+     "end": 2.526
+    },
+    {
+     "text": "anybody",
+     "start": 2.526,
+     "end": 2.879
+    },
+    {
+     "text": "ever",
+     "start": 2.879,
+     "end": 3.139
+    },
+    {
+     "text": "use",
+     "start": 3.139,
+     "end": 3.315
+    },
+    {
+     "text": "a",
+     "start": 3.315,
+     "end": 3.408
+    },
+    {
+     "text": "client",
+     "start": 3.408,
+     "end": 3.742
+    },
+    {
+     "text": "authority",
+     "start": 3.742,
+     "end": 4.29
+    },
+    {
+     "text": "model?",
+     "start": 4.29,
+     "end": 4.615
+    },
+    {
+     "text": "Well,",
+     "start": 5.39,
+     "end": 5.785
+    },
+    {
+     "text": "building",
+     "start": 6.05,
+     "end": 6.455
+    },
+    {
+     "text": "multiplayer",
+     "start": 6.455,
+     "end": 6.776
+    },
+    {
+     "text": "games",
+     "start": 6.776,
+     "end": 7.046
+    },
+    {
+     "text": "is",
+     "start": 7.046,
+     "end": 7.189
+    },
+    {
+     "text": "more",
+     "start": 7.189,
+     "end": 7.392
+    },
+    {
+     "text": "than",
+     "start": 7.392,
+     "end": 7.561
+    },
+    {
+     "text": "just",
+     "start": 7.561,
+     "end": 7.738
+    },
+    {
+     "text": "safeguarding",
+     "start": 7.738,
+     "end": 8.345
+    },
+    {
+     "text": "against",
+     "start": 8.345,
+     "end": 8.7
+    },
+    {
+     "text": "cheaters.",
+     "start": 8.7,
+     "end": 9.105
+    },
+    {
+     "text": "Take",
+     "start": 9.71,
+     "end": 9.978
+    },
+    {
+     "text": "co-op",
+     "start": 9.978,
+     "end": 10.245
+    },
+    {
+     "text": "games",
+     "start": 10.245,
+     "end": 10.541
+    },
+    {
+     "text": "for",
+     "start": 10.541,
+     "end": 10.651
+    },
+    {
+     "text": "example.",
+     "start": 10.651,
+     "end": 11.085
+    },
+    {
+     "text": "By",
+     "start": 11.39,
+     "end": 11.553
+    },
+    {
+     "text": "using",
+     "start": 11.553,
+     "end": 11.84
+    },
+    {
+     "text": "client",
+     "start": 11.84,
+     "end": 12.127
+    },
+    {
+     "text": "authority,",
+     "start": 12.127,
+     "end": 12.635
+    },
+    {
+     "text": "two",
+     "start": 12.635,
+     "end": 12.788
+    },
+    {
+     "text": "players",
+     "start": 12.788,
+     "end": 13.152
+    },
+    {
+     "text": "can",
+     "start": 13.152,
+     "end": 13.343
+    },
+    {
+     "text": "connect",
+     "start": 13.343,
+     "end": 13.746
+    },
+    {
+     "text": "directly",
+     "start": 13.746,
+     "end": 14.152
+    },
+    {
+     "text": "to",
+     "start": 14.152,
+     "end": 14.344
+    },
+    {
+     "text": "each",
+     "start": 14.344,
+     "end": 14.516
+    },
+    {
+     "text": "other",
+     "start": 14.516,
+     "end": 14.708
+    },
+    {
+     "text": "and",
+     "start": 14.708,
+     "end": 14.918
+    },
+    {
+     "text": "don't",
+     "start": 14.918,
+     "end": 15.091
+    },
+    {
+     "text": "need",
+     "start": 15.091,
+     "end": 15.254
+    },
+    {
+     "text": "to",
+     "start": 15.254,
+     "end": 15.388
+    },
+    {
+     "text": "rely",
+     "start": 15.388,
+     "end": 15.637
+    },
+    {
+     "text": "on",
+     "start": 15.637,
+     "end": 15.814
+    },
+    {
+     "text": "being",
+     "start": 15.814,
+     "end": 16.005
+    },
+    {
+     "text": "connected",
+     "start": 16.005,
+     "end": 16.446
+    },
+    {
+     "text": "to",
+     "start": 16.446,
+     "end": 16.599
+    },
+    {
+     "text": "an",
+     "start": 16.599,
+     "end": 16.733
+    },
+    {
+     "text": "always-on",
+     "start": 16.733,
+     "end": 17.24
+    },
+    {
+     "text": "game",
+     "start": 17.24,
+     "end": 17.489
+    },
+    {
+     "text": "server.",
+     "start": 17.489,
+     "end": 17.815
+    },
+    {
+     "text": "The",
+     "start": 18.56,
+     "end": 18.749
+    },
+    {
+     "text": "client",
+     "start": 18.749,
+     "end": 19.054
+    },
+    {
+     "text": "authority",
+     "start": 19.054,
+     "end": 19.445
+    },
+    {
+     "text": "model",
+     "start": 19.445,
+     "end": 19.708
+    },
+    {
+     "text": "is",
+     "start": 19.708,
+     "end": 19.848
+    },
+    {
+     "text": "often",
+     "start": 19.848,
+     "end": 20.103
+    },
+    {
+     "text": "a",
+     "start": 20.103,
+     "end": 20.193
+    },
+    {
+     "text": "lot",
+     "start": 20.193,
+     "end": 20.362
+    },
+    {
+     "text": "quicker",
+     "start": 20.362,
+     "end": 20.716
+    },
+    {
+     "text": "too,",
+     "start": 20.716,
+     "end": 20.905
+    },
+    {
+     "text": "as",
+     "start": 21.35,
+     "end": 21.5
+    },
+    {
+     "text": "each",
+     "start": 21.5,
+     "end": 21.713
+    },
+    {
+     "text": "client",
+     "start": 21.713,
+     "end": 22.032
+    },
+    {
+     "text": "is",
+     "start": 22.032,
+     "end": 22.173
+    },
+    {
+     "text": "responsible",
+     "start": 22.173,
+     "end": 22.775
+    },
+    {
+     "text": "for",
+     "start": 22.775,
+     "end": 22.979
+    },
+    {
+     "text": "their",
+     "start": 22.979,
+     "end": 23.103
+    },
+    {
+     "text": "own",
+     "start": 23.103,
+     "end": 23.271
+    },
+    {
+     "text": "updates",
+     "start": 23.271,
+     "end": 23.572
+    },
+    {
+     "text": "in",
+     "start": 23.572,
+     "end": 23.722
+    },
+    {
+     "text": "real",
+     "start": 23.722,
+     "end": 23.873
+    },
+    {
+     "text": "time.",
+     "start": 23.873,
+     "end": 24.125
+    },
+    {
+     "text": "There",
+     "start": 25.07,
+     "end": 25.366
+    },
+    {
+     "text": "are",
+     "start": 25.366,
+     "end": 25.493
+    },
+    {
+     "text": "many",
+     "start": 25.493,
+     "end": 25.662
+    },
+    {
+     "text": "valid",
+     "start": 25.662,
+     "end": 25.95
+    },
+    {
+     "text": "use",
+     "start": 25.95,
+     "end": 26.148
+    },
+    {
+     "text": "cases",
+     "start": 26.148,
+     "end": 26.419
+    },
+    {
+     "text": "for",
+     "start": 26.419,
+     "end": 26.571
+    },
+    {
+     "text": "allowing",
+     "start": 26.571,
+     "end": 26.901
+    },
+    {
+     "text": "clients",
+     "start": 26.901,
+     "end": 27.206
+    },
+    {
+     "text": "to",
+     "start": 27.206,
+     "end": 27.341
+    },
+    {
+     "text": "talk",
+     "start": 27.341,
+     "end": 27.544
+    },
+    {
+     "text": "directly",
+     "start": 27.544,
+     "end": 27.882
+    },
+    {
+     "text": "to",
+     "start": 27.882,
+     "end": 28.026
+    },
+    {
+     "text": "each",
+     "start": 28.026,
+     "end": 28.204
+    },
+    {
+     "text": "other,",
+     "start": 28.204,
+     "end": 28.415
+    },
+    {
+     "text": "and",
+     "start": 29,
+     "end": 29.221
+    },
+    {
+     "text": "this",
+     "start": 29.221,
+     "end": 29.443
+    },
+    {
+     "text": "is",
+     "start": 29.443,
+     "end": 29.559
+    },
+    {
+     "text": "the",
+     "start": 29.559,
+     "end": 29.722
+    },
+    {
+     "text": "way",
+     "start": 29.722,
+     "end": 29.876
+    },
+    {
+     "text": "that",
+     "start": 29.876,
+     "end": 30.011
+    },
+    {
+     "text": "old",
+     "start": 30.011,
+     "end": 30.189
+    },
+    {
+     "text": "PC",
+     "start": 30.189,
+     "end": 30.353
+    },
+    {
+     "text": "games",
+     "start": 30.353,
+     "end": 30.632
+    },
+    {
+     "text": "used",
+     "start": 30.632,
+     "end": 30.825
+    },
+    {
+     "text": "to",
+     "start": 30.825,
+     "end": 30.931
+    },
+    {
+     "text": "be",
+     "start": 30.931,
+     "end": 31.037
+    },
+    {
+     "text": "coded,",
+     "start": 31.037,
+     "end": 31.345
+    },
+    {
+     "text": "before",
+     "start": 31.6,
+     "end": 31.889
+    },
+    {
+     "text": "most",
+     "start": 31.889,
+     "end": 32.105
+    },
+    {
+     "text": "of",
+     "start": 32.105,
+     "end": 32.213
+    },
+    {
+     "text": "us",
+     "start": 32.213,
+     "end": 32.321
+    },
+    {
+     "text": "had",
+     "start": 32.321,
+     "end": 32.466
+    },
+    {
+     "text": "stable",
+     "start": 32.466,
+     "end": 32.772
+    },
+    {
+     "text": "internet",
+     "start": 32.772,
+     "end": 33.196
+    },
+    {
+     "text": "connections.",
+     "start": 33.196,
+     "end": 33.755
+    },
+    {
+     "text": "You",
+     "start": 34.65,
+     "end": 34.856
+    },
+    {
+     "text": "just",
+     "start": 34.856,
+     "end": 35.071
+    },
+    {
+     "text": "trusted",
+     "start": 35.071,
+     "end": 35.465
+    },
+    {
+     "text": "that",
+     "start": 35.465,
+     "end": 35.685
+    },
+    {
+     "text": "players",
+     "start": 35.685,
+     "end": 36.016
+    },
+    {
+     "text": "were",
+     "start": 36.016,
+     "end": 36.231
+    },
+    {
+     "text": "playing,",
+     "start": 36.231,
+     "end": 36.625
+    },
+    {
+     "text": "and",
+     "start": 37.04,
+     "end": 37.195
+    },
+    {
+     "text": "then",
+     "start": 37.195,
+     "end": 37.337
+    },
+    {
+     "text": "they",
+     "start": 37.337,
+     "end": 37.498
+    },
+    {
+     "text": "were",
+     "start": 37.498,
+     "end": 37.66
+    },
+    {
+     "text": "not",
+     "start": 37.66,
+     "end": 37.781
+    },
+    {
+     "text": "going",
+     "start": 37.781,
+     "end": 37.984
+    },
+    {
+     "text": "to",
+     "start": 37.984,
+     "end": 38.064
+    },
+    {
+     "text": "try",
+     "start": 38.064,
+     "end": 38.186
+    },
+    {
+     "text": "and",
+     "start": 38.186,
+     "end": 38.287
+    },
+    {
+     "text": "cheat",
+     "start": 38.287,
+     "end": 38.462
+    },
+    {
+     "text": "the",
+     "start": 38.462,
+     "end": 38.556
+    },
+    {
+     "text": "game.",
+     "start": 38.556,
+     "end": 38.735
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-13.n2v1.wav",
+   "seconds": 5.467,
+   "recordedAt": "2026-10-08T22:48:40.778Z",
+   "words": [
+    {
+     "text": "You",
+     "start": 0.67,
+     "end": 0.84
+    },
+    {
+     "text": "just",
+     "start": 0.84,
+     "end": 1.044
+    },
+    {
+     "text": "trusted",
+     "start": 1.044,
+     "end": 1.436
+    },
+    {
+     "text": "the",
+     "start": 1.436,
+     "end": 1.589
+    },
+    {
+     "text": "people",
+     "start": 1.589,
+     "end": 1.878
+    },
+    {
+     "text": "you",
+     "start": 1.878,
+     "end": 2.023
+    },
+    {
+     "text": "were",
+     "start": 2.023,
+     "end": 2.202
+    },
+    {
+     "text": "playing",
+     "start": 2.202,
+     "end": 2.525
+    },
+    {
+     "text": "with",
+     "start": 2.525,
+     "end": 2.747
+    },
+    {
+     "text": "were",
+     "start": 2.747,
+     "end": 2.934
+    },
+    {
+     "text": "not",
+     "start": 2.934,
+     "end": 3.036
+    },
+    {
+     "text": "going",
+     "start": 3.036,
+     "end": 3.215
+    },
+    {
+     "text": "to",
+     "start": 3.215,
+     "end": 3.359
+    },
+    {
+     "text": "try",
+     "start": 3.359,
+     "end": 3.495
+    },
+    {
+     "text": "and",
+     "start": 3.495,
+     "end": 3.632
+    },
+    {
+     "text": "cheat",
+     "start": 3.632,
+     "end": 3.87
+    },
+    {
+     "text": "at",
+     "start": 3.87,
+     "end": 3.964
+    },
+    {
+     "text": "the",
+     "start": 3.964,
+     "end": 4.151
+    },
+    {
+     "text": "game.",
+     "start": 4.151,
+     "end": 4.355
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-14.n2v1.wav",
+   "seconds": 12.795,
+   "recordedAt": "2026-10-08T22:49:23.098Z",
+   "words": [
+    {
+     "text": "However,",
+     "start": 0.88,
+     "end": 1.312
+    },
+    {
+     "text": "for",
+     "start": 1.312,
+     "end": 1.465
+    },
+    {
+     "text": "multiplayer",
+     "start": 1.465,
+     "end": 2.004
+    },
+    {
+     "text": "games",
+     "start": 2.004,
+     "end": 2.31
+    },
+    {
+     "text": "where",
+     "start": 2.31,
+     "end": 2.617
+    },
+    {
+     "text": "enforcement",
+     "start": 2.617,
+     "end": 3.267
+    },
+    {
+     "text": "of",
+     "start": 3.267,
+     "end": 3.425
+    },
+    {
+     "text": "rules",
+     "start": 3.425,
+     "end": 3.731
+    },
+    {
+     "text": "is",
+     "start": 3.731,
+     "end": 3.889
+    },
+    {
+     "text": "critical,",
+     "start": 3.889,
+     "end": 4.335
+    },
+    {
+     "text": "the",
+     "start": 4.7,
+     "end": 4.804
+    },
+    {
+     "text": "server",
+     "start": 4.804,
+     "end": 5.073
+    },
+    {
+     "text": "authority",
+     "start": 5.073,
+     "end": 5.685
+    },
+    {
+     "text": "model",
+     "start": 5.685,
+     "end": 5.955
+    },
+    {
+     "text": "is",
+     "start": 5.955,
+     "end": 6.131
+    },
+    {
+     "text": "the",
+     "start": 6.131,
+     "end": 6.307
+    },
+    {
+     "text": "gold",
+     "start": 6.307,
+     "end": 6.535
+    },
+    {
+     "text": "standard",
+     "start": 6.535,
+     "end": 6.96
+    },
+    {
+     "text": "to",
+     "start": 6.96,
+     "end": 7.137
+    },
+    {
+     "text": "use,",
+     "start": 7.137,
+     "end": 7.375
+    },
+    {
+     "text": "despite",
+     "start": 7.53,
+     "end": 7.947
+    },
+    {
+     "text": "it",
+     "start": 7.947,
+     "end": 8.116
+    },
+    {
+     "text": "being",
+     "start": 8.116,
+     "end": 8.423
+    },
+    {
+     "text": "so",
+     "start": 8.423,
+     "end": 8.592
+    },
+    {
+     "text": "much",
+     "start": 8.592,
+     "end": 8.83
+    },
+    {
+     "text": "more",
+     "start": 8.83,
+     "end": 9.088
+    },
+    {
+     "text": "complex.",
+     "start": 9.088,
+     "end": 9.555
+    },
+    {
+     "text": "If",
+     "start": 10.14,
+     "end": 10.415
+    },
+    {
+     "text": "a",
+     "start": 10.415,
+     "end": 10.536
+    },
+    {
+     "text": "game",
+     "start": 10.536,
+     "end": 10.828
+    },
+    {
+     "text": "server...",
+     "start": 10.828,
+     "end": 11.335
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-15.n2v1.wav",
+   "seconds": 37.499,
+   "recordedAt": "2026-10-08T22:50:12.273Z",
+   "words": [
+    {
+     "text": "However,",
+     "start": 0.69,
+     "end": 1.073
+    },
+    {
+     "text": "for",
+     "start": 1.073,
+     "end": 1.213
+    },
+    {
+     "text": "multiplayer",
+     "start": 1.213,
+     "end": 1.682
+    },
+    {
+     "text": "games",
+     "start": 1.682,
+     "end": 1.935
+    },
+    {
+     "text": "where",
+     "start": 1.935,
+     "end": 2.178
+    },
+    {
+     "text": "enforcement",
+     "start": 2.178,
+     "end": 2.728
+    },
+    {
+     "text": "of",
+     "start": 2.728,
+     "end": 2.881
+    },
+    {
+     "text": "rules",
+     "start": 2.881,
+     "end": 3.125
+    },
+    {
+     "text": "is",
+     "start": 3.125,
+     "end": 3.278
+    },
+    {
+     "text": "critical,",
+     "start": 3.278,
+     "end": 3.675
+    },
+    {
+     "text": "the",
+     "start": 4.05,
+     "end": 4.188
+    },
+    {
+     "text": "server",
+     "start": 4.188,
+     "end": 4.424
+    },
+    {
+     "text": "authority",
+     "start": 4.424,
+     "end": 5.004
+    },
+    {
+     "text": "model",
+     "start": 5.004,
+     "end": 5.298
+    },
+    {
+     "text": "is",
+     "start": 5.298,
+     "end": 5.466
+    },
+    {
+     "text": "the",
+     "start": 5.466,
+     "end": 5.593
+    },
+    {
+     "text": "gold",
+     "start": 5.593,
+     "end": 5.8
+    },
+    {
+     "text": "standard",
+     "start": 5.8,
+     "end": 6.222
+    },
+    {
+     "text": "to",
+     "start": 6.222,
+     "end": 6.39
+    },
+    {
+     "text": "use,",
+     "start": 6.39,
+     "end": 6.616
+    },
+    {
+     "text": "despite",
+     "start": 6.616,
+     "end": 6.94
+    },
+    {
+     "text": "it",
+     "start": 6.94,
+     "end": 7.097
+    },
+    {
+     "text": "being",
+     "start": 7.097,
+     "end": 7.363
+    },
+    {
+     "text": "so",
+     "start": 7.363,
+     "end": 7.53
+    },
+    {
+     "text": "much",
+     "start": 7.53,
+     "end": 7.726
+    },
+    {
+     "text": "more",
+     "start": 7.726,
+     "end": 7.933
+    },
+    {
+     "text": "complex.",
+     "start": 7.933,
+     "end": 8.385
+    },
+    {
+     "text": "If",
+     "start": 9.06,
+     "end": 9.215
+    },
+    {
+     "text": "a",
+     "start": 9.215,
+     "end": 9.306
+    },
+    {
+     "text": "game",
+     "start": 9.306,
+     "end": 9.525
+    },
+    {
+     "text": "uses",
+     "start": 9.525,
+     "end": 9.776
+    },
+    {
+     "text": "server",
+     "start": 9.776,
+     "end": 10.085
+    },
+    {
+     "text": "authority,",
+     "start": 10.085,
+     "end": 10.505
+    },
+    {
+     "text": "it",
+     "start": 10.505,
+     "end": 10.614
+    },
+    {
+     "text": "essentially",
+     "start": 10.614,
+     "end": 11.234
+    },
+    {
+     "text": "has",
+     "start": 11.234,
+     "end": 11.444
+    },
+    {
+     "text": "to",
+     "start": 11.444,
+     "end": 11.553
+    },
+    {
+     "text": "virtually",
+     "start": 11.553,
+     "end": 12.045
+    },
+    {
+     "text": "recreate",
+     "start": 12.045,
+     "end": 12.528
+    },
+    {
+     "text": "the",
+     "start": 12.528,
+     "end": 12.715
+    },
+    {
+     "text": "game",
+     "start": 12.715,
+     "end": 12.916
+    },
+    {
+     "text": "logic",
+     "start": 12.916,
+     "end": 13.208
+    },
+    {
+     "text": "and",
+     "start": 13.208,
+     "end": 13.417
+    },
+    {
+     "text": "work",
+     "start": 13.417,
+     "end": 13.599
+    },
+    {
+     "text": "out",
+     "start": 13.599,
+     "end": 13.764
+    },
+    {
+     "text": "what",
+     "start": 13.764,
+     "end": 13.955
+    },
+    {
+     "text": "actually",
+     "start": 14.02,
+     "end": 14.516
+    },
+    {
+     "text": "happens",
+     "start": 14.516,
+     "end": 14.971
+    },
+    {
+     "text": "itself.",
+     "start": 14.971,
+     "end": 15.395
+    },
+    {
+     "text": "This",
+     "start": 15.95,
+     "end": 16.262
+    },
+    {
+     "text": "is",
+     "start": 16.262,
+     "end": 16.402
+    },
+    {
+     "text": "resource",
+     "start": 16.402,
+     "end": 16.855
+    },
+    {
+     "text": "intensive,",
+     "start": 16.855,
+     "end": 17.415
+    },
+    {
+     "text": "costs",
+     "start": 17.52,
+     "end": 17.833
+    },
+    {
+     "text": "game",
+     "start": 17.833,
+     "end": 18.068
+    },
+    {
+     "text": "companies",
+     "start": 18.068,
+     "end": 18.635
+    },
+    {
+     "text": "a",
+     "start": 18.84,
+     "end": 18.936
+    },
+    {
+     "text": "significant",
+     "start": 18.936,
+     "end": 19.552
+    },
+    {
+     "text": "amount",
+     "start": 19.552,
+     "end": 19.778
+    },
+    {
+     "text": "of",
+     "start": 19.778,
+     "end": 19.895
+    },
+    {
+     "text": "money",
+     "start": 19.895,
+     "end": 20.112
+    },
+    {
+     "text": "to",
+     "start": 20.112,
+     "end": 20.251
+    },
+    {
+     "text": "run",
+     "start": 20.251,
+     "end": 20.442
+    },
+    {
+     "text": "and",
+     "start": 20.442,
+     "end": 20.642
+    },
+    {
+     "text": "maintain,",
+     "start": 20.642,
+     "end": 21.085
+    },
+    {
+     "text": "and",
+     "start": 21.53,
+     "end": 21.733
+    },
+    {
+     "text": "suffers",
+     "start": 21.733,
+     "end": 22.068
+    },
+    {
+     "text": "from",
+     "start": 22.068,
+     "end": 22.28
+    },
+    {
+     "text": "regional",
+     "start": 22.28,
+     "end": 22.73
+    },
+    {
+     "text": "latency.",
+     "start": 22.73,
+     "end": 23.145
+    },
+    {
+     "text": "If",
+     "start": 23.78,
+     "end": 23.935
+    },
+    {
+     "text": "you've",
+     "start": 23.935,
+     "end": 24.192
+    },
+    {
+     "text": "ever",
+     "start": 24.192,
+     "end": 24.365
+    },
+    {
+     "text": "wondered",
+     "start": 24.365,
+     "end": 24.64
+    },
+    {
+     "text": "why",
+     "start": 24.64,
+     "end": 24.786
+    },
+    {
+     "text": "large",
+     "start": 24.786,
+     "end": 25.042
+    },
+    {
+     "text": "online",
+     "start": 25.042,
+     "end": 25.298
+    },
+    {
+     "text": "games",
+     "start": 25.298,
+     "end": 25.591
+    },
+    {
+     "text": "such",
+     "start": 25.591,
+     "end": 25.774
+    },
+    {
+     "text": "as",
+     "start": 25.774,
+     "end": 25.883
+    },
+    {
+     "text": "League",
+     "start": 25.883,
+     "end": 26.139
+    },
+    {
+     "text": "of",
+     "start": 26.139,
+     "end": 26.267
+    },
+    {
+     "text": "Legends",
+     "start": 26.267,
+     "end": 26.569
+    },
+    {
+     "text": "or",
+     "start": 26.569,
+     "end": 26.716
+    },
+    {
+     "text": "World",
+     "start": 26.716,
+     "end": 26.898
+    },
+    {
+     "text": "of",
+     "start": 26.898,
+     "end": 26.953
+    },
+    {
+     "text": "Warcraft",
+     "start": 26.953,
+     "end": 27.292
+    },
+    {
+     "text": "have",
+     "start": 27.292,
+     "end": 27.475
+    },
+    {
+     "text": "server",
+     "start": 27.475,
+     "end": 27.817
+    },
+    {
+     "text": "regions,",
+     "start": 27.817,
+     "end": 28.165
+    },
+    {
+     "text": "this",
+     "start": 28.68,
+     "end": 28.878
+    },
+    {
+     "text": "is",
+     "start": 28.878,
+     "end": 28.986
+    },
+    {
+     "text": "why",
+     "start": 28.986,
+     "end": 29.139
+    },
+    {
+     "text": "thousands",
+     "start": 29.139,
+     "end": 29.598
+    },
+    {
+     "text": "of",
+     "start": 29.598,
+     "end": 29.751
+    },
+    {
+     "text": "players",
+     "start": 29.751,
+     "end": 30.057
+    },
+    {
+     "text": "need",
+     "start": 30.057,
+     "end": 30.273
+    },
+    {
+     "text": "to",
+     "start": 30.273,
+     "end": 30.381
+    },
+    {
+     "text": "stay",
+     "start": 30.381,
+     "end": 30.579
+    },
+    {
+     "text": "connected",
+     "start": 30.579,
+     "end": 31.038
+    },
+    {
+     "text": "with",
+     "start": 31.038,
+     "end": 31.299
+    },
+    {
+     "text": "low",
+     "start": 31.299,
+     "end": 31.479
+    },
+    {
+     "text": "latency",
+     "start": 31.479,
+     "end": 31.767
+    },
+    {
+     "text": "in",
+     "start": 31.767,
+     "end": 31.92
+    },
+    {
+     "text": "order",
+     "start": 31.92,
+     "end": 32.172
+    },
+    {
+     "text": "for",
+     "start": 32.172,
+     "end": 32.347
+    },
+    {
+     "text": "them",
+     "start": 32.347,
+     "end": 32.59
+    },
+    {
+     "text": "to",
+     "start": 32.59,
+     "end": 32.734
+    },
+    {
+     "text": "receive",
+     "start": 32.734,
+     "end": 33.04
+    },
+    {
+     "text": "server",
+     "start": 33.04,
+     "end": 33.346
+    },
+    {
+     "text": "events",
+     "start": 33.346,
+     "end": 33.688
+    },
+    {
+     "text": "in",
+     "start": 33.688,
+     "end": 33.841
+    },
+    {
+     "text": "a",
+     "start": 33.841,
+     "end": 33.94
+    },
+    {
+     "text": "timely",
+     "start": 33.94,
+     "end": 34.237
+    },
+    {
+     "text": "manner.",
+     "start": 34.237,
+     "end": 34.525
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-16.n2v1.wav",
+   "seconds": 16.192,
+   "recordedAt": "2026-10-08T22:50:55.201Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.82,
+     "end": 0.944
+    },
+    {
+     "text": "you've",
+     "start": 0.944,
+     "end": 1.246
+    },
+    {
+     "text": "ever",
+     "start": 1.246,
+     "end": 1.45
+    },
+    {
+     "text": "wondered",
+     "start": 1.45,
+     "end": 1.716
+    },
+    {
+     "text": "why",
+     "start": 1.716,
+     "end": 1.876
+    },
+    {
+     "text": "large",
+     "start": 1.876,
+     "end": 2.16
+    },
+    {
+     "text": "online",
+     "start": 2.16,
+     "end": 2.39
+    },
+    {
+     "text": "games",
+     "start": 2.39,
+     "end": 2.701
+    },
+    {
+     "text": "such",
+     "start": 2.701,
+     "end": 2.905
+    },
+    {
+     "text": "as",
+     "start": 2.905,
+     "end": 3.029
+    },
+    {
+     "text": "League",
+     "start": 3.029,
+     "end": 3.33
+    },
+    {
+     "text": "of",
+     "start": 3.33,
+     "end": 3.437
+    },
+    {
+     "text": "Legends",
+     "start": 3.437,
+     "end": 3.774
+    },
+    {
+     "text": "or",
+     "start": 3.774,
+     "end": 3.925
+    },
+    {
+     "text": "World",
+     "start": 3.925,
+     "end": 4.173
+    },
+    {
+     "text": "of",
+     "start": 4.173,
+     "end": 4.271
+    },
+    {
+     "text": "Warcraft",
+     "start": 4.271,
+     "end": 4.723
+    },
+    {
+     "text": "have",
+     "start": 4.723,
+     "end": 4.918
+    },
+    {
+     "text": "server",
+     "start": 4.918,
+     "end": 5.158
+    },
+    {
+     "text": "regions,",
+     "start": 5.158,
+     "end": 5.495
+    },
+    {
+     "text": "well",
+     "start": 5.74,
+     "end": 5.972
+    },
+    {
+     "text": "this",
+     "start": 5.972,
+     "end": 6.203
+    },
+    {
+     "text": "is",
+     "start": 6.203,
+     "end": 6.389
+    },
+    {
+     "text": "why.",
+     "start": 6.389,
+     "end": 6.655
+    },
+    {
+     "text": "Thousands",
+     "start": 7.3,
+     "end": 7.622
+    },
+    {
+     "text": "of",
+     "start": 7.622,
+     "end": 7.774
+    },
+    {
+     "text": "players",
+     "start": 7.774,
+     "end": 8.007
+    },
+    {
+     "text": "need",
+     "start": 8.007,
+     "end": 8.203
+    },
+    {
+     "text": "to",
+     "start": 8.203,
+     "end": 8.329
+    },
+    {
+     "text": "stay",
+     "start": 8.329,
+     "end": 8.516
+    },
+    {
+     "text": "connected",
+     "start": 8.516,
+     "end": 8.865
+    },
+    {
+     "text": "with",
+     "start": 8.865,
+     "end": 9.08
+    },
+    {
+     "text": "low",
+     "start": 9.08,
+     "end": 9.286
+    },
+    {
+     "text": "latency",
+     "start": 9.286,
+     "end": 9.626
+    },
+    {
+     "text": "in",
+     "start": 9.626,
+     "end": 9.778
+    },
+    {
+     "text": "order",
+     "start": 9.778,
+     "end": 10.019
+    },
+    {
+     "text": "for",
+     "start": 10.019,
+     "end": 10.162
+    },
+    {
+     "text": "them",
+     "start": 10.162,
+     "end": 10.359
+    },
+    {
+     "text": "to",
+     "start": 10.359,
+     "end": 10.498
+    },
+    {
+     "text": "receive",
+     "start": 10.498,
+     "end": 10.811
+    },
+    {
+     "text": "server",
+     "start": 10.811,
+     "end": 11.115
+    },
+    {
+     "text": "events",
+     "start": 11.115,
+     "end": 11.401
+    },
+    {
+     "text": "in",
+     "start": 11.401,
+     "end": 11.544
+    },
+    {
+     "text": "a",
+     "start": 11.544,
+     "end": 11.634
+    },
+    {
+     "text": "timely",
+     "start": 11.634,
+     "end": 11.92
+    },
+    {
+     "text": "manner,",
+     "start": 11.92,
+     "end": 12.215
+    },
+    {
+     "text": "otherwise",
+     "start": 12.73,
+     "end": 13.214
+    },
+    {
+     "text": "it",
+     "start": 13.214,
+     "end": 13.361
+    },
+    {
+     "text": "just",
+     "start": 13.361,
+     "end": 13.551
+    },
+    {
+     "text": "becomes",
+     "start": 13.551,
+     "end": 13.819
+    },
+    {
+     "text": "unplayable.",
+     "start": 13.819,
+     "end": 14.285
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/2026-10-08-23-29-22-17.n2v1.wav",
+   "seconds": 7.392,
+   "recordedAt": "2026-10-08T22:51:10.556Z",
+   "words": [
+    {
+     "text": "Anyway,",
+     "start": 0.75,
+     "end": 1.175
+    },
+    {
+     "text": "I",
+     "start": 1.51,
+     "end": 1.627
+    },
+    {
+     "text": "hope",
+     "start": 1.627,
+     "end": 1.831
+    },
+    {
+     "text": "you",
+     "start": 1.831,
+     "end": 1.99
+    },
+    {
+     "text": "found",
+     "start": 1.99,
+     "end": 2.125
+    },
+    {
+     "text": "that",
+     "start": 2.125,
+     "end": 2.337
+    },
+    {
+     "text": "useful.",
+     "start": 2.337,
+     "end": 2.605
+    },
+    {
+     "text": "I'll",
+     "start": 2.67,
+     "end": 2.848
+    },
+    {
+     "text": "be",
+     "start": 2.848,
+     "end": 2.942
+    },
+    {
+     "text": "sharing",
+     "start": 2.942,
+     "end": 3.234
+    },
+    {
+     "text": "more",
+     "start": 3.234,
+     "end": 3.485
+    },
+    {
+     "text": "insights",
+     "start": 3.485,
+     "end": 3.871
+    },
+    {
+     "text": "like",
+     "start": 3.871,
+     "end": 4.101
+    },
+    {
+     "text": "this",
+     "start": 4.101,
+     "end": 4.289
+    },
+    {
+     "text": "in",
+     "start": 4.289,
+     "end": 4.414
+    },
+    {
+     "text": "the",
+     "start": 4.414,
+     "end": 4.55
+    },
+    {
+     "text": "near",
+     "start": 4.55,
+     "end": 4.738
+    },
+    {
+     "text": "future,",
+     "start": 4.738,
+     "end": 5.072
+    },
+    {
+     "text": "so",
+     "start": 5.072,
+     "end": 5.145
+    },
+    {
+     "text": "follow",
+     "start": 5.19,
+     "end": 5.545
+    },
+    {
+     "text": "along",
+     "start": 5.545,
+     "end": 5.776
+    },
+    {
+     "text": "for",
+     "start": 5.776,
+     "end": 5.936
+    },
+    {
+     "text": "more",
+     "start": 5.936,
+     "end": 6.105
+    },
+    {
+     "text": "content.",
+     "start": 6.105,
+     "end": 6.425
+    }
+   ],
+   "transcribed": true
+  }
+ ],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true,
+  "denoise": 2,
+  "volume": 0.5
+ },
+ "music": {
+  "song": "mauryan.mp3",
+  "from": 0,
+  "level": 0.1
+ },
+ "slide": 0.4,
+ "origin": {
+  "file": "2026-10-08 23-29-22.mp4"
+ },
+ "createdAt": "2026-10-08T22:32:25.376Z",
+ "updatedAt": "2026-10-08T23:25:30.338Z"
+}
