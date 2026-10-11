@@ -10,6 +10,7 @@ import { HookClip, hookClipDurationSeconds, hookClipSchema, isLoop } from "./src
 import { ListClip, listClipDurationSeconds, listClipSchema } from "./src/ListClip";
 import { filledItems, markerWarning, numberOf } from "./src/listTiming";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
+import { Talk, talkDurationSeconds, talkSchema } from "./src/Talk";
 import { MUSIC_LEVEL } from "./src/components";
 import { EDITOR_ONLY, voiceDefaults } from "./src/voice";
 import roster from "./src/data/roster.json";
@@ -115,6 +116,27 @@ export const TEMPLATES: DeskTemplate[] = [
       const to = from + (Number(p.durationSeconds) || Infinity);
       return markerWarning(filledItems(p.items).length, clip?.markers?.filter((m) => m >= from && m < to).length);
     },
+    voice: true,
+    hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
+  },
+  {
+    id: "Talk",
+    label: "Talk (long form)",
+    blurb: "The long video: you talking for five minutes and up, straight through an edit, with its cards (text and sketches) and whatever b-roll you dropped in. Title as a cold open, regular captions, the sign-off to close. Made for 16:9.",
+    component: Talk,
+    schema: talkSchema,
+    seconds: (p) => talkDurationSeconds(p as never),
+    clipProps: (clip, clipSeconds, facts) => ({
+      clip,
+      durationSeconds: Math.max(1, Math.floor(clipSeconds)),
+      startFrom: 0,
+      sourceAspect: facts && facts.width && facts.height ? facts.width / facts.height : undefined,
+    }),
+    clipKey: "clip",
+    uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
+    defaults: { title: "", durationSeconds: 60, startFrom: 0, muted: false, cropTop: 0, cropBottom: 0, ending: "signoff", ...musicDefaults, musicVolume: 0.25, ...voiceDefaults, captions: "regular" },
+    options: { music: songs },
+    needsClip: true,
     voice: true,
     hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
   },

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type AudioClip,
   type CaptionStyle,
+  type Card,
   type Clip,
   type PlacedWord,
   type Sequence,
@@ -13,38 +14,45 @@ import {
   appendAt,
   audioAt,
   audioPieces,
+  cardOf,
   clipEnd,
   clipOf,
   clipOfTake,
   cropBox,
   findAudio,
+  findCard,
   findClip,
   placeAudio,
+  placeCard,
   placeVideo,
   placedWords,
   removeAudio,
+  removeCards,
   removeMarker,
   removeVideo,
   sequenceSeconds,
   setMusic,
   snapToGap,
   splitAudioAt,
+  splitCardAt,
   splitVideoAt,
   stackIntervals,
   timeTrack,
   updateAudio,
   updateAudioTrack,
+  updateCard,
   updateVideo,
   updateVideoTrack,
 } from "@heroic/voiceover";
 import type { VoicePreview } from "../../game";
-import { type Clip as LibraryClip, type GameApi, type GameInfo, type Idea, type SavedSequence, type WhisperStatus, fmtSeconds } from "../api";
+import { type Clip as LibraryClip, type GameApi, type GameInfo, type SavedSequence, type Script, type ScriptSummary, type WhisperStatus, fmtSeconds } from "../api";
 import { go } from "../App";
+import { sketchesOf } from "../../lib/scripts";
 import { loadTemplates, loadVoicePreview } from "../games";
 import { type Mic, type MicDevice, listMics, micPermission, micSupported, openMic, peaksOf } from "../mic";
 import { TikTokOverlay } from "../TikTokOverlay";
-import { Library } from "./Library";
-import { AudioClipPanel, CaptionsPanel, EditPanel, MusicPanel, ScriptPanel, VideoClipPanel, VoicePanel } from "./panels";
+import { Library, type Sketch } from "./Library";
+import { AudioClipPanel, CaptionsPanel, CardPanel, EditPanel, MusicPanel, ScriptPanel, VideoClipPanel, VoicePanel } from "./panels";
 import { type Context, type Focus, type Kind, type Picked, type RecState, Timeline } from "./Timeline";
 import { remember } from "./widgets";
 
@@ -114,7 +122,8 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   const [idea, setIdea] = useState("");
-  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [scripts, setScripts] = useState<ScriptSummary[]>([]);
+  const [script, setScript] = useState<Script | null>(null);
   // the screen
   const [picked, setPicked] = useState<Picked>({ clips: [] });
   const [focus, setFocus] = useState<Focus>({ kind: "video", track: 0 });
@@ -251,7 +260,7 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
     void loadTemplates(game.id).then((ts) => alive && setSongs(ts.find((x) => x.options?.music)?.options?.music ?? []));
     void api.whisper().then((w) => alive && setWhisper(w)).catch(() => {});
     void api.clips().then((c) => alive && setClips(c));
-    void api.ideas().then((l) => alive && setIdeas(l)).catch(() => {});
+    void api.scripts().then((r) => alive && setScripts(r.list)).catch(() => {});
     void api
       .sequence(id)
       .then((s) => {
@@ -274,6 +283,16 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
       alive = false;
     };
   }, [api, game.id, id, setSnap]);
+
+  // The picked script's words, to read from.
+  useEffect(() => {
+    if (!idea) return setScript(null);
+    let alive = true;
+    void api.script(idea).then((x) => alive && setScript(x)).catch(() => alive && setScript(null));
+    return () => {
+      alive = false;
+    };
+  }, [api, idea]);
 
   // The edit saves itself, a moment after the last change.
   useEffect(() => {
@@ -550,9 +569,22 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
     setFocus({ kind: "audio", track: placed.track });
     seek(at);
   };
-  const muteClip = (kind: Kind, clipId: string, muted: boolean) => {
+  /** A card onto the cards row at `where` (or the playhead). */
+  const addCard = (card: Card, where?: number) => {
     const cur = snapRef.current;
     if (!cur) return;
+    const at = where ?? tRef.current;
+    const next = placeCard(cur, card, at);
+    if (next === cur) return setMsg("No room for a card there.");
+    commit(next);
+    setPicked({ clips: [card.id] });
+    setFocus({ kind: "overlay", track: 0 });
+    seek(findCard(next, card.id)?.card.at ?? at);
+    pickTab("clip");
+  };
+  const muteClip = (kind: Kind, clipId: string, muted: boolean) => {
+    const cur = snapRef.current;
+    if (!cur || kind === "overlay") return;
     commit(kind === "video" ? updateVideo(cur, clipId, { muted: muted || undefined }) : updateAudio(cur, clipId, { muted: muted || undefined }));
   };
   /** The tracks' height, dragged from the bar above them. */
@@ -576,6 +608,14 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
     const cur = snapRef.current;
     if (!cur) return;
     const at = tRef.current;
+    if (focus.kind === "overlay") {
+      const next = splitCardAt(cur, at);
+      if (next === cur) return setMsg("Put the playhead on a card to split it.");
+      commit(next);
+      const right = next.overlay?.cards.find((c) => Math.abs(c.at - at) < 0.002 && !cur.overlay?.cards.some((x) => x.id === c.id));
+      if (right) setPicked({ clips: [right.id] });
+      return;
+    }
     if (focus.kind === "video") {
       const next = splitVideoAt(cur, focus.track, at);
       if (next === cur) return setMsg(`Put the playhead on a clip in V${focus.track + 1} to split it.`);
@@ -600,7 +640,7 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
     const cur = snapRef.current;
     if (!cur) return;
     if (picked.clips.length) {
-      commit(removeAudio(removeVideo(cur, picked.clips), picked.clips));
+      commit(removeCards(removeAudio(removeVideo(cur, picked.clips), picked.clips), picked.clips));
       return setPicked({ clips: [] });
     }
     if (picked.marker) {
@@ -701,6 +741,12 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
     const cur = snapRef.current;
     if (cur) (undoable ? commit : setSnap)(updateAudio(cur, clipId, patch));
   };
+  const patchCard = (cardId: string, patch: Partial<Card>) => {
+    const cur = snapRef.current;
+    if (cur) commit(updateCard(cur, cardId, patch));
+  };
+  // The script's sketches, for the library's Cards shelf.
+  const sketches: Sketch[] = useMemo(() => (script ? sketchesOf(script) : []), [script]);
 
   // Something the browser couldn't play: say so rather than go quiet.
   useEffect(() => {
@@ -750,7 +796,7 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
       } else if ((e.metaKey || e.ctrlKey) && e.key === "a") {
         e.preventDefault();
         const cur = snapRef.current;
-        if (cur) setPicked({ clips: [...cur.video.flatMap((tr) => tr.clips.map((c) => c.id)), ...cur.audio.flatMap((tr) => tr.clips.map((c) => c.id))] });
+        if (cur) setPicked({ clips: [...cur.video.flatMap((tr) => tr.clips.map((c) => c.id)), ...cur.audio.flatMap((tr) => tr.clips.map((c) => c.id)), ...(cur.overlay?.cards.map((c) => c.id) ?? [])] });
       } else if (e.metaKey || e.ctrlKey) return;
       else if (e.key === "r" || e.key === "R") void startRecording();
       else if (e.code === "KeyS") split(e.altKey);
@@ -793,14 +839,15 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
   const one = picked.clips.length === 1 ? picked.clips[0]! : null;
   const vsel = one ? findClip(seq, one) : undefined;
   const asel = one && !vsel ? findAudio(seq, one) : undefined;
+  const csel = one && !vsel && !asel ? findCard(seq, one) : undefined;
   const stacks = stackIntervals(seq);
   const stackable = Boolean(vsel && stacks.some((s) => s.start < clipEnd(vsel.clip) && s.end > vsel.clip.at));
   const vtimed = vsel ? timeTrack(seq.video[vsel.track]!)[vsel.index] : undefined;
   const vprev = vsel && vsel.index > 0 ? [...seq.video[vsel.track]!.clips].sort((a, b) => a.at - b.at)[vsel.index - 1] : undefined;
   const pickedTake = asel ? asel.clip.take : picked.word ? picked.word.take : undefined;
 
-  const focusLabel = focus.kind === "video" ? `V${focus.track + 1}` : `A${focus.track + 1}`;
-  const inspectorTitle = vsel ? `Clip on V${vsel.track + 1}` : asel ? `Voice on A${asel.track + 1}` : picked.clips.length > 1 ? `${picked.clips.length} clips selected` : picked.word ? "A word" : picked.marker ? "A marker" : "Nothing selected";
+  const focusLabel = focus.kind === "video" ? `V${focus.track + 1}` : focus.kind === "audio" ? `A${focus.track + 1}` : "cards";
+  const inspectorTitle = vsel ? `Clip on V${vsel.track + 1}` : asel ? `Voice on A${asel.track + 1}` : csel ? (csel.card.kind === "text" ? "A text card" : csel.card.kind === "image" ? "A picture" : "A b-roll slot") : picked.clips.length > 1 ? `${picked.clips.length} clips selected` : picked.word ? "A word" : picked.marker ? "A marker" : "Nothing selected";
 
   return (
     <div className="editor" onClick={() => setMenu(null)}>
@@ -825,7 +872,24 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
 
       {/* ── the room: library · stage · inspector ── */}
       <div className="ed-room">
-        <Library api={api} clips={clips} seq={seq} focus={focus} t={t} locked={locked} onAddFootage={(f) => addFootage(f, focus.kind === "video" ? focus.track : 0)} onAddTake={(i) => addTake(i, focus.kind === "audio" ? focus.track : 0)} />
+        <Library
+          api={api}
+          clips={clips}
+          seq={seq}
+          focus={focus}
+          t={t}
+          locked={locked}
+          onAddFootage={(f) => addFootage(f, focus.kind === "video" ? focus.track : 0)}
+          onAddTake={(i) => addTake(i, focus.kind === "audio" ? focus.track : 0)}
+          onAddCard={(c) => addCard(c)}
+          onGoCard={(c) => {
+            seek(c.at);
+            setPicked({ clips: [c.id] });
+            setFocus({ kind: "overlay", track: 0 });
+            pickTab("clip");
+          }}
+          sketches={sketches}
+        />
 
         <section className="stage-col">
           <div className="stage-tools">
@@ -911,6 +975,8 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
                 />
               ) : asel ? (
                 <AudioClipPanel seq={seq} track={asel.track} clip={asel.clip} locked={locked} whisperReady={Boolean(whisper?.ready)} onCheckpoint={checkpoint} onPatch={(p, u) => patchAudioClip(asel.clip.id, p, u)} onAgain={(tk) => void again(tk)} />
+              ) : csel ? (
+                <CardPanel api={api} card={csel.card} locked={locked} onPatch={(p) => patchCard(csel.card.id, p)} />
               ) : picked.clips.length > 1 ? (
                 <div className="small muted">Drag any of them and they all move together. Delete takes them all out and leaves the gaps.</div>
               ) : picked.word ? (
@@ -980,7 +1046,7 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
                 }}
               />
             ) : null}
-            {tab === "script" ? <ScriptPanel ideas={ideas} idea={idea} locked={locked} onPick={setIdea} onTick={(i) => void api.updateIdea(i.id, { done: !i.done }).then(setIdeas).catch((e: Error) => setMsg(`✖ ${e.message}`))} /> : null}
+            {tab === "script" ? <ScriptPanel scripts={scripts} script={script} idea={idea} locked={locked} onPick={setIdea} onTick={(sid, done) => void api.updateScript(sid, { done }).then(() => api.scripts()).then((r) => setScripts(r.list)).catch((e: Error) => setMsg(`✖ ${e.message}`))} /> : null}
             {tab === "edit" ? (
               <EditPanel
                 name={name}
@@ -1065,11 +1131,12 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
             onMuteClip={muteClip}
             onDropFootage={(file, track, at) => addFootage(file, track, at)}
             onDropTake={(take, track, at) => addTake(take, track, at)}
+            onDropCard={(card, at) => addCard(card, at)}
             onMusic={() => pickTab("music")}
           />
         </div>
         <div className="tl-help small muted">
-          Click or drag the ruler to move the playhead · wheel zooms · click a clip, <b>shift-click</b> for several · drag to move (together), edges to trim · 🔊 on a clip or a track name silences it · <b>S</b> split · <b>Delete</b> leaves the gap · <b>M</b> marker · <b>N</b> snap · <b>R</b> record onto A{recordTrack() + 1} · double-click a word to fix it · <b>⌘Z</b> undo
+          Click or drag the ruler to move the playhead · wheel zooms · click a clip, <b>shift-click</b> for several · drag to move (together), edges to trim · 🔊 on a clip or a track name silences it · cards row: text and sketches over the footage · <b>S</b> split · <b>Delete</b> leaves the gap · <b>M</b> marker · <b>N</b> snap · <b>R</b> record onto A{recordTrack() + 1} · double-click a word to fix it · <b>⌘Z</b> undo
         </div>
       </div>
 
@@ -1081,14 +1148,24 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
 
       {menu ? (
         <div className="menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
-          {menu.kind === "video" || menu.kind === "audio" ? (
+          {menu.kind === "video" || menu.kind === "audio" || menu.kind === "overlay" ? (
             <button
               onClick={() => {
                 split();
                 setMenu(null);
               }}
             >
-              Split {menu.kind === "video" ? `V${menu.track + 1}` : `A${menu.track + 1}`} here
+              Split {menu.kind === "video" ? `V${menu.track + 1}` : menu.kind === "audio" ? `A${menu.track + 1}` : "the card"} here
+            </button>
+          ) : null}
+          {menu.kind === "overlay" ? (
+            <button
+              onClick={() => {
+                addCard(cardOf("text", { text: "A few words" }), menu.at);
+                setMenu(null);
+              }}
+            >
+              Add a text card here
             </button>
           ) : null}
           {picked.clips.length ? (

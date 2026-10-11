@@ -9,6 +9,7 @@
 import type * as React from "react";
 import type { ZodObject } from "zod";
 import type { AiVoice } from "./lib/draft";
+import type { ScriptVoice } from "./lib/rewrite";
 
 export type FormatSpec = { width: number; height: number; label: string };
 
@@ -49,8 +50,35 @@ export type DeskTemplate = {
   warn?: (effective: Record<string, unknown>, typed: Record<string, unknown>, clip?: { markers?: number[] }) => string | undefined;
   /** Selects instead of free text for some fields. */
   options?: Record<string, { value: string; label: string }[]>;
+  /** The render name a blank Name field falls back to, worked out from the
+   * props (Autosave: `slot-7-the-memory`). Typing a name still wins. */
+  name?: (props: Record<string, unknown>) => string;
   /** Fields the screen handles itself. */
   hide?: string[];
+  /** One field picked from a library of pictures instead of a select:
+   * preview squares, with what's already been rendered on its own tab. */
+  gallery?: { key: string; label: string; items: GalleryItem[] };
+  /** Text fields that get a big box (long words). */
+  long?: string[];
+  /** Whole-number fields (a seed) that start random on a fresh form and
+   * get a Reroll button. */
+  reroll?: string[];
+  /** Changing one field fills others (picking a picture brings its words). */
+  linked?: (key: string, value: unknown) => Record<string, unknown> | undefined;
+  /** Props a fresh form fetches (the next pair off a queue the game keeps),
+   * laid over the defaults. A re-opened batch keeps its own. */
+  fresh?: () => Promise<Record<string, unknown>>;
+  /** A plain note under the form (not a warning): what these props will do,
+   * e.g. which easter egg a save gets and why. */
+  info?: (props: Record<string, unknown>) => string | undefined;
+  /** Files these props need, made before the preview plays them and before
+   * a render (Autosave's generated music). Returns props to lay over the
+   * form, e.g. the made file's name; the Make screen calls it a moment after
+   * the form settles, and awaits it on Render/Still. */
+  prepare?: (props: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** Told after a Render press with what went off (so the game can mark
+   * the queue's pair used). Once per press, whatever the variants. */
+  rendered?: (props: Record<string, unknown>, name: string) => void | Promise<void>;
   /** It takes a voice-over: the props `voice` (a path under public/, from
    * the Voice screen), `captions`, `voiceVolume` and `duck`, plus the hidden
    * `voiceData` (an unsaved edit, inline). Make fills the `voice` choices
@@ -65,6 +93,9 @@ export type VoicePreview = {
   component: React.FC<any>;
   props: (clipPath: string, clipSeconds: number, clip: { width: number; height: number; cropTop: number; cropBottom: number }) => Record<string, unknown>;
 };
+
+/** A picture a gallery field can take; `thumb` is under the game's public dir. */
+export type GalleryItem = { value: string; label: string; thumb: string };
 
 export type GameConfig = {
   /** URL-safe id: /api/<id>/… */
@@ -110,4 +141,25 @@ export type GameConfig = {
      * `draft` above stays the fallback. */
     ai?: AiVoice;
   };
+  /** The Scripts tab: with ANTHROPIC_API_KEY set, Claude rewrites a pasted
+   * script into a long cut and shorts in this voice (docs/design/desk-scripts.md). */
+  script?: { ai: ScriptVoice };
+  /** The game's own tabs (browser, lazy), after the Desk's. Their server
+   * side is `desk.server.ts` beside the config (see GameRoutes). */
+  tabs?: GameTab[];
+  /** Desk tabs this game has no use for, e.g. ["clips", "scripts"]. */
+  hideTabs?: string[];
 };
+
+/** What a game's own tab is handed. `game` is the game's id. */
+export type GameTabProps = { game: string; arg?: string };
+export type GameTab = { id: string; label: string; load: () => Promise<{ Tab: React.FC<GameTabProps> }> };
+
+/**
+ * A game's server routes: `export const routes: GameRoutes` in
+ * `<root>/desk.server.ts`, which the Desk loads by path at start (so the
+ * browser bundle never sees it). `"POST draft"` answers POST
+ * /api/<game>/x/draft. Long work must not block: use async I/O, never
+ * spawnSync (memory: bun-serve-no-spawnsync).
+ */
+export type GameRoutes = Record<string, (req: Request, g: GameConfig) => Response | Promise<Response>>;

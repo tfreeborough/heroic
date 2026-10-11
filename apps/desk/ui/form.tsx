@@ -38,15 +38,21 @@ export const SchemaForm: React.FC<{
   hide?: string[];
   /** Replace a field's control with a select (e.g. an id from the roster). */
   options?: Record<string, { value: string; label: string }[]>;
-}> = ({ schema, value, onChange, hide = [], options = {} }) => {
-  const set = (k: string, v: unknown) => onChange({ ...value, [k]: v });
+  /** Number fields that get a Reroll button (a seed). */
+  reroll?: string[];
+  /** Text fields shown as a big box. */
+  long?: string[];
+  /** Other fields a change fills in. */
+  linked?: (key: string, value: unknown) => Record<string, unknown> | undefined;
+}> = ({ schema, value, onChange, hide = [], options = {}, reroll = [], long = [], linked }) => {
+  const set = (k: string, v: unknown) => onChange({ ...value, [k]: v, ...linked?.(k, v) });
   return (
     <div className="fields">
       {fieldsOf(schema)
         .filter((f) => !hide.includes(f.key))
         .map((f) => {
           const v = value[f.key];
-          const wide = f.kind === "string" && !options[f.key] && !f.optional;
+          const wide = (f.kind === "string" && !options[f.key] && !f.optional) || long.includes(f.key);
           if (f.kind === "boolean") {
             return (
               <div key={f.key} className="field inline">
@@ -68,8 +74,17 @@ export const SchemaForm: React.FC<{
                     </option>
                   ))}
                 </select>
+              ) : f.kind === "number" && reroll.includes(f.key) ? (
+                <div className="row" style={{ flexWrap: "nowrap" }}>
+                  <input type="number" step="1" style={{ flex: 1, minWidth: 0 }} value={v === undefined || v === null ? "" : String(v)} onChange={(e) => set(f.key, e.target.value === "" ? undefined : Number(e.target.value))} />
+                  <button type="button" className="ghost small" title="A new random one" onClick={() => set(f.key, rollSeed())}>
+                    Reroll
+                  </button>
+                </div>
               ) : f.kind === "number" ? (
                 <input type="number" step="any" value={v === undefined || v === null ? "" : String(v)} onChange={(e) => set(f.key, e.target.value === "" ? undefined : Number(e.target.value))} />
+              ) : long.includes(f.key) ? (
+                <textarea rows={4} value={String(v ?? "")} onChange={(e) => set(f.key, e.target.value)} />
               ) : (
                 <input type="text" value={String(v ?? "")} onChange={(e) => set(f.key, e.target.value)} />
               )}
@@ -79,6 +94,32 @@ export const SchemaForm: React.FC<{
         })}
     </div>
   );
+};
+
+/** A fresh random seed, 1–9999. */
+export const rollSeed = () => 1 + Math.floor(Math.random() * 9999);
+
+/** A template's defaults for a new form: its reroll fields start random. */
+export const freshDefaults = (t: { defaults: Record<string, unknown>; reroll?: string[] }) => ({
+  ...t.defaults,
+  ...Object.fromEntries((t.reroll ?? []).map((k) => [k, rollSeed()])),
+});
+
+/** Props another tab hands Make for its next fresh form (one shot). */
+export const presetMake = (game: string, props: Record<string, unknown>) => {
+  try {
+    sessionStorage.setItem(`desk:preset:${game}`, JSON.stringify(props));
+  } catch {}
+};
+export const takePreset = (game: string): Record<string, unknown> => {
+  try {
+    const k = `desk:preset:${game}`;
+    const v = sessionStorage.getItem(k);
+    sessionStorage.removeItem(k);
+    return v ? (JSON.parse(v) as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
 };
 
 /** A variant field's value as rows: the list the Desk keeps, or a single

@@ -1,0 +1,36 @@
+{
+  "slots": [
+    {
+      "slot": 1,
+      "seconds": 16,
+      "playtimeFrom": 0,
+      "egg": "dashes",
+      "batch": "slot-01-mirror-check",
+      "renderedAt": "2026-10-10T21:40:08.310Z"
+    },
+    {
+      "slot": 2,
+      "seconds": 16,
+      "playtimeFrom": 16,
+      "egg": "freeze",
+      "batch": "slot-02-the-mentor",
+      "renderedAt": "2026-10-10T22:02:17.889Z"
+    },
+    {
+      "slot": 3,
+      "seconds": 16,
+      "playtimeFrom": 32,
+      "egg": "",
+      "batch": "slot-03-empty-halls",
+      "renderedAt": "2026-10-10T22:13:37.407Z"
+    },
+    {
+      "slot": 4,
+      "seconds": 16,
+      "playtimeFrom": 48,
+      "egg": "",
+      "batch": "slot-04-the-late-shift",
+      "renderedAt": "2026-10-10T22:29:11.133Z"
+    }
+  ]
+}

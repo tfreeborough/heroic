@@ -1,0 +1,992 @@
+{
+  "hints": [
+    {
+      "id": "h002",
+      "text": "Hint: Nobody has ever got to 100% on the first try.",
+      "used": {
+        "at": 1791668408312,
+        "in": "slot-01-mirror-check"
+      }
+    },
+    {
+      "id": "h001",
+      "text": "Tip: Your progress is only saved if you watch until the end.",
+      "used": {
+        "at": 1791668408311,
+        "in": "slot-01-mirror-check"
+      }
+    },
+    {
+      "id": "h004",
+      "text": "Tip: You can always come back for it later. You won't, but you can.",
+      "used": {
+        "at": 1791669737886,
+        "in": "slot-02-the-mentor"
+      }
+    },
+    {
+      "id": "h003",
+      "text": "Hint: You've seen this hint before. Or you will.",
+      "used": {
+        "at": 1791669737885,
+        "in": "slot-02-the-mentor"
+      }
+    },
+    {
+      "id": "h005",
+      "text": "Lore: The ferryman counts every passenger. The numbers never match.",
+      "used": {
+        "at": 1791670417408,
+        "in": "slot-03-empty-halls"
+      }
+    },
+    {
+      "id": "h006",
+      "text": "Tip: Armour is heavy. So is regret.",
+      "used": {
+        "at": 1791670417407,
+        "in": "slot-03-empty-halls"
+      }
+    },
+    {
+      "id": "h007",
+      "text": "Did you know? Your brain fills in the picture before the save finishes.",
+      "used": {
+        "at": 1791671351130,
+        "in": "slot-04-the-late-shift"
+      }
+    },
+    {
+      "id": "h008",
+      "text": "Lore: There was once a save that never finished. They still talk about it.",
+      "used": {
+        "at": 1791671351129,
+        "in": "slot-04-the-late-shift"
+      }
+    },
+    {
+      "id": "h009",
+      "text": "Did you know? Looking at something far away for twenty seconds rests your eyes."
+    },
+    {
+      "id": "h00a",
+      "text": "Hint: Achievements are rare here. That's what makes them achievements."
+    },
+    {
+      "id": "h00b",
+      "text": "Tip: The cat will come to you. Don't force it."
+    },
+    {
+      "id": "h00c",
+      "text": "Tip: The map isn't the place."
+    },
+    {
+      "id": "h00d",
+      "text": "Tip: Not everyone in the tavern wants to talk. Respect that."
+    },
+    {
+      "id": "h00e",
+      "text": "Tip: Go outside. The graphics are incredible."
+    },
+    {
+      "id": "h00f",
+      "text": "Tip: Some chests bite. Most don't."
+    },
+    {
+      "id": "h00g",
+      "text": "Tip: You can talk your way out of most fights."
+    },
+    {
+      "id": "h00h",
+      "text": "Tip: A goat can climb anything. You can't."
+    },
+    {
+      "id": "h00i",
+      "text": "Lore: The library shuts at dusk, but the lights stay on."
+    },
+    {
+      "id": "h00j",
+      "text": "Tip: Sleep at the inn. Your back will thank you."
+    },
+    {
+      "id": "h00k",
+      "text": "Tip: Rain makes everything look better."
+    },
+    {
+      "id": "h00l",
+      "text": "Tip: Rest when you can. The feed will still be there."
+    },
+    {
+      "id": "h00m",
+      "text": "Lore: Every winter someone tries to cross the lake. Every winter the lake wins."
+    },
+    {
+      "id": "h00n",
+      "text": "Hint: Count the saves. Something happens at a round number."
+    },
+    {
+      "id": "h00o",
+      "text": "Tip: Take the long way home once in a while."
+    },
+    {
+      "id": "h00p",
+      "text": "Lore: The tower has always been a little bit too tall."
+    },
+    {
+      "id": "h00q",
+      "text": "Lore: The bridge troll retired years ago. The sign is still up."
+    },
+    {
+      "id": "h00r",
+      "text": "Did you know? There's a seed behind every save. Same seed, same video."
+    },
+    {
+      "id": "h00s",
+      "text": "Lore: The old king saved every night and never once loaded."
+    },
+    {
+      "id": "h00t",
+      "text": "Tip: Never split the party. Unless it's a big party."
+    },
+    {
+      "id": "h00u",
+      "text": "Tip: Old friends are a good save point."
+    },
+    {
+      "id": "h00v",
+      "text": "Tip: The ghost wants its ring back. Just give it the ring."
+    },
+    {
+      "id": "h00w",
+      "text": "Tip: The top floor is always where they keep the good stuff."
+    },
+    {
+      "id": "h00x",
+      "text": "Tip: If it's too quiet, it's a trap. Or it's just quiet."
+    },
+    {
+      "id": "h00y",
+      "text": "Hint: Some of these hints are true."
+    },
+    {
+      "id": "h00z",
+      "text": "Hint: The tips are different every time. Most of them, anyway."
+    },
+    {
+      "id": "h010",
+      "text": "Tip: Turning it off and on again still works."
+    },
+    {
+      "id": "h011",
+      "text": "Tip: Look up once in a while."
+    },
+    {
+      "id": "h012",
+      "text": "Tip: You'll get it next time. That's what next time is for."
+    },
+    {
+      "id": "h013",
+      "text": "Lore: The guards change shift at midnight. Nobody has ever seen them do it."
+    },
+    {
+      "id": "h014",
+      "text": "Tip: Sit up straight. Your character can't, but you can."
+    },
+    {
+      "id": "h015",
+      "text": "Did you know? Nobody actually knows what the 99% is doing."
+    },
+    {
+      "id": "h016",
+      "text": "Hint: The saves aren't in any order. Or they are and you haven't noticed."
+    },
+    {
+      "id": "h017",
+      "text": "Tip: The music changes when something's coming."
+    },
+    {
+      "id": "h019",
+      "text": "Tip: Dragons hoard gold because they don't trust banks."
+    },
+    {
+      "id": "h01a",
+      "text": "Tip: Being stuck usually means you're close."
+    },
+    {
+      "id": "h01c",
+      "text": "Tip: Frogs know things. Don't ask them."
+    },
+    {
+      "id": "h01d",
+      "text": "Hint: The rain at the end is the same rain as the start."
+    },
+    {
+      "id": "h01e",
+      "text": "Tip: Breathe in for four, out for six."
+    },
+    {
+      "id": "h01f",
+      "text": "Tip: Try sneaking. The worst that happens is a fight."
+    },
+    {
+      "id": "h01g",
+      "text": "Lore: The apprentice makes the best swords. Nobody tells the blacksmith."
+    },
+    {
+      "id": "h01h",
+      "text": "Tip: Some doors are just painted on."
+    },
+    {
+      "id": "h01i",
+      "text": "Tip: Not every hill needs climbing."
+    },
+    {
+      "id": "h01j",
+      "text": "Lore: Nobody remembers who built the first save point. It was just there one day."
+    },
+    {
+      "id": "h01k",
+      "text": "Lore: The mapmaker drew a dragon in the corner. Then one moved in."
+    },
+    {
+      "id": "h01l",
+      "text": "Hint: The memory always comes last. Patience pays."
+    },
+    {
+      "id": "h01m",
+      "text": "Tip: You're allowed to start again."
+    },
+    {
+      "id": "h01n",
+      "text": "Tip: Nobody likes the ice level. Just get through it."
+    },
+    {
+      "id": "h01o",
+      "text": "Tip: Pigeons have nowhere to be and still look busy."
+    },
+    {
+      "id": "h01p",
+      "text": "Hint: If the bar goes backwards, close your eyes and count to ten."
+    },
+    {
+      "id": "h01q",
+      "text": "Tip: It's alright to play on easy."
+    },
+    {
+      "id": "h01r",
+      "text": "Lore: The save point in the forest is older than the forest."
+    },
+    {
+      "id": "h01s",
+      "text": "Tip: The boss has a pattern. So do you."
+    },
+    {
+      "id": "h01t",
+      "text": "Tip: If the boss is too hard, go and level up somewhere quiet."
+    },
+    {
+      "id": "h01u",
+      "text": "Tip: You've watched this far. You may as well stay."
+    },
+    {
+      "id": "h01v",
+      "text": "Tip: You can't carry everything. Most of it was junk anyway."
+    },
+    {
+      "id": "h01w",
+      "text": "Tip: Hit the wall. Hollow walls sound different."
+    },
+    {
+      "id": "h01x",
+      "text": "Tip: Crows remember faces. Be nice to crows."
+    },
+    {
+      "id": "h01y",
+      "text": "Tip: Some quests only turn up when you stop looking for them."
+    },
+    {
+      "id": "h01z",
+      "text": "Tip: Blink. Screens make you forget."
+    },
+    {
+      "id": "h020",
+      "text": "Tip: Bridges look safer than they are."
+    },
+    {
+      "id": "h021",
+      "text": "Tip: You don't lose anything by looking at the map."
+    },
+    {
+      "id": "h023",
+      "text": "Tip: Say thank you to the bus driver."
+    },
+    {
+      "id": "h025",
+      "text": "Tip: Skip the cutscene if you like. Nobody's checking."
+    },
+    {
+      "id": "h026",
+      "text": "Hint: The memory doesn't lie. It just leaves things out."
+    },
+    {
+      "id": "h027",
+      "text": "Tip: You can save without finishing."
+    },
+    {
+      "id": "h028",
+      "text": "Tip: Enemies can't climb ladders. Usually."
+    },
+    {
+      "id": "h029",
+      "text": "Lore: The castle has a room with no door. The window is lit at night."
+    },
+    {
+      "id": "h02a",
+      "text": "Tip: Don't trust a chest in an empty room."
+    },
+    {
+      "id": "h02b",
+      "text": "Tip: Please don't touch the screen. Or do. It's your screen."
+    },
+    {
+      "id": "h02c",
+      "text": "Tip: Every NPC has somewhere they'd rather be."
+    },
+    {
+      "id": "h02d",
+      "text": "Tip: Slimes are mostly harmless. Mostly."
+    },
+    {
+      "id": "h02e",
+      "text": "Tip: You should pet the dog."
+    },
+    {
+      "id": "h02f",
+      "text": "Tip: Some bosses only want to be left alone."
+    },
+    {
+      "id": "h02g",
+      "text": "Lore: The first player saved in a field. The field is still there."
+    },
+    {
+      "id": "h02h",
+      "text": "Hint: Somewhere in here is a hint that's actually useful."
+    },
+    {
+      "id": "h02i",
+      "text": "Tip: Doors that need three keys usually lead to a fourth door."
+    },
+    {
+      "id": "h02j",
+      "text": "Hint: The playtime is real. Don't ask whose."
+    },
+    {
+      "id": "h02k",
+      "text": "Tip: The tutorial was the easy bit. Sorry."
+    },
+    {
+      "id": "h02l",
+      "text": "Tip: Ducks are always watching. They mean well."
+    },
+    {
+      "id": "h02m",
+      "text": "Tip: Turn the brightness down after midnight."
+    },
+    {
+      "id": "h02n",
+      "text": "Did you know? Some games hide their loading inside a long lift ride."
+    },
+    {
+      "id": "h02o",
+      "text": "Tip: The ending isn't the point. Probably."
+    },
+    {
+      "id": "h02p",
+      "text": "Tip: Healing items are for using, not hoarding."
+    },
+    {
+      "id": "h02q",
+      "text": "Tip: That potion you're saving for the right moment. This might be it."
+    },
+    {
+      "id": "h02r",
+      "text": "Tip: The best loot is usually at the end of the long way round."
+    },
+    {
+      "id": "h02s",
+      "text": "Did you know? A memory card held about fifteen saves, if you were careful."
+    },
+    {
+      "id": "h02t",
+      "text": "Did you know? Saving used to mean waiting. It still does, a bit."
+    },
+    {
+      "id": "h02u",
+      "text": "Did you know? This video ends exactly where it started."
+    },
+    {
+      "id": "h02v",
+      "text": "Tip: Not every sound is an enemy."
+    },
+    {
+      "id": "h02w",
+      "text": "Tip: Eat something that didn't come out of a packet."
+    },
+    {
+      "id": "h02x",
+      "text": "Tip: Invisible walls are there to keep you safe. From what, nobody says."
+    },
+    {
+      "id": "h02y",
+      "text": "Tip: Bring a torch. Bring two."
+    },
+    {
+      "id": "h030",
+      "text": "Tip: Strafing is just walking sideways with confidence."
+    },
+    {
+      "id": "h031",
+      "text": "Did you know? Your thumb has scrolled a long way today."
+    },
+    {
+      "id": "h032",
+      "text": "Lore: The clock tower stopped at 4:12 and nobody ever wound it again."
+    },
+    {
+      "id": "h033",
+      "text": "Tip: Break every pot. Someone has to."
+    },
+    {
+      "id": "h034",
+      "text": "Tip: Nobody ever regretted an early night."
+    },
+    {
+      "id": "h035",
+      "text": "Tip: The fog hides more than it shows."
+    },
+    {
+      "id": "h036",
+      "text": "Tip: The wizard is late. Wizards are always late."
+    },
+    {
+      "id": "h037",
+      "text": "Tip: You can skip the dialogue. Or you could listen for once."
+    },
+    {
+      "id": "h038",
+      "text": "Tip: Bards will write a song about anything. Be careful what you do."
+    },
+    {
+      "id": "h039",
+      "text": "Tip: When in doubt, ask the old man by the well."
+    },
+    {
+      "id": "h03a",
+      "text": "Tip: The person next to you might fancy a cup of tea."
+    },
+    {
+      "id": "h03b",
+      "text": "Tip: Never trust a merchant who's pleased to see you."
+    },
+    {
+      "id": "h03c",
+      "text": "Tip: Press nothing for a moment and see what happens."
+    },
+    {
+      "id": "h03d",
+      "text": "Tip: Cooked food heals more than raw. Ask anyone."
+    },
+    {
+      "id": "h03e",
+      "text": "Did you know? Old cartridges kept your save alive with a tiny battery."
+    },
+    {
+      "id": "h03f",
+      "text": "Tip: Drop your shoulders. There, that's better."
+    },
+    {
+      "id": "h03g",
+      "text": "Tip: Don't sell the thing you don't understand yet."
+    },
+    {
+      "id": "h03h",
+      "text": "Tip: Statues that blink are not statues."
+    },
+    {
+      "id": "h03i",
+      "text": "Hint: You can watch it again. It loops for you."
+    },
+    {
+      "id": "h03j",
+      "text": "Tip: Saving often never hurt anyone."
+    },
+    {
+      "id": "h03k",
+      "text": "Tip: Talk to everyone in town twice."
+    },
+    {
+      "id": "h03l",
+      "text": "Tip: Your progress is precious. Be gentle with it."
+    },
+    {
+      "id": "h03m",
+      "text": "Tip: Jumping on things solves more problems than it should."
+    },
+    {
+      "id": "h03n",
+      "text": "Did you know? The darker the spot, the heavier the character."
+    },
+    {
+      "id": "h03o",
+      "text": "Tip: Charge your phone before you need to."
+    },
+    {
+      "id": "h03p",
+      "text": "Lore: The ghost in the east wing is mostly just lonely."
+    },
+    {
+      "id": "h03q",
+      "text": "Tip: Mushrooms in caves are not lunch."
+    },
+    {
+      "id": "h03r",
+      "text": "Tip: You don't have to finish every side quest."
+    },
+    {
+      "id": "h03s",
+      "text": "Tip: Sell the rusty sword. You're not going back for it."
+    },
+    {
+      "id": "h03t",
+      "text": "Lore: The inn has thirteen rooms. The key rack has fourteen hooks."
+    },
+    {
+      "id": "h03v",
+      "text": "Tip: A suspiciously good sword is suspicious for a reason."
+    },
+    {
+      "id": "h03w",
+      "text": "Tip: Keep a notebook. Ideas don't save themselves."
+    },
+    {
+      "id": "h03x",
+      "text": "Tip: When in doubt, go left."
+    },
+    {
+      "id": "h03y",
+      "text": "Tip: Fast travel is lovely, but you miss things."
+    },
+    {
+      "id": "h03z",
+      "text": "Tip: Not all progress shows up on a bar."
+    },
+    {
+      "id": "h040",
+      "text": "Tip: Keep the receipt."
+    },
+    {
+      "id": "h041",
+      "text": "Did you know? Old televisions gave off a high whine only some people could hear."
+    },
+    {
+      "id": "h042",
+      "text": "Tip: Moths are just butterflies who work nights."
+    },
+    {
+      "id": "h043",
+      "text": "Tip: Turn the subtitles on. You've been missing half the jokes."
+    },
+    {
+      "id": "h044",
+      "text": "Did you know? This hint was chosen just for you. It wasn't, but it's a nice thought."
+    },
+    {
+      "id": "h045",
+      "text": "Tip: Take your time. This isn't a speedrun."
+    },
+    {
+      "id": "h046",
+      "text": "Tip: Text them back. You've been meaning to."
+    },
+    {
+      "id": "h047",
+      "text": "Hint: No save loads the same way twice."
+    },
+    {
+      "id": "h048",
+      "text": "Lore: The lighthouse keeper still lights it. Nobody's told her the ships stopped."
+    },
+    {
+      "id": "h049",
+      "text": "Tip: Back up the photos. You know the ones."
+    },
+    {
+      "id": "h04a",
+      "text": "Tip: Go to bed. The internet will keep."
+    },
+    {
+      "id": "h04b",
+      "text": "Tip: Put your phone face down for a bit after this."
+    },
+    {
+      "id": "h04c",
+      "text": "Hint: This save is one of many. Keep scrolling and you'll find another."
+    },
+    {
+      "id": "h04d",
+      "text": "Tip: If a stranger offers you a quest, at least ask what it pays."
+    },
+    {
+      "id": "h04e",
+      "text": "Did you know? Some early save files were smaller than this sentence."
+    },
+    {
+      "id": "h04f",
+      "text": "Tip: There's always one more room."
+    },
+    {
+      "id": "h04g",
+      "text": "Lore: The merchant doesn't know where he gets his stock either."
+    },
+    {
+      "id": "h04h",
+      "text": "Tip: Check behind the waterfall."
+    },
+    {
+      "id": "h04i",
+      "text": "Tip: Stopping for a bit isn't quitting."
+    },
+    {
+      "id": "h04j",
+      "text": "Did you know? You've made it past the first three seconds. Most people don't."
+    },
+    {
+      "id": "h04k",
+      "text": "Tip: It's later than you think. It always is."
+    },
+    {
+      "id": "h04l",
+      "text": "Tip: The thing you lost is under the sofa."
+    },
+    {
+      "id": "h04n",
+      "text": "Tip: Hum along. Nobody can hear you."
+    },
+    {
+      "id": "h04o",
+      "text": "Did you know? Loading screens are there so the game can think. You're allowed to as well."
+    },
+    {
+      "id": "h04p",
+      "text": "Hint: Watch the last second. Then watch the first one again."
+    },
+    {
+      "id": "h04q",
+      "text": "Hint: This one doesn't help. The next one might."
+    },
+    {
+      "id": "h04r",
+      "text": "Tip: Leave the campfire going. Someone else might need it."
+    },
+    {
+      "id": "h04s",
+      "text": "Tip: Nobody plays it the way the guide says."
+    },
+    {
+      "id": "h04t",
+      "text": "Hint: The bar always sticks at 99%. Nobody knows why."
+    },
+    {
+      "id": "h04u",
+      "text": "Tip: The chicken is stronger than it looks. Leave it alone."
+    },
+    {
+      "id": "h04v",
+      "text": "Tip: Nobody has it all figured out. Not even the wise old man."
+    },
+    {
+      "id": "h04w",
+      "text": "Lore: There was a hero here once. The statue is better looking."
+    },
+    {
+      "id": "h04x",
+      "text": "Lore: The cartographer never finished the map. He kept moving the edge."
+    },
+    {
+      "id": "h04y",
+      "text": "Tip: Stretch. Your legs have been loading too."
+    },
+    {
+      "id": "h04z",
+      "text": "Tip: If you're reading this, it's working."
+    },
+    {
+      "id": "h050",
+      "text": "Tip: Write the code down. You'll forget it."
+    },
+    {
+      "id": "h051",
+      "text": "Lore: Somebody keeps leaving flowers at the save point by the gate."
+    },
+    {
+      "id": "h052",
+      "text": "Lore: Nobody in the village has seen the sea. They talk about it anyway."
+    },
+    {
+      "id": "h053",
+      "text": "Tip: Water the plants. They've been patient."
+    },
+    {
+      "id": "h054",
+      "text": "Tip: Footsteps that stop when you stop are worth noting."
+    },
+    {
+      "id": "h055",
+      "text": "Lore: Every slot used to belong to somebody."
+    },
+    {
+      "id": "h056",
+      "text": "Did you know? One frame of this video holds more characters than a page of a novel."
+    },
+    {
+      "id": "h057",
+      "text": "Tip: The village fool knows where the treasure is."
+    },
+    {
+      "id": "h059",
+      "text": "Tip: If you get lost, follow the river."
+    },
+    {
+      "id": "h05a",
+      "text": "Tip: Owls aren't wise. They're just quiet."
+    },
+    {
+      "id": "h05c",
+      "text": "Did you know? This save took longer to make than it does to watch."
+    },
+    {
+      "id": "h05d",
+      "text": "Tip: The red barrel is red for a reason."
+    },
+    {
+      "id": "h05e",
+      "text": "Did you know? You blink less when you look at a screen."
+    },
+    {
+      "id": "h05g",
+      "text": "Lore: The tavern sign has been repainted eleven times. It's still spelt wrong."
+    },
+    {
+      "id": "h05h",
+      "text": "Tip: Take the stairs. The lift isn't coming."
+    },
+    {
+      "id": "h05i",
+      "text": "Tip: Ring your mum. Or whoever you'd ring."
+    },
+    {
+      "id": "h05j",
+      "text": "Tip: Read the sign again. It might say something different this time."
+    },
+    {
+      "id": "h05k",
+      "text": "Tip: Unclench your jaw."
+    },
+    {
+      "id": "h05l",
+      "text": "Tip: Scrolling away now will not save your progress."
+    },
+    {
+      "id": "h05m",
+      "text": "Lore: The well in the square is deeper than anyone has measured."
+    },
+    {
+      "id": "h05n",
+      "text": "Tip: Grinding is just patience with a sword."
+    },
+    {
+      "id": "h05o",
+      "text": "Did you know? People made pictures out of typed characters long before screens."
+    },
+    {
+      "id": "h05p",
+      "text": "Tip: Read the item descriptions. Someone worked hard on them."
+    },
+    {
+      "id": "h05q",
+      "text": "Did you know? You've been holding your phone the same way for a while now."
+    },
+    {
+      "id": "h05r",
+      "text": "Lore: The old road goes somewhere. Nobody's walked far enough to find out."
+    },
+    {
+      "id": "h05s",
+      "text": "Tip: Losing is just saving with extra steps."
+    },
+    {
+      "id": "h05t",
+      "text": "Tip: Some days are just loading screens. That's fine."
+    },
+    {
+      "id": "h05u",
+      "text": "Tip: There's no shame in looking it up."
+    },
+    {
+      "id": "h05v",
+      "text": "Tip: If a door won't open, it's probably not your door yet."
+    },
+    {
+      "id": "h05w",
+      "text": "Tip: The strange noise in the cellar is probably fine."
+    },
+    {
+      "id": "h05x",
+      "text": "Lore: The children's rhyme about the tower is a set of directions."
+    },
+    {
+      "id": "h05y",
+      "text": "Tip: An empty room is rarely empty."
+    },
+    {
+      "id": "h05z",
+      "text": "Lore: The hermit came down the mountain once, bought bread, and went back up."
+    },
+    {
+      "id": "h060",
+      "text": "Did you know? Some old games gave you a password to write down instead of saving."
+    },
+    {
+      "id": "h061",
+      "text": "Tip: You're doing better than your stats say."
+    },
+    {
+      "id": "h062",
+      "text": "Tip: The washing's probably done."
+    },
+    {
+      "id": "h063",
+      "text": "Tip: Yellow paint usually means you can climb it."
+    },
+    {
+      "id": "h064",
+      "text": "Hint: Read the journal if you want. It goes further."
+    },
+    {
+      "id": "h065",
+      "text": "Did you know? A floppy disk holds 1.44 megabytes. This video is bigger."
+    },
+    {
+      "id": "h066",
+      "text": "Tip: Every lever does something. Some of them do something bad."
+    },
+    {
+      "id": "h067",
+      "text": "Lore: The last save in this slot was made in the rain."
+    },
+    {
+      "id": "h068",
+      "text": "Tip: Hold the button down. Some things take a while."
+    },
+    {
+      "id": "h069",
+      "text": "Tip: Open a window for a bit."
+    },
+    {
+      "id": "h06a",
+      "text": "Hint: The picture was always there. It just needed saving."
+    },
+    {
+      "id": "h06b",
+      "text": "Lore: They say the save crystals hum when you're not looking."
+    },
+    {
+      "id": "h06c",
+      "text": "Tip: The shopkeeper will still be there tomorrow."
+    },
+    {
+      "id": "h06d",
+      "text": "Hint: There are more hints than saves. For now."
+    },
+    {
+      "id": "h06e",
+      "text": "Tip: Tidy one thing. Just one."
+    },
+    {
+      "id": "h06f",
+      "text": "Tip: Check your pockets before the wash."
+    },
+    {
+      "id": "h06g",
+      "text": "Tip: Walking into walls sometimes works. Not often, but sometimes."
+    },
+    {
+      "id": "h06i",
+      "text": "Tip: Come back at night. Things are different."
+    },
+    {
+      "id": "h06j",
+      "text": "Tip: Mimics hate being called chests."
+    },
+    {
+      "id": "h06k",
+      "text": "Hint: You missed something in the last save."
+    },
+    {
+      "id": "h06l",
+      "text": "Tip: Don't turn off your phone. We did mention that."
+    },
+    {
+      "id": "h06m",
+      "text": "Tip: Did you leave the hob on? Probably not. Go and check anyway."
+    },
+    {
+      "id": "h06n",
+      "text": "Tip: The horse will find you. Give it a minute."
+    },
+    {
+      "id": "h06o",
+      "text": "Tip: Drink some water."
+    },
+    {
+      "id": "h06p",
+      "text": "Tip: Read the books on the shelves. One of them is real."
+    },
+    {
+      "id": "h06q",
+      "text": "Tip: Put the kettle on. It's never a bad idea."
+    },
+    {
+      "id": "h06r",
+      "text": "Tip: Saying no to a quest is allowed."
+    },
+    {
+      "id": "h06s",
+      "text": "Tip: Some of the best saves are in the most boring places."
+    },
+    {
+      "id": "h06t",
+      "text": "Tip: If it glows, it's probably important."
+    },
+    {
+      "id": "h06u",
+      "text": "Tip: Some saves hide something. Keep your eyes open."
+    },
+    {
+      "id": "h06v",
+      "text": "Tip: The snail gets there in the end. Be more snail."
+    },
+    {
+      "id": "h06w",
+      "text": "Tip: Some of the townsfolk remember what you did."
+    },
+    {
+      "id": "h06x",
+      "text": "Hint: The saves are numbered for a reason."
+    },
+    {
+      "id": "h06y",
+      "text": "Tip: The thing you're looking for is in the last place you look."
+    }
+  ]
+}

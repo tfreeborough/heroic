@@ -3,7 +3,7 @@
  * window over a recording, remembered settings.
  */
 import { memo, useEffect, useRef } from "react";
-import { type Box, boxAspect, fitBox } from "@heroic/voiceover";
+import { type Box, type Card, boxAspect, fitBox } from "@heroic/voiceover";
 import { PEAKS_PER_SECOND } from "../mic";
 
 export const remember = (key: string, value?: string): string => {
@@ -17,10 +17,10 @@ export const remember = (key: string, value?: string): string => {
 export const stem = (file: string) => file.replace(/\.[^.]+$/, "");
 
 /** Row heights on the timeline, px. */
-export const ROW = { ruler: 22, video: 58, audio: 56, words: 30, music: 24 };
+export const ROW = { ruler: 22, cards: 30, video: 58, audio: 56, words: 30, music: 24 };
 
 /** What's being dragged out of the library over the timeline (the browser's drag data can't be read until the drop, so it sits here). */
-export type DragPayload = { kind: "footage"; file: string; seconds: number } | { kind: "take"; take: number; seconds: number };
+export type DragPayload = { kind: "footage"; file: string; seconds: number } | { kind: "take"; take: number; seconds: number } | { kind: "card"; card: Card; seconds: number };
 export const dragPayload: { current: DragPayload | null } = { current: null };
 
 /** One audio clip's sound, drawn. Re-draws only when its slice or size changes. */

@@ -3,7 +3,7 @@ import type { Binned } from "../lib/footage";
 import type { ImportJob } from "../lib/imports";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
-import type { Idea, IdeaPatch } from "../lib/ideas";
+import type { Script, ScriptPatch, ScriptSummary } from "../lib/scripts";
 import type { Platform, Post, Schedule } from "../lib/schedule";
 import type { CleanupSpec, FootageSidecar } from "../lib/sidecar";
 import type { Sequence, Take, VoiceOver } from "@heroic/voiceover";
@@ -27,10 +27,10 @@ export type Clip = FootageSidecar & {
   /** An edit: its markers' times, in order. */
   markers?: number[];
   sources?: number;
-  /** An edit: the idea (Ideas tab) it's making, by id. */
+  /** An edit: the script (Scripts tab) it's making, by id. */
   idea?: string;
 };
-export type { Batch, Binned, Idea, IdeaPatch, ImportJob, Job, Platform, Post, Render, Schedule, VoiceSummary, WhisperStatus };
+export type { Batch, Binned, Script, ScriptPatch, ScriptSummary, ImportJob, Job, Platform, Post, Render, Schedule, VoiceSummary, WhisperStatus };
 /** What /api/games says about a game — enough for the page; templates load separately. */
 export type GameInfo = { id: string; name: string; icon: string; fps: number; formats: Record<string, FormatSpec>; footageFolderId: string; footageDir: string; rendersDir: string; footagePublic: string };
 /** An edit as the server lists it: `path` is what a template's clip prop takes. */
@@ -151,12 +151,27 @@ export const gameApi = (game: string) => {
     ignore: (batch: string, ignored: boolean) =>
       fetch(`${base}/batches/${enc(batch)}/ignore`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ignored }) }).then((r) => j<Schedule>(r)),
 
-    /** The ideas list (Ideas tab): every call returns the whole list, newest first. */
-    ideas: () => fetch(`${base}/ideas`).then((r) => j<Idea[]>(r)),
-    addIdea: (title: string, description = "") => post(`${base}/ideas`, { title, description }).then((r) => j<Idea[]>(r)),
-    updateIdea: (id: string, patch: IdeaPatch) =>
-      fetch(`${base}/ideas/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Idea[]>(r)),
-    removeIdea: (id: string) => fetch(`${base}/ideas/${enc(id)}`, { method: "DELETE" }).then((r) => j<Idea[]>(r)),
+    /** The Scripts tab. `claude` = the server has a key and the game a script voice, so the rewrite steps are on. */
+    scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean }>(r)),
+    /** `pending`: beats whose sketch is being made right now. */
+    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[] }>(r)),
+    /** A recording → a take on the script (saved, transcribed). */
+    addScriptTake: (id: string, audio: Blob, opts: { tidy: boolean; denoise?: number; ext?: string }) =>
+      fetch(`${base}/scripts/${enc(id)}/takes?tidy=${opts.tidy ? 1 : 0}&denoise=${opts.denoise ?? 0}&ext=${enc(opts.ext ?? "wav")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: audio }).then((r) => j<Take & { error?: string }>(r)),
+    removeScriptTake: (id: string, file: string) => fetch(`${base}/scripts/${enc(id)}/takes/${enc(file)}`, { method: "DELETE" }).then((r) => j<Script>(r)),
+    organise: (id: string) => post(`${base}/scripts/${enc(id)}/organise`).then((r) => j<{ script: Script; made: { cut: string; title: string; id: string; missing: string[]; conflicts: { beat: string; takes: string[] }[] }[] }>(r)),
+    planVisuals: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/plan${all ? "?all=1" : ""}`).then((r) => j<Script>(r)),
+    makeSketches: (id: string, beats?: string[]) => post(`${base}/scripts/${enc(id)}/sketches`, { beats }).then((r) => j<{ started: number }>(r)),
+    addScript: (title: string, source = "") => post(`${base}/scripts`, { title, source }).then((r) => j<Script>(r)),
+    updateScript: (id: string, patch: ScriptPatch) =>
+      fetch(`${base}/scripts/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Script>(r)),
+    removeScript: (id: string) => fetch(`${base}/scripts/${enc(id)}`, { method: "DELETE" }).then((r) => j<{ ok: true }>(r)),
+    /** The Claude steps; each answers with the whole script. */
+    rewriteScript: (id: string) => post(`${base}/scripts/${enc(id)}/rewrite`).then((r) => j<Script>(r)),
+    adjustScript: (id: string) => post(`${base}/scripts/${enc(id)}/adjust`).then((r) => j<Script>(r)),
+    redoBeat: (id: string, cut: string, beat: string, instruction: string) => post(`${base}/scripts/${enc(id)}/redo`, { cut, beat, instruction }).then((r) => j<Script>(r)),
+    redoCut: (id: string, cut: string, instruction: string) => post(`${base}/scripts/${enc(id)}/redo`, { cut, instruction }).then((r) => j<Script>(r)),
+    anotherShort: (id: string, instruction: string) => post(`${base}/scripts/${enc(id)}/short`, { instruction }).then((r) => j<Script>(r)),
     unqueue: (id: string) => fetch(`${base}/schedule/${enc(id)}`, { method: "DELETE" }).then((r) => j<Schedule>(r)),
   };
 };

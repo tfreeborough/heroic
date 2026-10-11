@@ -1,0 +1,430 @@
+/**
+ * The Saves tab's server side (docs/design/save-point-channel.md, stage 4):
+ * picture ideas and words from Claude, pictures from GPT Image, and the
+ * finished save written into public/saves. The Desk loads this file by
+ * path at start and mounts each route at /api/autosave/x/<name>.
+ *
+ * Keys come from apps/desk/.env (ANTHROPIC_API_KEY, OPENAI_API_KEY), which
+ * Bun loads for the Desk. Everything Claude writes is a draft: the boxes
+ * on the tab are Tom's, and the sidecar keeps what's in them at Save.
+ */
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { generateImage } from "@heroic/forge";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { z } from "zod";
+import type { GameRoutes } from "../desk/game";
+import { exec } from "../desk/lib/exec";
+import * as hints from "./scripts/hints";
+import { type SaveSidecar, syncLibrary } from "./scripts/sync-library";
+import { TAGLINE_MAX } from "./src/words";
+import { EMPTY_LEDGER, type Ledger, playtimeFor, record, resolveEgg } from "./src/eggs";
+import { type TuneProps, tuneFile } from "./src/music/tune";
+
+const SAVES = join(import.meta.dir, "public/saves");
+const MUSIC = join(import.meta.dir, "public/music");
+
+/** Generated tunes kept (newest first): every memory edit makes a new one, so the folder is trimmed. */
+const KEEP_TUNES = 40;
+const trimTunes = () => {
+  const dir = join(MUSIC, "generated");
+  if (!existsSync(dir)) return;
+  const files = readdirSync(dir).filter((f) => f.endsWith(".wav")).map((f) => ({ f, t: statSync(join(dir, f)).mtimeMs }));
+  for (const { f } of files.sort((a, b) => b.t - a.t).slice(KEEP_TUNES)) rmSync(join(dir, f));
+};
+
+/** Tunes being made right now, by file, so a second ask waits on the first. */
+const making = new Map<string, Promise<{ file?: string; error?: string }>>();
+const DRAFTS = join(SAVES, "drafts");
+const ASCII = join(SAVES, "ascii");
+const MODEL = "claude-opus-5-5";
+/** Pictures per Generate press. */
+const ROUND = 3;
+
+/** The look that reads as glyphs. Glyphs grow where the picture is WHITE, so the subject is carved out by
+ * light (a black silhouette builds as a hole). Full bleed with the frame's edges in shadow: the black builds as
+ * nothing (ascii-build shadow "auto"), so the lit parts float on the screen with the dither edge. Tom turned down
+ * the vignette circle and irregular cut-outs (10-10 re-shoot test; the old "large and centred" line made flat
+ * catalogue shots). */
+const STYLE =
+  "Black ink woodcut / linocut print on plain white paper, framed like a still from a film with a deliberate camera angle. " +
+  "Chiaroscuro: one strong light source carves the subject out of darkness, so the lit faces, hands and surfaces are bright white and carry the detail, " +
+  "the shadow side falls into solid black. The subject is drawn by light, never as a flat black silhouette. " +
+  "The dark scene runs right off every edge of the frame, full bleed, and the edges of the frame fall into solid black shadow: nothing lit touches the border. " +
+  "No circle, oval or vignette, no white paper showing. Big simple shapes, high contrast, no mid-grey, no text, no border.";
+
+export type Words = { memory: string[]; tagline: string[]; title: string[] };
+export type Draft = {
+  id: string;
+  created: number;
+  /** Tom's idea in his own words, if he gave one. */
+  idea: string;
+  /** What the picture model is asked for (the style is added on top). */
+  prompt: string;
+  /** Under public/, newest last. */
+  pictures: string[];
+  /** Pictures still being made (this Desk run only). */
+  pending: number;
+  errors: string[];
+  chosen?: string;
+  /** Claude's options; the boxes below are what Tom has made of them. */
+  words?: Words;
+  memory: string;
+  tagline: string;
+  title: string;
+  journal: string;
+  name: string;
+};
+
+const pending = new Map<string, number>();
+const safe = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "");
+const draftFile = (id: string) => join(DRAFTS, safe(id), "draft.json");
+const read = (id: string): Draft | undefined => {
+  const f = draftFile(id);
+  return existsSync(f) ? { ...(JSON.parse(readFileSync(f, "utf8")) as Draft), pending: pending.get(id) ?? 0 } : undefined;
+};
+/** Read, change, write: small and synchronous, so two pictures landing together can't lose one. */
+const change = (id: string, fn: (d: Draft) => void): Draft => {
+  const d = read(id);
+  if (!d) throw new Error("that draft has gone");
+  fn(d);
+  writeFileSync(draftFile(id), JSON.stringify({ ...d, pending: 0 }, null, 2));
+  return { ...d, pending: pending.get(id) ?? 0 };
+};
+const list = (): Draft[] =>
+  existsSync(DRAFTS)
+    ? readdirSync(DRAFTS)
+        .map((id) => read(id))
+        .filter((d): d is Draft => Boolean(d))
+        .sort((a, b) => b.created - a.created)
+    : [];
+
+const body = async <T>(req: Request) => (await req.json()) as T;
+const clean = (s: string) => s.replace(/—/g, ", ").replace(/\s+/g, " ").trim();
+
+/** Kick off a round of pictures; each is saved onto the draft as it lands. */
+const generate = (id: string, prompt: string) => {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
+  pending.set(id, (pending.get(id) ?? 0) + ROUND);
+  for (let i = 0; i < ROUND; i++) {
+    void generateImage(key, `${prompt.trim()} ${STYLE}`, "1024x1024", "opaque")
+      .then((png) => {
+        const dir = join(DRAFTS, safe(id));
+        let n = 1;
+        while (existsSync(join(dir, `${n}.png`))) n++;
+        writeFileSync(join(dir, `${n}.png`), png);
+        change(id, (d) => d.pictures.push(`saves/drafts/${safe(id)}/${n}.png`));
+      })
+      .catch((e: Error) => {
+        if (read(id)) change(id, (d) => d.errors.push(e.message.slice(0, 300)));
+      })
+      .finally(() => pending.set(id, Math.max(0, (pending.get(id) ?? 1) - 1)));
+  }
+};
+
+// ── Claude ──
+
+const ABOUT = [
+  "Autosave (@autosave.ascii) is a TikTok channel run by one person, Tom. Every video is a fake video-game save screen:",
+  "'Please wait while we save your progress.' A picture builds itself out of green ASCII characters, Matrix style, while a save bar fills,",
+  "then 'Save complete. You may now continue scrolling.' A line labelled MEMORY reveals what the picture was. Each video is a numbered save slot.",
+  "The mood: quiet, nostalgic, a little cryptic, like the save points in old games, but the saves are ordinary moments of a life as much as places.",
+].join(" ");
+
+const VOICE = [
+  "Write like Tom talking: plain, British spelling, everyday words, dry and a little wistful. No em dashes, no exclamation marks, no emoji,",
+  "no hashtags, no ALL CAPS, no slogans or three-beat lists, nothing that sounds like an advert.",
+].join(" ");
+
+const ask = async <T extends z.ZodTypeAny>(system: string, content: Anthropic.MessageParam["content"], out: T): Promise<z.infer<T>> => {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error("no ANTHROPIC_API_KEY in apps/desk/.env");
+  const res = await new Anthropic().messages.parse({
+    model: MODEL,
+    max_tokens: 4096,
+    output_config: { effort: "low", format: zodOutputFormat(out) },
+    system,
+    messages: [{ role: "user", content }],
+  });
+  if (res.stop_reason === "refusal") throw new Error("Claude declined this one");
+  const parsed = res.parsed_output as z.infer<T> | null;
+  if (!parsed) throw new Error(`nothing usable came back (stop reason ${res.stop_reason})`);
+  return parsed;
+};
+
+const Ideas = z.object({
+  ideas: z.array(z.string()).min(6).max(6).describe("Six picture prompts, one sentence each."),
+});
+
+const suggest = async (idea: string): Promise<string[]> => {
+  const have = syncLibrary().saves.map((s) => `- ${s.prompt || s.memory}`);
+  const out = await ask(
+    [
+      ABOUT,
+      "",
+      "You suggest what the next saves could be a picture of. Each suggestion is a prompt for an image model, one plain sentence.",
+      "Write it as a shot from a film, not a catalogue photo. Each prompt says where the camera is (low, over a shoulder, close on hands, from inside the screen looking out),",
+      "what single light source there is (a screen, a lamp, a window, moonlight, a torch) and what it falls on, and the small human moment: a face, hands, someone waiting.",
+      "Light matters most: what the light falls on is what shows, so faces and hands lit by the light source read best; a dark figure against a bright background reads badly.",
+      "What reads well: one or two subjects, a few big shapes, a face lit up. What reads badly: busy scenes, crowds, maps, small detail, wide landscapes, text, anything that needs colour.",
+      "No style words (the style is added for you). No text in the picture. Mix places with moments: a first bike, a late night, a waiting room, a lighthouse.",
+    ].join("\n"),
+    [
+      idea.trim() ? `Tom's idea, riff on it (six different takes): ${idea.trim()}` : "Six ideas of your own, all different from each other.",
+      "",
+      "Already made (don't repeat these):",
+      ...have,
+    ].join("\n"),
+    Ideas,
+  );
+  return out.ideas.map(clean);
+};
+
+const WordsOut = z.object({
+  memory: z.array(z.string()).min(3).max(3).describe("Three MEMORY lines: first short (2 to 5 words, like 'The quiet hours'), then a medium one, then a longer descriptive one up to 110 characters. Sentence case, no full stop at the end."),
+  tagline: z.array(z.string()).min(3).max(3).describe(`Three one-line captions for under the video, each under ${TAGLINE_MAX} characters (TikTok cuts it there). Dry, a little cryptic, can talk to the viewer. The first few words must work on their own.`),
+  title: z.array(z.string()).min(3).max(3).describe("Three short save names, 2 to 5 words, for 'Save 07: <name>'. No full stop."),
+});
+
+const write = async (d: Draft, picture: string): Promise<Words> => {
+  const png = readFileSync(join(import.meta.dir, "public", picture));
+  const examples = syncLibrary().saves.filter((s) => !s.file.includes("/drafts/")).map((s) => `- MEMORY: ${s.memory}${s.tagline ? ` | tagline: ${s.tagline}` : ""} | title: ${s.title}`);
+  const out = await ask(
+    [
+      ABOUT,
+      "",
+      VOICE,
+      "",
+      "You write the words for one save: the MEMORY line revealed on screen, the caption under the video, and the save's name.",
+      "Look at the picture itself: write about what's actually there, as a memory someone might have of it, not a description of an illustration.",
+      "Never mention ASCII, pixels, drawings, characters or the video. Don't explain the joke.",
+      "",
+      "Saves Tom has already made, so you hear the voice:",
+      ...examples,
+    ].join("\n"),
+    [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: png.toString("base64") } },
+      { type: "text", text: [d.idea.trim() ? `Tom's idea: ${d.idea.trim()}` : "", `The prompt the picture came from: ${d.prompt}`].filter(Boolean).join("\n") },
+    ],
+    WordsOut,
+  );
+  return { memory: out.memory.map(clean), tagline: out.tagline.map(clean), title: out.title.map(clean) };
+};
+
+const JournalOut = z.object({
+  journal: z.string().describe("The journal entry: one to three short paragraphs, plain text, no headings."),
+});
+
+/** One journal entry to start from. Tom's own is the point; this is for when he's stuck. */
+const writeJournal = async (d: Draft, picture: string): Promise<string> => {
+  const png = readFileSync(join(import.meta.dir, "public", picture));
+  const out = await ask(
+    [
+      ABOUT,
+      "",
+      VOICE,
+      "",
+      "You write the JOURNAL for one save: the longer text behind TikTok's 'more' button, under the short tagline. It's a reward for the people who tap.",
+      "It can be a small story, a fragment of a save file, a note someone left, a log entry, a half-remembered detail. Specific and concrete beats grand.",
+      "One to three short paragraphs. It mustn't repeat the memory or the tagline; it goes somewhere they don't. Never mention ASCII, pixels, drawings or the video.",
+    ].join("\n"),
+    [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: png.toString("base64") } },
+      { type: "text", text: [`MEMORY (on screen): ${d.memory || "(not written yet)"}`, `Tagline (above the journal): ${d.tagline || "(not written yet)"}`, `The prompt the picture came from: ${d.prompt}`].join("\n") },
+    ],
+    JournalOut,
+  );
+  return out.journal.replace(/—/g, ", ").trim();
+};
+
+const writeAscii = (name: string, base64: string) => {
+  mkdirSync(ASCII, { recursive: true });
+  writeFileSync(join(ASCII, `${name}.png`), Buffer.from(base64.replace(/^data:image\/png;base64,/, ""), "base64"));
+};
+
+// ── routes ──
+
+export const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+type Fields = Partial<Pick<Draft, "idea" | "prompt" | "chosen" | "memory" | "tagline" | "title" | "journal" | "name">>;
+const FIELDS = ["idea", "prompt", "chosen", "memory", "tagline", "title", "journal", "name"] as const;
+
+// ── the slot ledger (public/slots.json): what each slot was rendered as ──
+
+const LEDGER = join(import.meta.dir, "public/slots.json");
+const readLedger = (): Ledger => (existsSync(LEDGER) ? (JSON.parse(readFileSync(LEDGER, "utf8")) as Ledger) : EMPTY_LEDGER);
+
+export const routes: GameRoutes = {
+  "GET slots": () => Response.json(readLedger()),
+
+  /** A Save was sent to render: note its slot, its real length, where its clock
+   * started and the egg it got (worked out exactly as the video does). */
+  "POST slot-rendered": async (req) => {
+    const { props, name = "" } = await body<{ props: Record<string, unknown>; name?: string }>(req);
+    const slot = Number(props.slot), seconds = Number(props.seconds), seed = Number(props.seed);
+    if (!Number.isInteger(slot) || slot < 1 || !(seconds > 0)) return Response.json({ error: "no slot or length" }, { status: 400 });
+    const l = readLedger();
+    const from = Number(props.playtimeFrom);
+    const entry = {
+      slot,
+      seconds,
+      playtimeFrom: from >= 0 ? from : playtimeFor(l, slot),
+      egg: resolveEgg(String(props.egg ?? "auto"), slot, seed, l).egg?.id ?? "",
+      batch: name,
+      renderedAt: new Date().toISOString(),
+    };
+    const next = record(l, entry);
+    writeFileSync(LEDGER, JSON.stringify(next, null, 2) + "\n");
+    return Response.json(next);
+  },
+
+  "GET drafts": () => Response.json({ drafts: list(), keys: { images: Boolean(process.env.OPENAI_API_KEY), words: Boolean(process.env.ANTHROPIC_API_KEY) } }),
+
+  "POST suggest": async (req) => Response.json({ ideas: await suggest((await body<{ idea?: string }>(req)).idea ?? "") }),
+
+  /** A new draft and its first round of pictures. */
+  "POST draft": async (req) => {
+    const { idea = "", prompt } = await body<{ idea?: string; prompt: string }>(req);
+    if (!prompt?.trim()) return Response.json({ error: "say what to draw first" }, { status: 400 });
+    const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    mkdirSync(join(DRAFTS, id), { recursive: true });
+    const d: Draft = { id, created: Date.now(), idea, prompt: prompt.trim(), pictures: [], pending: 0, errors: [], memory: "", tagline: "", title: "", journal: "", name: "" };
+    writeFileSync(draftFile(id), JSON.stringify(d, null, 2));
+    generate(id, d.prompt);
+    return Response.json(read(id));
+  },
+
+  /** Another round, from the prompt as it stands now. */
+  "POST more": async (req) => {
+    const { id, prompt } = await body<{ id: string; prompt?: string }>(req);
+    const d = change(id, (x) => {
+      if (prompt?.trim()) x.prompt = prompt.trim();
+      x.errors = [];
+    });
+    generate(id, d.prompt);
+    return Response.json(read(id));
+  },
+
+  /** Keep what Tom has typed or picked. */
+  "POST update": async (req) => {
+    const { id, ...patch } = await body<{ id: string } & Fields>(req);
+    return Response.json(
+      change(id, (d) => {
+        for (const k of FIELDS) if (typeof patch[k] === "string") d[k] = patch[k]!;
+      }),
+    );
+  },
+
+  /** Claude's options for the chosen picture. The boxes are the page's business. */
+  "POST words": async (req) => {
+    const { id, picture } = await body<{ id: string; picture: string }>(req);
+    const d = read(id);
+    if (!d) return Response.json({ error: "that draft has gone" }, { status: 404 });
+    if (!d.pictures.includes(picture)) return Response.json({ error: "that picture isn't in this draft" }, { status: 400 });
+    const words = await write(d, picture);
+    return Response.json(change(id, (x) => (x.words = words)));
+  },
+
+  /** A journal entry to start from (the page shows it beside Tom's own). */
+  "POST journal": async (req) => {
+    const { id } = await body<{ id: string }>(req);
+    const d = read(id);
+    if (!d?.chosen) return Response.json({ error: "pick a picture first" }, { status: 400 });
+    return Response.json({ journal: await writeJournal(d, d.chosen) });
+  },
+
+  /** Saves with no glyph copy yet (made before 10-10). */
+  "GET missing-ascii": () => Response.json({ saves: syncLibrary().saves.filter((s) => !s.ascii).map((s) => ({ name: s.name, file: s.file })) }),
+  /** A glyph copy the page drew: { name, png } (base64). */
+  "POST ascii": async (req) => {
+    const { name, png } = await body<{ name: string; png: string }>(req);
+    if (!existsSync(join(SAVES, `${safe(name)}.png`))) return Response.json({ error: `no save called ${name}` }, { status: 404 });
+    writeAscii(safe(name), png);
+    syncLibrary();
+    return Response.json({ ok: true });
+  },
+
+  /** Into the library: the picture, its sidecar, its glyph copy, a re-sync. The draft goes. */
+  "POST save": async (req) => {
+    const { id, picture, name, memory, tagline, title, journal = "", ascii } = await body<{ id: string; picture: string; name: string; memory: string; tagline: string; title: string; journal?: string; ascii?: string }>(req);
+    const d = read(id);
+    if (!d) return Response.json({ error: "that draft has gone" }, { status: 404 });
+    if (!d.pictures.includes(picture)) return Response.json({ error: "pick a picture first" }, { status: 400 });
+    const n = slug(name || title || memory);
+    if (!n || n === "drafts") return Response.json({ error: "give it a name" }, { status: 400 });
+    if (existsSync(join(SAVES, `${n}.png`))) return Response.json({ error: `there's already a save called ${n}` }, { status: 409 });
+    renameSync(join(import.meta.dir, "public", picture), join(SAVES, `${n}.png`));
+    // The journal is kept exactly as written, line breaks and all.
+    const side: SaveSidecar = { memory: clean(memory), tagline: clean(tagline), title: clean(title), journal: journal.trim(), prompt: d.prompt };
+    if (ascii) writeAscii(n, ascii);
+    writeFileSync(join(SAVES, `${n}.json`), JSON.stringify(side, null, 2) + "\n");
+    rmSync(join(DRAFTS, safe(id)), { recursive: true, force: true });
+    syncLibrary();
+    return Response.json({ file: `saves/${n}.png`, ...side });
+  },
+
+  "POST bin": async (req) => {
+    const { id } = await body<{ id: string }>(req);
+    rmSync(join(DRAFTS, safe(id)), { recursive: true, force: true });
+    pending.delete(id);
+    return Response.json({ ok: true });
+  },
+
+  // ── the Hints tab (scripts/hints.ts) ──
+
+  "GET hints": () => Response.json(hints.view()),
+  "POST hints-add": async (req) => {
+    const { text, top = false } = await body<{ text: string; top?: boolean }>(req);
+    return Response.json(hints.add(text ?? "", top));
+  },
+  "POST hints-edit": async (req) => {
+    const { id, text } = await body<{ id: string; text: string }>(req);
+    return Response.json(hints.edit(id, text ?? ""));
+  },
+  "POST hints-delete": async (req) => Response.json(hints.remove((await body<{ id: string }>(req)).id)),
+  "POST hints-order": async (req) => Response.json(hints.order((await body<{ ids: string[] }>(req)).ids ?? [])),
+  "POST hints-requeue": async (req) => Response.json(hints.requeue((await body<{ id: string }>(req)).id)),
+  /** A fresh Make form's pair: the top two of the queue. */
+  "GET hints-next": () => {
+    const [hint1 = "", hint2 = ""] = hints.next(2);
+    return Response.json({ hint1, hint2 });
+  },
+  /** A Render press: these are taken. */
+  "POST hints-used": async (req) => {
+    const { texts, name } = await body<{ texts: string[]; name: string }>(req);
+    return Response.json(hints.markUsed(texts ?? [], name || "video"));
+  },
+
+  /**
+   * A save's generated music (src/music/tune.ts): the file for these props,
+   * made if it isn't there yet. The making runs in its own process (8s of
+   * maths would freeze the Desk's server otherwise) and is cached by name, so
+   * asking again for the same props is instant.
+   */
+  "POST tune": async (req) => {
+    const p = await body<TuneProps>(req);
+    if (!(Number(p.slot) >= 1) || !(Number(p.seconds) > 0)) return Response.json({ error: "no slot or length" }, { status: 400 });
+    const file = tuneFile(p);
+    if (existsSync(join(MUSIC, file))) return Response.json({ file });
+    let job = making.get(file);
+    if (!job) {
+      const props = { slot: p.slot, tuneTake: p.tuneTake, tuneStyle: p.tuneStyle, seconds: p.seconds, memory: p.memory, title: p.title, tagline: p.tagline, journal: p.journal };
+      job = exec(["bun", "scripts/music.ts", "--props", JSON.stringify(props), "--out", join(MUSIC, file)], import.meta.dir)
+        .then((r) => {
+          if (!r.ok) return { error: r.err.trim().split("\n").pop() || "the tune didn't make" };
+          trimTunes();
+          return { file };
+        })
+        .finally(() => making.delete(file));
+      making.set(file, job);
+    }
+    const r = await job;
+    return Response.json(r, { status: r.error ? 500 : 200 });
+  },
+};

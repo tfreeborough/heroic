@@ -1,5 +1,6 @@
 /**
- * The timeline: the ruler with the markers, the video tracks (highest on
+ * The timeline: the ruler with the markers, the cards row (text, sketches,
+ * b-roll slots: docs/design/desk-scripts.md), the video tracks (highest on
  * top), the audio tracks, the words of the captions and the music lane.
  *
  * Everything is placed at its own time. Click a clip to pick it (shift-click
@@ -18,12 +19,13 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type * as React from "react";
-import { type AudioClip, type Clip, type PlacedWord, type Sequence, clipEnd, findAudio, findClip, moveAudio, moveMarker, moveVideo, pieceEnd, pieceSeconds, shiftClips, snapPoints, snapTo, timeTrack, trimAudioEnd, trimAudioStart, trimVideoEnd, trimVideoStart } from "@heroic/voiceover";
+import { type AudioClip, type Card, type Clip, type PlacedWord, type Sequence, cardEnd, cardLabel, clipEnd, findAudio, findCard, findClip, moveAudio, moveCard, moveMarker, moveVideo, pieceEnd, pieceSeconds, shiftClips, snapPoints, snapTo, timeTrack, trimAudioEnd, trimAudioStart, trimCardEnd, trimCardStart, trimVideoEnd, trimVideoStart } from "@heroic/voiceover";
 import type { GameApi, GameInfo } from "../api";
 import { fmtSeconds } from "../api";
 import { ROW, Wave, dragPayload, stem } from "./widgets";
 
-export type Kind = "video" | "audio";
+/** `overlay` is the one row of cards. */
+export type Kind = "video" | "audio" | "overlay";
 export type Focus = { kind: Kind; track: number };
 export type Picked = { clips: string[]; marker?: string; word?: { take: number; word: number } };
 export type Context = { kind: Kind | "ruler" | "music"; track: number; at: number; x: number; y: number };
@@ -89,8 +91,9 @@ export const Timeline: React.FC<{
   onMuteClip: (kind: Kind, id: string, muted: boolean) => void;
   onDropFootage: (file: string, track: number, at: number) => void;
   onDropTake: (take: number, track: number, at: number) => void;
+  onDropCard: (card: Card, at: number) => void;
   onMusic: () => void;
-}> = ({ game, api, seq, laneSeconds, total, t, playing, pps, ppsRange, locked, snap, picked, focus, rec, words, editing, peaks, onPps, onWidth, onSeek, onPause, onPick, onFocus, onLive, onDrop, onContext, onEditWord, onRetype, onAddVideoTrack, onAddAudioTrack, onToggleVideoTrack, onToggleAudioTrack, onMuteClip, onDropFootage, onDropTake, onMusic }) => {
+}> = ({ game, api, seq, laneSeconds, total, t, playing, pps, ppsRange, locked, snap, picked, focus, rec, words, editing, peaks, onPps, onWidth, onSeek, onPause, onPick, onFocus, onLive, onDrop, onContext, onEditWord, onRetype, onAddVideoTrack, onAddAudioTrack, onToggleVideoTrack, onToggleAudioTrack, onMuteClip, onDropFootage, onDropTake, onDropCard, onMusic }) => {
   const scroller = useRef<HTMLDivElement>(null);
   const lane = useRef<HTMLDivElement>(null);
   const rows = useRef(new Map<string, HTMLDivElement>());
@@ -169,8 +172,9 @@ export const Timeline: React.FC<{
   };
   /** Which track of `kind` the pointer is over, if any. Just above the top video row, or just below the last audio row, means a new track. */
   const trackAtY = (kind: Kind, clientY: number): number | undefined => {
-    const mine = [...rows.current].filter(([key]) => key.startsWith(kind === "video" ? "v" : "a")).map(([key, el]) => ({ track: Number(key.slice(1)), r: el.getBoundingClientRect() }));
+    const mine = [...rows.current].filter(([key]) => key.startsWith(kind === "video" ? "v" : kind === "audio" ? "a" : "o")).map(([key, el]) => ({ track: Number(key.slice(1)), r: el.getBoundingClientRect() }));
     for (const { track, r } of mine) if (clientY >= r.top && clientY <= r.bottom) return track;
+    if (kind === "overlay") return undefined;
     const count = kind === "video" ? seqRef.current.video.length : seqRef.current.audio.length;
     const last = mine.find((m) => m.track === count - 1);
     if (!last) return undefined;
@@ -250,6 +254,20 @@ export const Timeline: React.FC<{
         onSeek(next.markers?.find((m) => m.id === d.id)?.at ?? d.at0);
         return;
       }
+      if (d.on === "trim" && d.kind === "overlay") {
+        const here = findCard(d.base, d.id);
+        if (!here) return;
+        const c = here.card;
+        const points = snapPoints(d.base, [d.id], tRef.current);
+        const want = (d.edge === "start" ? c.at : cardEnd(c)) + dt;
+        const edge = snapTo(want, 0, points, reach);
+        setSnapLine(Math.abs(edge - want) > 1e-6 ? edge : null);
+        const next = d.edge === "start" ? trimCardStart(d.base, d.id, edge) : trimCardEnd(d.base, d.id, edge);
+        onLive(next);
+        const after = findCard(next, d.id)?.card;
+        if (after) onSeek(d.edge === "start" ? after.at : cardEnd(after) - 1 / game.fps);
+        return;
+      }
       if (d.on === "trim") {
         const here = d.kind === "video" ? findClip(d.base, d.id) : findAudio(d.base, d.id);
         if (!here) return;
@@ -263,6 +281,17 @@ export const Timeline: React.FC<{
         onLive(next);
         const after = d.kind === "video" ? findClip(next, d.id)?.clip : findAudio(next, d.id)?.clip;
         if (after) onSeek(d.edge === "start" ? after.at : (d.kind === "video" ? clipEnd(after as Clip) : pieceEnd(after as AudioClip)) - 1 / game.fps);
+        return;
+      }
+      if (d.kind === "overlay") {
+        // A card moves along its one row; with others selected, everything goes together.
+        const here = findCard(d.base, d.primary);
+        if (!here) return;
+        const points = snapPoints(d.base, d.ids, tRef.current);
+        const want = here.card.at + dt;
+        const snapped = snapTo(want, here.card.seconds, points, reach);
+        setSnapLine(snappedEdge(want, snapped, here.card.seconds, points));
+        onLive(d.ids.length > 1 ? shiftClips(d.base, d.ids, snapped - here.card.at) : moveCard(d.base, d.primary, snapped));
         return;
       }
       // A move: the clip under the pointer leads; everything else selected follows by the same amount.
@@ -306,7 +335,7 @@ export const Timeline: React.FC<{
     const p = dragPayload.current;
     if (!p || locked) return;
     e.preventDefault();
-    const kind: Kind = p.kind === "footage" ? "video" : "audio";
+    const kind: Kind = p.kind === "footage" ? "video" : p.kind === "take" ? "audio" : "overlay";
     const track = trackAtY(kind, e.clientY);
     if (track === undefined) {
       e.dataTransfer.dropEffect = "none";
@@ -327,7 +356,8 @@ export const Timeline: React.FC<{
     setGhost(null);
     if (!p || !g || locked) return;
     if (p.kind === "footage") onDropFootage(p.file, g.track, g.at);
-    else onDropTake(p.take, g.track, g.at);
+    else if (p.kind === "take") onDropTake(p.take, g.track, g.at);
+    else onDropCard(p.card, g.at);
   };
 
   /** A clip's filmstrip: its recording's strip, sized so its slice lines up. Zoomed in, a denser one (in doubling steps) is layered over the coarse one. */
@@ -367,6 +397,7 @@ export const Timeline: React.FC<{
   const tickEvery = pxPerSec > 160 ? 0.5 : pxPerSec > 70 ? 1 : pxPerSec > 30 ? 2 : pxPerSec > 12 ? 5 : 10;
   const ticks = Array.from({ length: Math.floor(laneSeconds / tickEvery) + 1 }, (_, i) => i * tickEvery);
   const markers = seq.markers ?? [];
+  const cards = [...(seq.overlay?.cards ?? [])].sort((a, b) => a.at - b.at);
   const videoRows = seq.video.map((_, i) => i).reverse();
   const setRow = (key: string) => (el: HTMLDivElement | null) => {
     if (el) rows.current.set(key, el);
@@ -380,6 +411,9 @@ export const Timeline: React.FC<{
     <div className="vtl">
       <div className="vtl-names">
         <div style={{ height: ROW.ruler }} />
+        <div style={{ height: ROW.cards }} className={focus.kind === "overlay" ? "on" : ""} title="The cards: text, sketches and b-roll slots, drawn over the footage (b-roll slots are notes: never drawn)">
+          <span className="tname">cards</span>
+        </div>
         {ghostNewVideo ? <div style={{ height: ROW.video }}>V{seq.video.length + 1}</div> : null}
         {videoRows.map((i) => {
           const tr = seq.video[i]!;
@@ -431,6 +465,24 @@ export const Timeline: React.FC<{
                 {i + 1}
               </button>
             ))}
+          </div>
+          <div ref={setRow("o0")} className="vrow cards" style={{ height: ROW.cards }} onMouseDown={onRowDown("overlay", 0)} onContextMenu={onMenu("overlay", 0)}>
+            {cards.map((c) => (
+              <div
+                key={c.id}
+                className={`cpiece ${c.kind}${c.place === "over" ? " over" : ""}${selected.has(c.id) ? " on" : ""}`}
+                style={{ left: px(c.at), width: px(c.seconds) }}
+                title={`${cardLabel(c)} · ${fmtSeconds(c.at)} → ${fmtSeconds(cardEnd(c))}${c.place === "over" ? " · over the footage" : " · on the backdrop (footage wins)"}. Drag to move it, its edges to trim.`}
+                onMouseDown={onClipDown("overlay", 0, c.id)}
+              >
+                {c.kind === "image" && c.src ? <img src={api.publicUrl(c.src)} alt="" /> : null}
+                <span className="ctext">{c.kind === "image" ? "" : cardLabel(c)}</span>
+                <div className="edge l" onMouseDown={onEdgeDown("overlay", 0, c.id, "start")} />
+                <div className="edge r" onMouseDown={onEdgeDown("overlay", 0, c.id, "end")} />
+              </div>
+            ))}
+            {ghost?.kind === "overlay" ? <div className="fghost" style={{ left: px(ghost.at), width: px(ghost.seconds) }} /> : null}
+            {!cards.length && ghost?.kind !== "overlay" ? <div className="vempty">No cards. Add a text card or a sketch from the library's Cards shelf; organise lays one per beat.</div> : null}
           </div>
           {ghostNewVideo ? (
             <div className="vrow clip upper new" style={{ height: ROW.video }}>

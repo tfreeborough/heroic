@@ -56,6 +56,18 @@ const ai: NonNullable<GameConfig["post"]>["ai"] = {
   titleSuffix: GAME,
 };
 
+/** The Scripts tab's voice: the same person, writing a video script he'll
+ * read aloud (needs ANTHROPIC_API_KEY in apps/desk/.env). */
+const scriptAi: NonNullable<GameConfig["script"]>["ai"] = {
+  about: `${ai.about} The videos are the maker talking about making it: what went wrong, what he changed his mind about, how a system works, what he learned. Some are five minutes and up for YouTube, most are shorts cut from the same script.`,
+  rules:
+    "It reads like the maker talking to one person across a desk, plainly, in his own words. He writes well already: the edit is light. Keep his phrasing, his order and every point; fix only what reads badly aloud (a sentence that runs on, a word nobody says, a point made twice). Honest about what's in the game and what isn't, a little dry humour, everyday words, no marketing-speak, no hype. No ALL CAPS, no exclamation marks, no three-beat slogans, no coined aphorisms, no symmetrical clauses, no em dashes. Short sentences. Spoken English, not written: contractions, And or But at the start of a sentence, the odd aside.",
+  // No example lines: the voice is Tom's own scripts, fed in full by the Desk. Invented lines pulled the rewrite towards a generic register.
+  examples: [],
+  // Black ink on white paper is the model's natural sketch; the Desk turns the paper into transparency and the ink cream, so it sits on the dark backdrop.
+  sketch: "A quick hand-drawn line sketch in black ink on plain white paper, like a doodle in the margin of a notebook: thin confident lines, a little rough, no shading, no grey fills, no colour, no words or letters, no frame or border, nothing but the subject on white. The subject:",
+};
+
 const config: GameConfig = {
   id: "bits",
   name: "Blood in the Sand",
@@ -80,5 +92,6 @@ const config: GameConfig = {
   },
   templates: () => import("./desk.templates"),
   post: { draft, ai },
+  script: { ai: scriptAi },
 };
 export default config;

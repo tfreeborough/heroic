@@ -16,6 +16,8 @@
  * straight on (framed differently: the camera glides). Where two tracks
  * have picture the frame splits: the lower one fills its half, the upper
  * one slides into the other (top in a tall frame, right in a wide one).
+ * The sequence's cards (text, sketches) are drawn over the footage and
+ * under the template's own overlays (cards.tsx).
  */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type * as React from "react";
@@ -23,6 +25,7 @@ import { getVideoMetadata } from "@remotion/media-utils";
 import { AbsoluteFill, Easing, OffthreadVideo, Sequence, continueRender, delayRender, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { type Box, type Clip, type Playable, WHOLE, boxAspect, clipEnd, cropBox, frameBox, isLegacySequence, layersAt, sameBox, sortClips, splitAt, stackBox, stackIntervals, stackRegions, timeTrack, upgradeSequence } from "@heroic/voiceover";
 import { ditherOverlay, palette } from "./brand";
+import { CardsLayer } from "./cards";
 import { Backdrop, useFormat } from "./components";
 
 /** Seconds the camera takes to glide between two framings of the same footage. */
@@ -372,6 +375,7 @@ export const Stage: React.FC<{
             </AbsoluteFill>
           </Sequence>
         ) : null}
+        <CardsLayer seq={seq} offset={startFrom} />
         {children}
       </AbsoluteFill>
     </StageContext.Provider>

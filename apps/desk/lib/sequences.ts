@@ -16,12 +16,14 @@ import {
   type AudioClip,
   type AudioTrack,
   type Box,
+  type Card,
   type Clip,
   type LegacySequence,
   type LegacyShot,
   type Sequence,
   type Take,
   type VideoTrack,
+  MIN_CARD,
   WHOLE,
   cropBox,
   emptySequence,
@@ -143,6 +145,21 @@ const cleanAudio = (c: AudioClip, takes: number): AudioClip | undefined => {
     ...(c.volume !== undefined && Number(c.volume) !== 1 ? { volume: num(c.volume, 0, 2, 1) } : {}),
   };
 };
+const cleanCard = (c: Card): Card | undefined => {
+  const kind = c.kind === "text" || c.kind === "image" || c.kind === "broll" ? c.kind : undefined;
+  if (!kind) return undefined;
+  return {
+    id: String(c.id || freshId()),
+    kind,
+    ...(c.text !== undefined ? { text: String(c.text).slice(0, 400) } : {}),
+    ...(c.src !== undefined ? { src: safeSrc(c.src) } : {}),
+    ...(c.note !== undefined ? { note: String(c.note).slice(0, 400) } : {}),
+    at: num(c.at, 0, 1e6, 0),
+    seconds: num(c.seconds, MIN_CARD, 1e6, 4),
+    place: c.place === "over" ? "over" : "full",
+    ...(c.beat ? { beat: String(c.beat) } : {}),
+  };
+};
 const cleanTake = (t: Take): Take => ({
   file: safeSrc(t.file),
   seconds: num(t.seconds, 0, 1e6, 0),
@@ -188,6 +205,17 @@ export const writeSequence = (g: GameConfig, seq: Sequence): Sequence => {
       ...(seq.voice?.volume !== undefined && Number(seq.voice.volume) !== 1 ? { volume: num(seq.voice.volume, 0, 1, 1) } : {}),
     },
     ...(seq.music?.song ? { music: { song: safeSrc(seq.music.song), from: num(seq.music.from, 0, 1e6, 0), level: num(seq.music.level, 0, 1, 0.8) } } : {}),
+    ...(seq.overlay?.cards?.length
+      ? {
+          overlay: {
+            id: String(seq.overlay.id || "o1"),
+            cards: seq.overlay.cards
+              .map(cleanCard)
+              .filter((c): c is Card => Boolean(c))
+              .sort((a, b) => a.at - b.at),
+          },
+        }
+      : {}),
     ...(seq.markers?.length ? { markers: seq.markers.map((m) => ({ id: String(m.id || freshId()), at: num(m.at, 0, 1e6, 0) })).sort((a, b) => a.at - b.at) } : {}),
     slide: num(seq.slide, 0.1, 2, 0.4),
     ...(seq.origin ? { origin: seq.origin } : {}),

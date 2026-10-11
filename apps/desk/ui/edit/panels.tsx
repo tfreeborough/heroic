@@ -6,12 +6,12 @@
  * is handed its meter.
  */
 import type * as React from "react";
-import { type AudioClip, type Box, type CaptionStyle, type Clip, type Music, NOISE_LEVELS, type Sequence, type Timed, boxAspect, cropBox, fitBox, frameBox, stackBox, stackRegions, stackedKey } from "@heroic/voiceover";
-import type { GameApi, GameInfo, Idea, WhisperStatus } from "../api";
+import { type AudioClip, type Box, type CaptionStyle, type Card, type Clip, type Music, NOISE_LEVELS, type Sequence, type Timed, boxAspect, cropBox, fitBox, frameBox, stackBox, stackRegions, stackedKey } from "@heroic/voiceover";
+import type { GameApi, GameInfo, Script, ScriptSummary, WhisperStatus } from "../api";
 import type { MicDevice } from "../mic";
 import { fmtSeconds } from "../api";
 import { go } from "../App";
-import { Markdown } from "../markdown";
+import { ScriptReading } from "../Scripts";
 import { Framer, sizeBox, stem } from "./widgets";
 
 export const VideoClipPanel: React.FC<{
@@ -219,19 +219,19 @@ export const MusicPanel: React.FC<{ music: Music | undefined; songs: { value: st
 );
 
 /**
- * The script: the idea (Ideas tab) this edit is making, read while
- * recording. Pick one from the ideas not made yet; its title and
- * description sit here, big enough to read from across the desk. Tick it
- * once the video's made.
+ * The script: the one (Scripts tab) this edit is making, read while
+ * recording. Pick one from the scripts not made yet; its long cut (or
+ * its source, before a rewrite) sits here, big enough to read from
+ * across the desk. Tick it once the video's made.
  */
-export const ScriptPanel: React.FC<{ ideas: Idea[]; idea: string; locked: boolean; onPick: (id: string) => void; onTick: (idea: Idea) => void }> = ({ ideas, idea, locked, onPick, onTick }) => {
-  const current = ideas.find((i) => i.id === idea);
-  const choices = ideas.filter((i) => !i.done || i.id === idea);
+export const ScriptPanel: React.FC<{ scripts: ScriptSummary[]; script: Script | null; idea: string; locked: boolean; onPick: (id: string) => void; onTick: (id: string, done: boolean) => void }> = ({ scripts, script, idea, locked, onPick, onTick }) => {
+  const current = scripts.find((i) => i.id === idea);
+  const choices = scripts.filter((i) => !i.done || i.id === idea);
   return (
     <div className="stack script">
       <div className="row between">
-        <select value={current ? idea : ""} disabled={locked} onChange={(e) => onPick(e.target.value)} style={{ width: "auto", maxWidth: 260 }} title="The idea this edit is making. Its description is the script: read it while you record.">
-          <option value="">{ideas.length ? "no idea picked" : "no ideas yet"}</option>
+        <select value={current ? idea : ""} disabled={locked} onChange={(e) => onPick(e.target.value)} style={{ width: "auto", maxWidth: 260 }} title="The script this edit is making: read it while you record.">
+          <option value="">{scripts.length ? "no script picked" : "no scripts yet"}</option>
           {choices.map((i) => (
             <option key={i.id} value={i.id}>
               {i.done ? "✓ " : ""}
@@ -243,20 +243,20 @@ export const ScriptPanel: React.FC<{ ideas: Idea[]; idea: string; locked: boolea
       {current ? (
         <>
           <div className={`title ${current.done ? "done" : ""}`}>{current.title}</div>
-          {current.description ? <Markdown className="desc" text={current.description} /> : <div className="small muted">No script written for it. Add one on the Ideas tab and it shows here.</div>}
+          {script ? <ScriptReading s={script} /> : <div className="small muted">loading…</div>}
           <div className="row small muted" style={{ gap: 14 }}>
-            <button className="link small" onClick={() => go({ name: "ideas" })}>
-              Edit it on Ideas
+            <button className="link small" onClick={() => go({ name: "scripts", id: current.id })}>
+              Open it on Scripts
             </button>
-            <button className="link small" disabled={locked} onClick={() => onTick(current)}>
+            <button className="link small" disabled={locked} onClick={() => onTick(current.id, !current.done)}>
               {current.done ? "Not made after all" : "Tick it off: made"}
             </button>
           </div>
         </>
-      ) : idea && ideas.length ? (
-        <div className="small muted">The idea this edit was making has been deleted. Pick another, or leave it.</div>
+      ) : idea && scripts.length ? (
+        <div className="small muted">The script this edit was making has been deleted. Pick another, or leave it.</div>
       ) : (
-        <div className="small muted">Pick the idea this video is making and its description shows here to read from while you record. Ideas live on the Ideas tab.</div>
+        <div className="small muted">Pick the script this video is making and it shows here to read from while you record. Scripts live on the Scripts tab.</div>
       )}
     </div>
   );
@@ -441,6 +441,41 @@ export const EditPanel: React.FC<{ name: string; note: string; slide: number; lo
       <button className="link small" disabled={locked} onClick={onBin}>
         Bin this edit
       </button>
+    </div>
+  </div>
+);
+
+/** A card on the overlay: what it is, its words or picture or note, where it sits. */
+export const CardPanel: React.FC<{ api: GameApi; card: Card; locked: boolean; onPatch: (p: Partial<Card>) => void }> = ({ api, card, locked, onPatch }) => (
+  <div className="stack card-panel">
+    <div className="row" style={{ gap: 8 }}>
+      <select value={card.kind} disabled={locked} onChange={(e) => onPatch({ kind: e.target.value as Card["kind"] })} style={{ width: "auto" }} title="What the card is">
+        <option value="text">Text card</option>
+        <option value="image">Picture</option>
+        <option value="broll">B-roll slot</option>
+      </select>
+      {card.kind !== "broll" ? (
+        <select value={card.place} disabled={locked} onChange={(e) => onPatch({ place: e.target.value as Card["place"] })} style={{ width: "auto" }} title="full: the frame, on the backdrop, and it gives way to any footage playing. over: small, over whatever is playing.">
+          <option value="full">on the backdrop</option>
+          <option value="over">over the footage</option>
+        </select>
+      ) : null}
+    </div>
+    {card.kind === "text" ? <textarea rows={3} value={card.text ?? ""} disabled={locked} onChange={(e) => onPatch({ text: e.target.value })} placeholder="A few words. A new line is a new line on screen." /> : null}
+    {card.kind === "broll" ? <textarea rows={2} value={card.note ?? ""} disabled={locked} onChange={(e) => onPatch({ note: e.target.value })} placeholder="What to film here (the shot list reads this)" /> : null}
+    {card.kind === "image" ? (
+      card.src ? (
+        <>
+          <img className="sketch" src={api.publicUrl(card.src)} alt="" />
+          <div className="small muted mono">{card.src}</div>
+        </>
+      ) : (
+        <div className="small muted">No picture yet. Drag one of the script's sketches from the library's Cards shelf, or the organise step fills it.</div>
+      )
+    ) : null}
+    <div className="small muted">
+      {fmtSeconds(card.at)} for {card.seconds.toFixed(1)}s{card.beat ? ` · beat ${card.beat}` : ""}. Drag its edges on the timeline to change how long it shows.
+      {card.kind === "broll" ? " A b-roll slot is never drawn: drop footage on the video track under it." : card.place === "full" ? " On the backdrop it isn't drawn while footage plays." : ""}
     </div>
   </div>
 );

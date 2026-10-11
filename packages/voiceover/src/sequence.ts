@@ -114,6 +114,33 @@ export type VoiceSettings = {
   volume?: number;
 };
 
+/**
+ * Something on screen for a stretch that isn't footage (docs/design/desk-scripts.md):
+ * a TEXT card (a few words), an IMAGE (a sketch, under the game's public
+ * dir), or a B-ROLL slot (a note of what to film: shown in the editor,
+ * never drawn in the render). A card is content; the template draws it.
+ */
+export type CardKind = "text" | "image" | "broll";
+export type Card = {
+  id: string;
+  kind: CardKind;
+  /** text: the lines. */
+  text?: string;
+  /** image: the file under the game's public dir ("cards/<script>/x.png"). */
+  src?: string;
+  /** broll: what to film. */
+  note?: string;
+  /** Where it starts in the sequence. */
+  at: number;
+  seconds: number;
+  /** full: the frame, on the backdrop (it gives way to any footage playing). over: small, over whatever is playing. */
+  place: "full" | "over";
+  /** The script beat that put it there, so organise can find its own cards again. */
+  beat?: string;
+};
+/** The one row of cards. Sorted by `at`, never overlapping. */
+export type OverlayTrack = { id: string; cards: Card[] };
+
 /** A moment a template can hang something on (a list clip's items). */
 export type Marker = { id: string; at: number };
 
@@ -130,6 +157,8 @@ export type Sequence = {
   takes: Take[];
   voice: VoiceSettings;
   music?: Music;
+  /** The cards (text, sketches, b-roll slots), drawn by the template over the footage. */
+  overlay?: OverlayTrack;
   /** Sorted by `at`. Numbered by position: the first is 1. */
   markers?: Marker[];
   /** Seconds a slide takes by default: how far + Add footage overlaps the clip before, and a snap point when dragging. */
@@ -141,7 +170,7 @@ export type Sequence = {
 };
 
 /** What the player needs of a sequence (the editor passes an unsaved one inline). */
-export type Playable = Pick<Sequence, "video" | "audio" | "takes" | "voice" | "music" | "markers" | "slide">;
+export type Playable = Pick<Sequence, "video" | "audio" | "takes" | "voice" | "music" | "markers" | "slide" | "overlay">;
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const len = (c: { start: number; end: number }) => c.end - c.start;
@@ -217,8 +246,10 @@ export const timeTrack = (track: Pick<VideoTrack, "clips">): Timed[] => {
 
 export const videoEnd = (seq: Pick<Playable, "video">): number => Math.max(0, ...seq.video.flatMap((t) => t.clips.map(clipEnd)));
 export const audioEnd = (seq: Pick<Playable, "audio">): number => Math.max(0, ...seq.audio.flatMap((t) => t.clips.map(pieceEnd)));
+export const cardEnd = (c: Pick<Card, "at" | "seconds">): number => r3(c.at + c.seconds);
+export const overlayEnd = (seq: Pick<Playable, "overlay">): number => Math.max(0, ...(seq.overlay?.cards ?? []).map(cardEnd));
 /** Where the last thing stops. */
-export const sequenceSeconds = (seq: Pick<Playable, "video" | "audio">): number => r3(Math.max(videoEnd(seq), audioEnd(seq)));
+export const sequenceSeconds = (seq: Pick<Playable, "video" | "audio" | "overlay">): number => r3(Math.max(videoEnd(seq), audioEnd(seq), overlayEnd(seq)));
 
 /** The clip on a track showing at `t` (through a slide: the one arriving). -1: none. */
 export const clipAt = (track: Pick<VideoTrack, "clips">, t: number): number => {
@@ -499,6 +530,111 @@ export const clipOfTake = (take: number, seconds: number, skip = 0): AudioClip =
 /** Every audio clip that will be heard, as pieces in sequence time (muted tracks and clips left out), sorted. */
 export const audioPieces = (seq: Pick<Playable, "audio">): AudioClip[] => sortPieces(seq.audio.flatMap((t) => (t.muted ? [] : t.clips.filter((c) => !c.muted)))) as AudioClip[];
 
+// ── cards (the overlay track) ──
+
+/** The shortest card worth keeping, in seconds. */
+export const MIN_CARD = 0.3;
+export const DEFAULT_CARD_SECONDS = 4;
+
+const withCards = <T extends Pick<Playable, "overlay">>(seq: T, cards: Card[]): T => ({ ...seq, overlay: { id: seq.overlay?.id ?? "o1", cards: sortClips(cards) } });
+const roomOnOverlay = (others: Card[], at: number, seconds: number): boolean => at >= -EPS && others.every((o) => at + seconds <= o.at + EPS || at >= cardEnd(o) - EPS);
+
+export const findCard = (seq: Pick<Playable, "overlay">, id: string): { index: number; card: Card } | undefined => {
+  const cards = sortClips(seq.overlay?.cards ?? []);
+  const index = cards.findIndex((c) => c.id === id);
+  return index >= 0 ? { index, card: cards[index]! } : undefined;
+};
+
+/** The card showing at `t`, if any. */
+export const cardAt = (seq: Pick<Playable, "overlay">, t: number): Card | undefined => (seq.overlay?.cards ?? []).find((c) => t >= c.at - EPS && t < cardEnd(c) - EPS);
+
+/** The nearest start to `at` where a card `seconds` long overlaps no other (leaving out `skip`), or undefined when there's no room at all. */
+export const fitCard = (seq: Pick<Playable, "overlay">, at: number, seconds: number, skip?: string): number | undefined => {
+  const others = (seq.overlay?.cards ?? []).filter((c) => c.id !== skip);
+  const want = Math.max(0, at);
+  if (roomOnOverlay(others, want, seconds)) return r3(want);
+  const candidates = [0, ...others.flatMap((o) => [cardEnd(o), o.at - seconds])].filter((c) => roomOnOverlay(others, c, seconds));
+  return candidates.length ? r3(candidates.sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0]!) : undefined;
+};
+
+/** A new card, not yet placed. */
+export const cardOf = (kind: CardKind, content: { text?: string; src?: string; note?: string; beat?: string }, seconds = DEFAULT_CARD_SECONDS, place: Card["place"] = "full"): Card => ({
+  id: newId(),
+  kind,
+  ...(content.text !== undefined ? { text: content.text } : {}),
+  ...(content.src !== undefined ? { src: content.src } : {}),
+  ...(content.note !== undefined ? { note: content.note } : {}),
+  ...(content.beat ? { beat: content.beat } : {}),
+  at: 0,
+  seconds: Math.max(MIN_CARD, seconds),
+  place,
+});
+
+/**
+ * A card onto the overlay at `at`. Dropped into a gap: it goes there, cut
+ * down to the gap if the gap is shorter than it (a card never pushes
+ * another). Dropped onto a card: the nearest free spot that takes it
+ * whole. Unchanged only when the gap it's dropped in is a sliver.
+ */
+export const placeCard = <T extends Pick<Playable, "overlay">>(seq: T, card: Card, at: number): T => {
+  const others = (seq.overlay?.cards ?? []).filter((c) => c.id !== card.id);
+  const want = Math.max(0, at);
+  const onto = others.find((o) => want >= o.at - EPS && want < cardEnd(o) - EPS);
+  if (!onto) {
+    const next = Math.min(Infinity, ...others.filter((o) => o.at > want + EPS).map((o) => o.at));
+    const prev = Math.max(0, ...others.filter((o) => cardEnd(o) <= want + EPS).map(cardEnd));
+    const room = next - prev;
+    if (room < MIN_CARD) return seq;
+    if (room >= card.seconds) return withCards(seq, [...others, { ...card, at: r3(Math.max(prev, Math.min(want, next - card.seconds))) }]);
+    return withCards(seq, [...others, { ...card, at: r3(prev), seconds: r3(room) }]);
+  }
+  const fitted = fitCard({ overlay: { id: "", cards: others } }, want, card.seconds);
+  return fitted === undefined ? seq : withCards(seq, [...others, { ...card, at: fitted }]);
+};
+
+/** Slide a card along (it stops at its neighbours). */
+export const moveCard = <T extends Pick<Playable, "overlay">>(seq: T, id: string, at: number): T => {
+  const here = findCard(seq, id);
+  if (!here) return seq;
+  const fitted = fitCard(seq, at, here.card.seconds, id);
+  if (fitted === undefined) return seq;
+  return withCards(seq, (seq.overlay?.cards ?? []).map((c) => (c.id === id ? { ...c, at: fitted } : c)));
+};
+
+export const removeCards = <T extends Pick<Playable, "overlay">>(seq: T, ids: string[]): T => (seq.overlay ? withCards(seq, seq.overlay.cards.filter((c) => !ids.includes(c.id))) : seq);
+export const updateCard = <T extends Pick<Playable, "overlay">>(seq: T, id: string, patch: Partial<Card>): T => (seq.overlay ? withCards(seq, seq.overlay.cards.map((c) => (c.id === id ? { ...c, ...patch } : c))) : seq);
+
+/** Drag a card's left edge. Stops at a sliver and at the card before. */
+export const trimCardStart = <T extends Pick<Playable, "overlay">>(seq: T, id: string, at: number): T => {
+  const here = findCard(seq, id);
+  if (!here) return seq;
+  const c = here.card;
+  const floor = Math.max(0, ...(seq.overlay?.cards ?? []).filter((o) => o.id !== id && o.at < c.at).map(cardEnd));
+  const to = Math.max(floor, Math.min(cardEnd(c) - MIN_CARD, at));
+  return updateCard(seq, id, { at: r3(to), seconds: r3(cardEnd(c) - to) });
+};
+/** Drag a card's right edge. Stops at a sliver and at the card after. */
+export const trimCardEnd = <T extends Pick<Playable, "overlay">>(seq: T, id: string, endAt: number): T => {
+  const here = findCard(seq, id);
+  if (!here) return seq;
+  const c = here.card;
+  const next = Math.min(Infinity, ...(seq.overlay?.cards ?? []).filter((o) => o.id !== id && o.at > c.at).map((o) => o.at));
+  const to = Math.max(c.at + MIN_CARD, Math.min(next, endAt));
+  return updateCard(seq, id, { seconds: r3(to - c.at) });
+};
+
+/** Split the card under `t` in two of the same content. The left half keeps the id. */
+export const splitCardAt = <T extends Pick<Playable, "overlay">>(seq: T, t: number): T => {
+  const c = cardAt(seq, t);
+  if (!c || t - c.at < MIN_CARD || cardEnd(c) - t < MIN_CARD) return seq;
+  const left: Card = { ...c, seconds: r3(t - c.at) };
+  const right: Card = { ...c, id: newId(), at: r3(t), seconds: r3(cardEnd(c) - t) };
+  return withCards(seq, [...(seq.overlay?.cards ?? []).filter((x) => x.id !== c.id), left, right]);
+};
+
+/** A card's label on a timeline or in a list. */
+export const cardLabel = (c: Pick<Card, "kind" | "text" | "src" | "note">): string => (c.kind === "text" ? c.text?.trim() || "(empty card)" : c.kind === "image" ? (c.src ?? "").split("/").pop() || "(no picture)" : `b-roll: ${c.note?.trim() || "(what to film?)"}`);
+
 // ── a selection ──
 
 /**
@@ -508,9 +644,10 @@ export const audioPieces = (seq: Pick<Playable, "audio">): AudioClip[] => sortPi
  * overlap, that's a slide); if the full move isn't allowed, the largest
  * part of it that is happens instead. Unchanged if none of it can.
  */
-export const shiftClips = <T extends Pick<Playable, "video" | "audio" | "slide">>(seq: T, ids: string[], dt: number): T => {
+export const shiftClips = <T extends Pick<Playable, "video" | "audio" | "slide" | "overlay">>(seq: T, ids: string[], dt: number): T => {
   const set = new Set(ids);
-  const picked = [...seq.video.flatMap((t) => t.clips.filter((c) => set.has(c.id))), ...seq.audio.flatMap((t) => t.clips.filter((c) => set.has(c.id)))];
+  const cards = seq.overlay?.cards ?? [];
+  const picked = [...seq.video.flatMap((t) => t.clips.filter((c) => set.has(c.id))), ...seq.audio.flatMap((t) => t.clips.filter((c) => set.has(c.id))), ...cards.filter((c) => set.has(c.id))];
   if (!picked.length) return seq;
   const most = Math.max(dt, -Math.min(...picked.map((c) => c.at)));
   const attempt = (d: number): T | null => {
@@ -527,7 +664,11 @@ export const shiftClips = <T extends Pick<Playable, "video" | "audio" | "slide">
       return { ...t, clips: sortPieces([...still, ...moving]) as AudioClip[] };
     });
     if (video.some((t) => !t) || audio.some((t) => !t)) return null;
-    return { ...seq, video: video as VideoTrack[], audio: audio as AudioTrack[] };
+    const stillCards = cards.filter((c) => !set.has(c.id));
+    const movingCards = cards.filter((c) => set.has(c.id)).map((c) => ({ ...c, at: r3(c.at + d) }));
+    if (!movingCards.every((m) => roomOnOverlay(stillCards, m.at, m.seconds))) return null;
+    const overlay = seq.overlay ? { ...seq.overlay, cards: sortClips([...stillCards, ...movingCards]) } : undefined;
+    return { ...seq, video: video as VideoTrack[], audio: audio as AudioTrack[], ...(overlay ? { overlay } : {}) };
   };
   // The whole move, else as much of it as fits: coarse steps back towards nothing, then the edge between the last two narrowed down.
   const whole = attempt(most);
@@ -554,11 +695,12 @@ export const shiftClips = <T extends Pick<Playable, "video" | "audio" | "slide">
 // ── snapping ──
 
 /** The moments a dragged edge likes to land on: every clip's start and end, each video clip's end less a slide, the markers and the playhead. */
-export const snapPoints = (seq: Pick<Playable, "video" | "audio" | "markers" | "slide">, exclude: string[], playhead?: number): number[] => {
+export const snapPoints = (seq: Pick<Playable, "video" | "audio" | "markers" | "slide" | "overlay">, exclude: string[], playhead?: number): number[] => {
   const skip = new Set(exclude);
   const pts: number[] = [0];
   for (const t of seq.video) for (const c of t.clips) if (!skip.has(c.id)) pts.push(c.at, clipEnd(c), r3(clipEnd(c) - seq.slide));
   for (const t of seq.audio) for (const c of t.clips) if (!skip.has(c.id)) pts.push(c.at, pieceEnd(c));
+  for (const c of seq.overlay?.cards ?? []) if (!skip.has(c.id)) pts.push(c.at, cardEnd(c));
   for (const m of seq.markers ?? []) pts.push(m.at);
   if (playhead !== undefined) pts.push(playhead);
   return [...new Set(pts.map(r3))].sort((a, b) => a - b);

@@ -36,7 +36,7 @@ import {
   type SfxSpec,
   type SpriteSpec,
 } from "./styleBible";
-import { SFX_MODEL_ID, generateSfx } from "./elevenlabs";
+import { DEFAULT_IMAGE_MODEL, SFX_MODEL_ID, generateImage, generateSfx } from "@heroic/forge";
 import {
   STABLE_AUDIO_MODEL,
   generateSfxLocal,
@@ -44,7 +44,6 @@ import {
   weightsCached,
   type StableAudioEnv,
 } from "./stableAudio";
-import { DEFAULT_IMAGE_MODEL, generateImage } from "./openai";
 import { processSfx } from "./audio";
 import { bitsManifestTarget, listBankFiles, writeSfxManifest } from "./sfxManifest";
 import { processIcon, processScene } from "./images";

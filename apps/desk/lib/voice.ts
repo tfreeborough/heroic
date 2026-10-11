@@ -233,11 +233,20 @@ export const transcribeTake = async (g: GameConfig, take: Take, signal?: AbortSi
 /** Every take and its raw recording → Drive, beside the finished videos. Additive. */
 export const backupTakes = async (g: GameConfig): Promise<{ ok: boolean; log: string }> => {
   ensure(g);
-  const target = `${g.drive.uploadTarget.replace(/\/+$/, "")}/voice-takes`;
-  const p = await exec(["rclone", "copy", takesDir(g), target, "--exclude", "*.partial", "--stats-one-line"]);
-  const log = `${p.out}${p.err}`.split("\n").filter((l) => l && !l.includes("shared Google Drive client_id")).join("\n");
+  const base = g.drive.uploadTarget.replace(/\/+$/, "");
+  const p = await exec(["rclone", "copy", takesDir(g), `${base}/voice-takes`, "--exclude", "*.partial", "--stats-one-line"]);
+  const quiet = (t: string) => t.split("\n").filter((l) => l && !l.includes("shared Google Drive client_id")).join("\n");
+  let log = quiet(`${p.out}${p.err}`);
+  let ok = p.exitCode === 0;
+  // The scripts' sketches (public/cards) go along too: an edit's cards point at them.
+  const cards = join(publicDir(g), "cards");
+  if (existsSync(cards)) {
+    const c = await exec(["rclone", "copy", cards, `${base}/cards`, "--stats-one-line"]);
+    log = [log, quiet(`${c.out}${c.err}`)].filter(Boolean).join("\n");
+    ok = ok && c.exitCode === 0;
+  }
   const count = readdirSync(takesDir(g)).filter((f) => !f.endsWith(".partial")).length;
-  return { ok: p.exitCode === 0, log: log || (p.exitCode === 0 ? `${count} file${count === 1 ? "" : "s"} on Drive` : `rclone exit ${p.exitCode}`) };
+  return { ok, log: log || (ok ? `${count} take${count === 1 ? "" : "s"}${existsSync(cards) ? " and the sketches" : ""} on Drive` : `rclone exit ${p.exitCode}`) };
 };
 
 /** A voice-over by id, or a fresh one for `clip` if there's none yet. */

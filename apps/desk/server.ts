@@ -13,19 +13,21 @@
 import { existsSync, renameSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import index from "./index.html";
-import { type GameConfig } from "./game";
+import { type GameConfig, type GameRoutes } from "./game";
 import { GAMES, gameById } from "./games";
 import { type CleanupSpec, cleanupClip, ffprobe, filmstripAsync, thumbnail } from "./lib/ffmpeg";
 import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip, safeShelf, syncFootage, trashClip, writeSidecar } from "./lib/footage";
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
 import { hasClaude } from "./lib/draft";
-import type { IdeaPatch } from "./lib/ideas";
-import { addIdea, readIdeas, removeIdea, updateIdea } from "./lib/ideasStore";
+import type { ScriptPatch } from "./lib/scripts";
+import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
+import { adjustScript, anotherShort, hasClaude as hasRewriter, makeSketches, organise, pendingSketches, planVisuals, redoBeat, redoCut, rewriteScript } from "./lib/scriptSteps";
+import { hasImages } from "./lib/cards";
 import { type PostPatch, movePost, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
 import { type VoiceOver, voiceId } from "@heroic/voiceover";
-import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, resoundTakes, saveTake, soundStrength, transcribeTake, voicePath, writeVoice } from "./lib/voice";
+import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, resoundTakes, saveTake, soundStrength, transcribeTake, trashTakes, voicePath, writeVoice } from "./lib/voice";
 import { installWhisper, whisperStatus } from "./lib/whisper";
 import { backupImports, importJobs, startImport } from "./lib/imports";
 import { createSequence, footageSrc, listSequences, readSequence, sequenceFrom, sequencePath, trashSequence, writeSequence } from "./lib/sequences";
@@ -73,6 +75,13 @@ for (const g of GAMES) {
   }
 }
 
+// Each game's own server routes, from desk.server.ts beside its config.
+const gameRoutes = new Map<string, GameRoutes>();
+for (const g of GAMES) {
+  const mod = join(g.root, "desk.server.ts");
+  if (existsSync(mod)) gameRoutes.set(g.id, ((await import(mod)) as { routes: GameRoutes }).routes);
+}
+
 const server = Bun.serve({
   port: PORT,
   // Sync, cleanup and Drive upload answer only when the child process is done,
@@ -89,6 +98,17 @@ const server = Bun.serve({
     "/api/games": {
       GET: () => json(GAMES.map((g) => ({ id: g.id, name: g.name, icon: `/g/${g.id}/${g.icon}`, fps: g.fps, formats: g.formats, footageFolderId: g.drive.footageFolderId, footageDir: g.footageDir, rendersDir: g.rendersDir, footagePublic: footageSrc(g, "").replace(/\/$/, "") }))),
     },
+
+    // ── a game's own routes (its tabs' server side) ──
+    "/api/:game/x/:name": withGame(async (g, req) => {
+      const fn = gameRoutes.get(g.id)?.[`${req.method} ${req.params.name}`];
+      if (!fn) return json({ error: `no ${req.method} ${req.params.name} for ${g.id}` }, 404);
+      try {
+        return await fn(req, g);
+      } catch (e) {
+        return fail(e);
+      }
+    }),
 
     // ── raw clips ──
     "/api/:game/clips": { GET: withGame((g) => json(listClips(g))) },
@@ -464,23 +484,95 @@ const server = Bun.serve({
       }),
       DELETE: withGame((g, req) => json(removePost(g, req.params.id!))),
     },
-    // ── video ideas ──
-    "/api/:game/ideas": {
-      GET: withGame((g) => json(readIdeas(g))),
+    // ── scripts (the Scripts tab) ──
+    "/api/:game/scripts": {
+      GET: withGame((g) => json({ list: listScripts(g), claude: hasRewriter() && Boolean(g.script?.ai), images: hasImages() })),
       POST: withGame(async (g, req) => {
-        const body = (await req.json()) as { title?: string; description?: string };
-        return json(addIdea(g, String(body.title ?? ""), String(body.description ?? "")));
+        const body = (await req.json()) as { title?: string; source?: string };
+        return json(addScript(g, String(body.title ?? ""), String(body.source ?? "")));
       }),
     },
-    "/api/:game/ideas/:id": {
+    "/api/:game/scripts/:id": {
+      GET: withGame((g, req) => {
+        const s = readScript(g, req.params.id!);
+        return s ? json({ ...s, pending: pendingSketches(s.id) }) : json({ error: "no such script" }, 404);
+      }),
       PUT: withGame(async (g, req) => {
         try {
-          return json(updateIdea(g, req.params.id!, (await req.json()) as IdeaPatch));
+          return json(updateScript(g, req.params.id!, (await req.json()) as ScriptPatch));
         } catch (e) {
           return fail(e, 404);
         }
       }),
-      DELETE: withGame((g, req) => json(removeIdea(g, req.params.id!))),
+      DELETE: withGame((g, req) => {
+        removeScript(g, req.params.id!);
+        return json({ ok: true });
+      }),
+    },
+    /** The Claude steps: rewrite (source → cuts), adjust (a re-paste), redo (a beat or a cut to an instruction), short (one more). Each answers with the whole script. */
+    "/api/:game/scripts/:id/rewrite": { POST: withGame(async (g, req) => rewriteScript(g, req.params.id!).then(json, fail)) },
+    "/api/:game/scripts/:id/adjust": { POST: withGame(async (g, req) => adjustScript(g, req.params.id!).then(json, fail)) },
+    "/api/:game/scripts/:id/redo": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json()) as { cut: string; beat?: string; instruction?: string };
+        return body.beat ? redoBeat(g, req.params.id!, body.cut, body.beat, body.instruction ?? "").then(json, fail) : redoCut(g, req.params.id!, body.cut, body.instruction ?? "").then(json, fail);
+      }),
+    },
+    /** The visual plan: a card per beat (`?all=1`: every beat again); the sketches, made in the background (`beats`: just these, again). */
+    "/api/:game/scripts/:id/plan": { POST: withGame(async (g, req) => planVisuals(g, req.params.id!, new URL(req.url).searchParams.get("all") === "1").then(json, fail)) },
+    "/api/:game/scripts/:id/sketches": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { beats?: string[] };
+        try {
+          return json(makeSketches(g, req.params.id!, Array.isArray(body.beats) ? body.beats.map(String) : undefined));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** A recording off the prompter's mic (the body) → saved as a take, Whisper over it, onto the script. Answers with the take. `?ext=` for a dropped audio file. */
+    "/api/:game/scripts/:id/takes": {
+      POST: withGame(async (g, req) => {
+        const q = new URL(req.url).searchParams;
+        try {
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          if (bytes.byteLength < 100) return json({ error: "that recording is empty" }, 400);
+          const take = await saveTake(g, `script-${req.params.id!.slice(0, 8)}`, bytes, { ext: q.get("ext") ?? "wav", tidy: q.get("tidy") !== "0", denoise: Number(q.get("denoise")) || 0, signal: req.signal });
+          const heard = await transcribeTake(g, take, req.signal).catch((e: Error) => ({ ...take, error: e.message }));
+          addTakeToScript(g, req.params.id!, { ...take, words: heard.words, transcribed: heard.transcribed });
+          return json(heard);
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** A take off the script and into the voice folder's .trash (`file` = its path under public/). */
+    "/api/:game/scripts/:id/takes/:file": {
+      DELETE: withGame((g, req) => {
+        try {
+          const { script, take } = removeTakeFromScript(g, req.params.id!, decodeURIComponent(req.params.file!));
+          if (take) trashTakes(g, [take]);
+          return json(script);
+        } catch (e) {
+          return fail(e, 404);
+        }
+      }),
+    },
+    /** The takes → a fresh sequence per cut. */
+    "/api/:game/scripts/:id/organise": {
+      POST: withGame((g, req) => {
+        try {
+          return json(organise(g, req.params.id!));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    "/api/:game/scripts/:id/short": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json()) as { instruction?: string };
+        return anotherShort(g, req.params.id!, body.instruction ?? "").then(json, fail);
+      }),
     },
   },
   /** Static: /g/<game>/renders/<file>, /g/<game>/<public path>, then the cookie-selected game's public dir at the root. */

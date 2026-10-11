@@ -54,7 +54,8 @@ once it has. A clip with a voice-over is badged **voiced**. **Bin** moves
 a clip to `.trash/` AND writes its name to `.binned.json` (committed), so
 Sync leaves it on Drive for good; the **Bin** fold restores one.
 
-**Edit** — the sequence editor: video tracks of clips from any of the
+**Edit** — the sequence editor: a cards row (text, sketches, b-roll
+slots, drawn over the footage), video tracks of clips from any of the
 game's recordings, audio tracks of your voice, a music bed, markers, and
 the preview of it as it renders (design:
 `docs/design/desk-sequence-editor.md`; recording and captions:
@@ -88,6 +89,17 @@ goes back to Make with it chosen.
   nothing taken out) carry straight on; a gap shows the track below, or
   the backdrop. **+ Add footage** puts a recording at the playhead, or on
   the end of the track overlapping the last clip by **Slide (s)**.
+- *Cards.* The row above the video tracks holds what's on screen when
+  it isn't footage: a **text card** (a few words in the brand type), a
+  **picture** (one of the script's sketches), or a **b-roll slot** (a
+  note of what to film: dimmed on the timeline, never drawn). Cards
+  never overlap; they move, trim, split and snap like clips. A card *on
+  the backdrop* fills the frame and gives way to any footage playing; one
+  *over the footage* sits in the top third (tall) or the right third
+  (wide) regardless. The library's **Cards** shelf has **+ Text**, **+
+  B-roll slot**, the script's sketches and the cards already in the edit;
+  right-click the row for a text card at that spot. Every template that
+  plays an edit draws them (the Stage does), under its own overlays.
 - *Tracks stack.* Where two video tracks have picture, the lower one
   fills its half of the frame and the upper one slides into the other
   (top in a tall frame, right in a wide one): code over gameplay. A third
@@ -132,7 +144,10 @@ packed row of shots, voice-overs in `public/voice/<id>.json`) are brought
 up to date the first time they're read: the old voice-over files go to
 `public/voice/.trash`, their takes staying put.
 
-**Make a video** — **Start a timeline** opens an empty edit in the editor
+**Make a video** — the **Talk (long form)** template is the long video:
+you talking for five minutes and up straight through an edit, 16:9, its
+cards and b-roll, regular captions, the sign-off to close. **Start a
+timeline** opens an empty edit in the editor
 (Done there brings you back here with it chosen), or pick a clip (an edit
 or a recording) and a template, fill the form (generated from the
 template's zod schema, so a new prop is a new field), tick the formats,
@@ -176,18 +191,67 @@ red; **Re-flow from today** lifts everything not yet posted and lays it
 out again in order under the spacing rule. Stored in
 `<rendersDir>/schedule.json`; deleting a render drops it from the queue.
 
-**Ideas** — a list of videos worth making: a title and, if you want one, a
-description in basic markdown (**bold**, *italics*, `-` bullets, `1.`
-numbered lists). Click an idea to edit it (⌘↩ saves, Esc cancels), tick it
-when it's made (done ones fold away under the list), × to delete. Stored in
-`<rendersDir>/ideas.json`.
+**Scripts** — where a video starts (design: `docs/design/desk-scripts.md`).
+The list down the left; a script with only a title is an idea, as before.
+Open one and the page is steps: **1. The script**: paste what you wrote
+(it saves as you go); **Rewrite into cuts** has Claude turn it into **2.
+The long cut** (the whole script, lightly edited, as *beats*: one thought each, five to fifteen seconds spoken, each
+with a stable id everything later hangs on) and **3. The shorts** (as
+many self-contained 45–75s cuts as the script holds, each with a title, a
+hook line and a note on why it stands alone; a short's beat that is a
+long beat word for word is marked *same as long beat n*, so one
+recording serves both). Each beat shows what changed from the paragraph
+it came from (added words lit, dropped words struck); click to edit it,
+**keep mine** puts your paragraph back, **change…** has Claude redo that
+one beat to an instruction, and a box under each cut does the same for
+the whole cut. **+ short** asks for one more. Change the script after a
+rewrite and the page offers **Adjust the cuts to the change**: every beat
+whose point still stands keeps its id and words, changed and new ones are
+marked. Stored in `<rendersDir>/scripts/<id>.json` (gitignored); an old
+`ideas.json` is migrated the first time the tab opens and renamed. The voice is
+yours: every other script on the tab goes into the call in full, with
+the instruction that your sentences come back word for word unless one
+would trip you reading it aloud; the game's `script.ai` in `desk.config`
+only adds the rules (no invented example lines). Needs
+`ANTHROPIC_API_KEY` in `apps/desk/.env`. **4. The visuals**: **Plan the
+visuals** gives every beat what's on screen while it's said: *a few
+words* (a text card), *a sketch* (a prompt), *footage to film* (a b-roll
+note) or *nothing new*. Change any row; **Make N sketches** draws the
+sketches three at a time in the background (GPT Image through the shared
+`@heroic/forge`, the game's `script.ai.sketch` style in front of every
+prompt, needs `OPENAI_API_KEY` in `apps/desk/.env`) and each lands on its
+row as it finishes (`public/cards/<script>/`, gitignored; **Back the takes
+up to Drive** copies them too); **again** on a row makes another try.
+**Show the shot list** is the b-roll notes as one list to film from.
+**5. Record**: the prompter. Every beat that needs a take, large, the
+next one to read lit; the mic and its meter; **Record** (`R`), a 3-2-1,
+read as many beats as you like, `R` again. The take is saved to
+`public/voice/takes/` (like an edit's), Whisper writes its words, and
+every beat it reads gets a tick (✓✓ = read in two takes: delete one, or
+organise will skip that beat). Read in any order, as many times as you
+like; **Add a recording from a file** takes one made elsewhere. The takes
+sit under the prompter: waveform, words, the beats each covers, **×** to
+delete (to the voice folder's `.trash`). Click a take to open it: drag
+across the sound to select a stretch, **Cut it out** or **Keep only
+this**, **Trim to the words** takes the silence off both ends, **Reset**
+undoes every cut; the file is never touched, the take keeps a list of
+kept regions and the matching and organise only see those. **6.
+Organise**: every cut becomes a fresh edit (`<script>-long-r1`,
+`<script>-short-1-r1`…): the takes sliced per beat in script order with
+the **gap** between, each beat's card on the cards row at its start (a
+text card or sketch until the next card, a b-roll slot for its beat), a
+marker per beat, the video tracks empty. A beat nobody read is skipped
+and said so; a beat read in two takes is skipped and said so (nothing
+picks between takes for you). Earlier runs' edits are never touched.
+Open an edit, drop footage on the b-roll slots, pick a song, Done › to
+Make: **Talk** for the long cut, any vertical template for a short.
 
-The description is the script. In the editor, the **Script** panel beside
-Record picks the idea an edit is making (ideas not yet ticked); its title
-and description sit there, large, to read from while recording. The edit
-remembers the idea (`idea` in its JSON), Make names it under the chosen
-clip, and the idea's row on Ideas links back to the edit. Tick it off from
-any of the three once the video's made.
+In the editor, the **Script** panel beside Record picks the script an
+edit is making; its long cut (or the pasted script, before a rewrite)
+sits there, large, to read from while recording. The edit remembers it
+(`idea` in its JSON), Make names it under the chosen clip, and the
+script's row links back to the edit. Tick it off from any of the three
+once the video's made.
 
 ## Adding a game
 

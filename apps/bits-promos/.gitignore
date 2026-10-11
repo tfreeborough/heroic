@@ -14,6 +14,8 @@ public/footage/*
 # (pieces + words, one .json each) ARE the voice-over — commit them.
 public/voice/takes/
 public/voice/.trash/
+# Sketches the Scripts tab generates (the Desk backs them up to Drive with the takes).
+public/cards/
 public/music/*
 !public/music/README.md
 out/

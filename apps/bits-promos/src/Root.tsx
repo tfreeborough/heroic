@@ -5,6 +5,7 @@ import { GameplayClip, gameplayClipDurationSeconds, gameplayClipSchema } from ".
 import { HookClip, hookClipDurationSeconds, hookClipSchema } from "./HookClip";
 import { ListClip, listClipDurationSeconds, listClipSchema } from "./ListClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./Spotlight";
+import { Talk, talkDurationSeconds, talkSchema } from "./Talk";
 import { APPLE_SHOT_SIZE, DevNote, FEATURE_SIZE, FeatureGraphic, SHOT_SIZE, StoreShot } from "./Store";
 import { STORE_SHOTS } from "./data/store";
 import { ATTENTION_CHECKPOINTS, AttentionTest, attentionSchema, attentionSeconds } from "./experiments/attention/AttentionTest";
@@ -72,6 +73,19 @@ export const Root: React.FC = () => (
       defaultProps={{ clip: "", hook: "3 mistakes I made making my game", items: ["I built a map editor first", "No bots until month four", "I ignored the first three seconds"], order: "down" as const, durationSeconds: 30, startFrom: 0, muted: false, ending: "loop" as const, push: 0 }}
       calculateMetadata={({ props }) => ({
         durationInFrames: Math.round(listClipDurationSeconds(props) * FPS),
+        ...formatSize(props.format),
+      })}
+    />
+    <Composition
+      id="Talk"
+      component={Talk}
+      schema={talkSchema}
+      durationInFrames={FPS * 66}
+      fps={FPS}
+      {...formatSize("landscape")}
+      defaultProps={{ clip: "", title: "Three things I changed my mind about", durationSeconds: 60, startFrom: 0, muted: false, ending: "signoff" as const, format: "landscape" as const }}
+      calculateMetadata={({ props }) => ({
+        durationInFrames: Math.round(talkDurationSeconds(props) * FPS),
         ...formatSize(props.format),
       })}
     />

@@ -1,0 +1,14 @@
+# Suno tracks: big binaries, kept on Drive. The list the Desk offers is rebuilt by `bun run sync`.
+public/music/*
+!public/music/README.md
+out/
+.DS_Store
+# Save pictures: generated, backed up to Drive. Their sidecars (prompt + words) are committed.
+public/saves/*.png
+# Half-made saves from the Desk's Saves tab.
+public/saves/drafts/
+# The finished glyph pictures (made on Save), for using elsewhere.
+public/saves/ascii/
+src/data/library.json
+# Old saves cleared for the fresh start (10-10), kept in case.
+retired/
