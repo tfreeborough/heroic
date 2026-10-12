@@ -1,0 +1,24 @@
+{
+ "id": "edit-2026-10-11",
+ "name": "Edit 2026-10-11",
+ "video": [
+  {
+   "id": "v1",
+   "clips": []
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": []
+  }
+ ],
+ "takes": [],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true
+ },
+ "slide": 0.4,
+ "createdAt": "2026-10-11T21:27:37.723Z",
+ "updatedAt": "2026-10-11T21:27:37.723Z"
+}

@@ -142,6 +142,13 @@ export const FLAVOUR: Record<Mood, { palette: Partial<Record<Colour, number>>; b
   night: { palette: { seventh: 3, ninth: 2, eleventh: 2, added9: 1, plain: 1 }, borrow: 1.3 },
   playful: { palette: { plain: 3, sixth: 2, added9: 2, seventh: 1, sus: 1 }, borrow: 0.7 },
   tender: { palette: { added9: 3, plain: 2, sixth: 2, sus: 1, seventh: 1 }, borrow: 0.8 },
+  focus: { palette: { seventh: 3, added9: 2, ninth: 2, plain: 1 }, borrow: 0.6 },
+  curious: { palette: { added9: 3, eleventh: 2, sixth: 2, sus: 1, plain: 1 }, borrow: 0.8 },
+  tense: { palette: { plain: 3, seventh: 2, sus: 2 }, borrow: 1.4 },
+  eerie: { palette: { sus: 3, eleventh: 2, plain: 2, ninth: 1 }, borrow: 1.8 },
+  driving: { palette: { plain: 3, added9: 2, sus: 1, seventh: 1 }, borrow: 0.7 },
+  melancholy: { palette: { seventh: 3, ninth: 2, added9: 2, plain: 1 }, borrow: 1.5 },
+  triumph: { palette: { plain: 3, added9: 2, sixth: 1, sus: 1 }, borrow: 0.9 },
 };
 
 const pc = (n: number) => ((n % 12) + 12) % 12;

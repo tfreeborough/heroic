@@ -12,10 +12,13 @@ import { type Clip as LibraryClip, type GameApi, fmtDate, fmtSeconds, thumbOf } 
 import { type Focus } from "./Timeline";
 import { dragPayload, remember, stem } from "./widgets";
 
+/** A script picture off the shelf: a glyph build with its look seed (an old sketch stays a flat picture). */
+const shelfCard = (sk: Sketch): Card => (sk.look !== undefined ? cardOf("build", { src: sk.src, beat: sk.beat, seed: sk.look }) : cardOf("image", { src: sk.src, beat: sk.beat }));
+
 type Tab = "footage" | "takes" | "cards";
 
 /** A picture the script made (stage 3), offered as an image card. */
-export type Sketch = { src: string; label: string; beat?: string };
+export type Sketch = { src: string; label: string; beat?: string; look?: number };
 
 export const Library: React.FC<{
   api: GameApi;
@@ -124,7 +127,7 @@ export const Library: React.FC<{
           <div className="lib-list">
             {sketches.length ? <div className="lib-hint">The script's sketches</div> : null}
             {sketches.map((sk) => (
-              <div key={sk.src} className={`lib-row card${locked ? " locked" : ""}`} draggable={!locked} onDragStart={startDrag({ kind: "card", card: cardOf("image", { src: sk.src, beat: sk.beat }), seconds: 4 }, sk.label)} onDragEnd={endDrag} onClick={() => !locked && onAddCard(cardOf("image", { src: sk.src, beat: sk.beat }))} title={`${sk.label}\n\nClick to add it at the playhead; drag it onto the cards row.`}>
+              <div key={sk.src} className={`lib-row card${locked ? " locked" : ""}`} draggable={!locked} onDragStart={startDrag({ kind: "card", card: shelfCard(sk), seconds: 4 }, sk.label)} onDragEnd={endDrag} onClick={() => !locked && onAddCard(shelfCard(sk))} title={`${sk.label}\n\nClick to add it at the playhead; drag it onto the cards row.`}>
                 <img src={api.publicUrl(sk.src)} alt="" loading="lazy" />
                 <div className="what">
                   <div className="name">{sk.label}</div>
@@ -136,7 +139,7 @@ export const Library: React.FC<{
               .sort((a, b) => a.at - b.at)
               .map((c) => (
                 <div key={c.id} className="lib-row card" onClick={() => onGoCard(c)} title={`${cardLabel(c)} at ${fmtSeconds(c.at)}. Click to go there.`}>
-                  {c.kind === "image" && c.src ? <img src={api.publicUrl(c.src)} alt="" loading="lazy" /> : <div className="sym">{c.kind === "text" ? "Aa" : "🎬"}</div>}
+                  {(c.kind === "image" || c.kind === "build") && c.src ? <img src={api.publicUrl(c.src)} alt="" loading="lazy" /> : <div className="sym">{c.kind === "text" ? "Aa" : "🎬"}</div>}
                   <div className="what">
                     <div className="name">{cardLabel(c)}</div>
                     <div className="small muted">

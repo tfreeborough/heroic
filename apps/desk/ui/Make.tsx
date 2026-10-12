@@ -150,7 +150,7 @@ export const Make: React.FC<{ game: GameInfo; api: GameApi; file?: string; batch
     if (c && template) {
       // A plain recording you'd voiced before edits carried their own voice brings its voice-over with it; an edit's voice is in the edit.
       const spoken = template.voice ? { voice: c.path ? "" : (voices.find((v) => v.clip === c.file && v.pieces > 0)?.path ?? "") } : {};
-      setProps((p) => ({ ...p, ...template.clipProps(clipPath(game, c), c.facts.seconds, c.facts), cropTop: c.cropTop, cropBottom: c.cropBottom, muted: c.muted, ...(c.title && !p.title ? { title: c.title } : {}), ...(c.line && !p.line ? { line: c.line } : {}), ...spoken }));
+      setProps((p) => ({ ...p, ...template.clipProps(clipPath(game, c), c.facts.seconds, c.facts), cropTop: c.cropTop, cropBottom: c.cropBottom, muted: c.muted, ...(c.title && !p.title && !template.noClipFill?.includes("title") ? { title: c.title } : {}), ...(c.line && !p.line && !template.noClipFill?.includes("line") ? { line: c.line } : {}), ...spoken }));
       if (!name) setName(c.title || c.file.replace(/\.[^.]+$/, ""));
     }
   };

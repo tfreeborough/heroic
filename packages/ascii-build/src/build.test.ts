@@ -118,3 +118,12 @@ describe("plan", () => {
     expect(b.pic.h).toBe(1000);
   });
 });
+
+describe("terminal captions", () => {
+  test("a line fills to its width, a pause starts a fresh one", async () => {
+    const { terminalLines } = await import("./remotion");
+    const w = (text: string, start: number) => ({ text, start, end: start + 0.25 });
+    const lines = terminalLines([w("one", 0), w("two", 0.3), w("three", 0.6), w("four", 0.9), w("after", 3)], 13);
+    expect(lines.map((l) => l.words.map((x) => x.text).join(" "))).toEqual(["one two three", "four", "after"]);
+  });
+});

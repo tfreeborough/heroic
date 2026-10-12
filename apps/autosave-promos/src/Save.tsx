@@ -13,7 +13,7 @@
  * edge, where TikTok draws its caption and buttons.
  */
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
-import { ARRIVALS, type Arrival, type Build, ORDERS, type Order, PALETTES, drawBuild, hash, inkFromImage, landedCount, mulberry, newCache, planBuild, rgba } from "@heroic/ascii-build";
+import { ARRIVALS, type Arrival, type Build, NOISE, ORDERS, type Order, type Palette, PALETTES, drawBuild, hash, inkFromImage, landedCount, mulberry, newCache, planBuild, rgba } from "@heroic/ascii-build";
 import { AUTOSAVE_LOOK } from "./look";
 import type { Ink } from "@heroic/ascii-build";
 import * as React from "react";
@@ -69,6 +69,13 @@ export const saveSchema = z.object({
   musicFrom: z.number().min(0),
   musicVolume: z.number().min(0).max(1),
   ticksVolume: z.number().min(0).max(1),
+  /** The first-second hook (10-12, after 31.9% stayed to watch): `burst` sends
+   * a flurry of glyphs in up front, `glitch` flickers the finished picture
+   * like a bad CRT on the first frames (and the last, so the loop meets). */
+  burst: z.boolean().default(true),
+  glitch: z.boolean().default(true),
+  /** Faint Matrix rain behind everything; 0 = none. */
+  rain: z.number().min(0).max(1).default(0.5),
 });
 export type SaveProps = z.infer<typeof saveSchema>;
 
@@ -164,6 +171,68 @@ const below = (times: Float64Array, x: number) => {
   return lo;
 };
 
+/** The burst: this share of the glyphs set off in the first this-many seconds. */
+const BURST = { share: 0.3, seconds: 1.5 };
+
+/** Matrix rain behind everything. Each stream goes round a whole number of
+ * times in the video, so the last frame meets the first. */
+const RAIN = { cw: 27, ch: 36, trail: 16, px: 26 };
+const drawRain = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number, seconds: number, strength: number, pal: Palette, seed: number) => {
+  ctx.font = `400 ${RAIN.px}px ${FAMILY}`;
+  ctx.textBaseline = "top";
+  const lap = h + RAIN.trail * RAIN.ch;
+  for (let k = 0; k < Math.floor(w / RAIN.cw); k++) for (let d = 0; d < 2; d++) {
+    const n = k * 2 + d + seed * 101;
+    if (hash(n) < 0.4) continue;
+    const laps = 1 + Math.floor(hash(n + 17) * 3);
+    // Snapped to the row grid, so a stream steps down like the real thing.
+    const row = Math.floor((((t / seconds) * laps + hash(n + 33)) % 1) * lap / RAIN.ch);
+    for (let j = 0; j < RAIN.trail; j++) {
+      const y = (row - j) * RAIN.ch;
+      if (y < -RAIN.ch || y > h) continue;
+      const a = strength * (j === 0 ? 0.32 : 0.16 * (1 - j / RAIN.trail));
+      ctx.fillStyle = rgba(j === 0 ? pal.ink : pal.trail, a);
+      const flip = Math.floor(t * (2 + hash(n + row - j) * 6));
+      ctx.fillText(NOISE[Math.floor(hash(n * 131 + (row - j) * 7 + flip) * NOISE.length)]!, k * RAIN.cw, y);
+    }
+  }
+};
+
+/** How hard the CRT glitch is at `t`, 0..1: hardest on the first frames,
+ * dying out with a couple of dropouts by 0.45s, and back for the last few
+ * frames so the loop's seam is a glitch too. */
+const glitchAt = (t: number, seconds: number, frame: number) => {
+  if (t > seconds - 0.15) return 0.8;
+  if (t >= 0.45) return 0;
+  if (t > 0.1 && hash(frame * 17 + 5) < 0.3) return 0;
+  return 1 - (t / 0.45) ** 1.5;
+};
+
+/** Slices of the finished picture, torn sideways, with a ghost and a rolling band. */
+const drawGlitch = (ctx: CanvasRenderingContext2D, still: OffscreenCanvas, box: typeof PIC, k: number, frame: number, w: number, pal: Palette) => {
+  const r = mulberry(frame * 7 + 3);
+  for (let y = box.y; y < box.y + box.h;) {
+    const bh = 6 + Math.floor(r() * 54);
+    if (r() < 0.3 + 0.4 * k) {
+      const dx = (r() - 0.5) * 160 * k;
+      const a = (0.35 + r() * 0.6) * k;
+      ctx.globalAlpha = a;
+      ctx.drawImage(still, 0, y, w, bh, dx, y, w, bh);
+      if (r() < 0.35) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = a * 0.5;
+        ctx.drawImage(still, 0, y, w, bh, dx + 12, y, w, bh);
+        ctx.globalCompositeOperation = "source-over";
+      }
+    }
+    y += bh;
+  }
+  ctx.globalAlpha = 0.2 * k;
+  ctx.fillStyle = rgba(pal.ink, 1);
+  ctx.fillRect(0, box.y + r() * box.h, w, 4 + r() * 10);
+  ctx.globalAlpha = 1;
+};
+
 const typed = (text: string, since: number, t: number, cps = 40) => text.slice(0, Math.max(0, Math.floor((t - since) * cps)));
 
 export const Save: React.FC<SaveProps> = (p) => {
@@ -179,10 +248,20 @@ export const Save: React.FC<SaveProps> = (p) => {
   const build = React.useMemo<Build | null>(
     () => ink && planBuild({
       ink, look: AUTOSAVE_LOOK, box: PIC, frame: { w: width, h: height },
-      start: tl.buildStart, end: tl.buildEnd, seed: p.seed, arrival, order, exit: tl.exit,
+      // A burst starts straight away: glyphs are already falling on the first frame after the glitch.
+      start: p.burst ? 0.05 : tl.buildStart, end: tl.buildEnd, seed: p.seed, arrival, order, exit: tl.exit,
+      burst: p.burst ? BURST : undefined,
     }),
-    [ink, width, height, tl.buildStart, tl.buildEnd, tl.exit.start, tl.exit.end, p.seed, arrival, order],
+    [ink, width, height, tl.buildStart, tl.buildEnd, tl.exit.start, tl.exit.end, p.seed, arrival, order, p.burst],
   );
+  // The finished picture, for the glitch to tear up.
+  const still = React.useMemo(() => {
+    if (!build || !p.glitch) return null;
+    const c = new OffscreenCanvas(width, height);
+    drawBuild(c.getContext("2d")!, build, tl.exit.start - 0.01, { palette: pal, family: FAMILY });
+    return c;
+  }, [build, p.glitch, width, height, pal, tl.exit.start]);
+  const glitch = p.glitch ? glitchAt(t, p.seconds, frame) : 0;
   const leaveTimes = React.useMemo(() => (build ? Float64Array.from(build.cells.map((c) => c.leave)).sort() : new Float64Array()), [build]);
 
   const canvas = React.useRef<HTMLCanvasElement>(null);
@@ -191,8 +270,10 @@ export const Save: React.FC<SaveProps> = (p) => {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, width, height);
-    if (build) drawBuild(ctx, build, t, { palette: pal, family: FAMILY, ambient: true, glow: 0.25, glowFrom: tl.buildEnd + 0.3, cache: cache.current });
-  }, [build, t, width, height, pal, tl.buildEnd]);
+    if (p.rain > 0) drawRain(ctx, width, height, t, p.seconds, p.rain, pal, p.seed);
+    if (build) drawBuild(ctx, build, t, { palette: pal, family: FAMILY, glow: 0.25, glowFrom: tl.buildEnd + 0.3, cache: cache.current });
+    if (still && glitch > 0) drawGlitch(ctx, still, PIC, glitch, frame, width, pal);
+  }, [build, t, width, height, pal, tl.buildEnd, p.rain, p.seconds, p.seed, still, glitch, frame]);
 
   const ink1 = rgba(pal.ink, 1), dim = rgba(pal.ink, 0.45), faint = rgba(pal.ink, 0.28);
 
@@ -268,6 +349,8 @@ export const Save: React.FC<SaveProps> = (p) => {
     <AbsoluteFill style={{ backgroundColor: pal.bg }}>
       <canvas ref={canvas} width={width} height={height} style={{ position: "absolute", inset: 0 }} />
 
+      {/* The words jump sideways with the glitch. */}
+      <div style={{ position: "absolute", inset: 0, transform: `translateX(${glitch > 0 ? (hash(frame * 3 + 1) - 0.5) * 28 * glitch : 0}px)` }}>
       {/* Nothing above the status lines: TikTok's top bar (LIVE · For You · search) covers the top of the frame. */}
       <div style={{ ...text, top: STATUS_Y, fontSize: 38, fontWeight: 700, color: ink1, opacity: statusFade }}>{line1}</div>
       <div style={{ ...text, top: STATUS_Y + 58, fontSize: 30, color: dim, opacity: statusFade }}>{line2}</div>
@@ -288,6 +371,8 @@ export const Save: React.FC<SaveProps> = (p) => {
       </div>
       <div style={{ ...text, top: BAR_Y + 80 + ROW + Math.max(1, lines.length) * 40 + 30, fontSize: 28, color: dim, width: 840, whiteSpace: "normal" }}>{tip}</div>
 
+      </div>
+
       {achievement && eggIn > 0 && (
         <div style={{ position: "absolute", left: "50%", top: 300 + DROP, transform: `translate(-50%, ${(1 - eggIn) * -30}px)`, opacity: eggIn, fontFamily: FAMILY, fontSize: 28, color: ink1, border: `2px solid ${dim}`, background: pal.bg, padding: "18px 28px", whiteSpace: "pre" }}>
           {"[*] Achievement unlocked\n    Watched one to the end"}
@@ -299,6 +384,12 @@ export const Save: React.FC<SaveProps> = (p) => {
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)", pointerEvents: "none" }} />
 
       <Audio src={staticFile("sfx/hum.mp3")} loop volume={(f) => 0.12 * loopEdges(f)} />
+      {p.glitch && (
+        <>
+          <Sequence durationInFrames={Math.round(0.5 * fps)}><Audio src={staticFile("sfx/glitch.wav")} volume={0.5} /></Sequence>
+          <Sequence from={Math.round((p.seconds - 0.15) * fps)}><Audio src={staticFile("sfx/glitch.wav")} volume={0.35} /></Sequence>
+        </>
+      )}
       <Audio src={staticFile("sfx/ticks.mp3")} loop volume={(f) => p.ticksVolume * Math.min(1, rate(f / fps) / peak) ** 0.7} />
       <Sequence from={Math.round(tl.saved * fps)} durationInFrames={Math.round(2.5 * fps)}>
         {/* In the generated tune's key, so they agree. */}

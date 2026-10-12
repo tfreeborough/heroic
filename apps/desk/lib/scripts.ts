@@ -33,6 +33,39 @@ export type BeatCard = {
   error?: string;
 };
 
+/**
+ * A picture on a beat (docs/design/desk-ascii-scripts.md): what it's of,
+ * every try at it, the one chosen, and its LOOK SEED (how its glyphs
+ * arrive and fill in: same seed, same build). A long beat has two.
+ */
+export type BeatPicture = {
+  /** What the picture is of (the game's style is added when it's made). */
+  prompt: string;
+  /** Every try, oldest first, under the game's public dir (generated or Tom's own). */
+  candidates: string[];
+  /** The one the video uses (one of the candidates). */
+  chosen?: string;
+  /** Tom's tick. Organise warns about a beat without one but uses it anyway. */
+  approved?: boolean;
+  /** The beat's words (or the prompt) changed since the picture was made. */
+  check?: boolean;
+  /** The last try failed: why. */
+  error?: string;
+  /** The look seed. */
+  look: number;
+};
+
+/** What the score should feel like under a beat. The six Autosave moods, then the seven for telling a story. */
+export const SCORE_MOODS = ["cosy", "wistful", "wonder", "night", "playful", "tender", "focus", "curious", "tense", "eerie", "driving", "melancholy", "triumph"] as const;
+export type ScoreMood = (typeof SCORE_MOODS)[number];
+export type BeatMood = {
+  mood: ScoreMood;
+  /** 0 (bare) to 1 (everything playing). */
+  intensity: number;
+  /** The turn of the video: the music steps up a key here. One or two a video at most. */
+  lift?: boolean;
+};
+
 /** One thought, a few sentences, five to fifteen seconds spoken. */
 export type Beat = {
   /** Stable through edits; what a take match and a card refer to. */
@@ -42,8 +75,16 @@ export type Beat = {
   from?: string;
   /** The words changed since the last rewrite (a re-paste, or Tom's hand): its match and card want checking. */
   changed?: boolean;
-  /** The visual plan for it. A short's shared beat uses the long beat's. */
+  /** The old visual plan (desk-scripts.md), left on older scripts; organise only falls back to it. */
   card?: BeatCard;
+  /** Its picture, or two for a long beat. */
+  pictures?: BeatPicture[];
+  /** What the score does under it. */
+  mood?: BeatMood;
+  /** Key words (as written in the beat) the picture's glyphs fly out to spell as they're said. */
+  pulled?: string[];
+  /** A chapter starts at this beat: its name. */
+  chapter?: string;
 };
 
 /** One video's worth: the long cut, or a short. */
@@ -61,8 +102,13 @@ export type Cut = {
 /** A source the cuts were made from, kept: every rewrite or adjust snapshots the text it ran on. */
 export type SourceVersion = { at: string; text: string };
 
-/** A recording of Tom reading the script, with its words and the parts of it he's kept (no `keep` = all of it). */
-export type ScriptTake = Take & { keep?: { start: number; end: number }[] };
+/**
+ * A recording of Tom reading the script, with its words and the parts of it
+ * he's kept (no `keep` = all of it). `assign`: the beats Tom says it reads
+ * (ids, in order), for when the matcher didn't hear them: it then reads
+ * those and only those.
+ */
+export type ScriptTake = Take & { keep?: { start: number; end: number }[]; assign?: string[] };
 
 export type Script = {
   id: string;
@@ -77,10 +123,12 @@ export type Script = {
   takes: ScriptTake[];
   /** Seconds of silence organise leaves between beats. */
   gap: number;
+  /** The score's seed (desk-ascii-scripts.md): set at the first organise; Another soundtrack draws a new one. */
+  scoreSeed?: number;
   /** How many times organise has run (each run names its sequences by it). */
   runs?: number;
   /** The sequences organise wrote, newest last: the cut each is, which run, when. */
-  sequences?: { id: string; cut: string; run: number; at: string; missing: number; conflicts: number }[];
+  sequences?: { id: string; cut: string; run: number; at: string; missing: number; conflicts: number; youtube?: string }[];
   /** ISO timestamp once the video's made. */
   done?: string;
   createdAt: string;
@@ -131,14 +179,20 @@ export const beatText = (s: Pick<Script, "long">, b: Beat): string => (b.from &&
 
 // ── words ──
 
-/** Words as the matcher and the diff see them: lower case, no punctuation, numbers kept. */
+/** Spelled numbers as digits: the script says "three", Whisper hears "3". */
+const NUMBERS: Record<string, string> = Object.fromEntries(
+  "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split(" ").map((w, i) => [w, String(i)]),
+);
+
+/** Words as the matcher and the diff see them: lower case, no punctuation, numbers as digits. */
 export const tokens = (text: string): string[] =>
   text
     .toLowerCase()
     .replace(/[’']/g, "")
     .replace(/[^a-z0-9\s]+/g, " ")
     .split(/\s+/)
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((t) => NUMBERS[t] ?? t);
 
 /** Words with their original spelling, for showing a diff. */
 export const words = (text: string): string[] => text.split(/\s+/).filter(Boolean);
@@ -178,6 +232,48 @@ export const wordDiff = (a: string, b: string): DiffOp[] => {
   return ops;
 };
 
+/**
+ * The review's diff: the whole script against the whole cut in ONE
+ * alignment, then shared out to the beats. Every word written is matched
+ * once, so a sentence a neighbouring beat says is never shown as cut (the
+ * old per-beat diff against a whole paragraph struck 60–70% of a real
+ * script that had lost almost nothing). A run of the script that no beat
+ * says is struck on the beat that follows it (the last beat for the end).
+ * `span` is the script's words for that beat as written, for keep mine.
+ */
+export const cutDiff = (source: string, beats: string[]): { ops: DiffOp[]; span: string }[] => {
+  const A = words(source);
+  const an = A.map(norm);
+  const B: { w: string; beat: number }[] = beats.flatMap((t, k) => words(t).map((w) => ({ w, beat: k })));
+  const bn = B.map((b) => norm(b.w));
+  const n = A.length;
+  const m = B.length;
+  const out = beats.map(() => ({ ops: [] as DiffOp[], span: [] as string[] }));
+  if (!m) return out.map(() => ({ ops: [], span: "" }));
+  const lcs: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) lcs[i]![j] = an[i] === bn[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+  const push = (k: number, kind: DiffOp["kind"], text: string) => {
+    const ops = out[k]!.ops;
+    const last = ops.at(-1);
+    if (last && last.kind === kind) last.text += ` ${text}`;
+    else ops.push({ kind, text });
+    if (kind !== "added") out[k]!.span.push(text);
+  };
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (an[i] === bn[j]) {
+      push(B[j]!.beat, "same", B[j]!.w);
+      i++;
+      j++;
+    } else if (lcs[i + 1]![j]! >= lcs[i]![j + 1]!) push(B[j]!.beat, "removed", A[i++]!);
+    else push(B[j]!.beat, "added", B[j++]!.w);
+  }
+  while (i < n) push(beats.length - 1, "removed", A[i++]!);
+  while (j < m) push(B[j]!.beat, "added", B[j++]!.w);
+  return out.map((o) => ({ ops: o.ops, span: o.span.join(" ") }));
+};
+
 /** How alike two texts are, 0–1: the share of the shorter's words found in the other. */
 export const overlap = (a: string, b: string): number => {
   const A = tokens(a);
@@ -214,25 +310,58 @@ export const cutText = (s: Pick<Script, "long">, c: Cut): string => c.beats.map(
 /** Spoken length, roughly: 2.6 words a second. */
 export const spokenSeconds = (text: string): number => Math.round(tokens(text).length / 2.6);
 
-/** The beats that carry their own plan: the long cut's, then the shorts' beats that aren't a long beat. */
-export const plannedBeats = (s: Pick<Script, "long" | "shorts">): { cut: Cut; beat: Beat }[] => [
-  ...(s.long ? s.long.beats.map((beat) => ({ cut: s.long!, beat })) : []),
-  ...s.shorts.flatMap((cut) => cut.beats.filter((b) => !b.from).map((beat) => ({ cut, beat }))),
-];
+/** The beats that are planned, recorded and organised: the long cut's (shorts are parked, desk-ascii-scripts.md decision 1). */
+export const plannedBeats = (s: Pick<Script, "long" | "shorts">): { cut: Cut; beat: Beat }[] => (s.long ? s.long.beats.map((beat) => ({ cut: s.long!, beat })) : []);
 
 /** A beat's visual: its own, or (a short's shared beat) the long beat's. */
 export const cardOfBeat = (s: Pick<Script, "long">, b: Beat): BeatCard | undefined => (b.from ? s.long?.beats.find((x) => x.id === b.from)?.card : b.card);
 
-/** The pictures the script has made, for the editor's Cards shelf. */
-export const sketchesOf = (s: Pick<Script, "long" | "shorts">): { src: string; label: string; beat: string }[] =>
-  plannedBeats(s).flatMap(({ cut, beat }, i) => (beat.card?.kind === "sketch" && beat.card.src ? [{ src: beat.card.src, label: `${cut.kind === "long" ? "" : "short · "}${beat.text.slice(0, 60)}`, beat: beat.id }] : []));
+/** The pictures the script has chosen, for the editor's Cards shelf (and the old sketches, on older scripts). */
+export const sketchesOf = (s: Pick<Script, "long" | "shorts">): { src: string; label: string; beat: string; look?: number }[] =>
+  plannedBeats(s).flatMap(({ beat }) => {
+    const label = beat.text.slice(0, 60);
+    const chosen = (beat.pictures ?? []).flatMap((p, k) => (p.chosen ? [{ src: p.chosen, label: k ? `${label} (2)` : label, beat: beat.id, look: p.look }] : []));
+    return chosen.length ? chosen : beat.card?.kind === "sketch" && beat.card.src ? [{ src: beat.card.src, label, beat: beat.id }] : [];
+  });
 
-/** What to film: every b-roll slot, numbered by its beat, as one list to take out with the phone. */
-export const shotList = (s: Pick<Script, "long" | "shorts">): string =>
-  plannedBeats(s)
-    .filter(({ beat }) => beat.card?.kind === "broll" && beat.card.note?.trim())
-    .map(({ cut, beat }) => {
-      const n = cut.beats.findIndex((b) => b.id === beat.id) + 1;
-      return `${cut.kind === "long" ? "" : `[${cut.title}] `}${n}. ${beat.card!.note!.trim()}\n   while saying: "${beat.text.slice(0, 90)}${beat.text.length > 90 ? "…" : ""}"`;
-    })
-    .join("\n\n");
+// ── pictures, chapters ──
+
+/** A beat guessed at longer than this (spoken seconds) gets a second picture. */
+export const LONG_BEAT = 20;
+/** No chapters in a video shorter than this (spoken seconds). */
+export const CHAPTERS_FROM = 6 * 60;
+/** Never two chapters closer than this (spoken seconds). */
+export const CHAPTER_GAP = 3 * 60;
+
+/** A fresh look seed, 1–9999 like the Desk's other seeds. */
+export const newLook = (): number => 1 + Math.floor(Math.random() * 9999);
+
+/** How many pictures a beat wants by its length. */
+export const picturesWanted = (text: string): number => (spokenSeconds(text) > LONG_BEAT ? 2 : 1);
+
+/** The chapters as the rules allow them: none in a short video, never two within CHAPTER_GAP (the first wins). Beat ids. */
+export const allowedChapters = (beats: Pick<Beat, "id" | "text" | "chapter">[]): Set<string> => {
+  const total = beats.reduce((n, b) => n + spokenSeconds(b.text), 0);
+  const ok = new Set<string>();
+  if (total < CHAPTERS_FROM) return ok;
+  let at = 0;
+  let last = -Infinity;
+  for (const b of beats) {
+    if (b.chapter?.trim() && at - last >= CHAPTER_GAP) {
+      ok.add(b.id);
+      last = at;
+    }
+    at += spokenSeconds(b.text);
+  }
+  return ok;
+};
+
+/** Where each beat starts, roughly (spoken seconds from the top), for showing chapter spacing. */
+export const beatStarts = (beats: Pick<Beat, "text">[]): number[] => {
+  let at = 0;
+  return beats.map((b) => {
+    const t = at;
+    at += spokenSeconds(b.text);
+    return t;
+  });
+};

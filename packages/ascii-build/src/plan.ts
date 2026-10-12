@@ -32,6 +32,16 @@ export type Order = keyof typeof ORDERS;
 export const RAMP = " .:-=+*#%@";
 export const NOISE = "01<>/\\|=+*#%&$@{}[]";
 
+/** A look seed's shuffle: the arrival and fill order it picks. Same seed, same pair
+ * (the same draw the Save template makes for "shuffle"). */
+export const lookFromSeed = (seed: number): { arrival: Arrival; order: Order } => {
+  const r = mulberry(seed * 31 + 5);
+  const arrivals = Object.keys(ARRIVALS) as Arrival[];
+  const orders = Object.keys(ORDERS) as Order[];
+  const arrival = arrivals[Math.floor(r() * arrivals.length)]!;
+  return { arrival, order: orders[Math.floor(r() * orders.length)]! };
+};
+
 export type Rect = { x: number; y: number; w: number; h: number };
 
 export type Cell = {
@@ -88,6 +98,9 @@ export type PlanOptions = {
   order: Order;
   /** For a loop: everything drops away between these times. */
   exit?: { start: number; end: number };
+  /** A fast start: `share` of the glyphs set off in the first `seconds`, then
+   * the rest at the steady pace (a hook for the first second of a feed). */
+  burst?: { share: number; seconds: number };
 };
 
 /** How long a fallen glyph takes to fade out of the exit. */
@@ -126,9 +139,14 @@ export const planBuild = (o: PlanOptions): Build => {
   }
   cells.sort((a, b) => a.key - b.key);
 
-  const span = o.end - o.start;
+  const span = (o.end - o.start) * 0.97;
+  const burst = o.burst && o.burst.share > 0 && o.burst.share < 1 && o.burst.seconds < span ? o.burst : null;
+  const releaseAt = (q: number) =>
+    !burst ? q * span
+    : q < burst.share ? (q / burst.share) * burst.seconds
+    : burst.seconds + ((q - burst.share) / (1 - burst.share)) * (span - burst.seconds);
   cells.forEach((c, i) => {
-    c.release = o.start + (i / cells.length) * span * 0.97;
+    c.release = o.start + releaseAt(i / cells.length);
     c.seed = i + o.seed * 7919;
     let dur: number;
     switch (o.arrival) {

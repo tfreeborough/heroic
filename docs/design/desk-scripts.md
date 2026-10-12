@@ -1,5 +1,9 @@
 # The Desk: scripts
 
+> **2026-10-11:** the visual plan (text cards, sketches, b-roll slots,
+> shot list) and shorts are being replaced by one ASCII picture per beat
+> and a generated score: see [desk-ascii-scripts.md](desk-ascii-scripts.md).
+
 *Drafted 2026-10-09 (Tom + Claude). Status: **all five stages BUILT
 2026-10-09** (the Scripts tab with rewrite, review and adjust; the
 overlay track, its editor and the Talk template; the visual plan, the

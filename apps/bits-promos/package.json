@@ -19,6 +19,7 @@
     "attention:score": "bun src/experiments/attention/score.ts"
   },
   "dependencies": {
+    "@heroic/ascii-build": "workspace:*",
     "@heroic/voiceover": "workspace:*",
     "@remotion/cli": "^4.0.0",
     "@remotion/fonts": "^4.0.0",

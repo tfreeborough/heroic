@@ -10,9 +10,13 @@
  * wide one, whatever's playing. Each fades and rises in over a few frames
  * and fades out at its end. Drawn inside the Stage, under the captions.
  */
+import { useMemo } from "react";
 import type * as React from "react";
 import { AbsoluteFill, Easing, Img, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import { type Card, type Playable, cardEnd, layersAt, sortClips } from "@heroic/voiceover";
+import { CHAPTER_CARD, LOCKED_LOOK, PALETTES } from "@heroic/ascii-build";
+import { BuildLayer, ChapterCard } from "@heroic/ascii-build/remotion";
+import { type Card, type Playable, audioPieces, cardEnd, layersAt, piecesInVideo, placedWords, sortClips } from "@heroic/voiceover";
+import { GLYPH_FAMILY, buildShows } from "./glyphs";
 import { CINZEL, SANS, palette } from "./brand";
 import { useFormat } from "./components";
 
@@ -84,13 +88,50 @@ const OneCard: React.FC<{ seq: Playable; card: Card }> = ({ seq, card }) => {
   );
 };
 
-/** Every card of the sequence, each in its own Sequence so it only exists while it shows. `offset` = the sequence frame at this layer's frame zero. */
-export const CardsLayer: React.FC<{ seq: Playable; offset: number }> = ({ seq, offset }) => {
-  const { fps, durationInFrames } = useVideoConfig();
-  const cards = sortClips(seq.overlay?.cards ?? []).filter((c) => c.kind !== "broll");
-  if (!cards.length) return null;
+/**
+ * An edit's glyph pictures and chapter cards (docs/design/desk-ascii-scripts.md),
+ * as the Beats template draws them, in whatever template plays the edit
+ * (the editor's preview among them): on the matrix ground while one shows,
+ * giving way to footage like a full card.
+ */
+const GlyphCards: React.FC<{ seq: Playable; offset: number }> = ({ seq, offset }) => {
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames, width, height } = useVideoConfig();
+  const pal = PALETTES.matrix;
+  const look = LOCKED_LOOK;
+  const startFrom = offset / fps;
+  const words = useMemo(() => (seq.takes.length ? placedWords({ takes: seq.takes, captionNudgeMs: seq.voice.captionNudgeMs }, piecesInVideo(audioPieces(seq), startFrom, durationInFrames / fps)) : []), [seq, startFrom, durationInFrames, fps]);
+  const builds = useMemo(() => buildShows(seq, words, startFrom), [seq, words, startFrom]);
+  const chapters = useMemo(() => sortClips((seq.overlay?.cards ?? []).filter((c) => c.kind === "chapter")), [seq]);
+  if (!builds.length && !chapters.length) return null;
+  const now = startFrom + frame / fps;
+  const footage = layersAt(seq, now).length > 0;
+  const showing = !footage && [...builds, ...chapters].some((c) => now >= c.at && now < c.at + c.seconds + 0.5);
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {showing ? <AbsoluteFill style={{ backgroundColor: pal.bg }} /> : null}
+      <BuildLayer cards={builds} offset={offset} palette={pal} family={GLYPH_FAMILY} look={look} hiddenAt={(s) => layersAt(seq, s).length > 0} />
+      {chapters.map((c, i) => {
+        const from = Math.round(c.at * fps) - offset;
+        if (from + CHAPTER_CARD * fps <= 0 || from >= durationInFrames || footage) return null;
+        return (
+          <Sequence key={c.id} from={from} durationInFrames={Math.round((CHAPTER_CARD + 0.4) * fps)} layout="none">
+            <ChapterCard n={c.n ?? i + 1} name={c.text ?? ""} palette={pal} family={GLYPH_FAMILY} nameFont={`700 ${Math.round(Math.min(width, height) * 0.15)}px ${CINZEL}`} look={look} seed={500 + i} />
+          </Sequence>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+
+/** Every card of the sequence, each in its own Sequence so it only exists while it shows. `offset` = the sequence frame at this layer's frame zero. `glyphs`: draw the glyph pictures and chapters too. */
+export const CardsLayer: React.FC<{ seq: Playable; offset: number; glyphs?: boolean }> = ({ seq, offset, glyphs = true }) => {
+  const { fps, durationInFrames } = useVideoConfig();
+  const cards = sortClips(seq.overlay?.cards ?? []).filter((c) => c.kind === "text" || c.kind === "image");
+  if (!cards.length) return glyphs ? <GlyphCards seq={seq} offset={offset} /> : null;
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {glyphs ? <GlyphCards seq={seq} offset={offset} /> : null}
       {cards.map((c) => {
         const from = Math.round(c.at * fps) - offset;
         const frames = Math.max(1, Math.round((cardEnd(c) - c.at) * fps));

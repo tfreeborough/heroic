@@ -847,7 +847,7 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
   const pickedTake = asel ? asel.clip.take : picked.word ? picked.word.take : undefined;
 
   const focusLabel = focus.kind === "video" ? `V${focus.track + 1}` : focus.kind === "audio" ? `A${focus.track + 1}` : "cards";
-  const inspectorTitle = vsel ? `Clip on V${vsel.track + 1}` : asel ? `Voice on A${asel.track + 1}` : csel ? (csel.card.kind === "text" ? "A text card" : csel.card.kind === "image" ? "A picture" : "A b-roll slot") : picked.clips.length > 1 ? `${picked.clips.length} clips selected` : picked.word ? "A word" : picked.marker ? "A marker" : "Nothing selected";
+  const inspectorTitle = vsel ? `Clip on V${vsel.track + 1}` : asel ? `Voice on A${asel.track + 1}` : csel ? (csel.card.kind === "text" ? "A text card" : csel.card.kind === "image" ? "A picture" : csel.card.kind === "build" ? "A glyph picture" : csel.card.kind === "chapter" ? "A chapter" : "A b-roll slot") : picked.clips.length > 1 ? `${picked.clips.length} clips selected` : picked.word ? "A word" : picked.marker ? "A marker" : "Nothing selected";
 
   return (
     <div className="editor" onClick={() => setMenu(null)}>

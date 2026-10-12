@@ -475,8 +475,8 @@ export const Timeline: React.FC<{
                 title={`${cardLabel(c)} · ${fmtSeconds(c.at)} → ${fmtSeconds(cardEnd(c))}${c.place === "over" ? " · over the footage" : " · on the backdrop (footage wins)"}. Drag to move it, its edges to trim.`}
                 onMouseDown={onClipDown("overlay", 0, c.id)}
               >
-                {c.kind === "image" && c.src ? <img src={api.publicUrl(c.src)} alt="" /> : null}
-                <span className="ctext">{c.kind === "image" ? "" : cardLabel(c)}</span>
+                {(c.kind === "image" || c.kind === "build") && c.src ? <img src={api.publicUrl(c.src)} alt="" /> : null}
+                <span className="ctext">{c.kind === "image" || c.kind === "build" ? "" : cardLabel(c)}</span>
                 <div className="edge l" onMouseDown={onEdgeDown("overlay", 0, c.id, "start")} />
                 <div className="edge r" onMouseDown={onEdgeDown("overlay", 0, c.id, "end")} />
               </div>

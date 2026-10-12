@@ -67,7 +67,7 @@ const MISMATCH = -1;
 const GAP = -0.6;
 
 /** The best stretch of the take that reads this beat (a local alignment): how many of its words were heard in order, and which heard words bracket it. */
-const findBeat = (A: string[], Bt: string[]): { matches: number; from: number; to: number } | undefined => {
+const findBeat = (A: string[], Bt: string[], gaps?: boolean[]): { matches: number; from: number; to: number } | undefined => {
   const n = A.length;
   const m = Bt.length;
   if (!n || !m) return undefined;
@@ -126,7 +126,11 @@ const findBeat = (A: string[], Bt: string[]): { matches: number; from: number; t
     } else if (d === 2) i--;
     else j--;
   }
-  return { matches, from, to: bi - 1 };
+  // The alignment stops at the last word that paired: a beat ending on a word heard differently ("…the other three players" read as "3 players")
+  // would lose its tail. Take in as many more heard words as the beat had left, so long as there's no pause before them.
+  let to = bi - 1;
+  for (let left = m - bj; left > 0 && to + 1 < n && !(gaps?.[to + 1] ?? false); left--) to++;
+  return { matches, from, to };
 };
 
 /**
@@ -140,12 +144,14 @@ export const matchTake = (take: Pick<Take, "words"> & { keep?: Span[] }, beats: 
   const heard = keptWords(take).filter((w) => !w.hidden);
   const A = heard.map((w) => tokens(w.text).join(""));
   if (!A.length) return [];
+  // A pause before each heard word.
+  const gaps = heard.map((w, i) => i > 0 && w.start - heard[i - 1]!.end >= PAUSE);
   type Found = Cover & { from: number; to: number; matches: number };
   const found: Found[] = [];
   for (const b of beats) {
     const Bt = tokens(b.text);
     if (!Bt.length) continue;
-    const f = findBeat(A, Bt);
+    const f = findBeat(A, Bt, gaps);
     if (!f) continue;
     const score = f.matches / Bt.length;
     if (score < threshold) continue;
@@ -174,7 +180,8 @@ export const matchTake = (take: Pick<Take, "words"> & { keep?: Span[] }, beats: 
  * short's order, not the long cut's), the covers merged by beat with the
  * best score kept. A short's shared beat counts as the long beat.
  */
-export const matchScript = (take: Pick<Take, "words"> & { keep?: Span[] }, s: Pick<Script, "long" | "shorts">, threshold = COVER_THRESHOLD): Cover[] => {
+export const matchScript = (take: Pick<Take, "words" | "seconds"> & { keep?: Span[]; assign?: string[] }, s: Pick<Script, "long" | "shorts">, threshold = COVER_THRESHOLD): Cover[] => {
+  if (take.assign?.length) return assignedCovers(take, s);
   const best = new Map<string, Cover>();
   for (const cut of cutsOf(s)) {
     const beats = cut.beats.map((b) => ({ id: b.from ?? b.id, text: beatText(s, b) }));
@@ -184,4 +191,61 @@ export const matchScript = (take: Pick<Take, "words"> & { keep?: Span[] }, s: Pi
     }
   }
   return [...best.values()].sort((a, b) => a.start - b.start);
+};
+
+/**
+ * A take Tom has said reads certain beats (the matcher didn't hear them):
+ * it covers exactly those, in order, across its kept part. One beat takes
+ * the lot. Several are placed where the alignment finds them, however
+ * faintly; one it can't find at all shares out what's left between its
+ * neighbours.
+ */
+export const assignedCovers = (take: Pick<Take, "words" | "seconds"> & { keep?: Span[]; assign?: string[] }, s: Pick<Script, "long" | "shorts">): Cover[] => {
+  const all = cutsOf(s).flatMap((c) => c.beats.map((b) => ({ id: b.from ?? b.id, text: beatText(s, b) })));
+  const beats = (take.assign ?? []).flatMap((id) => all.find((b) => b.id === id) ?? []);
+  if (!beats.length) return [];
+  const words = keptWords(take);
+  const keep = take.keep?.length ? take.keep : [{ start: 0, end: take.seconds }];
+  // The kept part: from the first word heard to the last (or the kept edges when nothing was heard).
+  const from = words[0]?.start ?? keep[0]!.start;
+  const to = words.at(-1)?.end ?? keep.at(-1)!.end;
+  if (beats.length === 1) return [{ beat: beats[0]!.id, start: from, end: to, score: 1 }];
+  const found = new Map(matchTake(take, beats, 0.01).map((c) => [c.beat, c]));
+  const starts: (number | undefined)[] = beats.map((b) => found.get(b.id)?.start);
+  starts[0] = from;
+  // Fill the gaps evenly between the starts the alignment did find.
+  for (let i = 1; i < beats.length; i++) {
+    if (starts[i] !== undefined && starts[i]! > starts[i - 1]!) continue;
+    let j = i;
+    while (j < beats.length && (starts[j] === undefined || starts[j]! <= starts[i - 1]!)) j++;
+    const end = j < beats.length ? starts[j]! : to;
+    const step = (end - starts[i - 1]!) / (j - i + 1);
+    for (let k = i; k < j; k++) starts[k] = starts[k - 1]! + step;
+  }
+  return beats.map((b, i) => ({ beat: b.id, start: starts[i]!, end: i + 1 < beats.length ? starts[i + 1]! : to, score: found.get(b.id)?.score ?? 0 }));
+};
+
+/** A pause longer than this inside a take is shortened by the auto trim… */
+export const LONG_PAUSE = 0.7;
+/** …to about this. */
+const KEEP_PAUSE = 0.4;
+
+/**
+ * The tidy-up a take gets without Tom touching it: the silence off both
+ * ends (to just before the first word and just after the last) and,
+ * with `pauses`, every pause longer than LONG_PAUSE between two words cut
+ * down to about KEEP_PAUSE. Works on what's already kept, so cuts Tom
+ * made by hand stay; running it again changes nothing. Undefined = no
+ * words to go by (left as it is).
+ */
+export const autoTrim = (take: Pick<Take, "words" | "seconds"> & { keep?: Span[] }, pauses = true): Span[] | undefined => {
+  const words = keptWords(take).filter((w) => !w.hidden);
+  if (!words.length) return take.keep;
+  let keep = trimRegion(take.keep, take.seconds, Math.max(0, words[0]!.start - 0.15), Math.min(take.seconds, words.at(-1)!.end + 0.2));
+  if (pauses)
+    for (let i = 1; i < words.length; i++) {
+      const gap = words[i]!.start - words[i - 1]!.end;
+      if (gap > LONG_PAUSE) keep = cutRegion(keep, take.seconds, { start: words[i - 1]!.end + KEEP_PAUSE / 2, end: words[i]!.start - KEEP_PAUSE / 2 });
+    }
+  return keep;
 };

@@ -27,6 +27,8 @@ export type DeskTemplate = {
   clipProps: (clipPath: string, clipSeconds: number, facts?: { width: number; height: number }) => Record<string, unknown>;
   /** The prop naming the footage file. */
   clipKey: string;
+  /** Props Make never fills from the chosen clip's sidecar (its title, its line): they start blank. */
+  noClipFill?: string[];
   /** The "how much of the clip" props: leaving `durationKey` blank in the
    * Desk means "from `startKey` to the end of the clip", and a typed value is
    * capped there too. */
@@ -142,8 +144,10 @@ export type GameConfig = {
     ai?: AiVoice;
   };
   /** The Scripts tab: with ANTHROPIC_API_KEY set, Claude rewrites a pasted
-   * script into a long cut and shorts in this voice (docs/design/desk-scripts.md). */
-  script?: { ai: ScriptVoice };
+   * script into a long cut in this voice (docs/design/desk-scripts.md) and
+   * plans a picture per beat (docs/design/desk-ascii-scripts.md), previewed
+   * as glyphs in `palette` (ascii-build's PALETTES; default matrix). */
+  script?: { ai: ScriptVoice; palette?: "matrix" | "sand" };
   /** The game's own tabs (browser, lazy), after the Desk's. Their server
    * side is `desk.server.ts` beside the config (see GameRoutes). */
   tabs?: GameTab[];

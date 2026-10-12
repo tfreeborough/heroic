@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ffmpegPath from "ffmpeg-static";
-import { SR, wav } from "../src/music/render";
+import { SR, wav } from "@heroic/music";
 import { chimeFile } from "../src/music/tune";
 
 const pub = join(import.meta.dir, "../public");

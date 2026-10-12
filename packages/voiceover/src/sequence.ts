@@ -117,10 +117,13 @@ export type VoiceSettings = {
 /**
  * Something on screen for a stretch that isn't footage (docs/design/desk-scripts.md):
  * a TEXT card (a few words), an IMAGE (a sketch, under the game's public
- * dir), or a B-ROLL slot (a note of what to film: shown in the editor,
- * never drawn in the render). A card is content; the template draws it.
+ * dir), a B-ROLL slot (a note of what to film: shown in the editor,
+ * never drawn in the render), or a BUILD (a picture that builds itself out
+ * of glyphs, docs/design/desk-ascii-scripts.md: its `src` and its look
+ * `seed`), or a CHAPTER (its name in `text`: the screen clears and the
+ * name builds out of glyphs). A card is content; the template draws it.
  */
-export type CardKind = "text" | "image" | "broll";
+export type CardKind = "text" | "image" | "broll" | "build" | "chapter";
 export type Card = {
   id: string;
   kind: CardKind;
@@ -130,6 +133,12 @@ export type Card = {
   src?: string;
   /** broll: what to film. */
   note?: string;
+  /** build: the look seed (how the glyphs arrive and fill in: same seed, same build). */
+  seed?: number;
+  /** build: key words the picture's glyphs fly out to spell as they're said. */
+  pulled?: string[];
+  /** chapter: its number ("CHAPTER TWO"): the first beat's chapter opens the video with no card, so the first card may be two. */
+  n?: number;
   /** Where it starts in the sequence. */
   at: number;
   seconds: number;
@@ -150,6 +159,8 @@ export type Sequence = {
   note?: string;
   /** The idea it's making, by id (the Desk's Ideas tab): its script is read while recording. */
   idea?: string;
+  /** The video's title (organise writes the script's), for a template's cold open. */
+  title?: string;
   /** Bottom first: video[0] is the track that fills the frame when it has picture. */
   video: VideoTrack[];
   audio: AudioTrack[];
@@ -170,7 +181,7 @@ export type Sequence = {
 };
 
 /** What the player needs of a sequence (the editor passes an unsaved one inline). */
-export type Playable = Pick<Sequence, "video" | "audio" | "takes" | "voice" | "music" | "markers" | "slide" | "overlay">;
+export type Playable = Pick<Sequence, "video" | "audio" | "takes" | "voice" | "music" | "markers" | "slide" | "overlay"> & Partial<Pick<Sequence, "title">>;
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const len = (c: { start: number; end: number }) => c.end - c.start;
@@ -558,9 +569,10 @@ export const fitCard = (seq: Pick<Playable, "overlay">, at: number, seconds: num
 };
 
 /** A new card, not yet placed. */
-export const cardOf = (kind: CardKind, content: { text?: string; src?: string; note?: string; beat?: string }, seconds = DEFAULT_CARD_SECONDS, place: Card["place"] = "full"): Card => ({
+export const cardOf = (kind: CardKind, content: { text?: string; src?: string; note?: string; beat?: string; seed?: number }, seconds = DEFAULT_CARD_SECONDS, place: Card["place"] = "full"): Card => ({
   id: newId(),
   kind,
+  ...(content.seed !== undefined ? { seed: content.seed } : {}),
   ...(content.text !== undefined ? { text: content.text } : {}),
   ...(content.src !== undefined ? { src: content.src } : {}),
   ...(content.note !== undefined ? { note: content.note } : {}),
@@ -633,7 +645,8 @@ export const splitCardAt = <T extends Pick<Playable, "overlay">>(seq: T, t: numb
 };
 
 /** A card's label on a timeline or in a list. */
-export const cardLabel = (c: Pick<Card, "kind" | "text" | "src" | "note">): string => (c.kind === "text" ? c.text?.trim() || "(empty card)" : c.kind === "image" ? (c.src ?? "").split("/").pop() || "(no picture)" : `b-roll: ${c.note?.trim() || "(what to film?)"}`);
+export const cardLabel = (c: Pick<Card, "kind" | "text" | "src" | "note">): string =>
+  c.kind === "text" ? c.text?.trim() || "(empty card)" : c.kind === "chapter" ? `chapter: ${c.text?.trim() || "(no name)"}` : c.kind === "image" || c.kind === "build" ? (c.src ?? "").split("/").pop() || "(no picture)" : `b-roll: ${c.note?.trim() || "(what to film?)"}`;
 
 // ── a selection ──
 

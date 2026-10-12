@@ -4,7 +4,7 @@ import { type GameApi, type Script, type WhisperStatus, fmtSeconds } from "./api
 import { go } from "./App";
 import { type Mic, type MicDevice, listMics, micPermission, micSupported, openMic, peaksOf } from "./mic";
 import { Wave, remember } from "./edit/widgets";
-import { type Cover, type Span, cutRegion, keptSeconds, matchScript, trimRegion } from "../lib/match";
+import { type Cover, LONG_PAUSE, type Span, autoTrim, cutRegion, keptSeconds, matchScript, trimRegion } from "../lib/match";
 import { type Beat, type Cut, type ScriptTake, plannedBeats } from "../lib/scripts";
 
 /**
@@ -134,13 +134,20 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
     return () => clearInterval(t);
   }, [rec.state]);
 
+  // The auto trim: on by default, remembered on this machine (see autoTrim in lib/match.ts).
+  const [autoOn, setAutoOn] = useState(() => remember("autotrim") !== "off");
+  const [pausesOn, setPausesOn] = useState(() => remember("autotrim-pauses") !== "off");
   const landed = useCallback(
     (take: Take & { error?: string }) => {
       if (take.error) onError(`The take is saved but Whisper couldn't hear it: ${take.error}`);
-      onTakes([...s.takes, { file: take.file, seconds: take.seconds, recordedAt: take.recordedAt, words: take.words, transcribed: take.transcribed }]);
+      const fresh: ScriptTake = { file: take.file, seconds: take.seconds, recordedAt: take.recordedAt, words: take.words, transcribed: take.transcribed };
+      const keep = autoOn && take.transcribed ? autoTrim(fresh, pausesOn) : undefined;
+      onTakes([...s.takes, { ...fresh, ...(keep?.length ? { keep } : {}) }]);
     },
-    [s.takes, onTakes, onError],
+    [s.takes, onTakes, onError, autoOn, pausesOn],
   );
+  /** Every take tidied at once (cuts made by hand stay). */
+  const trimAll = () => onTakes(s.takes.map((t) => (t.transcribed ? { ...t, keep: autoTrim(t, pausesOn) ?? t.keep } : t)));
   const start = async () => {
     if (recRef.current.state !== "idle") return;
     const m = mic.current ?? (await turnMicOn());
@@ -192,6 +199,23 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
     }
   };
   const setKeep = (take: ScriptTake, keep: Span[] | undefined) => onTakes(s.takes.map((t) => (t.file === take.file ? { ...t, keep: keep?.length ? keep : undefined } : t)));
+  /** Tom says which beats a take reads ("7", "7-9", "7, 9"; blank = let the matcher decide again). */
+  const setAssign = (take: ScriptTake, text: string): string | undefined => {
+    const ids: string[] = [];
+    for (const part of text.split(/[,\s]+/).filter(Boolean)) {
+      const m = /^(\d+)(?:-(\d+))?$/.exec(part);
+      if (!m) return `"${part}" isn't a beat number`;
+      const a = Number(m[1]);
+      const b = Number(m[2] ?? m[1]);
+      for (let n = Math.min(a, b); n <= Math.max(a, b); n++) {
+        const beat = beats[n - 1];
+        if (!beat) return `there's no beat ${n}`;
+        ids.push(beat.beat.id);
+      }
+    }
+    onTakes(s.takes.map((t) => (t.file === take.file ? { ...t, assign: ids.length ? ids : undefined } : t)));
+    return undefined;
+  };
 
   // Keys: R records / stops, ↓ ↑ move the prompter, Esc closes a take.
   useEffect(() => {
@@ -295,7 +319,20 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
 
       {/* ── the takes bin ── */}
       <div className="stack" style={{ gap: 8 }}>
-        <strong className="small">Takes {s.takes.length ? `(${s.takes.length})` : ""}</strong>
+        <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
+          <strong className="small">Takes {s.takes.length ? `(${s.takes.length})` : ""}</strong>
+          <button className="ghost small" disabled={!s.takes.some((t) => t.transcribed)} onClick={trimAll} title={`Every take: the silence off both ends${pausesOn ? `, and pauses over ${LONG_PAUSE}s inside it shortened` : ""}. Cuts you made by hand stay; running it again changes nothing.`}>
+            Trim all
+          </button>
+          <label className="row small muted" style={{ gap: 4 }} title="New takes get the same tidy as they land.">
+            <input type="checkbox" checked={autoOn} onChange={(e) => (setAutoOn(e.target.checked), remember("autotrim", e.target.checked ? "on" : "off"))} />
+            trim new takes as they land
+          </label>
+          <label className="row small muted" style={{ gap: 4 }} title={`Pauses longer than ${LONG_PAUSE}s between words are cut down to about 0.4s.`}>
+            <input type="checkbox" checked={pausesOn} onChange={(e) => (setPausesOn(e.target.checked), remember("autotrim-pauses", e.target.checked ? "on" : "off"))} />
+            shorten long pauses
+          </label>
+        </div>
         {!s.takes.length ? <div className="small muted">Nothing recorded yet. Press Record, read, press again.</div> : null}
         {[...s.takes].reverse().map((t) => {
           const i = s.takes.indexOf(t);
@@ -310,9 +347,13 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
                 {(t.keep ?? []).length ? <KeepShade keep={t.keep!} seconds={t.seconds} /> : null}
               </div>
               <div className="what">
-                <div className="name">
-                  {fmtSeconds(keptSeconds(t))}
-                  {t.keep ? <span className="muted small"> of {fmtSeconds(t.seconds)}</span> : null} <span className="muted small">· beats {label}</span>
+                <div className="name row" style={{ gap: 6 }}>
+                  <span>
+                    {fmtSeconds(keptSeconds(t))}
+                    {t.keep ? <span className="muted small"> of {fmtSeconds(t.seconds)}</span> : null} <span className="muted small">· beats {label}</span>
+                    {t.assign?.length ? <span className="muted small" title="You said which beats this take reads"> (yours)</span> : null}
+                  </span>
+                  <AssignBox take={t} onAssign={(text) => setAssign(t, text)} onError={onError} label={t.assign?.length ? cs.map((c) => `${beats.findIndex((b) => b.beat.id === c.beat) + 1}`).join(", ") : ""} />
                 </div>
                 <div className="small muted words">{words || (t.transcribed ? "no words heard" : "listening…")}</div>
               </div>
@@ -479,5 +520,44 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
         <audio ref={player} src={audio} controls style={{ height: 30 }} onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} />
       </div>
     </div>
+  );
+};
+
+/**
+ * "It's beat 7": type the beat (or "7-9") a take reads when the matcher
+ * didn't hear it. Blank lets the matcher decide again.
+ */
+const AssignBox: React.FC<{ take: ScriptTake; label: string; onAssign: (text: string) => string | undefined; onError: (e: string) => void }> = ({ take, label, onAssign, onError }) => {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(label);
+  const send = () => {
+    const err = onAssign(text);
+    if (err) return onError(err);
+    setEditing(false);
+  };
+  if (!editing)
+    return (
+      <button className="link small" onClick={(e) => (e.stopPropagation(), setText(label), setEditing(true))} title="Say which beat(s) this take reads, when it didn't hear them">
+        {take.assign?.length ? "change beats" : "set beats…"}
+      </button>
+    );
+  return (
+    <span className="row" style={{ gap: 4 }} onClick={(e) => e.stopPropagation()}>
+      <input
+        type="text"
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") send();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        placeholder="7 or 7-9 (blank: back to the matcher)"
+        style={{ width: 200, padding: "2px 6px" }}
+      />
+      <button className="ghost small" onClick={send}>
+        Set
+      </button>
+    </span>
   );
 };

@@ -19,9 +19,9 @@ import { mkdirSync, readFileSync, readdirSync, existsSync, renameSync, writeFile
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
-import { STYLE_NAMES, type StyleName, compose, musicSeed, stylesFor } from "../src/music/compose";
-import { MOODS, type Mood, readMood, type SaveWords } from "../src/music/mood";
-import { SR, type Stereo, render, stemLevels, wav } from "../src/music/render";
+import { STYLE_NAMES, type StyleName, compose, musicSeed, stylesFor } from "@heroic/music";
+import { MOODS, type Mood, readMood, type SaveWords } from "@heroic/music";
+import { SR, type Stereo, render, stemLevels, wav } from "@heroic/music";
 import { timeline } from "../src/timeline";
 import { type TuneProps, tuneFor } from "../src/music/tune";
 

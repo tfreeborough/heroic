@@ -11,8 +11,8 @@
  * file (the old one would land "Save complete" in the wrong place).
  */
 import { timeline } from "../timeline";
-import { STYLE_NAMES, type StyleName, compose, musicSeed } from "./compose";
-import { readMood } from "./mood";
+import { STYLE_NAMES, type StyleName, compose, musicSeed } from "@heroic/music";
+import { readMood } from "@heroic/music";
 
 /** The `music` prop's value for "generate this save's own". */
 export const TUNE = "@tune";

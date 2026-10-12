@@ -13,6 +13,12 @@ import { fmtSeconds } from "../api";
 import { go } from "../App";
 import { ScriptReading } from "../Scripts";
 import { Framer, sizeBox, stem } from "./widgets";
+import { ARRIVALS, ORDERS, lookFromSeed } from "@heroic/ascii-build";
+
+const lookLabel = (seed: number) => {
+  const { arrival, order } = lookFromSeed(seed);
+  return `${ARRIVALS[arrival].label.toLowerCase()} · ${ORDERS[order].toLowerCase()}`;
+};
 
 export const VideoClipPanel: React.FC<{
   game: GameInfo;
@@ -453,8 +459,10 @@ export const CardPanel: React.FC<{ api: GameApi; card: Card; locked: boolean; on
         <option value="text">Text card</option>
         <option value="image">Picture</option>
         <option value="broll">B-roll slot</option>
+        <option value="build">Glyph picture</option>
+        <option value="chapter">Chapter</option>
       </select>
-      {card.kind !== "broll" ? (
+      {card.kind !== "broll" && card.kind !== "build" && card.kind !== "chapter" ? (
         <select value={card.place} disabled={locked} onChange={(e) => onPatch({ place: e.target.value as Card["place"] })} style={{ width: "auto" }} title="full: the frame, on the backdrop, and it gives way to any footage playing. over: small, over whatever is playing.">
           <option value="full">on the backdrop</option>
           <option value="over">over the footage</option>
@@ -462,7 +470,25 @@ export const CardPanel: React.FC<{ api: GameApi; card: Card; locked: boolean; on
       ) : null}
     </div>
     {card.kind === "text" ? <textarea rows={3} value={card.text ?? ""} disabled={locked} onChange={(e) => onPatch({ text: e.target.value })} placeholder="A few words. A new line is a new line on screen." /> : null}
+    {card.kind === "chapter" ? <input type="text" value={card.text ?? ""} disabled={locked} onChange={(e) => onPatch({ text: e.target.value })} placeholder="The chapter's name, two to four words" /> : null}
     {card.kind === "broll" ? <textarea rows={2} value={card.note ?? ""} disabled={locked} onChange={(e) => onPatch({ note: e.target.value })} placeholder="What to film here (the shot list reads this)" /> : null}
+    {card.kind === "build" ? (
+      card.src ? (
+        <>
+          <img className="sketch" src={api.publicUrl(card.src)} alt="" />
+          <div className="row small" style={{ gap: 10 }}>
+            <span className="muted" title={`look seed ${card.seed ?? 1}`}>
+              {lookLabel(card.seed ?? 1)}
+            </span>
+            <button className="link small" disabled={locked} onClick={() => onPatch({ seed: 1 + Math.floor(Math.random() * 9999) })} title="A new look seed: how the glyphs arrive and fill in. The picture stays.">
+              reroll look
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="small muted">No picture. Drag one of the script's pictures from the library's Cards shelf.</div>
+      )
+    ) : null}
     {card.kind === "image" ? (
       card.src ? (
         <>
@@ -475,7 +501,7 @@ export const CardPanel: React.FC<{ api: GameApi; card: Card; locked: boolean; on
     ) : null}
     <div className="small muted">
       {fmtSeconds(card.at)} for {card.seconds.toFixed(1)}s{card.beat ? ` · beat ${card.beat}` : ""}. Drag its edges on the timeline to change how long it shows.
-      {card.kind === "broll" ? " A b-roll slot is never drawn: drop footage on the video track under it." : card.place === "full" ? " On the backdrop it isn't drawn while footage plays." : ""}
+      {card.kind === "broll" ? " A b-roll slot is never drawn: drop footage on the video track under it." : card.kind === "build" ? ` It builds over the start of the card and falls away across its end (the Beats template draws it).${card.pulled?.length ? ` Pulled word: ${card.pulled.join(", ")}.` : ""}` : card.kind === "chapter" ? " The screen clears and the name builds out of glyphs. Keep the voice clear of it." : card.place === "full" ? " On the backdrop it isn't drawn while footage plays." : ""}
     </div>
   </div>
 );

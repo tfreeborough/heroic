@@ -22,7 +22,8 @@ import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } fr
 import { hasClaude } from "./lib/draft";
 import type { ScriptPatch } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, hasClaude as hasRewriter, makeSketches, organise, pendingSketches, planVisuals, redoBeat, redoCut, rewriteScript } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, hasClaude as hasRewriter, makePictures, organise, ownPicture, pendingPictures, planPictures, redoBeat, redoCut, redoPicturePrompt, remakeScore, rewriteScript } from "./lib/scriptSteps";
+import { scoreState } from "./lib/score";
 import { hasImages } from "./lib/cards";
 import { type PostPatch, movePost, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
@@ -486,7 +487,7 @@ const server = Bun.serve({
     },
     // ── scripts (the Scripts tab) ──
     "/api/:game/scripts": {
-      GET: withGame((g) => json({ list: listScripts(g), claude: hasRewriter() && Boolean(g.script?.ai), images: hasImages() })),
+      GET: withGame((g) => json({ list: listScripts(g), claude: hasRewriter() && Boolean(g.script?.ai), images: hasImages(), palette: g.script?.palette ?? "matrix" })),
       POST: withGame(async (g, req) => {
         const body = (await req.json()) as { title?: string; source?: string };
         return json(addScript(g, String(body.title ?? ""), String(body.source ?? "")));
@@ -495,7 +496,8 @@ const server = Bun.serve({
     "/api/:game/scripts/:id": {
       GET: withGame((g, req) => {
         const s = readScript(g, req.params.id!);
-        return s ? json({ ...s, pending: pendingSketches(s.id) }) : json({ error: "no such script" }, 404);
+        const seqId = s?.sequences?.at(-1)?.id;
+        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(seqId) ?? null) : null }) : json({ error: "no such script" }, 404);
       }),
       PUT: withGame(async (g, req) => {
         try {
@@ -518,13 +520,36 @@ const server = Bun.serve({
         return body.beat ? redoBeat(g, req.params.id!, body.cut, body.beat, body.instruction ?? "").then(json, fail) : redoCut(g, req.params.id!, body.cut, body.instruction ?? "").then(json, fail);
       }),
     },
-    /** The visual plan: a card per beat (`?all=1`: every beat again); the sketches, made in the background (`beats`: just these, again). */
-    "/api/:game/scripts/:id/plan": { POST: withGame(async (g, req) => planVisuals(g, req.params.id!, new URL(req.url).searchParams.get("all") === "1").then(json, fail)) },
-    "/api/:game/scripts/:id/sketches": {
+    /** The picture plan (docs/design/desk-ascii-scripts.md): prompts, mood, pulled word, chapter per beat (`?all=1`: every beat again). */
+    "/api/:game/scripts/:id/plan": { POST: withGame(async (g, req) => planPictures(g, req.params.id!, new URL(req.url).searchParams.get("all") === "1").then(json, fail)) },
+    /** One picture's prompt written again by Claude: `{ beat, k, instruction }`. Answers with the script. */
+    "/api/:game/scripts/:id/prompt": {
       POST: withGame(async (g, req) => {
-        const body = (await req.json().catch(() => ({}))) as { beats?: string[] };
+        const body = (await req.json().catch(() => ({}))) as { beat?: string; k?: number; instruction?: string };
+        return redoPicturePrompt(g, req.params.id!, String(body.beat ?? ""), Math.max(0, Math.min(1, Math.round(Number(body.k)) || 0)), String(body.instruction ?? "")).then(json, fail);
+      }),
+    },
+    /** Make pictures in the background: every one not yet made, or (`only`) another try at exactly these. */
+    "/api/:game/scripts/:id/pictures": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { only?: { beat: string; k: number }[] };
         try {
-          return json(makeSketches(g, req.params.id!, Array.isArray(body.beats) ? body.beats.map(String) : undefined));
+          const only = Array.isArray(body.only) ? body.only.map((o) => ({ beat: String(o.beat), k: Math.round(Number(o.k)) || 0 })) : undefined;
+          return json(makePictures(g, req.params.id!, only));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Tom's own image (the body) as a beat's picture: `?beat=&k=&ext=`. Answers with the script. */
+    "/api/:game/scripts/:id/pictures/own": {
+      POST: withGame(async (g, req) => {
+        const q = new URL(req.url).searchParams;
+        try {
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          if (bytes.byteLength < 100) return json({ error: "that image is empty" }, 400);
+          if (bytes.byteLength > 25e6) return json({ error: "that image is over 25 MB" }, 400);
+          return json(ownPicture(g, req.params.id!, q.get("beat") ?? "", Math.round(Number(q.get("k"))) || 0, bytes, q.get("ext") ?? "png"));
         } catch (e) {
           return fail(e);
         }
@@ -555,6 +580,17 @@ const server = Bun.serve({
           return json(script);
         } catch (e) {
           return fail(e, 404);
+        }
+      }),
+    },
+    /** The newest edit's score made again (`another`: a new seed, a whole new soundtrack). Answers at once with the script. */
+    "/api/:game/scripts/:id/score": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { another?: boolean };
+        try {
+          return json(remakeScore(g, req.params.id!, Boolean(body.another)));
+        } catch (e) {
+          return fail(e);
         }
       }),
     },

@@ -324,7 +324,8 @@ const voice = (n: Note, cutoff: (t: number) => number, rand: () => number): Floa
 };
 
 /** Freeverb-style room: eight damped combs then four allpasses per side. */
-const reverb = (x: Stereo, rt60: number): Stereo => {
+/** `wrap`: the pre-delay reads round the end (a loop); off, the first moment has nothing before it. */
+const reverb = (x: Stereo, rt60: number, wrap = true): Stereo => {
   const total = x.l.length;
   const scale = SR / 44100;
   const combL = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617].map((d) => Math.round(d * scale * 1.3));
@@ -355,9 +356,9 @@ const reverb = (x: Stereo, rt60: number): Stereo => {
   const out = { l: new Float32Array(total), r: new Float32Array(total) };
   const pre = Math.round(0.02 * SR);
   for (let i = 0; i < total; i++) {
-    const j = (i - pre + total) % total;
-    out.l[i] = run(cl, al, x.l[j]!);
-    out.r[i] = run(cr, ar, x.r[j]!);
+    const j = wrap ? (i - pre + total) % total : i - pre;
+    out.l[i] = run(cl, al, j >= 0 ? x.l[j]! : 0);
+    out.r[i] = run(cr, ar, j >= 0 ? x.r[j]! : 0);
   }
   return out;
 };
@@ -448,6 +449,9 @@ export const stemLevels = (score: Score, seed: number): Partial<Record<Inst, num
 
 export const render = (score: Score, seed: number): Stereo => {
   const n = Math.round(score.seconds * SR);
+  const once = score.loop === false;
+  /** A loop runs its effects twice round and keeps the second pass (so the seam is settled); a piece runs them once. */
+  const fx = (x: Stereo, f: (s: Stereo) => Stereo) => (once ? f(x) : looped(x, f));
   const rand = mulberry(seed * 977 + 41);
   const dry = { l: new Float32Array(n), r: new Float32Array(n) };
   for (const note of score.notes) {
@@ -455,6 +459,14 @@ export const render = (score: Score, seed: number): Stereo => {
     const gl = Math.sqrt((1 - note.pan) / 2);
     const gr = Math.sqrt((1 + note.pan) / 2);
     const start = Math.round(note.t * SR);
+    if (once) {
+      // A piece that runs once: what rings past the end is cut.
+      for (let i = Math.max(0, -start); i < s.length && start + i < n; i++) {
+        dry.l[start + i] = dry.l[start + i]! + s[i]! * gl;
+        dry.r[start + i] = dry.r[start + i]! + s[i]! * gr;
+      }
+      continue;
+    }
     for (let i = 0; i < s.length; i++) {
       const j = (((start + i) % n) + n) % n; // rings past the end → wraps to the start
       dry.l[j] = dry.l[j]! + s[i]! * gl;
@@ -466,18 +478,18 @@ export const render = (score: Score, seed: number): Stereo => {
     dry.l[i] = dry.l[i]! * g;
     dry.r[i] = dry.r[i]! * g;
   }
-  const wet = looped(dry, (x) => reverb(x, score.reverb.rt60));
+  const wet = fx(dry, (x) => reverb(x, score.reverb.rt60, !once));
   const room = texture(score.texture, n, rand);
   let mix: Stereo = { l: new Float32Array(n), r: new Float32Array(n) };
   for (let i = 0; i < n; i++) {
     mix.l[i] = dry.l[i]! + wet.l[i]! * score.reverb.wet * 3;
     mix.r[i] = dry.r[i]! + wet.r[i]! * score.reverb.wet * 3;
   }
-  if (score.wow > 0) mix = looped(mix, wobble(score.wow, score.seconds));
+  if (score.wow > 0) mix = fx(mix, wobble(score.wow, score.seconds));
   // Soften the top (looped, so the filter has settled by the seam), add the
   // room tone, warm it with a gentle saturation and level it.
   const a = 1 - Math.exp((-TAU * score.lowpass) / SR);
-  mix = looped(mix, (x) => {
+  mix = fx(mix, (x) => {
     let yl = 0;
     let yr = 0;
     for (let i = 0; i < x.l.length; i++) {

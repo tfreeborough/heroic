@@ -1,6 +1,7 @@
 /**
- * The sketches a script's visual plan asks for: GPT Image (the shared
- * forge) in the game's one fixed style, saved under the game's public dir
+ * A script's pictures (one or two per beat, docs/design/desk-ascii-scripts.md)
+ * and, on older scripts, the sketches the old visual plan asked for: GPT
+ * Image (the shared forge) in the game's one fixed style, saved under the game's public dir
  * as cards/<script>/<beat>-<n>.png (gitignored; backed up to Drive with
  * the takes), so a card on an edit can point at one. Server only.
  *
@@ -45,12 +46,12 @@ const safe = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "");
 export const cardsDir = (g: GameConfig, script?: string) => (script ? join(publicDir(g), "cards", safe(script)) : join(publicDir(g), "cards"));
 
 /** The next free file for a beat's picture: <beat>-1.png, -2, … (an earlier try is kept beside it). */
-const nextFile = (g: GameConfig, script: string, beat: string): string => {
+const nextFile = (g: GameConfig, script: string, beat: string, ext = "png"): string => {
   const dir = cardsDir(g, script);
   mkdirSync(dir, { recursive: true });
   const taken = new Set(readdirSync(dir));
   for (let n = 1; ; n++) {
-    const f = `${safe(beat)}-${n}.png`;
+    const f = `${safe(beat)}-${n}.${ext}`;
     if (!taken.has(f)) return join(dir, f);
   }
 };
@@ -65,6 +66,38 @@ export const makeSketch = async (g: GameConfig, script: Pick<Script, "id">, beat
   const out = nextFile(g, script.id, beat.id);
   writeFileSync(out, png);
   await inkToAlpha(out);
+  return relative(publicDir(g), out);
+};
+
+/**
+ * The picture style (docs/design/desk-ascii-scripts.md): Autosave's
+ * chiaroscuro film still, landscape. Glyphs grow where the picture is
+ * WHITE, so the subject is carved out by light and the dark builds as
+ * nothing. A game can set its own in `script.ai.picture`.
+ */
+export const PICTURE_STYLE =
+  "Black ink woodcut / linocut print on plain white paper, framed like a still from a film with a deliberate camera angle. " +
+  "Chiaroscuro: one strong light source carves the subject out of darkness, so the lit faces, hands and surfaces are bright white and carry the detail, " +
+  "the shadow side falls into solid black. The subject is drawn by light, never as a flat black silhouette. " +
+  "The dark scene runs right off every edge of the frame, full bleed, and the edges of the frame fall into solid black shadow: nothing lit touches the border. " +
+  "No circle, oval or vignette, no white paper showing. Big simple shapes, high contrast, no mid-grey, no text, no letters, no border. The scene:";
+
+/** A beat's picture: the style, then the prompt, landscape, kept as it comes (the glyphs read its brightness). Returns the path under the public dir. */
+export const makePicture = async (g: GameConfig, script: Pick<Script, "id">, beat: Pick<Beat, "id">, k: number, prompt: string, style: string): Promise<string> => {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
+  if (!prompt.trim()) throw new Error("the picture has no prompt");
+  const png = await generateImage(key, `${style.trim()} ${prompt.trim()}`, "1536x1024", "opaque");
+  const out = nextFile(g, script.id, k ? `${beat.id}-p${k + 1}` : beat.id);
+  writeFileSync(out, png);
+  return relative(publicDir(g), out);
+};
+
+/** Tom's own picture for a beat (dropped or picked on the page): saved beside the made ones. */
+export const saveOwnPicture = (g: GameConfig, script: Pick<Script, "id">, beat: Pick<Beat, "id">, k: number, bytes: Uint8Array, ext: string): string => {
+  const e = ["png", "jpg", "jpeg", "webp"].includes(ext.toLowerCase()) ? ext.toLowerCase() : "png";
+  const out = nextFile(g, script.id, `${k ? `${beat.id}-p${k + 1}` : beat.id}-own`, e);
+  writeFileSync(out, bytes);
   return relative(publicDir(g), out);
 };
 

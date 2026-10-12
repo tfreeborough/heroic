@@ -5,7 +5,9 @@
  */
 import { mulberry } from "@heroic/ascii-build";
 
-export const MOODS = ["cosy", "wistful", "wonder", "night", "playful", "tender"] as const;
+/** The six loading-screen moods, then seven for telling a story (the Desk's glyph videos, desk-ascii-scripts.md).
+ * Only the first six have words: a save's mood is read from its words, a script beat's is set by its plan. */
+export const MOODS = ["cosy", "wistful", "wonder", "night", "playful", "tender", "focus", "curious", "tense", "eerie", "driving", "melancholy", "triumph"] as const;
 export type Mood = (typeof MOODS)[number];
 
 /** Word beginnings: "remember" also catches "remembered". */
@@ -16,6 +18,13 @@ const WORDS: Record<Mood, string[]> = {
   night: ["night", "quiet", "alone", "rain", "empty", "dark", "cold", "late", "3am", "sleepless", "street", "lamp", "bus", "train", "station", "hours", "fog", "snow", "waiting", "midnight", "insomnia", "window"],
   playful: ["game", "coin", "arcade", "play", "win", "score", "level", "boss", "cheat", "race", "bike", "kite", "football", "toy", "lego", "silly", "laugh", "party", "birthday", "puppy", "chess", "dog", "beach", "joystick", "console", "player"],
   tender: ["baby", "sleeping", "newborn", "hold", "hand", "love", "wedding", "born", "shoulder", "lullaby", "cradle", "hug", "first steps", "daughter", "son", "asleep", "cuddle"],
+  focus: [],
+  curious: [],
+  tense: [],
+  eerie: [],
+  driving: [],
+  melancholy: [],
+  triumph: [],
 };
 
 /** The moods a save with no telling words falls back to: the loading-screen defaults. */

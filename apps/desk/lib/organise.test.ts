@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Word } from "@heroic/voiceover";
 import { matchScript } from "./match";
-import { organiseCut } from "./organise";
+import { organiseCut, splitPoint } from "./organise";
 import { type Cut, type Script, emptyScript } from "./scripts";
 
 const said = (text: string, from = 0, step = 0.3): Word[] => text.split(/\s+/).map((t, i) => ({ text: t, start: from + i * step, end: from + (i + 1) * step - 0.05 }));
@@ -83,5 +83,50 @@ describe("organise", () => {
     expect(seq.audio[0]!.clips.length).toBe(2);
     // The shared beat's card is the long beat's sketch.
     expect(seq.overlay!.cards.map((c) => c.kind)).toEqual(["text", "image"]);
+  });
+
+  test("pictures become glyph builds; a beat with two splits at its sentence break", () => {
+    const pic = (src: string, look: number) => ({ prompt: "p", candidates: [src], chosen: src, look });
+    const withPics: Cut = { ...long, beats: [{ id: "b1", text: B1, pictures: [pic("cards/s/b1.png", 11)] }, { id: "b2", text: B2, pictures: [pic("cards/s/b2.png", 22), pic("cards/s/b2-p2.png", 33)] }, { id: "b3", text: B3 }] };
+    const s = { ...script([{ file: "voice/takes/t1.wav", seconds: 30, recordedAt: "", words: said(`${B1} ${B2} ${B3}`, 1), transcribed: true }]), long: withPics };
+    const { seq } = organiseCut(s, withPics, covers(s), { id: "x-long", name: "x" });
+    const cards = seq.overlay!.cards;
+    expect(cards.map((c) => [c.kind, c.src, c.seed])).toEqual([["build", "cards/s/b1.png", 11], ["build", "cards/s/b2.png", 22], ["build", "cards/s/b2-p2.png", 33]]);
+    const clip2 = seq.audio[0]!.clips[1]!;
+    // B2's first sentence ends on "all." (its 11th word): the second picture starts there.
+    const allEnd = 1 + 19 * 0.3 + 11 * 0.3 - 0.05;
+    expect(cards[2]!.at).toBeCloseTo(clip2.at + (allEnd - clip2.start), 2);
+    expect(cards[1]!.at + cards[1]!.seconds).toBeCloseTo(cards[2]!.at, 2);
+    // The last build holds through the beat with no picture.
+    const clip3 = seq.audio[0]!.clips[2]!;
+    expect(cards[2]!.at + cards[2]!.seconds).toBeCloseTo(clip3.at + (clip3.end - clip3.start), 2);
+  });
+
+  test("a split with no sentence break near the middle falls on the middle", () => {
+    expect(splitPoint(said("one two three four five six", 0, 1), 0, 6)).toBe(3);
+  });
+
+  test("chapters: the first beat's opens the video with no card, a later one leaves a gap with its card", async () => {
+    const { CHAPTER_CARD, youtubeChapters } = await import("@heroic/ascii-build");
+    // Long enough for chapters: pad the beats' words out to minutes (only the spoken-length guess reads them).
+    const pad = (t: string) => `${t} ${"and so on ".repeat(400)}`;
+    const chap: Cut = { ...long, beats: [{ id: "b1", text: pad(B1), chapter: "The start" }, { id: "b2", text: B2 }, { id: "b3", text: pad(B3), chapter: "The turn" }] };
+    const s = { ...script([{ file: "voice/takes/t1.wav", seconds: 30, recordedAt: "", words: said(`${B1} ${B2} ${B3}`, 1), transcribed: true }]), long: chap };
+    const sc = new Map(s.takes.map((t) => [t.file, matchScript(t, { long: { ...chap, beats: long.beats }, shorts: [] })]));
+    const { seq, chapters } = organiseCut(s, chap, sc, { id: "x-long", name: "x" });
+    expect(seq.title).toBe("Three things");
+    const cards = seq.overlay?.cards ?? [];
+    const card = cards.find((c) => c.kind === "chapter");
+    expect(card?.text).toBe("The turn");
+    expect(card?.n).toBe(2);
+    expect(cards.filter((c) => c.kind === "chapter").length).toBe(1);
+    // The third beat's voice starts after the card's gap.
+    const clips = seq.audio[0]!.clips;
+    expect(clips[2]!.at).toBeCloseTo(card!.at + CHAPTER_CARD, 2);
+    expect(chapters.map((c) => c.name)).toEqual(["The start", "The turn"]);
+    expect(chapters[0]!.at).toBe(0);
+    // Two chapters is under YouTube's three: no list.
+    expect(youtubeChapters(chapters)).toBe("");
+    expect(youtubeChapters([...chapters, { name: "The end", at: chapters[1]!.at + 60 }]).split("\n")[0]).toBe("0:00 The start");
   });
 });

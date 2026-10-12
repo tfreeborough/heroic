@@ -329,8 +329,10 @@ export const Stage: React.FC<{
   blend?: { from: number; to: number; source: number };
   /** The Desk's editor: a sequence it hasn't saved yet. */
   sequence?: Playable | null;
+  /** Draw the edit's glyph pictures and chapter cards (off where the template draws them itself: Beats). */
+  glyphCards?: boolean;
   children?: React.ReactNode;
-}> = ({ src, startFrom, muted, cropTop = 0, cropBottom = 0, aspect, volume, push = 0, blend, sequence, children }) => {
+}> = ({ src, startFrom, muted, cropTop = 0, cropBottom = 0, aspect, volume, push = 0, blend, sequence, glyphCards = true, children }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const shape = useFormat();
@@ -375,7 +377,7 @@ export const Stage: React.FC<{
             </AbsoluteFill>
           </Sequence>
         ) : null}
-        <CardsLayer seq={seq} offset={startFrom} />
+        <CardsLayer seq={seq} offset={startFrom} glyphs={glyphCards} />
         {children}
       </AbsoluteFill>
     </StageContext.Provider>

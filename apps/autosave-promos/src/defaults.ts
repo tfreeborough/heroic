@@ -34,4 +34,7 @@ export const SAVE_DEFAULTS: SaveProps = {
   musicFrom: 0,
   musicVolume: 0.7,
   ticksVolume: 0.9,
+  burst: true,
+  glitch: true,
+  rain: 0.5,
 };

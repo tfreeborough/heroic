@@ -10,6 +10,7 @@ import { HookClip, hookClipDurationSeconds, hookClipSchema, isLoop } from "./src
 import { ListClip, listClipDurationSeconds, listClipSchema } from "./src/ListClip";
 import { filledItems, markerWarning, numberOf } from "./src/listTiming";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./src/Spotlight";
+import { Beats, beatsDurationSeconds, beatsSchema } from "./src/Beats";
 import { Talk, talkDurationSeconds, talkSchema } from "./src/Talk";
 import { MUSIC_LEVEL } from "./src/components";
 import { EDITOR_ONLY, voiceDefaults } from "./src/voice";
@@ -120,6 +121,24 @@ export const TEMPLATES: DeskTemplate[] = [
     hide: ["clip", "format", "sourceAspect", ...EDITOR_ONLY],
   },
   {
+    id: "Beats",
+    label: "Beats (long form, glyphs)",
+    blurb: "The long video from a script: the title builds out of glyphs, then each beat's picture while you say it, falling away as the next arrives; pulled words spell themselves out of the picture, chapters get their own card, your words run along the foot as a terminal line, and the end card replays every picture before your sign-off. Organise a script with its pictures made, then pick its edit. Made for 16:9.",
+    component: Beats,
+    schema: beatsSchema,
+    seconds: (p) => beatsDurationSeconds(p as never),
+    clipProps: (clip, clipSeconds) => ({ clip, durationSeconds: Math.max(1, Math.ceil(clipSeconds)), startFrom: 0 }),
+    clipKey: "clip",
+    // Blank: the cold open builds the script's title (organise puts it on the edit), not the edit's "· long (run 6)" name.
+    noClipFill: ["title"],
+    uncapped: { durationKey: "durationSeconds", startKey: "startFrom" },
+    defaults: { title: "", durationSeconds: 60, startFrom: 0, palette: "matrix", cols: 280, opening: "title", ending: "card", channel: "Free the Borough Games", signoff: "Thanks for watching, and I'll see you in the next one.", ...musicDefaults, musicVolume: 0.1, ...voiceDefaults, voiceVolume: 0.7, captions: "terminal", duck: 1 },
+    options: { music: songs },
+    needsClip: true,
+    voice: true,
+    hide: ["clip", "format", ...EDITOR_ONLY],
+  },
+  {
     id: "Talk",
     label: "Talk (long form)",
     blurb: "The long video: you talking for five minutes and up, straight through an edit, with its cards (text and sketches) and whatever b-roll you dropped in. Title as a cold open, regular captions, the sign-off to close. Made for 16:9.",
@@ -128,7 +147,7 @@ export const TEMPLATES: DeskTemplate[] = [
     seconds: (p) => talkDurationSeconds(p as never),
     clipProps: (clip, clipSeconds, facts) => ({
       clip,
-      durationSeconds: Math.max(1, Math.floor(clipSeconds)),
+      durationSeconds: Math.max(1, Math.ceil(clipSeconds)),
       startFrom: 0,
       sourceAspect: facts && facts.width && facts.height ? facts.width / facts.height : undefined,
     }),

@@ -4,6 +4,8 @@ import type { ImportJob } from "../lib/imports";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
 import type { Script, ScriptPatch, ScriptSummary } from "../lib/scripts";
+/** A script's newest edit's score (lib/score.ts). */
+export type ScoreState = { seq: string; file: string; seed: number; state: "making" | "ready" | "failed"; label?: string; error?: string };
 import type { Platform, Post, Schedule } from "../lib/schedule";
 import type { CleanupSpec, FootageSidecar } from "../lib/sidecar";
 import type { Sequence, Take, VoiceOver } from "@heroic/voiceover";
@@ -152,16 +154,25 @@ export const gameApi = (game: string) => {
       fetch(`${base}/batches/${enc(batch)}/ignore`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ignored }) }).then((r) => j<Schedule>(r)),
 
     /** The Scripts tab. `claude` = the server has a key and the game a script voice, so the rewrite steps are on. */
-    scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean }>(r)),
+    scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean; palette: "matrix" | "sand" }>(r)),
     /** `pending`: beats whose sketch is being made right now. */
-    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[] }>(r)),
+    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null }>(r)),
+    /** The newest edit's score made again; `another` = a new seed. */
+    remakeScore: (id: string, another: boolean) => post(`${base}/scripts/${enc(id)}/score`, { another }).then((r) => j<Script>(r)),
     /** A recording → a take on the script (saved, transcribed). */
     addScriptTake: (id: string, audio: Blob, opts: { tidy: boolean; denoise?: number; ext?: string }) =>
       fetch(`${base}/scripts/${enc(id)}/takes?tidy=${opts.tidy ? 1 : 0}&denoise=${opts.denoise ?? 0}&ext=${enc(opts.ext ?? "wav")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: audio }).then((r) => j<Take & { error?: string }>(r)),
     removeScriptTake: (id: string, file: string) => fetch(`${base}/scripts/${enc(id)}/takes/${enc(file)}`, { method: "DELETE" }).then((r) => j<Script>(r)),
-    organise: (id: string) => post(`${base}/scripts/${enc(id)}/organise`).then((r) => j<{ script: Script; made: { cut: string; title: string; id: string; missing: string[]; conflicts: { beat: string; takes: string[] }[] }[] }>(r)),
-    planVisuals: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/plan${all ? "?all=1" : ""}`).then((r) => j<Script>(r)),
-    makeSketches: (id: string, beats?: string[]) => post(`${base}/scripts/${enc(id)}/sketches`, { beats }).then((r) => j<{ started: number }>(r)),
+    organise: (id: string) => post(`${base}/scripts/${enc(id)}/organise`).then((r) => j<{ script: Script; made: { cut: string; title: string; id: string; missing: string[]; conflicts: { beat: string; takes: string[] }[]; youtube: string }[] }>(r)),
+    /** The picture plan (docs/design/desk-ascii-scripts.md); `all` = every beat again. */
+    planPictures: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/plan${all ? "?all=1" : ""}`).then((r) => j<Script>(r)),
+    /** Pictures made in the background: every one not yet made, or another try at exactly `only`. */
+    makePictures: (id: string, only?: { beat: string; k: number }[]) => post(`${base}/scripts/${enc(id)}/pictures`, { only }).then((r) => j<{ started: number }>(r)),
+    /** One picture's prompt written again by Claude (to an instruction, or blank for just a better idea). */
+    newPicturePrompt: (id: string, beat: string, k: number, instruction: string) => post(`${base}/scripts/${enc(id)}/prompt`, { beat, k, instruction }).then((r) => j<Script>(r)),
+    /** Tom's own image as a beat's picture. */
+    ownPicture: (id: string, beat: string, k: number, file: File) =>
+      fetch(`${base}/scripts/${enc(id)}/pictures/own?beat=${enc(beat)}&k=${k}&ext=${enc(file.name.split(".").pop() ?? "png")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }).then((r) => j<Script>(r)),
     addScript: (title: string, source = "") => post(`${base}/scripts`, { title, source }).then((r) => j<Script>(r)),
     updateScript: (id: string, patch: ScriptPatch) =>
       fetch(`${base}/scripts/${enc(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) }).then((r) => j<Script>(r)),

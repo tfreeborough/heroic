@@ -34,6 +34,15 @@ describe("matching a take to the beats", () => {
     expect(matchTake({ words }, beats)[0]?.beat).toBe("b1");
   });
 
+  test("a beat's last words heard differently still end the cover at the last word said", () => {
+    const words = said("Looking back now, there really isn't a way to build that game on yer lonesome.");
+    const [c] = matchTake({ words }, beats);
+    expect(c?.beat).toBe("b4");
+    expect(c!.end).toBe(words.at(-1)!.end);
+    // Spelled numbers and digits are the same word.
+    expect(matchTake({ words: said("I changed my mind about 3 big things.") }, [{ id: "n", text: "I changed my mind about three big things." }])[0]?.score).toBe(1);
+  });
+
   test("words outside the kept regions aren't heard", () => {
     const words = said(`${beats[0]!.text} ${beats[3]!.text}`);
     const all = matchTake({ words }, beats).map((c) => c.beat);
@@ -74,5 +83,43 @@ describe("kept regions", () => {
       { start: 2, end: 4 },
       { start: 6, end: 8 },
     ]);
+  });
+});
+
+describe("beats set by hand", () => {
+  test("a take Tom says is beat 2 reads beat 2 across its kept part, even when nothing matches", async () => {
+    const { assignedCovers, matchScript } = await import("./match");
+    const { emptyScript } = await import("./scripts");
+    const s = { ...emptyScript("s", "t"), long: { id: "L", kind: "long" as const, title: "t", beats: [{ id: "a", text: "the first beat here" }, { id: "b", text: "the second beat here" }, { id: "c", text: "the third beat here" }] } };
+    const words = ["completely", "different", "words", "said"].map((text, i) => ({ text, start: 1 + i, end: 1.6 + i }));
+    const take = { file: "t.wav", seconds: 8, recordedAt: "", words, transcribed: true };
+    expect(matchScript(take, s)).toEqual([]);
+    expect(matchScript({ ...take, assign: ["b"] }, s)).toEqual([{ beat: "b", start: 1, end: 4.6, score: 1 }]);
+    // Two beats with nothing to align on share the take.
+    const two = assignedCovers({ ...take, assign: ["b", "c"] }, s);
+    expect(two.map((c) => c.beat)).toEqual(["b", "c"]);
+    expect(two[0]!.start).toBe(1);
+    expect(two[1]!.start).toBeCloseTo(two[0]!.end, 5);
+    expect(two[1]!.end).toBe(4.6);
+  });
+});
+
+describe("auto trim", () => {
+  test("trims the ends, shortens a long pause, keeps a hand cut, and changes nothing the second time", async () => {
+    const { autoTrim } = await import("./match");
+    const w = (text: string, start: number, end: number) => ({ text, start, end });
+    const take = { seconds: 20, words: [w("one", 2, 2.4), w("two", 2.5, 2.9), w("three", 6, 6.4), w("four", 6.5, 6.9), w("five", 12, 12.4)] };
+    const keep = autoTrim(take)!;
+    expect(keep[0]!.start).toBeCloseTo(1.85, 5);
+    expect(keep.at(-1)!.end).toBeCloseTo(12.6, 5);
+    // The 3.1s pause after "two" comes down to 0.4s.
+    expect(keep[1]!.start - keep[0]!.end).toBeCloseTo(6 - 0.2 - (2.9 + 0.2), 5);
+    expect(autoTrim({ ...take, keep })).toEqual(keep);
+    // Tom cut "four" out by hand: it stays out.
+    const cut = [{ start: 0, end: 6.45 }, { start: 6.95, end: 20 }];
+    const again = autoTrim({ ...take, keep: cut })!;
+    expect(again.some((k) => k.start <= 6.6 && k.end >= 6.8)).toBe(false);
+    // Without pauses: just the ends.
+    expect(autoTrim(take, false)).toEqual([{ start: 1.85, end: 12.6 }]);
   });
 });

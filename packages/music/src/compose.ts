@@ -72,6 +72,9 @@ export type Score = {
   chimeShift: number;
   /** One line saying what the seed chose. */
   label: string;
+  /** false: a piece that runs once, start to end (journey.ts); notes past the end are cut,
+   * effects run once. Default: a loop (a save's tune), where the end rings into the start. */
+  loop?: boolean;
 };
 
 // ------------------------------------------------------------------ harmony
@@ -112,6 +115,14 @@ const MOODS: Record<Mood, MoodPreset> = {
   night: { modes: ["aeolian", "dorian"], bpm: [54, 66], textures: ["rain", "rain", "hiss"], rt60: 3.5, wet: 0.36, wow: 0.4, lowpass: 5500, brightness: 0.7, swing: 0.52, deceptive: 0.35 },
   playful: { modes: ["ionian", "mixolydian", "lydian"], bpm: [78, 94], textures: ["none", "crackle"], rt60: 1.4, wet: 0.18, wow: 0.2, lowpass: 9000, brightness: 1.1, swing: 0.6 },
   tender: { modes: ["ionian", "lydian"], bpm: [64, 76], textures: ["hiss", "tape"], rt60: 2.4, wet: 0.3, wow: 0.5, lowpass: 6500, brightness: 0.75, swing: 0.5 },
+  // For telling a story (journey.ts): the score moves between these under one key and tempo.
+  focus: { modes: ["dorian", "ionian"], bpm: [70, 84], textures: ["hiss", "none"], rt60: 2, wet: 0.24, wow: 0.2, lowpass: 7500, brightness: 0.85, swing: 0.52 },
+  curious: { modes: ["lydian", "lydian", "ionian"], bpm: [72, 86], textures: ["none", "hiss"], rt60: 2.2, wet: 0.26, wow: 0.2, lowpass: 8500, brightness: 1, swing: 0.55 },
+  tense: { modes: ["aeolian", "aeolian", "dorian"], bpm: [68, 80], textures: ["hiss", "none"], rt60: 2.8, wet: 0.3, wow: 0.3, lowpass: 5000, brightness: 0.6, swing: 0.5 },
+  eerie: { modes: ["aeolian", "dorian"], bpm: [56, 66], textures: ["hiss", "rain"], rt60: 4.5, wet: 0.42, wow: 0.6, lowpass: 5500, brightness: 0.65, swing: 0.5 },
+  driving: { modes: ["dorian", "mixolydian", "aeolian"], bpm: [84, 96], textures: ["none"], rt60: 1.8, wet: 0.2, wow: 0.1, lowpass: 9000, brightness: 1.05, swing: 0.5 },
+  melancholy: { modes: ["aeolian", "dorian"], bpm: [58, 70], textures: ["tape", "hiss"], rt60: 3.2, wet: 0.34, wow: 0.6, lowpass: 5500, brightness: 0.7, swing: 0.52 },
+  triumph: { modes: ["ionian", "lydian", "mixolydian"], bpm: [76, 90], textures: ["none"], rt60: 3, wet: 0.3, wow: 0.1, lowpass: 10000, brightness: 1.2, swing: 0.5 },
 };
 
 // ------------------------------------------------------------------ styles
@@ -146,17 +157,17 @@ type Style = {
 };
 
 const STYLES = {
-  felt: { moods: ["wistful", "night", "tender", "cosy", "wonder"], chords: [["piano", "strike"]], pad: [null, "strings", "pad"], tune: ["piano"], density: [2, 4], arp: 0.25, arpInst: ["piano"], arpRate: [2], bass: ["none", "soft"] },
-  rhodes: { moods: ["cosy", "wistful", "night", "playful"], chords: [["epiano", "strike"]], pad: ["pad", null], tune: ["musicbox", "ocarina", "vibes", "epiano"], density: [3, 5], arp: 0.4, arpInst: ["harp", "kalimba"], arpRate: [2], bass: ["soft"] },
+  felt: { moods: ["wistful", "night", "tender", "cosy", "wonder", "focus", "melancholy", "tense", "eerie"], chords: [["piano", "strike"]], pad: [null, "strings", "pad"], tune: ["piano"], density: [2, 4], arp: 0.25, arpInst: ["piano"], arpRate: [2], bass: ["none", "soft"] },
+  rhodes: { moods: ["cosy", "wistful", "night", "playful", "focus", "curious"], chords: [["epiano", "strike"]], pad: ["pad", null], tune: ["musicbox", "ocarina", "vibes", "epiano"], density: [3, 5], arp: 0.4, arpInst: ["harp", "kalimba"], arpRate: [2], bass: ["soft"] },
   // Lo-fi (boom-bap) was here; cut 10-10 (Tom: the beat felt off). The waltz
   // is RPG-village music: plucked "oom" on one, "pah pah" on two and three.
-  waltz: { moods: ["cosy", "playful", "wistful", "wonder"], meter: 3, bpm: [100, 120], barsPerChord: 2, chords: [["pizz", "oompah"], ["harp", "oompah"], ["guitar", "oompah"]], pad: [null, "strings"], tune: ["flute", "ocarina"], tuneUnit: 2, density: [3, 5], arp: 0, arpInst: [], arpRate: [], bass: ["none"], textures: ["none", "hiss", "crackle"] },
-  chip: { moods: ["playful", "wistful", "wonder", "cosy"], bpm: [76, 96], chords: [["pulse", "chiparp"]], pad: [null], tune: ["pulse"], density: [3, 6], arp: 0, arpInst: [], arpRate: [], bass: ["tri"], drums: ["chip"], textures: ["none", "hiss"], rtScale: 0.6, lowpass: 6500 },
-  ambient: { moods: ["wonder", "night", "tender", "wistful"], bpm: [52, 66], chords: [["choir", "hold"], ["strings", "hold"], ["pad", "hold"]], pad: [null], tune: ["celesta", "kalimba", "vibes", "musicbox"], density: [1, 2], arp: 0.5, arpInst: ["celesta", "harp"], arpRate: [1, 2], bass: ["none", "sub"], rtScale: 1.4 },
+  waltz: { moods: ["cosy", "playful", "wistful", "wonder", "curious"], meter: 3, bpm: [100, 120], barsPerChord: 2, chords: [["pizz", "oompah"], ["harp", "oompah"], ["guitar", "oompah"]], pad: [null, "strings"], tune: ["flute", "ocarina"], tuneUnit: 2, density: [3, 5], arp: 0, arpInst: [], arpRate: [], bass: ["none"], textures: ["none", "hiss", "crackle"] },
+  chip: { moods: ["playful", "wistful", "wonder", "cosy", "driving", "curious"], bpm: [76, 96], chords: [["pulse", "chiparp"]], pad: [null], tune: ["pulse"], density: [3, 6], arp: 0, arpInst: [], arpRate: [], bass: ["tri"], drums: ["chip"], textures: ["none", "hiss"], rtScale: 0.6, lowpass: 6500 },
+  ambient: { moods: ["wonder", "night", "tender", "wistful", "eerie", "tense", "melancholy", "triumph"], bpm: [52, 66], chords: [["choir", "hold"], ["strings", "hold"], ["pad", "hold"]], pad: [null], tune: ["celesta", "kalimba", "vibes", "musicbox"], density: [1, 2], arp: 0.5, arpInst: ["celesta", "harp"], arpRate: [1, 2], bass: ["none", "sub"], rtScale: 1.4 },
   lullaby: { moods: ["tender", "cosy", "wistful", "wonder"], meter: 3, bpm: [70, 84], chords: [["pad", "hold"], ["strings", "hold"]], pad: [null], tune: ["musicbox", "kalimba", "celesta"], density: [2, 3], arp: 1, arpInst: ["musicbox", "kalimba", "harp"], arpRate: [2], bass: ["soft"] },
-  guitar: { moods: ["cosy", "wistful", "wonder", "night"], chords: [["guitar", "pick"]], pad: [null, "strings", "pad"], tune: ["ocarina", "piano", "vibes"], density: [2, 4], arp: 0, arpInst: [], arpRate: [], bass: ["none"] },
-  downtempo: { moods: ["night", "wonder", "wistful", "cosy"], bpm: [78, 92], chords: [["strings", "hold"], ["choir", "hold"], ["pad", "hold"]], pad: [null], tune: ["kalimba", "vibes", "piano", "marimba"], density: [2, 4], arp: 0.7, arpInst: ["kalimba", "marimba"], arpRate: [2], bass: ["sub"], drums: ["halftime"] },
-  dnb: { moods: ["night", "wonder", "wistful"], bpm: [164, 174], barsPerChord: 2, chords: [["pad", "hold"], ["choir", "hold"], ["strings", "hold"]], pad: [null], tune: ["piano", "vibes", "celesta"], tuneUnit: 2, density: [2, 4], arp: 0.4, arpInst: ["celesta", "kalimba"], arpRate: [1], bass: ["sub"], drums: ["dnb"], rtScale: 1.1 },
+  guitar: { moods: ["cosy", "wistful", "wonder", "night", "focus", "curious", "melancholy"], chords: [["guitar", "pick"]], pad: [null, "strings", "pad"], tune: ["ocarina", "piano", "vibes"], density: [2, 4], arp: 0, arpInst: [], arpRate: [], bass: ["none"] },
+  downtempo: { moods: ["night", "wonder", "wistful", "cosy", "driving", "focus", "tense", "triumph"], bpm: [78, 92], chords: [["strings", "hold"], ["choir", "hold"], ["pad", "hold"]], pad: [null], tune: ["kalimba", "vibes", "piano", "marimba"], density: [2, 4], arp: 0.7, arpInst: ["kalimba", "marimba"], arpRate: [2], bass: ["sub"], drums: ["halftime"] },
+  dnb: { moods: ["night", "wonder", "wistful", "driving", "tense"], bpm: [164, 174], barsPerChord: 2, chords: [["pad", "hold"], ["choir", "hold"], ["strings", "hold"]], pad: [null], tune: ["piano", "vibes", "celesta"], tuneUnit: 2, density: [2, 4], arp: 0.4, arpInst: ["celesta", "kalimba"], arpRate: [1], bass: ["sub"], drums: ["dnb"], rtScale: 1.1 },
 } satisfies Record<string, Style>;
 export type StyleName = keyof typeof STYLES;
 export const STYLE_NAMES = Object.keys(STYLES) as StyleName[];
@@ -521,3 +532,7 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName)
     label,
   };
 };
+
+// The tables, for the long-form composer (journey.ts).
+export type { MoodPreset, Style, Groove, Play };
+export { MOODS as MOOD_PRESETS, STYLES as STYLE_TABLE, GROOVES, LIFT, TUNE as TUNE_DEGREES };

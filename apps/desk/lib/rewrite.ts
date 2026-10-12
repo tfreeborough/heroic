@@ -1,8 +1,9 @@
 /**
- * The Scripts tab's Claude calls: a pasted script → a long cut and some
- * short cuts, as beats, in Tom's voice; a re-paste → the cuts adjusted to
- * the change and nothing else; one beat or one cut redone to an
- * instruction; another short. Same client and shape as draft.ts (the
+ * The Scripts tab's Claude calls: a pasted script → the long cut, as
+ * beats, in Tom's voice; a re-paste → the cut adjusted to the change and
+ * nothing else; one beat or the cut redone to an instruction; the picture
+ * plan (docs/design/desk-ascii-scripts.md). Shorts are parked (decision 1
+ * there): the calls that make them stay for later but nothing presses them. Same client and shape as draft.ts (the
  * queue's words): structured output, the game's own voice from
  * desk.config, the key from ANTHROPIC_API_KEY in apps/desk/.env.
  *
@@ -11,7 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { type Beat, type BeatCard, type Cut, type Script, newId, tokens } from "./scripts";
+import { type Beat, type BeatMood, type Cut, SCORE_MOODS, type Script, newId, picturesWanted, spokenSeconds, tokens } from "./scripts";
 
 export const hasClaude = (): boolean => Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -23,8 +24,8 @@ export type ScriptVoice = {
   rules: string;
   /** Lines actually written in the voice, if the game has none of the author's own scripts yet. Never invented ones. */
   examples?: string[];
-  /** The fixed start of every sketch prompt (stage 3). */
-  sketch?: string;
+  /** The picture style, added to every picture prompt (default: the chiaroscuro film still, cards.ts). */
+  picture?: string;
 };
 
 const MODEL = "claude-opus-5-5";
@@ -43,9 +44,8 @@ const ShortOut = z.object({
   beats: z.array(ShortBeatOut).min(2),
 });
 const RewriteOut = z.object({
-  longTitle: z.string().describe("The long video's title, under 80 characters, no ALL CAPS."),
+  longTitle: z.string().describe("The video's title, under 80 characters, no ALL CAPS."),
   long: z.array(BeatOut).min(1).describe("The whole script, lightly edited to the voice, as beats in the author's order."),
-  shorts: z.array(ShortOut).describe("As many shorts as the script naturally holds; may be one. Never pad."),
 });
 
 const KeptBeatOut = z.object({
@@ -70,12 +70,17 @@ const CutOut = z.object({ title: z.string(), hook: z.string().nullable(), beats:
 const BEAT_RULES = [
   "A BEAT is one thought: one to three sentences, roughly fifteen to forty words, a stretch that takes five to fifteen seconds to say. Every beat must read aloud on its own, because each is recorded on its own and a picture is hung on it.",
   "The long cut is the whole script, in the author's order, with every point kept. The job is a light edit to the voice, not a rewrite: keep the author's words wherever they already read well, fix what doesn't, and never invent a fact, a number or a feature that isn't in the source.",
+].join("\n\n");
+
+const SHORT_RULES = [
   "A SHORT is a self-contained vertical video of forty-five to seventy-five seconds spoken (about a hundred and twenty to two hundred words). It opens with the hook, makes one point, and ends without a sign-off. Reuse long beats word for word wherever they stand alone (mark them sameAs), so one recording serves both cuts; write new words only for the opening, the joins and the close. Make as many shorts as the script naturally holds: one idea gives one short, three distinct points give three. Never pad a short with filler, and never make a short from a point that needs the rest of the script to make sense.",
 ].join("\n\n");
 
-const system = (v: ScriptVoice, samples: string[]): string =>
+const system = (v: ScriptVoice, samples: string[], shorts = false): string =>
   [
-    "You edit video scripts for the one person who made the game, for videos they will read aloud themselves. A long video for YouTube (five minutes and up, landscape) and short vertical videos (TikTok, YouTube Shorts, Reels) come from one script.",
+    shorts
+      ? "You edit video scripts for the one person who made the game, for videos they will read aloud themselves. A long video for YouTube (five minutes and up, landscape) and short vertical videos (TikTok, YouTube Shorts, Reels) come from one script."
+      : "You edit video scripts for the one person who made the game, for videos they will read aloud themselves: a long video for YouTube (five minutes and up, landscape), one picture on screen per beat.",
     "",
     `About the game and the person (for you, not for the script): ${v.about}`,
     "",
@@ -95,6 +100,7 @@ const system = (v: ScriptVoice, samples: string[]): string =>
     "Hard rules: first person singular, British spelling, everyday words, no em dashes, no ALL CAPS, no exclamation marks, no three-beat slogans, no coined aphorisms, no emoji, no hashtags, no headings or labels inside a beat, nothing in brackets that isn't to be read aloud. Spoken English: contractions are fine, a sentence can start with And or But.",
     "",
     BEAT_RULES,
+    ...(shorts ? ["", SHORT_RULES] : []),
   ].join("\n");
 
 const client = () => new Anthropic();
@@ -131,18 +137,18 @@ const toShortBeats = (long: Beat[], beats: { text: string; sameAs: number | null
 
 // ── the calls ──
 
-/** The first rewrite: source → long cut + shorts. */
+/** The first rewrite: source → the long cut. */
 export const rewriteScript = async (v: ScriptVoice, source: string, samples: string[]): Promise<Pick<Script, "long" | "shorts">> => {
-  const out = await ask(system(v, samples), ["The script, as the author wrote it:", "", source.trim(), "", "Write the long cut as beats, then the shorts."].join("\n"), RewriteOut);
+  const out = await ask(system(v, samples), ["The script, as the author wrote it:", "", source.trim(), "", "Write the long cut as beats."].join("\n"), RewriteOut);
   const long: Cut = { id: newId(), kind: "long", title: clean(out.longTitle), beats: out.long.map((b) => ({ id: newId(), text: clean(b.text) })) };
-  const shorts: Cut[] = out.shorts.map((s) => ({ id: newId(), kind: "short", title: clean(s.title), hook: clean(s.hook), why: clean(s.why), beats: toShortBeats(long.beats, s.beats) }));
-  return { long, shorts };
+  return { long, shorts: [] };
 };
 
 /** A re-paste: the cuts adjusted to what changed in the source, every unchanged beat kept as it is (same id, same words). */
 export const adjustScript = async (v: ScriptVoice, samples: string[], oldSource: string, newSource: string, long: Cut, shorts: Cut[]): Promise<Pick<Script, "long" | "shorts">> => {
   const user = [
-    "The author has changed their script since the cuts below were made. Adjust the cuts to the change and nothing else: every beat whose point didn't change keeps its id and its exact words (even if you'd now phrase it differently); a beat whose point changed keeps its id with new words; a point that's gone is dropped; a new point becomes a new beat (id null) in its place. Shorts the same: a short whose points still stand keeps its id; one built on a point that's gone is dropped; a new point may earn a new short.",
+    "The author has changed their script since the cuts below were made. Adjust the cuts to the change and nothing else: every beat whose point didn't change keeps its id and its exact words (even if you'd now phrase it differently); a beat whose point changed keeps its id with new words; a point that's gone is dropped; a new point becomes a new beat (id null) in its place.",
+    shorts.length ? "Shorts the same: a short whose points still stand keeps its id; one built on a point that's gone is dropped; a new point may earn a new short." : "There are no shorts: return an empty list for them.",
     "",
     "THE SCRIPT BEFORE:",
     oldSource.trim(),
@@ -156,7 +162,7 @@ export const adjustScript = async (v: ScriptVoice, samples: string[], oldSource:
     ...(shorts.length ? ["THE SHORTS NOW:", ...shorts.map((s) => describeShort(s, true)), ""] : []),
     "Return the long cut and the shorts, adjusted.",
   ].join("\n");
-  const out = await ask(system(v, samples), user, AdjustOut);
+  const out = await ask(system(v, samples, shorts.length > 0), user, AdjustOut);
   const oldBeat = new Map(long.beats.map((b) => [b.id, b]));
   const newLong: Cut = {
     ...long,
@@ -164,11 +170,12 @@ export const adjustScript = async (v: ScriptVoice, samples: string[], oldSource:
     beats: out.long.map((b) => {
       const was = b.id ? oldBeat.get(b.id) : undefined;
       if (was && same(was.text, b.text)) return { ...was, changed: was.changed };
-      return { id: was ? was.id : newId(), text: clean(b.text), changed: true };
+      // Its point changed: new words, and its pictures (kept) want a look.
+      return was ? { ...was, text: clean(b.text), changed: true, card: undefined, ...(was.pictures ? { pictures: was.pictures.map((p) => ({ ...p, check: true })) } : {}) } : { id: newId(), text: clean(b.text), changed: true };
     }),
   };
   const oldShort = new Map(shorts.map((s) => [s.id, s]));
-  const newShorts: Cut[] = out.shorts.map((s) => {
+  const newShorts: Cut[] = (shorts.length ? out.shorts : []).map((s) => {
     const was = s.id ? oldShort.get(s.id) : undefined;
     const wasBeat = new Map((was?.beats ?? []).map((b) => [b.id, b]));
     const beats = toShortBeats(newLong.beats, s.beats, true).map((b, i) => {
@@ -191,7 +198,7 @@ export const redoBeat = async (v: ScriptVoice, samples: string[], cut: Cut, beat
     `Write beat ${cut.beats.findIndex((b) => b.id === beat.id) + 1} again. The author says: ${instruction.trim() || "try it another way"}`,
     "Only that beat. Keep it one thought, and keep every fact in it.",
   ].join("\n");
-  const out = await ask(system(v, samples), user, OneBeatOut, "medium");
+  const out = await ask(system(v, samples, cut.kind === "short"), user, OneBeatOut, "medium");
   return clean(out.text);
 };
 
@@ -208,7 +215,7 @@ export const redoCut = async (v: ScriptVoice, samples: string[], source: string,
     `Write this ${cut.kind} cut again. The author says: ${instruction.trim() || "try it another way"}`,
     cut.kind === "short" ? "Return the title, the hook and the beats. Where a beat is a long beat word for word, use those exact words." : "Return the title and the beats; hook is null for the long cut.",
   ].join("\n");
-  const out = await ask(system(v, samples), user, CutOut);
+  const out = await ask(system(v, samples, cut.kind === "short"), user, CutOut);
   const beats: Beat[] = out.beats.map((b) => {
     const text = clean(b.text);
     const ref = cut.kind === "short" ? long?.beats.find((x) => same(x.text, text)) : undefined;
@@ -229,40 +236,103 @@ export const anotherShort = async (v: ScriptVoice, samples: string[], source: st
     ...(shorts.length ? ["THE SHORTS ALREADY MADE (don't repeat them):", ...shorts.map((s) => describeShort(s, false)), ""] : []),
     `Write one more short. The author says: ${instruction.trim() || "about whatever the existing shorts leave out"}`,
   ].join("\n");
-  const out = await ask(system(v, samples), user, ShortOut);
+  const out = await ask(system(v, samples, true), user, ShortOut);
   return { id: newId(), kind: "short", title: clean(out.title), hook: clean(out.hook), why: clean(out.why), beats: toShortBeats(long.beats, out.beats) };
 };
 
-// ── the visual plan ──
+// ── the picture plan ──
 
-const PlanItemOut = z.object({
+const PictureItemOut = z.object({
   n: z.number().describe("The beat's number in the list given."),
-  kind: z.enum(["text", "sketch", "broll", "none"]).describe("text: a few words on screen carry it. sketch: a simple picture says it faster. broll: real footage should carry it (the maker films it). none: what's on screen stays."),
-  text: z.string().describe("kind text: two to six words, the point of the beat, as they'd sit on screen. Otherwise empty."),
-  prompt: z.string().describe("kind sketch: what to draw, one plain sentence, a single subject, no words in the picture, no style words (the style is fixed). Otherwise empty."),
-  note: z.string().describe("kind broll: what to film, concrete enough to go and get it (which screen, which match, what happens). Otherwise empty."),
+  pictures: z
+    .array(z.string())
+    .min(1)
+    .max(2)
+    .describe("One picture prompt; two only when the beat is marked LONG (the second follows the first while the beat is still being said: the same moment from another angle, or what it leads to)."),
+  mood: z.enum(SCORE_MOODS).describe("What the music under this beat should feel like."),
+  intensity: z.number().describe("0 to 1: how much is going on in the music. Most beats sit between 0.2 and 0.6; save 0.8 and up for the real peaks."),
+  lift: z.boolean().describe("True only for the one or two beats that are the turn of the whole video (the music steps up a key). Almost always false."),
+  pulled: z.array(z.string()).describe("Zero or one word, copied exactly as it appears in the beat, that the point turns on (a number, a name, a 'never'). Give one in roughly one beat in four, only where the word really is the point, never in two beats running. Empty for the rest."),
+  chapter: z.string().nullable().describe("When a new chapter starts at this beat: its name, two to four words, plain, no numbering. null otherwise."),
 });
-const PlanOut = z.object({ items: z.array(PlanItemOut) });
+const PicturesOut = z.object({ items: z.array(PictureItemOut) });
 
-const PLAN_RULES = [
-  "You plan what's on screen while each beat is read. The videos are one person talking about making their game: the picture is there to help the words land, never to compete with them.",
-  "Use text when the beat makes a point worth seeing written (a claim, a number, a name, a turn in the argument). Use a sketch when a simple drawing explains faster than words (a shape, a layout, a before and after, a thing being described). Use broll when the beat talks about something that exists and can be shown: the game, the code, the tool, a match. Use none when the beat carries straight on from the one before and a new picture would be noise.",
-  "A sketch prompt describes ONE simple subject in one sentence, as a line drawing would show it. No text in the picture, no style words, no colours. Roughly one beat in three or four earns a sketch; the rest are text, broll or none. Never two sketches in a row unless both are needed.",
-  "A text card is two to six words, never a sentence from the beat copied out, no full stop. Vary: a label, a number, a question, the key phrase.",
-  "A broll note says what to film and where to find it, so the maker can go and record it without thinking.",
+const PICTURE_RULES = [
+  "You plan the pictures for a video one person made about making their game. Every beat of the script gets a picture on screen while it's said. Each picture is turned into ASCII art (built out of typed characters, light becoming glyphs, shadow becoming empty screen), so it must read as strong shapes of light against darkness.",
+  "A picture prompt describes ONE scene as a still from a film: the subject, what it's doing, where the light falls from, the camera's angle and distance. One or two sentences, concrete and visual. No words, letters, numbers, screens full of text or UI in the picture (they turn to mush as glyphs). No style words (woodcut, ink, chiaroscuro): the style is added for you. Never a flat diagram or an icon.",
+  "Show the beat's point as a moment, often a metaphor: a bug hunt can be a figure with a lantern in a cave; balancing a weapon can be a blacksmith weighing a blade. The game itself can appear (its arena, its fighters) when the beat is about it. Keep recurring subjects the same from picture to picture (the same person, the same arena, the same objects), so the video feels like one world, and let an image from early on come back when its idea does.",
+  "Vary the framing down the video: close-ups, wide shots, from above, from low down. Never two pictures in a row with the same framing and subject.",
+  `Moods for the music: ${SCORE_MOODS.join(", ")}. focus is for explaining how something works (the most common), curious for a question or a what-if, tense for a problem, eerie for something wrong or strange, driving for momentum and getting work done, melancholy for something lost or cut, triumph for the payoff; the first six are the soft ones. Neighbouring beats usually share a mood or move to a near one; a jump is for a real turn in the story.`,
+  "Chapters: only when the video is long enough (the total is given). A chapter is a real turn in the story, never just a new paragraph. At most one every three minutes of speaking, so a ten minute video has three or four. When there are chapters, the first beat starts the first one. When the total is under six minutes, give no chapters at all.",
 ].join("\n\n");
 
-/** A visual for every beat given (the long cut's, and a short's own beats), by number. */
-export const planVisuals = async (v: ScriptVoice, beats: { n: number; text: string }[]): Promise<Map<number, BeatCard>> => {
-  const sys = [`About the game and the person: ${v.about}`, "", PLAN_RULES].join("\n");
-  const user = ["The beats, in order:", ...beats.map((b) => `${b.n}. ${b.text}`), "", "Give one item per beat, every beat, by number."].join("\n");
-  const out = await ask(sys, user, PlanOut, "medium");
-  const plan = new Map<number, BeatCard>();
-  for (const it of out.items) {
+export type PicturePlan = { prompts: string[]; mood: BeatMood; pulled: string[]; chapter?: string };
+
+/** A picture plan for every beat given, by number: prompts (two for a LONG beat), the mood under it, a pulled word, a chapter. */
+export const planPictures = async (v: ScriptVoice, title: string, beats: { n: number; text: string }[], all: { n: number; text: string }[]): Promise<Map<number, PicturePlan>> => {
+  const sys = [`About the game and the person: ${v.about}`, "", PICTURE_RULES].join("\n");
+  const total = all.reduce((t, b) => t + spokenSeconds(b.text), 0);
+  const want = new Set(beats.map((b) => b.n));
+  const user = [
+    `The video: "${title}". About ${Math.round(total / 60)} minutes spoken (${total} seconds).`,
+    "",
+    "The whole script, beat by beat (roughly how long each takes to say in brackets; LONG = give two pictures):",
+    ...all.map((b) => `${b.n}. (${spokenSeconds(b.text)}s${picturesWanted(b.text) > 1 ? ", LONG" : ""}) ${b.text}`),
+    "",
+    want.size === all.length ? "Give one item for every beat, by number." : `Give items only for these beats, by number: ${[...want].join(", ")}. The rest are already planned and are here for context.`,
+  ].join("\n");
+  const out = await ask(sys, user, PicturesOut, "medium");
+  const plan = new Map<number, PicturePlan>();
+  // A pulled word only lands if it's rare: never two beats running (the earlier one keeps it).
+  let lastPulled = -9;
+  for (const it of [...out.items].sort((a, b) => a.n - b.n)) {
     const n = Math.round(it.n);
-    if (!beats.some((b) => b.n === n)) continue;
-    const card: BeatCard = it.kind === "text" ? { kind: "text", text: clean(it.text) } : it.kind === "sketch" ? { kind: "sketch", prompt: clean(it.prompt) } : it.kind === "broll" ? { kind: "broll", note: clean(it.note) } : { kind: "none" };
-    plan.set(n, card);
+    const beat = beats.find((b) => b.n === n);
+    if (!beat) continue;
+    const prompts = it.pictures.map(clean).filter(Boolean).slice(0, picturesWanted(beat.text));
+    if (!prompts.length) continue;
+    // A pulled word must really be in the beat (it's spelt from what's said).
+    const said = new Set(tokens(beat.text));
+    let pulled = it.pulled.map((w) => w.trim()).filter((w) => w && tokens(w).length === 1 && said.has(tokens(w)[0]!)).slice(0, 1);
+    if (pulled.length && n - lastPulled < 2) pulled = [];
+    if (pulled.length) lastPulled = n;
+    plan.set(n, {
+      prompts,
+      mood: { mood: it.mood, intensity: Math.max(0, Math.min(1, it.intensity)), ...(it.lift ? { lift: true } : {}) },
+      pulled,
+      ...(it.chapter?.trim() ? { chapter: clean(it.chapter) } : {}),
+    });
   }
   return plan;
+};
+
+const OnePromptOut = z.object({ prompt: z.string().describe("The new picture prompt: one scene as a film still, one or two sentences, no style words, no words in the picture.") });
+
+/** One picture's prompt written again (to an instruction, or just differently), the whole script and the other pictures' prompts for context. */
+export const redoPicturePrompt = async (
+  v: ScriptVoice,
+  title: string,
+  beats: { n: number; text: string; prompts: string[] }[],
+  n: number,
+  k: number,
+  instruction: string,
+): Promise<string> => {
+  const sys = [`About the game and the person: ${v.about}`, "", PICTURE_RULES].join("\n");
+  const beat = beats.find((b) => b.n === n);
+  if (!beat) throw new Error("that beat isn't in the script");
+  const current = beat.prompts[k] ?? "";
+  const user = [
+    `The video: "${title}".`,
+    "",
+    "The script, beat by beat, with each picture's prompt as it stands (keep the new one in the same world):",
+    ...beats.map((b) => [`${b.n}. ${b.text}`, ...b.prompts.map((p, i) => `   picture${b.prompts.length > 1 ? ` ${i + 1}` : ""}: ${p || "(none yet)"}`)].join("\n")),
+    "",
+    `Write a new prompt for beat ${n}${beat.prompts.length > 1 ? `, picture ${k + 1} (${k ? "the second half of the beat" : "the first half of the beat"})` : ""}.`,
+    current ? `The prompt now, which the author wants replaced: ${current}` : "",
+    instruction.trim() ? `The author says: ${instruction.trim()}` : "Make it a different, stronger idea than the one now: a scene that shows the beat's point at a glance, not a literal illustration of its words.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const out = await ask(sys, user, OnePromptOut, "medium");
+  return clean(out.prompt);
 };

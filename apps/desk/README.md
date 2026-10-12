@@ -191,39 +191,50 @@ red; **Re-flow from today** lifts everything not yet posted and lays it
 out again in order under the spacing rule. Stored in
 `<rendersDir>/schedule.json`; deleting a render drops it from the queue.
 
-**Scripts** — where a video starts (design: `docs/design/desk-scripts.md`).
+**Scripts** — where a video starts (design: `docs/design/desk-scripts.md`,
+then `docs/design/desk-ascii-scripts.md` for the pictures and the score).
 The list down the left; a script with only a title is an idea, as before.
 Open one and the page is steps: **1. The script**: paste what you wrote
 (it saves as you go); **Rewrite into cuts** has Claude turn it into **2.
 The long cut** (the whole script, lightly edited, as *beats*: one thought each, five to fifteen seconds spoken, each
-with a stable id everything later hangs on) and **3. The shorts** (as
-many self-contained 45–75s cuts as the script holds, each with a title, a
-hook line and a note on why it stands alone; a short's beat that is a
-long beat word for word is marked *same as long beat n*, so one
-recording serves both). Each beat shows what changed from the paragraph
-it came from (added words lit, dropped words struck); click to edit it,
-**keep mine** puts your paragraph back, **change…** has Claude redo that
-one beat to an instruction, and a box under each cut does the same for
-the whole cut. **+ short** asks for one more. Change the script after a
+with a stable id everything later hangs on). One long video for YouTube:
+shorts are parked (TikTok splits a long video into parts itself), and an
+older script's shorts are kept on file but not shown. Each beat shows what changed from what you wrote
+(the whole script lined up against the whole cut in one pass, so a sentence another beat says is never struck; added words lit, dropped words struck); click to edit it,
+**keep mine** puts your words for that beat back, **change…** has Claude redo that
+one beat to an instruction, and a box under the cut does the same for
+the whole cut. Change the script after a
 rewrite and the page offers **Adjust the cuts to the change**: every beat
 whose point still stands keeps its id and words, changed and new ones are
-marked. Stored in `<rendersDir>/scripts/<id>.json` (gitignored); an old
+marked (and their pictures marked *check*, never thrown away). Stored in `<rendersDir>/scripts/<id>.json` (gitignored); an old
 `ideas.json` is migrated the first time the tab opens and renamed. The voice is
 yours: every other script on the tab goes into the call in full, with
 the instruction that your sentences come back word for word unless one
 would trip you reading it aloud; the game's `script.ai` in `desk.config`
 only adds the rules (no invented example lines). Needs
-`ANTHROPIC_API_KEY` in `apps/desk/.env`. **4. The visuals**: **Plan the
-visuals** gives every beat what's on screen while it's said: *a few
-words* (a text card), *a sketch* (a prompt), *footage to film* (a b-roll
-note) or *nothing new*. Change any row; **Make N sketches** draws the
-sketches three at a time in the background (GPT Image through the shared
-`@heroic/forge`, the game's `script.ai.sketch` style in front of every
-prompt, needs `OPENAI_API_KEY` in `apps/desk/.env`) and each lands on its
-row as it finishes (`public/cards/<script>/`, gitignored; **Back the takes
-up to Drive** copies them too); **again** on a row makes another try.
-**Show the shot list** is the b-roll notes as one list to film from.
-**5. Record**: the prompter. Every beat that needs a take, large, the
+`ANTHROPIC_API_KEY` in `apps/desk/.env`. **3. The pictures**: **Plan the
+pictures** has Claude give every beat a picture prompt (a scene as a film
+still, one consistent world down the video; two prompts on a beat over
+20s spoken), the score's **mood** (13: the six Autosave ones plus focus,
+curious, tense, eerie, driving, melancholy, triumph), its **intensity**
+and the odd **big moment** (the music steps up a key there), a **pulled** word now and then (never two beats
+running), and **chapters** (none under 6 minutes spoken, never two within
+3; a chapter too close is flagged and won't show). **Make N pictures**
+draws them four at a time in the background (GPT Image through the
+shared `@heroic/forge`, landscape 1536×1024, the chiaroscuro style in
+`lib/cards.ts` or the game's `script.ai.picture` in front of every prompt,
+needs `OPENAI_API_KEY`), each landing on its beat as it finishes
+(`public/cards/<script>/`, gitignored; **Back the takes up to Drive**
+copies them too). Every picture shows **as glyphs** (the real
+`@heroic/ascii-build` engine in the game's `script.palette`), still until
+you hover it, then building on a loop with its own **look seed** (how the
+glyphs arrive and fill in; **reroll look** changes only that). Per
+picture: **approve**, **again** (another try; the older ones stay as
+thumbnails to click back to), edit the prompt, **new prompt…** (Claude writes that one picture's prompt again, to what you say or blank for a better idea, with the whole script and the other prompts in view; then **again** makes it), **my own** (pick or drop
+an image), **original** to see it before the glyphs. **Approve all** ticks
+the lot. Every field is yours to change by hand: mood, intensity, lift,
+pulled words, + chapter here, + second picture.
+**4. Record**: the prompter. Every beat that needs a take, large, the
 next one to read lit; the mic and its meter; **Record** (`R`), a 3-2-1,
 read as many beats as you like, `R` again. The take is saved to
 `public/voice/takes/` (like an edit's), Whisper writes its words, and
@@ -231,16 +242,36 @@ every beat it reads gets a tick (✓✓ = read in two takes: delete one, or
 organise will skip that beat). Read in any order, as many times as you
 like; **Add a recording from a file** takes one made elsewhere. The takes
 sit under the prompter: waveform, words, the beats each covers, **×** to
-delete (to the voice folder's `.trash`). Click a take to open it: drag
+delete (to the voice folder's `.trash`). New takes **trim themselves as they land** (the silence off both ends and, with **shorten long pauses**, any pause over 0.7s inside cut down to about 0.4s; both are ticks above the takes, remembered per machine), and **Trim all** gives every take you already have the same tidy; cuts you made by hand stay, and running it again changes nothing. **set beats…** on a take's row says which beat(s) it reads when the matcher didn't hear them (`7`, `7-9` or `7, 9`; blank goes back to the matcher): the take then reads exactly those, across its kept part, marked *(yours)*. Click a take to open it: drag
 across the sound to select a stretch, **Cut it out** or **Keep only
 this**, **Trim to the words** takes the silence off both ends, **Reset**
 undoes every cut; the file is never touched, the take keeps a list of
-kept regions and the matching and organise only see those. **6.
-Organise**: every cut becomes a fresh edit (`<script>-long-r1`,
-`<script>-short-1-r1`…): the takes sliced per beat in script order with
-the **gap** between, each beat's card on the cards row at its start (a
-text card or sketch until the next card, a b-roll slot for its beat), a
-marker per beat, the video tracks empty. A beat nobody read is skipped
+kept regions and the matching and organise only see those. **5.
+Organise**: the long cut becomes a fresh edit (`<script>-long-r1`…): the takes sliced per beat in script order with
+the **gap** between, each beat's chosen picture on the cards row at its start as a
+**glyph picture** (a build card: the picture and its look seed; a long
+beat's two pictures split at the sentence break nearest its middle), a
+marker per beat, the video tracks empty. Make it with the **Beats**
+template (BITS): the title builds out of glyphs and rains into the first
+picture; the pictures build and fall away as rain into the next; a
+pulled word borrows the picture's glyphs to spell itself as it's said;
+a chapter (organise leaves it a 3.5s silent gap, and the first beat's
+chapter needs none: the title opens it) clears the screen for "CHAPTER
+TWO" and its name; the voice runs along the foot as a terminal line;
+footage dropped on a video track plays over them; the end card replays
+every picture, makes a mosaic of them, builds the channel name and types
+the sign-off, then holds for YouTube's end-screen elements. After
+organising, the page shows the chapter list for the YouTube description
+(with copy) when YouTube would take it, and the **Score**: organise
+writes the edit its own music in the background (`@heroic/music`'s
+journey: one piece whose layers, brightness and mode follow each beat's
+mood, intensity and big moment, breathing at chapters, a bell on pulled
+words, landing home on the end card), sets it as the edit's quiet music
+bed (never over a song you set yourself), and the panel has a player,
+**Fit to the edit** (the same piece refitted after you've moved things)
+and **Another soundtrack** (a new seed: new key, tempo, style, theme). In the editor a glyph picture's
+inspector shows its look and **reroll look**; the Cards shelf drops the
+script's pictures as glyph pictures. A beat nobody read is skipped
 and said so; a beat read in two takes is skipped and said so (nothing
 picks between takes for you). Earlier runs' edits are never touched.
 Open an edit, drop footage on the b-roll slots, pick a song, Done › to

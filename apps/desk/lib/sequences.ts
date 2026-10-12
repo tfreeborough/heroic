@@ -146,7 +146,7 @@ const cleanAudio = (c: AudioClip, takes: number): AudioClip | undefined => {
   };
 };
 const cleanCard = (c: Card): Card | undefined => {
-  const kind = c.kind === "text" || c.kind === "image" || c.kind === "broll" ? c.kind : undefined;
+  const kind = c.kind === "text" || c.kind === "image" || c.kind === "broll" || c.kind === "build" || c.kind === "chapter" ? c.kind : undefined;
   if (!kind) return undefined;
   return {
     id: String(c.id || freshId()),
@@ -154,6 +154,9 @@ const cleanCard = (c: Card): Card | undefined => {
     ...(c.text !== undefined ? { text: String(c.text).slice(0, 400) } : {}),
     ...(c.src !== undefined ? { src: safeSrc(c.src) } : {}),
     ...(c.note !== undefined ? { note: String(c.note).slice(0, 400) } : {}),
+    ...(kind === "build" ? { seed: Math.round(num(c.seed, 1, 1e6, 1)) } : {}),
+    ...(kind === "chapter" && c.n ? { n: Math.round(num(c.n, 1, 99, 1)) } : {}),
+    ...(kind === "build" && Array.isArray(c.pulled) && c.pulled.length ? { pulled: c.pulled.map((w) => String(w).slice(0, 40)).slice(0, 4) } : {}),
     at: num(c.at, 0, 1e6, 0),
     seconds: num(c.seconds, MIN_CARD, 1e6, 4),
     place: c.place === "over" ? "over" : "full",
@@ -195,6 +198,7 @@ export const writeSequence = (g: GameConfig, seq: Sequence): Sequence => {
     name: String(seq.name || id).slice(0, 120),
     ...(seq.note ? { note: String(seq.note) } : {}),
     ...(seq.idea ? { idea: String(seq.idea) } : {}),
+    ...(seq.title ? { title: String(seq.title).slice(0, 200) } : {}),
     video,
     audio,
     takes,

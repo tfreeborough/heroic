@@ -374,7 +374,25 @@ textarea.script-source { font-size: 15px; line-height: 1.5; }
 .beat:hover .beat-tools { opacity: 1; }
 .beat-read { font-size: 19px; line-height: 1.5; margin: 0; }
 .fields label { display: flex; flex-direction: column; gap: 4px; }
-.plan-row .plan-words { line-height: 1.4; }
+.plan-row .plan-words, .pic-row .plan-words { line-height: 1.4; }
+/* the pictures (desk-ascii-scripts.md) */
+.pic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.pic-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(0,0,0,0.2); }
+.pic-card.approved { border-color: rgba(159, 224, 173, 0.55); }
+.pic-card.over { border-color: var(--sand); background: rgba(220,185,111,0.08); }
+.pic-card textarea { font-size: 13px; line-height: 1.4; }
+.pic-add { align-self: center; justify-self: start; }
+.glyphs { position: relative; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #000; }
+.glyphs canvas, .glyphs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.glyphs.empty { display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px; }
+.glyphs-orig { position: absolute; right: 6px; bottom: 4px; opacity: 0; transition: opacity 0.15s; }
+.glyphs:hover .glyphs-orig { opacity: 0.85; }
+.pic-cands { display: flex; gap: 4px; flex-wrap: wrap; }
+.pic-cands button { padding: 0; border: 2px solid transparent; background: none; border-radius: 4px; overflow: hidden; width: 64px; aspect-ratio: 16 / 9; }
+.pic-cands button.on { border-color: var(--sand); }
+.pic-cands img { width: 100%; height: 100%; object-fit: cover; display: block; }
+mark.pulled { background: rgba(220,185,111,0.3); color: var(--bone); border-radius: 3px; padding: 0 2px; }
+.chapter-row input { font-family: Cinzel, Georgia, serif; font-weight: 700; }
 /* the prompter */
 .prompt-list { display: flex; flex-direction: column; max-height: 52vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px 0; background: rgba(0,0,0,0.25); }
 .pbeat { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 10px 14px; cursor: pointer; border-left: 3px solid transparent; }

@@ -10,7 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GameConfig } from "../game";
-import { type Beat, type BeatCard, type Cut, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, summarise } from "./scripts";
+import { type Beat, type BeatCard, type BeatMood, type BeatPicture, type Cut, SCORE_MOODS, type ScoreMood, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, summarise } from "./scripts";
 import { rendersDir } from "./render";
 
 const dir = (g: GameConfig) => join(rendersDir(g), "scripts");
@@ -65,12 +65,42 @@ const cleanCard = (c: Partial<BeatCard> | undefined): BeatCard | undefined => {
     ...(c.error ? { error: String(c.error).slice(0, 200) } : {}),
   };
 };
+const cleanPath = (src: unknown) => String(src ?? "").replace(/(^|\/)\.\.(?=\/|$)/g, "").replace(/^\/+/, "");
+const cleanPicture = (p: Partial<BeatPicture>): BeatPicture => {
+  const candidates = (Array.isArray(p.candidates) ? p.candidates : []).map(cleanPath).filter(Boolean);
+  const chosen = p.chosen ? cleanPath(p.chosen) : undefined;
+  return {
+    prompt: String(p.prompt ?? "").slice(0, 1200),
+    candidates,
+    ...(chosen && candidates.includes(chosen) ? { chosen } : {}),
+    ...(p.approved ? { approved: true } : {}),
+    ...(p.check ? { check: true } : {}),
+    ...(p.error ? { error: String(p.error).slice(0, 200) } : {}),
+    look: Math.round(num(p.look, 1, 1e6, 1)),
+  };
+};
+const cleanMood = (m: Partial<BeatMood> | undefined): BeatMood | undefined =>
+  m && SCORE_MOODS.includes(m.mood as ScoreMood) ? { mood: m.mood as ScoreMood, intensity: num(m.intensity, 0, 1, 0.5), ...(m.lift ? { lift: true } : {}) } : undefined;
 const cleanBeat = (b: Partial<Beat>): Beat | undefined => {
   const text = String(b.text ?? "").trim();
   const id = String(b.id ?? "").trim();
   if (!id) return undefined;
   const card = cleanCard(b.card);
-  return { id, text, ...(b.from ? { from: String(b.from) } : {}), ...(b.changed ? { changed: true } : {}), ...(card ? { card } : {}) };
+  const pictures = Array.isArray(b.pictures) ? b.pictures.slice(0, 2).map(cleanPicture) : [];
+  const mood = cleanMood(b.mood);
+  const pulled = Array.isArray(b.pulled) ? b.pulled.map((w) => String(w).trim().slice(0, 40)).filter(Boolean).slice(0, 4) : [];
+  const chapter = String(b.chapter ?? "").trim().slice(0, 80);
+  return {
+    id,
+    text,
+    ...(b.from ? { from: String(b.from) } : {}),
+    ...(b.changed ? { changed: true } : {}),
+    ...(card ? { card } : {}),
+    ...(pictures.length ? { pictures } : {}),
+    ...(mood ? { mood } : {}),
+    ...(pulled.length ? { pulled } : {}),
+    ...(chapter ? { chapter } : {}),
+  };
 };
 const cleanCut = (c: Partial<Cut>, kind: Cut["kind"]): Cut | undefined => {
   const id = String(c.id ?? "").trim();
@@ -99,6 +129,7 @@ const cleanTake = (t: Partial<ScriptTake>): ScriptTake | undefined => {
     words: Array.isArray(t.words) ? t.words.map((w) => ({ text: String(w.text ?? ""), start: num(w.start, 0, 1e6, 0), end: num(w.end, 0, 1e6, 0), ...(w.hidden ? { hidden: true } : {}) })) : [],
     ...(t.transcribed ? { transcribed: true } : {}),
     ...(keep?.length ? { keep } : {}),
+    ...(Array.isArray(t.assign) && t.assign.length ? { assign: t.assign.map(String).slice(0, 40) } : {}),
   };
 };
 
@@ -150,7 +181,26 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
   // ever comes from the server, so one the page doesn't know about yet is kept.
   const known = new Map(cutsOf(s).flatMap((c) => c.beats.map((b) => [b.id, b.card] as const)));
   const keepSrc = (c: Cut): Cut => ({ ...c, beats: c.beats.map((b) => (b.card && !b.card.src && known.get(b.id)?.src && known.get(b.id)?.kind === "sketch" && b.card.kind === "sketch" && known.get(b.id)?.prompt === b.card.prompt ? { ...b, card: { ...b.card, src: known.get(b.id)!.src } } : b)) });
-  if (patch.long !== undefined) s.long = patch.long ? keepSrc(cleanCut(patch.long, "long")!) : undefined;
+  // Same for pictures: candidates only ever come from the server (made, or Tom's own uploaded), so any the page
+  // hasn't seen yet are kept, and so is a choice the server made that the page hasn't caught up with.
+  const knownPics = new Map(cutsOf(s).flatMap((c) => c.beats.map((b) => [b.id, b.pictures ?? []] as const)));
+  const keepPics = (c: Cut): Cut => ({
+    ...c,
+    beats: c.beats.map((b) => {
+      const had = knownPics.get(b.id);
+      if (!had?.length || !b.pictures) return b;
+      return {
+        ...b,
+        pictures: b.pictures.map((p, k) => {
+          const h = had[k];
+          if (!h) return p;
+          const missed = h.candidates.filter((x) => !p.candidates.includes(x));
+          return missed.length ? { ...p, candidates: [...p.candidates, ...missed], chosen: h.chosen ?? p.chosen, error: h.error } : p;
+        }),
+      };
+    }),
+  });
+  if (patch.long !== undefined) s.long = patch.long ? keepPics(keepSrc(cleanCut(patch.long, "long")!)) : undefined;
   if (patch.shorts !== undefined) s.shorts = (Array.isArray(patch.shorts) ? patch.shorts : []).flatMap((c) => cleanCut(c, "short") ?? []).map(keepSrc);
   if (patch.takes !== undefined) {
     // The page only ever changes a take's kept regions and its words: the files are the server's.
@@ -158,7 +208,10 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
     s.takes = (Array.isArray(patch.takes) ? patch.takes : []).flatMap((t) => {
       const c = cleanTake(t);
       const was = c && mine.get(c.file);
-      return c && was ? [{ ...was, words: c.words.length ? c.words : was.words, ...(c.keep ? { keep: c.keep } : {}) }] : [];
+      if (!c || !was) return [];
+      // Kept regions and the beats it's assigned to are the page's to change (an assign the page cleared goes).
+      const { assign: _a, ...rest } = was;
+      return [{ ...rest, words: c.words.length ? c.words : was.words, ...(c.keep ? { keep: c.keep } : {}), ...(c.assign ? { assign: c.assign } : {}) }];
     });
     // A take the page didn't send is not deleted this way (that's the DELETE route): it stays.
     for (const t of s.takes.length < mine.size ? [...mine.values()].filter((t) => !s.takes.some((x) => x.file === t.file)) : []) s.takes.push(t);
