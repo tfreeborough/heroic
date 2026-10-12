@@ -66,51 +66,99 @@
     },
     {
       "id": "h009",
-      "text": "Did you know? Looking at something far away for twenty seconds rests your eyes."
+      "text": "Did you know? Looking at something far away for twenty seconds rests your eyes.",
+      "used": {
+        "at": 1791834499299,
+        "in": "slot-05-daytona"
+      }
     },
     {
       "id": "h00a",
-      "text": "Hint: Achievements are rare here. That's what makes them achievements."
+      "text": "Hint: Achievements are rare here. That's what makes them achievements.",
+      "used": {
+        "at": 1791834499298,
+        "in": "slot-05-daytona"
+      }
     },
     {
       "id": "h00b",
-      "text": "Tip: The cat will come to you. Don't force it."
+      "text": "Tip: The cat will come to you. Don't force it.",
+      "used": {
+        "at": 1791836895636,
+        "in": "slot-06-first-flight"
+      }
     },
     {
       "id": "h00c",
-      "text": "Tip: The map isn't the place."
+      "text": "Tip: The map isn't the place.",
+      "used": {
+        "at": 1791836895635,
+        "in": "slot-06-first-flight"
+      }
     },
     {
       "id": "h00d",
-      "text": "Tip: Not everyone in the tavern wants to talk. Respect that."
+      "text": "Tip: Not everyone in the tavern wants to talk. Respect that.",
+      "used": {
+        "at": 1791838546615,
+        "in": "slot-07-judicium"
+      }
     },
     {
       "id": "h00e",
-      "text": "Tip: Go outside. The graphics are incredible."
+      "text": "Tip: Go outside. The graphics are incredible.",
+      "used": {
+        "at": 1791838546614,
+        "in": "slot-07-judicium"
+      }
     },
     {
       "id": "h00f",
-      "text": "Tip: Some chests bite. Most don't."
+      "text": "Tip: Some chests bite. Most don't.",
+      "used": {
+        "at": 1791840508771,
+        "in": "slot-05-daytona"
+      }
     },
     {
       "id": "h00g",
-      "text": "Tip: You can talk your way out of most fights."
+      "text": "Tip: You can talk your way out of most fights.",
+      "used": {
+        "at": 1791840508770,
+        "in": "slot-05-daytona"
+      }
     },
     {
       "id": "h00h",
-      "text": "Tip: A goat can climb anything. You can't."
+      "text": "Tip: A goat can climb anything. You can't.",
+      "used": {
+        "at": 1791840711043,
+        "in": "slot-06-first-flight"
+      }
     },
     {
       "id": "h00i",
-      "text": "Lore: The library shuts at dusk, but the lights stay on."
+      "text": "Lore: The library shuts at dusk, but the lights stay on.",
+      "used": {
+        "at": 1791840711042,
+        "in": "slot-06-first-flight"
+      }
     },
     {
       "id": "h00j",
-      "text": "Tip: Sleep at the inn. Your back will thank you."
+      "text": "Tip: Sleep at the inn. Your back will thank you.",
+      "used": {
+        "at": 1791840792216,
+        "in": "slot-07-judicium"
+      }
     },
     {
       "id": "h00k",
-      "text": "Tip: Rain makes everything look better."
+      "text": "Tip: Rain makes everything look better.",
+      "used": {
+        "at": 1791840792215,
+        "in": "slot-07-judicium"
+      }
     },
     {
       "id": "h00l",

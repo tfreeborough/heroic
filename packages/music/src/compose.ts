@@ -129,7 +129,7 @@ const MOODS: Record<Mood, MoodPreset> = {
 
 type Play = "strike" | "hold" | "pick" | "chiparp" | "oompah";
 type Bass = "soft" | "sub" | "tri" | "none";
-type Groove = "halftime" | "dnb" | "chip";
+type Groove = "halftime" | "dnb" | "chip" | "brush" | "hand" | "march" | "four";
 
 type Style = {
   moods: Mood[];
@@ -168,16 +168,34 @@ const STYLES = {
   guitar: { moods: ["cosy", "wistful", "wonder", "night", "focus", "curious", "melancholy"], chords: [["guitar", "pick"]], pad: [null, "strings", "pad"], tune: ["ocarina", "piano", "vibes"], density: [2, 4], arp: 0, arpInst: [], arpRate: [], bass: ["none"] },
   downtempo: { moods: ["night", "wonder", "wistful", "cosy", "driving", "focus", "tense", "triumph"], bpm: [78, 92], chords: [["strings", "hold"], ["choir", "hold"], ["pad", "hold"]], pad: [null], tune: ["kalimba", "vibes", "piano", "marimba"], density: [2, 4], arp: 0.7, arpInst: ["kalimba", "marimba"], arpRate: [2], bass: ["sub"], drums: ["halftime"] },
   dnb: { moods: ["night", "wonder", "wistful", "driving", "tense"], bpm: [164, 174], barsPerChord: 2, chords: [["pad", "hold"], ["choir", "hold"], ["strings", "hold"]], pad: [null], tune: ["piano", "vibes", "celesta"], tuneUnit: 2, density: [2, 4], arp: 0.4, arpInst: ["celesta", "kalimba"], arpRate: [1], bass: ["sub"], drums: ["dnb"], rtScale: 1.1 },
+  // Added 10-12 so neighbouring saves have more to choose from (every mood
+  // now has at least four styles). Same instruments, new arrangements.
+  // Marimba: picked wooden chords, a hand-drum groove, a flute on top.
+  marimba: { moods: ["playful", "curious", "cosy", "driving", "focus"], bpm: [84, 100], chords: [["marimba", "pick"], ["kalimba", "pick"]], pad: [null, "pad"], tune: ["flute", "ocarina", "vibes"], density: [3, 5], arp: 0, arpInst: [], arpRate: [], bass: ["soft"], drums: ["hand"], textures: ["none", "hiss"], rtScale: 0.8 },
+  // Harp: fingerpicked harp over strings or choir, a flute or celesta tune.
+  harp: { moods: ["tender", "wonder", "melancholy", "wistful", "eerie"], chords: [["harp", "pick"]], pad: ["strings", "choir"], tune: ["flute", "celesta", "ocarina"], density: [2, 3], arp: 0, arpInst: [], arpRate: [], bass: ["none", "sub"], rtScale: 1.2 },
+  // Score: held strings or choir with plucked strings running under, a march on the drums.
+  score: { moods: ["triumph", "tense", "wonder", "driving", "melancholy"], chords: [["strings", "hold"], ["choir", "hold"]], pad: ["pad", null], tune: ["piano", "flute", "vibes"], density: [2, 4], arp: 0.8, arpInst: ["pizz", "harp"], arpRate: [2], bass: ["sub"], drums: ["march"], rtScale: 1.2 },
+  // Vibes: a swung late-night trio, brushes and rim clicks.
+  vibes: { moods: ["night", "focus", "cosy", "curious", "melancholy"], chords: [["vibes", "strike"], ["epiano", "strike"]], pad: ["pad", null], tune: ["flute", "piano", "ocarina"], density: [3, 5], arp: 0, arpInst: [], arpRate: [], bass: ["soft"], drums: ["brush"], swing: 0.62, textures: ["crackle", "hiss", "rain"] },
+  // Toybox: celesta and music box, a wind-up arpeggio. Sweet, or a bit haunted.
+  toybox: { moods: ["playful", "tender", "curious", "cosy", "eerie"], bpm: [72, 92], chords: [["celesta", "strike"], ["musicbox", "strike"]], pad: [null, "pad"], tune: ["musicbox", "celesta", "kalimba"], density: [2, 4], arp: 0.8, arpInst: ["musicbox", "celesta"], arpRate: [2, 3], bass: ["none"], textures: ["none", "crackle"] },
+  // Synthwave: a fast chip arpeggio over a pad, octave-bouncing bass, four on the floor.
+  synthwave: { moods: ["driving", "night", "triumph", "tense"], bpm: [92, 108], chords: [["pulse", "chiparp"], ["pad", "hold"]], pad: ["pad", null], tune: ["epiano", "vibes", "pulse"], density: [3, 5], arp: 0.5, arpInst: ["celesta", "kalimba"], arpRate: [2], bass: ["tri"], drums: ["four"], textures: ["none", "hiss"], lowpass: 8000 },
 } satisfies Record<string, Style>;
 export type StyleName = keyof typeof STYLES;
 export const STYLE_NAMES = Object.keys(STYLES) as StyleName[];
 export const stylesFor = (mood: Mood) => STYLE_NAMES.filter((s) => (STYLES[s] as Style).moods.includes(mood));
 
 /** Drum patterns on a 16-step bar. */
-const GROOVES: Record<Groove, { kick: number[]; snare: number[]; hat: number[]; ghost?: number[]; shaker?: boolean; chip?: boolean }> = {
+const GROOVES: Record<Groove, { kick: number[]; snare: number[]; hat: number[]; ghost?: number[]; rim?: number[]; shaker?: boolean; chip?: boolean }> = {
   halftime: { kick: [0, 10], snare: [8], hat: [0, 2, 4, 6, 8, 10, 12, 14], ghost: [14], shaker: true },
   dnb: { kick: [0, 10], snare: [4, 12], hat: [0, 2, 4, 6, 8, 10, 12, 14], ghost: [7, 9] },
   chip: { kick: [0, 8], snare: [4, 12], hat: [2, 6, 10, 14], chip: true },
+  brush: { kick: [0, 10], snare: [], hat: [0, 4, 8, 12], rim: [4, 12], shaker: true },
+  hand: { kick: [0, 8], snare: [], hat: [], rim: [4, 10, 12], shaker: true },
+  march: { kick: [0, 8], snare: [4, 12], hat: [], ghost: [13, 15] },
+  four: { kick: [0, 4, 8, 12], snare: [4, 12], hat: [2, 6, 10, 14] },
 };
 
 /** How far above middle C the tune sits, per instrument. */
@@ -191,7 +209,12 @@ const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
  * `take` > 0 asks the same slot for a different one. */
 export const musicSeed = (slot: number, take = 0) => slot + take * 100_000;
 
-export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName): Score => {
+/** Choices made outside the seed (variety.ts, so neighbouring saves differ):
+ * the key, as semitones off the white-key mode, and how quick, 0 = the
+ * slowest the style or mood allows, 1 = the quickest. */
+export type Vary = { chimeShift?: number; pace?: number };
+
+export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName, vary: Vary = {}): Score => {
   const rand = mulberry(seed * 131 + 17);
   const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
   const between = (a: number, b: number) => a + (b - a) * rand();
@@ -204,7 +227,9 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName)
 
   // ------------------------------------------------------------ key + time
   const mode = pick(M.modes);
-  const chimeShift = pick([-2, -1, 0, 1, 2]);
+  // Drawn even when given, so the rest of the seed's choices stay put.
+  const drawnShift = pick([-2, -1, 0, 1, 2]);
+  const chimeShift = vary.chimeShift ?? drawnShift;
   const tonic = pc(WHITE[mode] + chimeShift);
   const scale = SCALES[mode];
   /** Semitones above the tonic for any scale degree (wraps into octaves). */
@@ -215,7 +240,10 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName)
   // (a pickup) when they don't divide evenly.
   const meter = S.meter ?? 4;
   const bpc = S.barsPerChord ?? 1;
-  const beats = Math.max(meter * 2, Math.round(m.saved / (60 / between(...(S.bpm ?? M.bpm)))));
+  const [slow, quick] = S.bpm ?? M.bpm;
+  const drawnBpm = between(slow, quick);
+  const bpm = vary.pace === undefined ? drawnBpm : slow + (quick - slow) * vary.pace;
+  const beats = Math.max(meter * 2, Math.round(m.saved / (60 / bpm)));
   const beat = m.saved / beats;
   const bar = meter * beat;
   const eighth = beat / 2;
@@ -324,7 +352,7 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName)
         for (const n of s.v) notes.push({ t: s.t0, dur: len, midi: n, vel: isHome ? 0.8 : 0.65, inst: chordInst, pan: 0 });
         break;
       case "pick": {
-        // Fingerpicking: the thumb on the root and fifth, fingers over the top.
+        // Fingerpicking (guitar, harp, marimba…): the thumb on the root and fifth, fingers over the top.
         const root = 40 + pc(s.bass - 40);
         const fifth = root + pc(s.pcs[2]! - root);
         const top = s.v.slice(1);
@@ -335,7 +363,7 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName)
             if (t >= s.t1 || (holding(t) && k > 0) || (t >= m.exitStart && k > 0)) continue;
             const f = fingers[k % fingers.length] ?? null;
             const midi = f === null ? (k === 0 ? root : fifth) : top[f % top.length]!;
-            notes.push({ t: t + nudge(), dur: 2.5 * eighth, midi, vel: (f === null ? 0.55 : 0.4) * (0.85 + 0.3 * rand()), inst: "guitar", pan: f === null ? -0.15 : 0.2 });
+            notes.push({ t: t + nudge(), dur: 2.5 * eighth, midi, vel: (f === null ? 0.55 : 0.4) * (0.85 + 0.3 * rand()), inst: chordInst, pan: f === null ? -0.15 : 0.2 });
           }
         }
         break;
@@ -478,6 +506,7 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName)
         if (G.kick.includes(st)) hit(t, kit.kick, st === 0 ? 0.8 : 0.6);
         if (G.snare.includes(st)) hit(t, kit.snare, 0.6);
         if (G.ghost?.includes(st)) hit(t, kit.snare, 0.18);
+        if (G.rim?.includes(st)) hit(t, "rim", 0.38, -0.15);
         if (G.hat.includes(st)) hit(t, kit.hat, st % 4 === 0 ? 0.42 : 0.3, 0.3);
         if (groove === "dnb" && st % 2 === 1) hit(t, "hat", 0.14, 0.3);
         if (G.shaker) hit(t, "shaker", st % 2 ? 0.2 : 0.3, -0.3);

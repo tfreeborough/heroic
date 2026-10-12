@@ -165,5 +165,8 @@ export type GameTab = { id: string; label: string; load: () => Promise<{ Tab: Re
  * browser bundle never sees it). `"POST draft"` answers POST
  * /api/<game>/x/draft. Long work must not block: use async I/O, never
  * spawnSync (memory: bun-serve-no-spawnsync).
+ *
+ * Reserved: `"POST batch-deleted"`, if a game has it, is called after a batch
+ * of renders is deleted, with `{ id, props }` (each deleted render's props).
  */
 export type GameRoutes = Record<string, (req: Request, g: GameConfig) => Response | Promise<Response>>;

@@ -2,9 +2,10 @@
 /**
  * Generates a save's music from its seed and memory (src/music/).
  *
- *   bun scripts/music.ts --memory "The quiet hours" --seed 7      one track
+ *   bun scripts/music.ts --memory "The quiet hours" --mood night --seed 7   one track
  *   bun scripts/music.ts --memory "…" --variants 6                six to choose from
  *   bun scripts/music.ts --save mirror-check --styles             one save, every style
+ *     (no --mood: the save's own, as Claude chose it; a bare --memory: the seed picks)
  *     (a save's music comes from its slot: --slot N, default the next free
  *     slot; --take 1, 2… for a different tune in the same slot)
  *   bun scripts/music.ts --samples                                every style, twice
@@ -20,7 +21,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { STYLE_NAMES, type StyleName, compose, musicSeed, stylesFor } from "@heroic/music";
-import { MOODS, type Mood, readMood, type SaveWords } from "@heroic/music";
+import { MOODS, type Mood } from "@heroic/music";
 import { SR, type Stereo, render, stemLevels, wav } from "@heroic/music";
 import { timeline } from "../src/timeline";
 import { type TuneProps, tuneFor } from "../src/music/tune";
@@ -42,10 +43,13 @@ const chime = (() => {
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "save";
 
-const make = (words: SaveWords, seed: number, seconds: number, force: { style?: StyleName; mood?: Mood } = {}, dir = OUT) => {
+type Words = { memory: string };
+/** With no mood given, the seed picks one of the loading-screen six. */
+const seedMood = (seed: number): Mood => MOODS[seed % 6]!;
+
+const make = (words: Words, seed: number, seconds: number, force: { style?: StyleName; mood?: Mood } = {}, dir = OUT) => {
   const tl = timeline(seconds, words.memory);
-  const reading = readMood(words, seed);
-  const mood = force.mood ?? reading.mood;
+  const mood = force.mood ?? seedMood(seed);
   const score = compose(seed, mood, { seconds, buildEnd: tl.buildEnd, saved: tl.saved, exitStart: tl.exit.start }, force.style);
   const loop = render(score, seed);
   const name = `${score.style}-${slug(words.memory)}-s${seed}`;
@@ -73,7 +77,7 @@ const make = (words: SaveWords, seed: number, seconds: number, force: { style?: 
     }
   }
   writeFileSync(join(dir, `${name}-preview.wav`), wav(prev));
-  console.log(`${name}\n  ${score.label}${force.mood ? "" : `\n  words: ${reading.why.join(", ") || "–"}`}`);
+  console.log(`${name}\n  ${score.label}`);
   if (args.has("stems")) {
     const levels = stemLevels(score, seed);
     console.log(`  levels: ${Object.entries(levels).sort((a, b) => b[1]! - a[1]!).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
@@ -89,35 +93,25 @@ if (force.mood && !MOODS.includes(force.mood)) throw new Error(`moods: ${MOODS.j
 if (args.has("props")) {
   // The Desk's call (desk.server.ts "tune"): one loop, written where it says
   // (via a .part file, so a half-written tune is never played).
-  const { score, seed } = tuneFor(JSON.parse(args.get("props")!) as TuneProps);
+  const tune = tuneFor(JSON.parse(args.get("props")!) as TuneProps);
+  if (!tune) throw new Error("this save's music hasn't been chosen yet");
+  const { score, seed } = tune;
   const out = args.get("out")!;
   mkdirSync(join(out, ".."), { recursive: true });
   writeFileSync(`${out}.part`, wav(render(score, seed)));
   renameSync(`${out}.part`, out);
   console.log(score.label);
 } else if (args.has("samples")) {
-  // A tour: every style twice, each time on a memory whose mood suits it.
-  // Memories are Tom's old saves (retired/, kept locally) plus a few to cover the moods.
-  const retired = join(root, "retired");
-  const saves: SaveWords[] = existsSync(retired)
-    ? readdirSync(retired).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(retired, f), "utf8")) as SaveWords)
-    : [];
-  saves.push({ memory: "The last bus home in the rain" }, { memory: "Holding her for the first time" }, { memory: "Sunday mornings in the kitchen" }, { memory: "Our first go on the arcade" }, { memory: "The stars over the campsite" });
+  // A tour: every style twice, each time in a different mood it suits.
   let seed = 100;
-  const used = new Map<string, number>();
   for (const style of STYLE_NAMES) {
-    for (let k = 0; k < 2; k++) {
-      // Next memory (round the list) whose mood this style suits.
-      const fits = saves.filter((w) => stylesFor(readMood(w, seed).mood).includes(style));
-      const pool = fits.length ? fits : saves;
-      const w = pool.sort((a, b) => (used.get(a.memory) ?? 0) - (used.get(b.memory) ?? 0))[0]!;
-      used.set(w.memory, (used.get(w.memory) ?? 0) + 1);
-      make(w, seed++, seconds, { style });
-    }
+    const moods = MOODS.filter((m) => stylesFor(m).includes(style));
+    for (let k = 0; k < 2; k++) make({ memory: `${style} ${moods[k % moods.length]}` }, seed++, seconds, { style, mood: moods[(seed + k) % moods.length] });
   }
 } else if (args.has("save")) {
   // A real save's words (public/saves/<name>.json); --styles plays its seed in every style.
-  const words = JSON.parse(readFileSync(join(root, "public/saves", `${args.get("save")}.json`), "utf8")) as SaveWords;
+  const words = JSON.parse(readFileSync(join(root, "public/saves", `${args.get("save")}.json`), "utf8")) as Words & { music?: { mood: Mood } };
+  if (!force.mood && words.music) force.mood = words.music.mood;
   const ledger = JSON.parse(readFileSync(join(root, "public/slots.json"), "utf8")) as { slots: unknown[] };
   const slot = Number(args.get("slot") ?? ledger.slots.length + 1);
   const take = Number(args.get("take") ?? 0);
@@ -126,7 +120,7 @@ if (args.has("props")) {
   mkdirSync(dir, { recursive: true });
   for (const style of args.has("styles") ? STYLE_NAMES : [force.style]) make(words, seed, seconds, { ...force, style }, dir);
 } else {
-  const words = { memory: args.get("memory") ?? "", title: args.get("title"), tagline: args.get("tagline") };
+  const words = { memory: args.get("memory") ?? "" };
   const first = Number(args.get("seed") ?? 1);
   const count = Number(args.get("variants") ?? 1);
   for (let s = first; s < first + count; s++) make(words, s, seconds, force);

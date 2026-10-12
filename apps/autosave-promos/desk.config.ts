@@ -8,20 +8,17 @@ import { FORMATS, FPS } from "./src/formats";
 
 const NAME = "Autosave";
 
-/** Cut at a word so a long memory still makes a title. */
-const short = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, s.lastIndexOf(" ", n - 1) > 0 ? s.lastIndexOf(" ", n - 1) : n - 1)}…`);
-
-/** The posting queue's words: the title is YouTube's; the description is <tagline> - <journal>. */
+/** The posting queue's words, from the one line (the tagline): YouTube's title is
+ * "Save 07: <tagline>", the description (TikTok's caption) is <tagline> - <journal>.
+ * Never the memory: post words show from the first second, the memory is the reveal. */
 const draft = (_template: string, props: Record<string, unknown>) => {
-  const slot = Number(props.slot) || 1;
+  const slot = `Save ${String(Number(props.slot) || 1).padStart(2, "0")}`;
   const text = (k: string) => (typeof props[k] === "string" ? (props[k] as string).trim() : "");
-  const memory = text("memory").replace(/[.\s]+$/, "") || "Somewhere";
-  const title = text("title") || short(memory, 70);
-  const lead = text("tagline") || `${memory}.`;
+  const line = text("tagline");
   const journal = text("journal");
   return {
-    title: `Save ${String(slot).padStart(2, "0")}: ${title}`,
-    description: journal ? `${lead} - ${journal}` : lead,
+    title: line ? `${slot}: ${line}` : slot,
+    description: [line, journal].filter(Boolean).join(" - "),
   };
 };
 

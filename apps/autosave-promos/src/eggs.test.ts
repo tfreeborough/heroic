@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { EGG_RATE, EMPTY_LEDGER, type Ledger, nextSlot, playtimeFor, record, resolveEgg } from "./eggs";
+import { EGG_RATE, EMPTY_LEDGER, type Ledger, forget, nextSlot, playtimeFor, record, resolveEgg } from "./eggs";
 
 const entry = (slot: number, seconds: number, egg = "") => ({ slot, seconds, playtimeFrom: 0, egg, batch: "", renderedAt: "" });
 
@@ -31,4 +31,15 @@ test("pinned slots always get their egg; none and force override", () => {
 test("an egg on cooldown can't fire again", () => {
   const l = record(EMPTY_LEDGER, entry(19, 16, "freeze"));
   for (let seed = 1; seed <= 3000; seed++) expect(resolveEgg("auto", 20, seed, l).egg?.id).not.toBe("freeze");
+});
+
+test("a deleted render's slot comes back as the next slot", () => {
+  let l: Ledger = EMPTY_LEDGER;
+  for (let s = 1; s <= 7; s++) l = record(l, entry(s, 16));
+  expect(nextSlot(l)).toBe(8);
+  l = forget(l, [6, 7]);
+  expect(nextSlot(l)).toBe(6);
+  // A gap in the middle is filled before the run goes on.
+  l = forget(l, [3]);
+  expect(nextSlot(l)).toBe(3);
 });

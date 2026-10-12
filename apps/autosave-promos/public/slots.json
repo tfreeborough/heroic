@@ -5,6 +5,7 @@
       "seconds": 16,
       "playtimeFrom": 0,
       "egg": "dashes",
+      "music": "ambient",
       "batch": "slot-01-mirror-check",
       "renderedAt": "2026-10-10T21:40:08.310Z"
     },
@@ -13,6 +14,7 @@
       "seconds": 16,
       "playtimeFrom": 16,
       "egg": "freeze",
+      "music": "chip",
       "batch": "slot-02-the-mentor",
       "renderedAt": "2026-10-10T22:02:17.889Z"
     },
@@ -21,6 +23,7 @@
       "seconds": 16,
       "playtimeFrom": 32,
       "egg": "",
+      "music": "downtempo",
       "batch": "slot-03-empty-halls",
       "renderedAt": "2026-10-10T22:13:37.407Z"
     },
@@ -29,8 +32,36 @@
       "seconds": 16,
       "playtimeFrom": 48,
       "egg": "",
+      "music": "guitar",
       "batch": "slot-04-the-late-shift",
       "renderedAt": "2026-10-10T22:29:11.133Z"
+    },
+    {
+      "slot": 5,
+      "seconds": 16,
+      "playtimeFrom": 64,
+      "egg": "",
+      "music": "synthwave",
+      "batch": "slot-05-daytona",
+      "renderedAt": "2026-10-12T21:28:29.115Z"
+    },
+    {
+      "slot": 6,
+      "seconds": 16,
+      "playtimeFrom": 80,
+      "egg": "",
+      "music": "felt",
+      "batch": "slot-06-first-flight",
+      "renderedAt": "2026-10-12T21:31:51.044Z"
+    },
+    {
+      "slot": 7,
+      "seconds": 16,
+      "playtimeFrom": 96,
+      "egg": "achievement",
+      "music": "ambient",
+      "batch": "slot-07-judicium",
+      "renderedAt": "2026-10-12T21:33:12.218Z"
     }
   ]
 }

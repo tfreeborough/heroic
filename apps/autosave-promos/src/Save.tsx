@@ -34,10 +34,11 @@ export const saveSchema = z.object({
   /** What the picture turns out to be, as long and descriptive as you like
    * (up to about three lines); scrambled until the save completes. */
   memory: z.string(),
-  /** The post's words (not drawn): the line under the video, and the save's
-   * name for "Save 07: <title>". From the picture's sidecar; yours to change. */
+  /** The post's one line (not drawn): YouTube's title as "Save 07: <tagline>",
+   * TikTok's caption. From the picture's sidecar; yours to change. */
   tagline: z.string(),
-  title: z.string(),
+  /** Retired 10-12 (the tagline does its job); kept so older props still load. */
+  title: z.string().default(""),
   /** The long one, behind TikTok's "more": as much as you like, yours to write. Not drawn. */
   journal: z.string(),
   slot: z.number().int().min(1),
@@ -63,6 +64,13 @@ export const saveSchema = z.object({
    * slot; the style, or "auto" for the one the slot picks. */
   tuneTake: z.number().int().min(0).default(0),
   tuneStyle: z.string().default("auto"),
+  /** The styles the last two slots got (the Desk fills it from the ledger), so this tune doesn't repeat them. */
+  tuneAvoid: z.string().default(""),
+  /** Claude's choice for this save's music (desk.server.ts, kept in its sidecar): the mood, its
+   * favourite styles best first (comma separated), and why. The Desk lays these on. */
+  tuneMood: z.string().default(""),
+  tuneStyles: z.string().default(""),
+  tuneWhy: z.string().default(""),
   /** Set by the Desk once it has made the tune (under public/music); the video
    * plays it only while it matches these props. */
   musicFile: z.string().default(""),
@@ -74,8 +82,11 @@ export const saveSchema = z.object({
    * like a bad CRT on the first frames (and the last, so the loop meets). */
   burst: z.boolean().default(true),
   glitch: z.boolean().default(true),
+  /** Once saved, "Journal entry recovered. Check the comments." where the
+   * hints were (only when there's a journal; post it as the pinned comment). */
+  journalLine: z.boolean().default(true),
   /** Faint Matrix rain behind everything; 0 = none. */
-  rain: z.number().min(0).max(1).default(0.5),
+  rain: z.number().min(0).max(1).default(0.3),
 });
 export type SaveProps = z.infer<typeof saveSchema>;
 
@@ -190,7 +201,9 @@ const drawRain = (ctx: CanvasRenderingContext2D, w: number, h: number, t: number
     for (let j = 0; j < RAIN.trail; j++) {
       const y = (row - j) * RAIN.ch;
       if (y < -RAIN.ch || y > h) continue;
-      const a = strength * (j === 0 ? 0.32 : 0.16 * (1 - j / RAIN.trail));
+      // Barely there behind the words, so it never reads as a stray letter.
+      const words = (y > STATUS_Y - 20 && y < STATUS_Y + 100) || y > BAR_Y - 20;
+      const a = strength * (j === 0 ? 0.6 : 0.3 * (1 - j / RAIN.trail)) * (words ? 0.2 : 1);
       ctx.fillStyle = rgba(j === 0 ? pal.ink : pal.trail, a);
       const flip = Math.floor(t * (2 + hash(n + row - j) * 6));
       ctx.fillText(NOISE[Math.floor(hash(n * 131 + (row - j) * 7 + flip) * NOISE.length)]!, k * RAIN.cw, y);
@@ -325,7 +338,8 @@ export const Save: React.FC<SaveProps> = (p) => {
   // Two hints while it saves (an older render's props may have none).
   const hint1 = p.hint1 ?? "", hint2 = p.hint2 ?? "";
   const tipSwap = tl.buildStart + (tl.buildEnd - tl.buildStart) * 0.5;
-  const tip = t < 1.2 || t >= tl.saved ? "" : t < tipSwap || !hint2 ? typed(hint1, 1.2, t, 32) : typed(hint2, tipSwap + 0.2, t, 32);
+  const journalLine = p.journalLine && p.journal.trim() && t < tl.rewind ? typed("Journal entry recovered. Check the comments.", tl.saved + 1.2, t, 32) : "";
+  const tip = t < 1.2 || t >= tl.saved ? journalLine : t < tipSwap || !hint2 ? typed(hint1, 1.2, t, 32) : typed(hint2, tipSwap + 0.2, t, 32);
 
   const achievement = effect === "achievement";
   const eggIn = interpolate(t, [tl.saved + 0.5, tl.saved + 0.8, tl.exit.start - 0.2, tl.exit.start + 0.1], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -340,7 +354,7 @@ export const Save: React.FC<SaveProps> = (p) => {
   const tune = React.useMemo(
     () => (p.music === TUNE ? tuneFor(p) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [p.music, p.slot, p.tuneTake, p.tuneStyle, p.seconds, p.memory, p.title, p.tagline, p.journal],
+    [p.music, p.slot, p.tuneTake, p.tuneStyle, p.tuneAvoid, p.tuneMood, p.tuneStyles, p.seconds, p.memory],
   );
   const tuneReady = !!tune && p.musicFile === tune.file;
   const loopEdges = (f: number) => interpolate(f, [0, 3, p.seconds * fps - 5, p.seconds * fps], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
@@ -395,7 +409,7 @@ export const Save: React.FC<SaveProps> = (p) => {
         {/* In the generated tune's key, so they agree. */}
         <Audio src={staticFile(chimeFile(tune?.score.chimeShift ?? 0))} volume={0.8} />
       </Sequence>
-      {tune ? (
+      {p.music === TUNE ? (
         // Made to fit this video exactly (it starts at frame 0 and its end swells
         // into its start), so it only needs a frame of fade against clicks.
         tuneReady && <Audio src={staticFile(`music/${p.musicFile}`)} volume={(f) => p.musicVolume * interpolate(f, [0, 1, p.seconds * fps - 2, p.seconds * fps], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })} />

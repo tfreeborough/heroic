@@ -415,7 +415,15 @@ const server = Bun.serve({
     "/api/:game/renders": { GET: withGame((g) => json(listRenders(g))) },
     "/api/:game/batches": { GET: withGame((g) => json(listBatches(g))) },
     "/api/:game/batches/:id": {
-      DELETE: withGame((g, req) => json({ ok: true, deleted: deleteBatch(g, decodeURIComponent(req.params.id!)) })),
+      DELETE: withGame(async (g, req) => {
+        const id = decodeURIComponent(req.params.id!);
+        const props = listBatches(g).find((b) => b.id === id)?.renders.map((r) => r.props) ?? [];
+        const deleted = deleteBatch(g, id);
+        // Tell the game, if it listens (Autosave takes the slot out of its ledger).
+        const hook = gameRoutes.get(g.id)?.["POST batch-deleted"];
+        if (hook && deleted) await hook(new Request("http://desk/batch-deleted", { method: "POST", body: JSON.stringify({ id, props }) }), g);
+        return json({ ok: true, deleted });
+      }),
     },
     /** One rclone run for however many renders — a whole batch, or the ones not on Drive yet. */
     "/api/:game/renders/upload": {

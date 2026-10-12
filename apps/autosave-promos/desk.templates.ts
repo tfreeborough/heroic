@@ -10,7 +10,7 @@ import library from "./src/data/library.json";
 const saves = library.saves as LibrarySave[];
 import { SAVE_DEFAULTS } from "./src/defaults";
 import { HINT_MAX, TAGLINE_MAX } from "./src/words";
-import { EMPTY_LEDGER, type Ledger, clock, missingBefore, nextSlot, playtimeFor, resolveEgg } from "./src/eggs";
+import { EMPTY_LEDGER, type Ledger, clock, missingBefore, nextSlot, playtimeFor, recentStyles, resolveEgg } from "./src/eggs";
 import { MEMORY_MAX_LINES, Save, memoryLines, saveSchema, saveSeconds, timeline } from "./src/Save";
 import { TUNE, type TuneProps, tuneFor } from "./src/music/tune";
 
@@ -45,10 +45,14 @@ const info = (p: Record<string, unknown>) => {
   const { egg, why } = resolveEgg(String(p.egg ?? "auto"), slot, seed, ledger);
   lines.push(egg ? `Egg: ${egg.label}. ${why}` : `Egg: none. ${why}`);
   if (p.music === TUNE) {
-    const { score, reading, file } = tuneFor(p as unknown as TuneProps);
+    const tune = tuneFor({ ...(p as unknown as TuneProps), tuneAvoid: recentStyles(ledger, slot) });
     const take = Number(p.tuneTake) || 0;
-    const words = reading.why.filter((w) => w.includes("→")).map((w) => w.split("→")[0]).slice(0, 4);
-    lines.push(`Music: slot ${slot}'s tune${take ? ` (take ${take})` : ""}, ${score.label}.${words.length ? ` Mood from: ${words.join(", ")}.` : ""}${p.musicFile === file ? "" : " Making it…"}`);
+    if (!tune) lines.push("Music: Claude is choosing it from the picture and words…");
+    else {
+      const favourites = String(p.tuneStyles ?? "").split(",").filter(Boolean);
+      const second = tune.score.style !== favourites[0] && favourites[0] ? ` (${favourites[0]} was its first pick; the slot before had it)` : "";
+      lines.push(`Music: slot ${slot}'s tune${take ? ` (take ${take})` : ""}, ${tune.score.label}.${second}${p.tuneWhy ? ` Why: ${p.tuneWhy}` : ""} Choose again on the Saves tab.${p.musicFile === tune.file ? "" : " Making it…"}`);
+    }
   }
   return lines.join("\n");
 };
@@ -83,14 +87,14 @@ export const TEMPLATES: DeskTemplate[] = [
     // The look is locked and the seed picks the rest (arrival, order, tune style),
     // the ledger sets the clock and the egg is earned, not forced: none of it is
     // a choice per video. Still in the schema, so Studio can force them for testing.
-    hide: ["clip", "musicFile", "arrival", "order", "tone", "palette", "egg", "playtimeFrom", "tuneStyle", "tuneTake", "musicFrom", "musicVolume", "ticksVolume"],
-    gallery: { key: "image", label: "Picture", items: saves.map((s) => ({ value: s.file, label: s.title || s.memory, thumb: s.file })) },
+    hide: ["clip", "musicFile", "arrival", "order", "tone", "palette", "egg", "playtimeFrom", "tuneStyle", "tuneTake", "tuneAvoid", "tuneMood", "tuneStyles", "tuneWhy", "musicFrom", "musicVolume", "ticksVolume", "title"],
+    gallery: { key: "image", label: "Picture", items: saves.map((s) => ({ value: s.file, label: s.memory, thumb: s.file })) },
     long: ["memory", "journal"],
     reroll: ["seed"],
     // Picking a picture brings its words; edit them after to make them yours.
     linked: (key, value) => {
       const s = key === "image" ? saves.find((x) => x.file === value) : undefined;
-      return s ? { memory: s.memory, tagline: s.tagline, title: s.title, journal: s.journal } : undefined;
+      return s ? { memory: s.memory, tagline: s.tagline, journal: s.journal } : undefined;
     },
     // Each video gets the next two hints off the queue; rendering takes them.
     // and the next free slot from the ledger. Rendering takes the hints and writes the slot.
@@ -102,12 +106,17 @@ export const TEMPLATES: DeskTemplate[] = [
       await Promise.all([hints("hints-used", { texts: [p.hint1, p.hint2].filter((h) => typeof h === "string"), name }), hints("slot-rendered", { props: p, name })]);
       await loadLedger();
     },
-    // Generated music: the Desk makes the file for these props (desk.server.ts "tune").
+    // Generated music: the save's choice (Claude's, kept in its sidecar: desk.server.ts
+    // "tune-choice"), steering clear of the styles the last two slots got (the ledger),
+    // then the Desk makes the file for these props ("tune").
     prepare: async (p) => {
       if (p.music !== TUNE) return {};
-      const r = (await hints("tune", p)) as { file?: string; error?: string };
+      const choice = (await hints("tune-choice", { image: p.image })) as { tuneMood?: string; tuneStyles?: string; tuneWhy?: string; error?: string };
+      if (!choice.tuneMood) throw new Error(choice.error ?? "the music wasn't chosen");
+      const tuneAvoid = recentStyles(ledger, Number(p.slot) || 1);
+      const r = (await hints("tune", { ...p, ...choice, tuneAvoid })) as { file?: string; error?: string };
       if (!r.file) throw new Error(r.error ?? "the music didn't make");
-      return { musicFile: r.file };
+      return { ...choice, tuneAvoid, musicFile: r.file };
     },
     name: renderName,
     info,

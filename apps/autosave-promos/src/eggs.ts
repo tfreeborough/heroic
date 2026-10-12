@@ -50,6 +50,8 @@ export type SlotEntry = {
   playtimeFrom: number;
   /** The egg it got ("" for none). */
   egg: string;
+  /** Its generated tune's style ("" for none or a library track), so the next slots don't repeat it. */
+  music?: string;
   batch: string;
   renderedAt: string;
 };
@@ -68,7 +70,20 @@ export const missingBefore = (l: Ledger, slot: number) => {
   return Array.from({ length: Math.max(0, slot - 1) }, (_, i) => i + 1).filter((s) => !have.has(s));
 };
 
-export const nextSlot = (l: Ledger) => (l.slots.length ? Math.max(...l.slots.map((e) => e.slot)) + 1 : 1);
+/** The styles the two slots before `slot` got, newest first, for the next tune to avoid. */
+export const recentStyles = (l: Ledger, slot: number) =>
+  [slot - 1, slot - 2].map((s) => l.slots.find((e) => e.slot === s)?.music ?? "").filter(Boolean).join(",");
+
+/** The ledger without these slots (their renders were deleted). */
+export const forget = (l: Ledger, slots: number[]): Ledger => ({ slots: l.slots.filter((e) => !slots.includes(e.slot)) });
+
+/** The first slot with no render: a gap left by a deleted render gets filled before the run goes on. */
+export const nextSlot = (l: Ledger) => {
+  const have = new Set(l.slots.map((e) => e.slot));
+  let n = 1;
+  while (have.has(n)) n++;
+  return n;
+};
 
 export const clock = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(Math.floor(s) % 60).padStart(2, "0")}`;
 

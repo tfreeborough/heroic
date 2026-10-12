@@ -8,8 +8,10 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 
 /** A save's sidecar, public/saves/<name>.json. Every word is Tom's final say. */
-export type SaveSidecar = { memory?: string; tagline?: string; title?: string; journal?: string; prompt?: string; /** Before 10-10. */ location?: string };
-export type LibrarySave = { file: string; name: string; memory: string; tagline: string; title: string; journal: string; prompt: string; /** The finished glyph picture, saves/ascii/<name>.png, once made. */ ascii: string };
+/** Claude's choice for a save's music (desk.server.ts): a mood, its favourite styles best first, and why. */
+export type SaveMusic = { mood: string; styles: string[]; why: string };
+export type SaveSidecar = { memory?: string; tagline?: string; title?: string; journal?: string; prompt?: string; music?: SaveMusic; /** Before 10-10. */ location?: string };
+export type LibrarySave = { file: string; name: string; memory: string; tagline: string; title: string; journal: string; prompt: string; /** The finished glyph picture, saves/ascii/<name>.png, once made. */ ascii: string; music: SaveMusic | null };
 
 const root = join(import.meta.dir, "..");
 const list = (dir: string, exts: string[]) =>
@@ -23,7 +25,7 @@ export const syncLibrary = () => {
     const meta = existsSync(side) ? (JSON.parse(readFileSync(side, "utf8")) as SaveSidecar) : {};
     const memory = meta.memory ?? meta.location ?? titleCase(name);
     const ascii = existsSync(join(root, "public/saves/ascii", `${name}.png`)) ? `saves/ascii/${name}.png` : "";
-    return { file: `saves/${file}`, name, memory, tagline: meta.tagline ?? "", title: meta.title ?? memory, journal: meta.journal ?? "", prompt: meta.prompt ?? "", ascii };
+    return { file: `saves/${file}`, name, memory, tagline: meta.tagline ?? "", title: meta.title ?? memory, journal: meta.journal ?? "", prompt: meta.prompt ?? "", ascii, music: meta.music ?? null };
   });
   const music = list("public/music", [".mp3", ".wav", ".m4a", ".aac", ".ogg"]).map((file) => ({ file, name: titleCase(basename(file, extname(file))) }));
   writeFileSync(join(root, "src/data/library.json"), JSON.stringify({ saves, music }, null, 2) + "\n");

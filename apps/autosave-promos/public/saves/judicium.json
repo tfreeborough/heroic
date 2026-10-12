@@ -1,0 +1,15 @@
+{
+  "memory": "Judicium",
+  "tagline": "Somewhere there stands a gate",
+  "journal": "The first thing I remember is the noise of the wind, it whipped at my shawl as the sand gently rattled around me. I couldn't remember how I had made it here or even where I was, but as I opened my eyes it all seemed so... familiar.\n\nI saw before me an impossible sight, incomprehensibly large and imposing stone carved higher than any castle, bleached white as bone, and as my eyes slowly adjusted to the light, I began to make out a figure in the distance. Just beyond this impressive and ancient archway stood a man, robed in white and still against the shifting dunes.",
+  "prompt": "A huge ancient stone archway in the far far distance across the sand dunes. A tiny man in the distance can be seen kneeling before it, as if grovelling. Far away perspective",
+  "music": {
+    "mood": "eerie",
+    "styles": [
+      "ambient",
+      "score",
+      "harp"
+    ],
+    "why": "A vast bone-white ancient gate in dark, empty dunes with a tiny kneeling figure and a still robed stranger feels still, uncanny and judgment-laden."
+  }
+}

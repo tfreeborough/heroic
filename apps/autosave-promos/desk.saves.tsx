@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GameTabProps } from "../desk/game";
 import { presetMake } from "../desk/ui/form";
 import type { Draft, Words } from "./desk.server";
+import type { LibrarySave } from "./scripts/sync-library";
 import { AUTOSAVE_LOOK } from "./src/look";
 import { TAGLINE_MAX } from "./src/words";
 import { EGGS, EGG_RATE, type Ledger, clock, nextSlot } from "./src/eggs";
@@ -53,6 +54,9 @@ const call = async <T,>(game: string, method: "GET" | "POST", name: string, body
   return data;
 };
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+/** A save already in the library, as the "saved" route lists it. */
+type Saved = LibrarySave & { at: number; slots: number[] };
+const SAVED = "saved:";
 const open = (game: string, id?: string) => (location.hash = `#${game}/x/saves${id ? `/${encodeURIComponent(id)}` : ""}`);
 
 /** A picture as Autosave will draw it: the real engine, the locked look, finished. Hover for the original. */
@@ -69,6 +73,8 @@ const AsGlyphs: React.FC<{ src: string }> = ({ src }) => {
     </div>
   );
 };
+
+const TAGLINE_HINT = `The one line under the video: YouTube's title as "Save 07: <tagline>", and the start of TikTok's caption, which cuts at about ${TAGLINE_MAX}. Shows from the first second, so don't give the memory away.`;
 
 /** A box that's Tom's, with Claude's options under it as chips to swap in. */
 const WordsBox: React.FC<{ label: string; hint: string; value: string; options?: string[]; long?: boolean | number; max?: number; onChange: (v: string) => void }> = ({ label, hint, value, options, long, max, onChange }) => (
@@ -106,6 +112,8 @@ export const Tab: React.FC<GameTabProps> = ({ game, arg }) => {
     setMissing([]);
     setCopying("");
   };
+  const [saved, setSaved] = useState<Saved[]>([]);
+  const refreshSaved = () => call<{ saves: Saved[] }>(game, "GET", "saved").then((r) => setSaved(r.saves));
   const refresh = () =>
     call<{ drafts: Draft[]; keys: typeof keys }>(game, "GET", "drafts").then((r) => {
       setDrafts(r.drafts);
@@ -114,6 +122,7 @@ export const Tab: React.FC<GameTabProps> = ({ game, arg }) => {
     });
   useEffect(() => {
     void refresh().catch((e: Error) => setErr(e.message));
+    void refreshSaved().catch(() => {});
   }, [game]);
   // Pictures land in the background: poll while any are on their way.
   const waiting = drafts?.some((d) => d.pending > 0);
@@ -125,7 +134,8 @@ export const Tab: React.FC<GameTabProps> = ({ game, arg }) => {
 
   if (!drafts) return <div className="muted">{err || "loading…"}</div>;
   const draft = arg ? drafts.find((d) => d.id === arg) : undefined;
-  const label = (d: Draft) => d.title || d.memory || d.idea || d.prompt;
+  const savedOne = arg?.startsWith(SAVED) ? saved.find((x) => x.name === arg.slice(SAVED.length)) : undefined;
+  const label = (d: Draft) => d.memory || d.idea || d.prompt;
   return (
     <div className="scripts">
       <div className="stack script-list">
@@ -142,6 +152,13 @@ export const Tab: React.FC<GameTabProps> = ({ game, arg }) => {
             </span>
           </a>
         ))}
+        {saved.length ? <b className="small" style={{ marginTop: 10 }}>Saved</b> : null}
+        {saved.map((x) => (
+          <a key={x.name} className={`script-row${arg === SAVED + x.name ? " on" : ""}`} href={`#${game}/x/saves/${encodeURIComponent(SAVED + x.name)}`}>
+            <span className="first" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.memory}</span>
+            <span className="small muted">{x.slots.length ? x.slots.map((n) => `Save ${String(n).padStart(2, "0")}`).join(", ") : "Not made yet"}</span>
+          </a>
+        ))}
         {err ? <div className="warn small">{err}</div> : null}
         <EggsPanel game={game} />
         {missing.length ? (
@@ -155,7 +172,8 @@ export const Tab: React.FC<GameTabProps> = ({ game, arg }) => {
         {!keys.images || !keys.words ? <div className="warn small">{!keys.images ? "No OPENAI_API_KEY in apps/desk/.env, so no pictures. " : ""}{!keys.words ? "No ANTHROPIC_API_KEY, so no ideas or words." : ""}</div> : null}
       </div>
       <div className="script-page">
-        {arg && !draft ? <div className="muted">That draft has gone (saved or binned).</div> : null}
+        {arg && !draft && !savedOne ? <div className="muted">{arg.startsWith(SAVED) ? "That save isn't in the library any more." : "That draft has gone (saved or binned)."}</div> : null}
+        {savedOne ? <SavedPage key={savedOne.name} game={game} save={savedOne} onChanged={() => void refreshSaved()} /> : null}
         {!arg ? <NewSave game={game} onMade={(d) => void refresh().then(() => open(game, d.id))} /> : null}
         {draft ? <DraftPage key={draft.id} game={game} draft={draft} onChanged={() => void refresh()} /> : null}
       </div>
@@ -225,7 +243,7 @@ const NewSave: React.FC<{ game: string; onMade: (d: Draft) => void }> = ({ game,
 
 const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }> = ({ game, draft, onChanged }) => {
   // The boxes are local and save as you type; the server copy catches up.
-  const [f, setF] = useState(() => ({ prompt: draft.prompt, chosen: draft.chosen ?? "", memory: draft.memory, tagline: draft.tagline, title: draft.title, journal: draft.journal ?? "", name: draft.name }));
+  const [f, setF] = useState(() => ({ prompt: draft.prompt, chosen: draft.chosen ?? "", memory: draft.memory, tagline: draft.tagline, journal: draft.journal ?? "", name: draft.name }));
   const [journalDraft, setJournalDraft] = useState("");
   const [words, setWords] = useState<Words | undefined>(draft.words);
   const [busy, setBusy] = useState<"" | "more" | "words" | "journal" | "save" | "bin">("");
@@ -254,18 +272,18 @@ const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }>
       call<Draft>(game, "POST", "words", { id: draft.id, picture: f.chosen }).then((d) => {
         setWords(d.words);
         // Claude's first option fills an empty box; anything you've written stays, with the options under it.
-        if (d.words) setF((x) => ({ ...x, memory: x.memory || d.words!.memory[0]!, tagline: x.tagline || d.words!.tagline[0]!, title: x.title || d.words!.title[0]! }));
+        if (d.words) setF((x) => ({ ...x, memory: x.memory || d.words!.memory[0]!, tagline: x.tagline || d.words!.tagline[0]! }));
       }),
     );
   const draftJournal = () => run("journal", call<{ journal: string }>(game, "POST", "journal", { id: draft.id }).then((r) => setJournalDraft(r.journal)));
-  const name = f.name.trim() || slug(f.title || f.memory);
+  const name = f.name.trim() || slug(f.memory);
   const save = () =>
     run(
       "save",
       asciiPng(f.chosen)
-        .then((ascii) => call<{ file: string; memory: string; tagline: string; title: string; journal: string }>(game, "POST", "save", { id: draft.id, picture: f.chosen, name, memory: f.memory, tagline: f.tagline, title: f.title, journal: f.journal, ascii }))
+        .then((ascii) => call<{ file: string; memory: string; tagline: string; journal: string }>(game, "POST", "save", { id: draft.id, picture: f.chosen, name, memory: f.memory, tagline: f.tagline, journal: f.journal, ascii }))
         .then((r) => {
-        presetMake(game, { image: r.file, memory: r.memory, tagline: r.tagline, title: r.title, journal: r.journal });
+        presetMake(game, { image: r.file, memory: r.memory, tagline: r.tagline, journal: r.journal });
         location.hash = `#${game}/make`;
         // A fresh page, so Make's picture list has the new save in it.
         location.reload();
@@ -276,7 +294,7 @@ const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }>
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="row between">
-        <h2 style={{ margin: 0 }}>{f.title || f.memory || "A save in the making"}</h2>
+        <h2 style={{ margin: 0 }}>{f.memory || "A save in the making"}</h2>
         {sure ? (
           <span className="row small">
             <button className="danger small" disabled={busy !== ""} onClick={bin}>
@@ -329,9 +347,8 @@ const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }>
         {!f.chosen ? <div className="small muted">Pick a picture first: Claude writes from what's actually in it.</div> : null}
         <div className="fields">
           <WordsBox label="Memory" hint="Revealed on screen when the save completes. As long as you like, up to about three lines." long value={f.memory} options={words?.memory} onChange={set("memory")} />
-          <WordsBox label="Tagline" hint={`The line under the video. TikTok cuts it at about ${TAGLINE_MAX}, so the start has to stand on its own.`} max={TAGLINE_MAX} value={f.tagline} options={words?.tagline} onChange={set("tagline")} />
-          <WordsBox label="Title" hint={`The save's name: "Save 07: ${f.title || "…"}".`} value={f.title} options={words?.title} onChange={set("title")} />
-          <WordsBox label="Journal" hint={'Behind TikTok\'s "more": as long as you like. A story, a log, a note left behind. Yours; Claude only drafts one if you ask.'} long={8} value={f.journal} onChange={set("journal")} />
+          <WordsBox label="Tagline" hint={TAGLINE_HINT} max={TAGLINE_MAX} value={f.tagline} options={words?.tagline} onChange={set("tagline")} />
+          <WordsBox label="Journal" hint="Goes in the pinned comment (the video says to check the comments). As long as you like. Yours; Claude only drafts one if you ask." long={8} value={f.journal} onChange={set("journal")} />
         </div>
         <div className="row">
           <button className="ghost small" disabled={!f.chosen || busy !== ""} onClick={draftJournal}>
@@ -365,6 +382,114 @@ const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }>
           {busy === "save" ? "Saving…" : "Save, then make a video"}
         </button>
         <span className="small muted">Goes in public/saves as {name || "…"}.png with its words, and a glyph copy in public/saves/ascii.</span>
+      </div>
+      {err ? <div className="warn small">{err}</div> : null}
+    </div>
+  );
+};
+
+/** A save's music as Claude chose it from the picture and words (desk.server.ts), and a fresh pick on demand.
+ * A new choice goes into the next render; videos already made keep their music. */
+const MusicPanel: React.FC<{ game: string; save: Saved; onChanged: () => void }> = ({ game, save, onChanged }) => {
+  const [music, setMusic] = useState(save.music);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const choose = () => {
+    setBusy(true);
+    setErr("");
+    void call<{ music: NonNullable<Saved["music"]> }>(game, "POST", "music-choose", { name: save.name })
+      .then((r) => (setMusic(r.music), onChanged()))
+      .catch((e: Error) => setErr(e.message))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="row">
+        <b>Music</b>
+        <span className="small">{music ? `${music.mood} · ${music.styles.join(", ")}` : "Not chosen yet (it's chosen the first time you make a video)."}</span>
+        <button className="ghost small" disabled={busy} onClick={choose}>
+          {busy ? "Choosing…" : music ? "Choose again" : "Choose now"}
+        </button>
+      </div>
+      {music?.why ? <div className="small muted">{music.why} The first style the last two slots didn't use is the one that plays.</div> : null}
+      {err ? <div className="warn small">{err}</div> : null}
+    </div>
+  );
+};
+
+/** A save already in the library: its words, still yours to change until it's made (and after, for the next render). */
+const SavedPage: React.FC<{ game: string; save: Saved; onChanged: () => void }> = ({ game, save, onChanged }) => {
+  const [f, setF] = useState(() => ({ memory: save.memory, tagline: save.tagline, journal: save.journal }));
+  const [state, setState] = useState<"" | "saving" | "saved">("");
+  const [err, setErr] = useState("");
+  const [sure, setSure] = useState(false);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setState("saving");
+    const t = setTimeout(
+      () =>
+        void call(game, "POST", "saved-update", { name: save.name, ...f })
+          .then(() => (setState("saved"), setErr(""), onChanged()))
+          .catch((e: Error) => (setState(""), setErr(e.message))),
+      600,
+    );
+    return () => clearTimeout(t);
+  }, [f]);
+  const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
+  const make = () => {
+    presetMake(game, { image: save.file, ...f });
+    location.hash = `#${game}/make`;
+    // A fresh page, so Make reads the library with these words in it.
+    location.reload();
+  };
+  const retire = () =>
+    void call(game, "POST", "saved-retire", { name: save.name })
+      .then(() => (onChanged(), open(game)))
+      .catch((e: Error) => setErr(e.message));
+  const made = save.slots.length > 0;
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="row between">
+        <h2 style={{ margin: 0 }}>{f.memory || save.name}</h2>
+        {made ? null : sure ? (
+          <span className="row small">
+            <button className="danger small" onClick={retire}>
+              Retire this save
+            </button>
+            <button className="ghost small" onClick={() => setSure(false)}>
+              Keep it
+            </button>
+          </span>
+        ) : (
+          <button className="link small muted" onClick={() => setSure(true)} title="Moves it to retired/, out of the library">
+            Retire…
+          </button>
+        )}
+      </div>
+      <div className="small muted">
+        {made ? `Made as ${save.slots.map((n) => `Save ${String(n).padStart(2, "0")}`).join(", ")}. Changes here go into the next render; videos already made keep their words.` : "Not made into a video yet."}{" "}
+        public/saves/{save.name}.png
+      </div>
+      <div className="row" style={{ alignItems: "flex-start", gap: 24 }}>
+        <div style={{ width: 300, flex: "none" }}>
+          <AsGlyphs src={save.file} />
+        </div>
+        <div className="fields" style={{ flex: 1 }}>
+          <WordsBox label="Memory" hint="Revealed on screen when the save completes. Up to about three lines." long value={f.memory} onChange={set("memory")} />
+          <WordsBox label="Tagline" hint={TAGLINE_HINT} max={TAGLINE_MAX} value={f.tagline} onChange={set("tagline")} />
+          <WordsBox label="Journal" hint="The pinned comment." long={8} value={f.journal} onChange={set("journal")} />
+        </div>
+      </div>
+      <MusicPanel key={save.name} game={game} save={save} onChanged={onChanged} />
+      <div className="row">
+        <button disabled={state === "saving" || !f.memory.trim()} onClick={make}>
+          Make a video
+        </button>
+        <span className="small muted">{state === "saving" ? "Saving…" : state === "saved" ? "Saved." : "Changes save as you type."}</span>
       </div>
       {err ? <div className="warn small">{err}</div> : null}
     </div>
