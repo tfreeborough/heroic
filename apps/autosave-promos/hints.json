@@ -82,11 +82,19 @@
     },
     {
       "id": "h00k",
-      "text": "Tip: Rain makes everything look better."
+      "text": "Tip: Rain makes everything look better.",
+      "used": {
+        "at": 1792354950015,
+        "in": "slot-10-rain"
+      }
     },
     {
       "id": "h00j",
-      "text": "Tip: Sleep at the inn. Your back will thank you."
+      "text": "Tip: Sleep at the inn. Your back will thank you.",
+      "used": {
+        "at": 1792354950014,
+        "in": "slot-10-rain"
+      }
     },
     {
       "id": "h002",
@@ -154,27 +162,51 @@
     },
     {
       "id": "h00l",
-      "text": "Tip: Rest when you can. The feed will still be there."
+      "text": "Tip: Rest when you can. The feed will still be there.",
+      "used": {
+        "at": 1792356737198,
+        "in": "slot-11-obliteration"
+      }
     },
     {
       "id": "h00m",
-      "text": "Lore: Every winter someone tries to cross the lake. Every winter the lake wins."
+      "text": "Lore: Every winter someone tries to cross the lake. Every winter the lake wins.",
+      "used": {
+        "at": 1792356737197,
+        "in": "slot-11-obliteration"
+      }
     },
     {
       "id": "h00n",
-      "text": "Hint: Count the saves. Something happens at a round number."
+      "text": "Hint: Count the saves. Something happens at a round number.",
+      "used": {
+        "at": 1792358522730,
+        "in": "slot-12-expedition"
+      }
     },
     {
       "id": "h00o",
-      "text": "Tip: Take the long way home once in a while."
+      "text": "Tip: Take the long way home once in a while.",
+      "used": {
+        "at": 1792358522729,
+        "in": "slot-12-expedition"
+      }
     },
     {
       "id": "h00p",
-      "text": "Lore: The tower has always been a little bit too tall."
+      "text": "Lore: The tower has always been a little bit too tall.",
+      "used": {
+        "at": 1792359768744,
+        "in": "slot-13-snow-day"
+      }
     },
     {
       "id": "h00q",
-      "text": "Lore: The bridge troll retired years ago. The sign is still up."
+      "text": "Lore: The bridge troll retired years ago. The sign is still up.",
+      "used": {
+        "at": 1792359768743,
+        "in": "slot-13-snow-day"
+      }
     },
     {
       "id": "h00r",

@@ -80,6 +80,42 @@
       "music": "guitar",
       "batch": "slot-09-herding",
       "renderedAt": "2026-10-17T22:44:12.895Z"
+    },
+    {
+      "slot": 10,
+      "seconds": 16,
+      "playtimeFrom": 144,
+      "egg": "",
+      "music": "felt",
+      "batch": "slot-10-rain",
+      "renderedAt": "2026-10-18T20:22:30.022Z"
+    },
+    {
+      "slot": 11,
+      "seconds": 16,
+      "playtimeFrom": 160,
+      "egg": "",
+      "music": "score",
+      "batch": "slot-11-obliteration",
+      "renderedAt": "2026-10-18T20:52:17.207Z"
+    },
+    {
+      "slot": 12,
+      "seconds": 16,
+      "playtimeFrom": 176,
+      "egg": "",
+      "music": "ambient",
+      "batch": "slot-12-expedition",
+      "renderedAt": "2026-10-18T21:22:02.731Z"
+    },
+    {
+      "slot": 13,
+      "seconds": 16,
+      "playtimeFrom": 192,
+      "egg": "unlucky",
+      "music": "felt",
+      "batch": "slot-13-snow-day",
+      "renderedAt": "2026-10-18T21:42:48.743Z"
     }
   ]
 }
