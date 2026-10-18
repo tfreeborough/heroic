@@ -214,12 +214,15 @@ would trip you reading it aloud; the game's `script.ai` in `desk.config`
 only adds the rules (no invented example lines). Needs
 `ANTHROPIC_API_KEY` in `apps/desk/.env`. **3. The pictures**: **Plan the
 pictures** has Claude give every beat a picture prompt (a scene as a film
-still, one consistent world down the video; two prompts on a beat over
+still, all in one **world** Claude picks for the video (a submarine
+crew, a lighthouse winter…), editable in the world box and kept on Plan
+again; two prompts on a beat over
 20s spoken), the score's **mood** (13: the six Autosave ones plus focus,
 curious, tense, eerie, driving, melancholy, triumph), its **intensity**
 and the odd **big moment** (the music steps up a key there), a **pulled** word now and then (never two beats
-running), and **chapters** (none under 6 minutes spoken, never two within
-3; a chapter too close is flagged and won't show). **Make N pictures**
+running), and **chapters** (Claude suggests none under 6 minutes spoken and
+never two within 3, but your Doc headings and your own chapters always
+show, short of two within 10s, YouTube's floor, which is flagged). **Make N pictures**
 draws them four at a time in the background (GPT Image through the
 shared `@heroic/forge`, landscape 1536×1024, the chiaroscuro style in
 `lib/cards.ts` or the game's `script.ai.picture` in front of every prompt,
@@ -256,8 +259,8 @@ template (BITS): the title builds out of glyphs and rains into the first
 picture; the pictures build and fall away as rain into the next; a
 pulled word borrows the picture's glyphs to spell itself as it's said;
 a chapter (organise leaves it a 3.5s silent gap, and the first beat's
-chapter needs none: the title opens it) clears the screen for "CHAPTER
-TWO" and its name; the voice runs along the foot as a terminal line;
+chapter needs none: the title opens it) clears the screen and builds
+its name; the voice runs along the foot as a terminal line;
 footage dropped on a video track plays over them; the end card replays
 every picture, makes a mosaic of them, builds the channel name and types
 the sign-off, then holds for YouTube's end-screen elements. After

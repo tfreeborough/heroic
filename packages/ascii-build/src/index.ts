@@ -10,6 +10,8 @@
  */
 export * from "./look";
 export * from "./ink";
+export * from "./text";
+export * from "./thumbnail";
 export * from "./plan";
 export * from "./draw";
 export * from "./video";

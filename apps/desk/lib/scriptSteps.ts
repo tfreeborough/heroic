@@ -6,12 +6,13 @@
  */
 import type { GameConfig } from "../game";
 import { youtubeChapters } from "@heroic/ascii-build";
-import { PICTURE_STYLE, hasImages, makePicture, saveOwnPicture } from "./cards";
+import { PICTURE_STYLE, THUMB_STYLE, hasImages, makePicture, saveOwnPicture } from "./cards";
 import * as ai from "./rewrite";
 import { matchScript } from "./match";
 import { organiseCut } from "./organise";
-import { type Beat, type BeatPicture, type Cut, type Script, isStale, newLook, picturesWanted, plannedBeats } from "./scripts";
+import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText } from "./scripts";
 import { readScript, saveScript, voiceSamples } from "./scriptsStore";
+import { docHeadings } from "./doc";
 import { makeScore } from "./score";
 import { seqSlug, writeSequence } from "./sequences";
 
@@ -24,7 +25,8 @@ const need = (g: GameConfig, id: string): { s: Script; v: ai.ScriptVoice; sample
   if (!s) throw new Error(`no script ${id}`);
   return { s, v: g.script.ai, samples: voiceSamples(g, id) };
 };
-const snapshot = (s: Script): Script => ({ ...s, sources: [...s.sources, { at: new Date().toISOString(), text: s.source }] });
+/** What the cuts were made from (scriptText: the accepted research woven in, Tom's notes out), so the next adjust sees research changes too. */
+const snapshot = (s: Script): Script => ({ ...s, sources: [...s.sources, { at: new Date().toISOString(), text: scriptText(s) }] });
 const findCut = (s: Script, cut: string): Cut => {
   const c = s.long?.id === cut ? s.long : s.shorts.find((x) => x.id === cut);
   if (!c) throw new Error("that cut isn't in the script any more");
@@ -38,7 +40,7 @@ export const voiceSamplesFor = (g: GameConfig, id: string): string[] => voiceSam
 export const rewriteScript = async (g: GameConfig, id: string): Promise<Script> => {
   const { s, v, samples } = need(g, id);
   if (!s.source.trim()) throw new Error("paste the script first");
-  const cuts = await ai.rewriteScript(v, s.source, samples);
+  const cuts = await ai.rewriteScript(v, scriptText(s), samples);
   return saveScript(g, snapshot({ ...s, ...cuts }));
 };
 
@@ -48,7 +50,7 @@ export const adjustScript = async (g: GameConfig, id: string): Promise<Script> =
   if (!s.long) return rewriteScript(g, id);
   if (!isStale(s)) return s;
   const before = s.sources.at(-1)?.text ?? "";
-  const cuts = await ai.adjustScript(v, samples, before, s.source, s.long, s.shorts);
+  const cuts = await ai.adjustScript(v, samples, before, scriptText(s), s.long, s.shorts);
   return saveScript(g, snapshot({ ...s, ...cuts }));
 };
 
@@ -66,14 +68,14 @@ export const redoBeat = async (g: GameConfig, id: string, cut: string, beat: str
 export const redoCut = async (g: GameConfig, id: string, cut: string, instruction: string): Promise<Script> => {
   const { s, v, samples } = need(g, id);
   const c = findCut(s, cut);
-  const next = await ai.redoCut(v, samples, s.source, s.long, c, instruction);
+  const next = await ai.redoCut(v, samples, scriptText(s), s.long, c, instruction);
   return saveScript(g, putCut(s, next));
 };
 
 export const anotherShort = async (g: GameConfig, id: string, instruction: string): Promise<Script> => {
   const { s, v, samples } = need(g, id);
   if (!s.long) throw new Error("rewrite the script first");
-  const c = await ai.anotherShort(v, samples, s.source, s.long, s.shorts, instruction);
+  const c = await ai.anotherShort(v, samples, scriptText(s), s.long, s.shorts, instruction);
   return saveScript(g, { ...s, shorts: [...s.shorts, c] });
 };
 
@@ -98,8 +100,8 @@ export const planPictures = async (g: GameConfig, id: string, all = false): Prom
   const every = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, beat: b }));
   const want = every.filter((x) => all || !x.beat.pictures?.length);
   if (!want.length) return s;
-  const plan = await ai.planPictures(v, s.long.title, want, every);
-  let next = s;
+  const { theme, plan } = await ai.planPictures(v, s.long.title, want, every, docHeadings(scriptText(s)), s.theme);
+  let next: Script = { ...s, theme };
   for (const x of want) {
     const p = plan.get(x.n);
     if (!p) continue;
@@ -123,7 +125,7 @@ export const redoPicturePrompt = async (g: GameConfig, id: string, beatId: strin
   const beats = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, prompts: (b.pictures ?? []).map((p) => p.prompt), id: b.id }));
   const beat = beats.find((b) => b.id === beatId);
   if (!beat) throw new Error("that beat isn't in the script any more");
-  const prompt = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction);
+  const prompt = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction, s.theme);
   return saveScript(
     g,
     withBeat(s, beatId, (b) => {
@@ -201,6 +203,88 @@ export const ownPicture = (g: GameConfig, id: string, beatId: string, k: number,
       return { ...b, pictures };
     }),
   );
+};
+
+// ── the thumbnail (docs/design/desk-thumbnails.md) ──
+
+const withIdea = (s: Script, ideaId: string, f: (t: ThumbnailIdea) => ThumbnailIdea): Script => ({ ...s, thumbnails: (s.thumbnails ?? []).map((t) => (t.id === ideaId ? f(t) : t)) });
+/** A thumbnail's pictures sit with the beats' in cards/<script>/, named thumb-<idea>-<n>.png. */
+const thumbFile = (ideaId: string) => ({ id: `thumb-${ideaId}` });
+const thumbKey = (ideaId: string) => `thumb:${ideaId}`;
+
+/** Three more thumbnail ideas (to Tom's instruction, if any), after the ones already there. Nothing is made yet. */
+export const planThumbnails = async (g: GameConfig, id: string, instruction: string): Promise<Script> => {
+  const { s, v } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  const beats = s.long.beats.map((b) => ({ text: b.text, prompts: (b.pictures ?? []).map((p) => p.prompt) }));
+  const had = (s.thumbnails ?? []).map((t) => ({ prompt: t.prompt, words: t.words }));
+  const ideas = await ai.planThumbnails(v, s.long.title, beats, had, instruction);
+  const fresh = ideas.map((t): ThumbnailIdea => ({ id: newId(), prompt: t.prompt, words: t.words, accent: t.accent, why: t.why, candidates: [] }));
+  // Read again: a picture may have landed on an older idea while Claude was thinking.
+  const now = readScript(g, id) ?? s;
+  return saveScript(g, { ...now, thumbnails: [...(now.thumbnails ?? []), ...fresh] });
+};
+
+/** Three more YouTube titles to test (to Tom's instruction, if any), after the ones already there. */
+export const planTitles = async (g: GameConfig, id: string, instruction: string): Promise<Script> => {
+  const { s, v } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  const chapters = s.long.beats.flatMap((b) => (b.chapter?.trim() ? [b.chapter.trim()] : []));
+  const words = [...new Set((s.thumbnails ?? []).map((t) => t.words.trim()).filter(Boolean))];
+  const titles = await ai.planTitles(v, s.long.title, s.long.beats.map((b) => b.text), chapters, words, (s.titles ?? []).map((t) => t.text), instruction);
+  const now = readScript(g, id) ?? s;
+  return saveScript(g, { ...now, titles: [...(now.titles ?? []), ...titles.map((t) => ({ id: newId(), ...t }))] });
+};
+
+/** The top of the long video's YouTube description and its tags, written again (to Tom's instruction, if any). */
+export const writeYouTube = async (g: GameConfig, id: string, instruction: string): Promise<Script> => {
+  const { s, v } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  const chapters = s.long.beats.flatMap((b) => (b.chapter?.trim() ? [b.chapter.trim()] : []));
+  const youtube = await ai.writeYouTube(v, g.name, s.long.title, s.long.beats.map((b) => b.text), chapters, s.youtube, instruction);
+  return saveScript(g, { ...(readScript(g, id) ?? s), youtube });
+};
+
+/**
+ * Thumbnail pictures in the background, like the beats' (`only`: another
+ * try at exactly these ideas; otherwise every idea with nothing made yet).
+ * The page polls; each lands as the chosen one.
+ */
+export const makeThumbnails = (g: GameConfig, id: string, only?: string[]): { started: number } => {
+  if (!hasImages()) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
+  const { s, v } = need(g, id);
+  const style = v.picture ?? PICTURE_STYLE;
+  const inFlight = making.get(id) ?? new Set<string>();
+  making.set(id, inFlight);
+  const todo = (s.thumbnails ?? []).filter((t) => t.prompt.trim() && !inFlight.has(thumbKey(t.id)) && (only ? only.includes(t.id) : !t.candidates.length));
+  for (const t of todo) inFlight.add(thumbKey(t.id));
+  void Promise.all(
+    todo.map(async (t) => {
+      try {
+        const src = await makePicture(g, s, thumbFile(t.id), 0, `${t.prompt.trim()} ${THUMB_STYLE}`, style);
+        const now = readScript(g, id);
+        if (now) saveScript(g, withIdea(now, t.id, (x) => ({ ...x, candidates: [...x.candidates, src], chosen: src, error: undefined })));
+      } catch (e) {
+        console.warn(`⚠ thumbnail for ${id}/${t.id}: ${(e as Error).message}`);
+        const now = readScript(g, id);
+        if (now) saveScript(g, withIdea(now, t.id, (x) => ({ ...x, error: (e as Error).message.slice(0, 200) })));
+      } finally {
+        inFlight.delete(thumbKey(t.id));
+      }
+    }),
+  );
+  return { started: todo.length };
+};
+
+/** Tom's own image as a thumbnail picture: onto an idea (the chosen try), or a new idea of its own with no words. */
+export const ownThumbnail = (g: GameConfig, id: string, ideaId: string, bytes: Uint8Array, ext: string): Script => {
+  const s = readScript(g, id);
+  if (!s) throw new Error(`no script ${id}`);
+  const idea = (s.thumbnails ?? []).find((t) => t.id === ideaId) ?? { id: newId(), prompt: "", words: "", accent: "red" as const, candidates: [] };
+  const src = saveOwnPicture(g, s, thumbFile(idea.id), 0, bytes, ext);
+  const next: ThumbnailIdea = { ...idea, candidates: [...idea.candidates, src], chosen: src, error: undefined };
+  const had = (s.thumbnails ?? []).some((t) => t.id === idea.id);
+  return saveScript(g, { ...s, thumbnails: had ? (s.thumbnails ?? []).map((t) => (t.id === idea.id ? next : t)) : [...(s.thumbnails ?? []), next] });
 };
 
 // ── organise ──

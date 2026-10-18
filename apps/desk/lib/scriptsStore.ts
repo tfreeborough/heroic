@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { GameConfig } from "../game";
 import { type Beat, type BeatCard, type BeatMood, type BeatPicture, type Cut, SCORE_MOODS, type ScoreMood, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, summarise } from "./scripts";
 import { rendersDir } from "./render";
+import { forRewrite } from "./doc";
 
 const dir = (g: GameConfig) => join(rendersDir(g), "scripts");
 const safeId = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -175,8 +176,12 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
   const s = readScript(g, id);
   if (!s) throw new Error(`no script ${id}`);
   if (patch.title !== undefined && patch.title.trim()) s.title = patch.title.trim();
-  if (patch.source !== undefined) s.source = String(patch.source);
+  // A script from a Google Doc takes its words from the Doc (Pull the latest), never from the page.
+  if (patch.source !== undefined && !s.doc) s.source = String(patch.source);
   if (patch.gap !== undefined) s.gap = num(patch.gap, 0, 3, s.gap);
+  if (patch.theme !== undefined) s.theme = String(patch.theme) || undefined;
+  if (patch.titles !== undefined) s.titles = (Array.isArray(patch.titles) ? patch.titles : []).flatMap((t) => (t?.id ? [{ id: String(t.id), text: String(t.text ?? "").slice(0, 100), ...(t.why ? { why: String(t.why) } : {}) }] : []));
+  if (patch.youtube !== undefined) s.youtube = patch.youtube ? { description: String(patch.youtube.description ?? "").slice(0, 5000), tags: String(patch.youtube.tags ?? "").slice(0, 500) } : undefined;
   // A picture lands on a beat from the background (makeSketches) while the page may be mid-edit: a src only
   // ever comes from the server, so one the page doesn't know about yet is kept.
   const known = new Map(cutsOf(s).flatMap((c) => c.beats.map((b) => [b.id, b.card] as const)));
@@ -216,6 +221,24 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
     // A take the page didn't send is not deleted this way (that's the DELETE route): it stays.
     for (const t of s.takes.length < mine.size ? [...mine.values()].filter((t) => !s.takes.some((x) => x.file === t.file)) : []) s.takes.push(t);
   }
+  if (patch.thumbnails !== undefined) {
+    // Ideas and their pictures only ever come from the server (planned, made, or Tom's own uploaded): the page
+    // changes the words, the accent, the side, the prompt and which try is chosen, and can drop an idea.
+    // The chosen try can be another idea's picture: it's borrowed, and joins this idea's tries.
+    const had = new Map((s.thumbnails ?? []).map((t) => [t.id, t]));
+    const pictures = new Set([...had.values()].flatMap((t) => t.candidates));
+    s.thumbnails = (Array.isArray(patch.thumbnails) ? patch.thumbnails : []).flatMap((t) => {
+      const h = had.get(String(t?.id));
+      if (!h) return [];
+      const seen = Array.isArray(t.candidates) ? t.candidates : [];
+      // A picture that landed since the page last looked stays the chosen one.
+      const missed = h.candidates.some((c) => !seen.includes(c));
+      const chosen = !missed && t.chosen && pictures.has(t.chosen) ? t.chosen : h.chosen;
+      const candidates = chosen && !h.candidates.includes(chosen) ? [...h.candidates, chosen] : h.candidates;
+      const side = t.side === "left" || t.side === "right" ? t.side : undefined;
+      return [{ ...h, candidates, prompt: typeof t.prompt === "string" ? t.prompt : h.prompt, words: typeof t.words === "string" ? t.words.slice(0, 60) : h.words, accent: t.accent === "white" ? "white" : "red", side, chosen }];
+    });
+  }
   if (patch.done === true && !s.done) s.done = new Date().toISOString();
   if (patch.done === false) delete s.done;
   s.updatedAt = new Date().toISOString();
@@ -243,7 +266,8 @@ export const voiceSamples = (g: GameConfig, except: string, maxWords = 20000): s
     .filter((s) => s.hasSource && s.id !== except)
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))) {
     const full = readScript(g, s.id);
-    const text = full?.source.trim();
+    // His words and headings, not his notes (a Sources list isn't voice).
+    const text = full ? forRewrite(full.source).trim() : undefined;
     if (!text) continue;
     const n = text.split(/\s+/).length;
     if (words + n > maxWords && out.length) break;

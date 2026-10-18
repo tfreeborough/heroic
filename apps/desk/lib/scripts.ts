@@ -1,4 +1,6 @@
 import type { Take } from "@heroic/voiceover";
+import { type ScriptResearch, wovenSource } from "./research";
+import { type ScriptDoc, forRewrite } from "./doc";
 
 /**
  * A SCRIPT: a video's words, as a project on the Scripts tab (what Ideas
@@ -53,6 +55,39 @@ export type BeatPicture = {
   error?: string;
   /** The look seed. */
   look: number;
+};
+
+/**
+ * A thumbnail idea for the long video (docs/design/desk-thumbnails.md): a
+ * fresh picture made for the thumbnail, built out of green glyphs, and up
+ * to four words built out of glyphs in an accent colour on its dark side.
+ * Several ideas, so YouTube's Test & compare can pick between three.
+ */
+export type ThumbnailIdea = {
+  id: string;
+  /** What the picture is of (the game's picture style and the thumbnail rules are added when it's made). */
+  prompt: string;
+  /** The words on it, "" for none; set in capitals, a new line breaks a line. */
+  words: string;
+  accent: "red" | "white";
+  /** Which side the words go; unset = the picture's darker side. */
+  side?: "left" | "right";
+  /** Claude's one line on why someone scrolling would stop for it. */
+  why?: string;
+  /** Every try, oldest first, under the game's public dir (generated or Tom's own). */
+  candidates: string[];
+  /** The one in use. */
+  chosen?: string;
+  /** The last try failed: why. */
+  error?: string;
+};
+
+/** A YouTube title to try against the working one (Test & compare takes titles as well as thumbnails). Not the title the video builds on screen: that's the long cut's. */
+export type TitleIdea = {
+  id: string;
+  text: string;
+  /** Claude's one line on why it gets the click. */
+  why?: string;
 };
 
 /** What the score should feel like under a beat. The six Autosave moods, then the seven for telling a story. */
@@ -113,8 +148,10 @@ export type ScriptTake = Take & { keep?: { start: number; end: number }[]; assig
 export type Script = {
   id: string;
   title: string;
-  /** What Tom pasted, live (saves as it changes). */
+  /** What Tom pasted, live (saves as it changes), or the markdown of the Google Doc it was pulled from. */
   source: string;
+  /** The Google Doc it comes from (docs/design/desk-docs.md): the box is then read only, and Pull the latest replaces re-pasting. */
+  doc?: ScriptDoc;
   /** The texts the cuts were rewritten from, oldest first. The last is what the current cuts came from. */
   sources: SourceVersion[];
   long?: Cut;
@@ -129,6 +166,16 @@ export type Script = {
   runs?: number;
   /** The sequences organise wrote, newest last: the cut each is, which run, when. */
   sequences?: { id: string; cut: string; run: number; at: string; missing: number; conflicts: number; youtube?: string }[];
+  /** Facts from real sources, pinned after Tom's sentences (docs/design/desk-research.md). The accepted ones are woven into what the rewrite reads. */
+  research?: ScriptResearch;
+  /** The long video's thumbnail ideas (docs/design/desk-thumbnails.md). */
+  thumbnails?: ThumbnailIdea[];
+  /** YouTube titles to test, beside the long cut's title (docs/design/desk-thumbnails.md). */
+  titles?: TitleIdea[];
+  /** The top of the long video's YouTube description and its tags, written by Claude, Tom's to change. The chapters go under it. */
+  youtube?: { description: string; tags: string };
+  /** The world every picture lives in (a submarine crew, a lighthouse winter…): Claude picks it at the first plan, Tom can write his own. */
+  theme?: string;
   /** ISO timestamp once the video's made. */
   done?: string;
   createdAt: string;
@@ -138,7 +185,7 @@ export type Script = {
 /** What the list shows. */
 export type ScriptSummary = Pick<Script, "id" | "title" | "done" | "createdAt" | "updatedAt"> & { hasSource: boolean; hasCuts: boolean; shorts: number; stale: boolean };
 
-export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes">> & { done?: boolean };
+export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "theme">> & { done?: boolean };
 
 export const DEFAULT_GAP = 0.3;
 
@@ -156,8 +203,14 @@ export const emptyScript = (id: string, title: string, source = "", now = new Da
   updatedAt: now,
 });
 
-/** The cuts were made from an older source than the one in the box. */
-export const isStale = (s: Pick<Script, "source" | "sources" | "long">): boolean => Boolean(s.long) && (s.sources.at(-1)?.text ?? "").trim() !== s.source.trim();
+/** What the rewrite reads: the box (or the Doc), with the research Tom's accepted woven in and his notes (a Sources section) left out. */
+export const scriptText = (s: Pick<Script, "source" | "research">): string => forRewrite(wovenSource(s));
+
+/** The cuts were made from an older script than the one there now. Spacing alone (blank lines, a trailing space) isn't a change. */
+export const isStale = (s: Pick<Script, "source" | "sources" | "long" | "research">): boolean => {
+  const flat = (t: string) => t.replace(/\s+/g, " ").trim();
+  return Boolean(s.long) && flat(s.sources.at(-1)?.text ?? "") !== flat(scriptText(s));
+};
 
 export const summarise = (s: Script): ScriptSummary => ({
   id: s.id,
@@ -328,10 +381,8 @@ export const sketchesOf = (s: Pick<Script, "long" | "shorts">): { src: string; l
 
 /** A beat guessed at longer than this (spoken seconds) gets a second picture. */
 export const LONG_BEAT = 20;
-/** No chapters in a video shorter than this (spoken seconds). */
-export const CHAPTERS_FROM = 6 * 60;
-/** Never two chapters closer than this (spoken seconds). */
-export const CHAPTER_GAP = 3 * 60;
+/** Never two chapters closer than this (spoken seconds): YouTube's own floor. Claude's suggestions keep to its stricter rules (rewrite.ts); Tom's own chapters only need this. */
+export const CHAPTER_GAP = 10;
 
 /** A fresh look seed, 1–9999 like the Desk's other seeds. */
 export const newLook = (): number => 1 + Math.floor(Math.random() * 9999);
@@ -339,11 +390,9 @@ export const newLook = (): number => 1 + Math.floor(Math.random() * 9999);
 /** How many pictures a beat wants by its length. */
 export const picturesWanted = (text: string): number => (spokenSeconds(text) > LONG_BEAT ? 2 : 1);
 
-/** The chapters as the rules allow them: none in a short video, never two within CHAPTER_GAP (the first wins). Beat ids. */
+/** The chapters that show: every named one, but never two within CHAPTER_GAP (the first wins). Beat ids. */
 export const allowedChapters = (beats: Pick<Beat, "id" | "text" | "chapter">[]): Set<string> => {
-  const total = beats.reduce((n, b) => n + spokenSeconds(b.text), 0);
   const ok = new Set<string>();
-  if (total < CHAPTERS_FROM) return ok;
   let at = 0;
   let last = -Infinity;
   for (const b of beats) {

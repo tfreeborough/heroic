@@ -393,6 +393,24 @@ textarea.script-source { font-size: 15px; line-height: 1.5; }
 .pic-cands img { width: 100%; height: 100%; object-fit: cover; display: block; }
 mark.pulled { background: rgba(220,185,111,0.3); color: var(--bone); border-radius: 3px; padding: 0 2px; }
 .chapter-row input { font-family: Cinzel, Georgia, serif; font-weight: 700; }
+/* scripts from Google Docs (desk-docs.md) */
+.script-doc { max-height: 60vh; overflow-y: auto; padding: 4px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--ink); font-size: 15px; line-height: 1.55; }
+.md-heading { font-family: Cinzel, Georgia, serif; color: var(--sand); font-size: 15px; margin: 16px 0 4px; }
+.doc-picker { width: min(720px, 100%); }
+.doc-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: transparent; color: var(--bone); border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; font-weight: 400; }
+.doc-row:hover, .doc-row.on { background: var(--panel); border-color: var(--line); filter: none; }
+.doc-row .first { font-weight: 600; }
+/* research (desk-research.md) */
+.research { padding-top: 10px; border-top: 1px solid var(--line); }
+.draft-para { font-size: 15.5px; line-height: 1.6; }
+.draft-para .anchor { background: rgba(220, 185, 111, 0.12); border-radius: 3px; }
+.finding { margin: 8px 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--sand); border-radius: 8px; background: rgba(0,0,0,0.22); font-size: 15px; line-height: 1.5; }
+.finding.accepted { border-left-color: rgba(159, 224, 173, 0.8); }
+.finding.against, .finding.lost { border-left-color: #e0b27c; }
+.finding-text { background: rgba(220, 185, 111, 0.16); border-radius: 4px; padding: 2px 6px; }
+.finding.accepted .finding-text { background: rgba(159, 224, 173, 0.12); }
+.finding blockquote { margin: 0; padding: 6px 10px; border-left: 2px solid var(--line); color: var(--bone); opacity: 0.85; }
+.ok { color: #9fe0ad; }
 /* the prompter */
 .prompt-list { display: flex; flex-direction: column; max-height: 52vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 6px 0; background: rgba(0,0,0,0.25); }
 .pbeat { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 10px 14px; cursor: pointer; border-left: 3px solid transparent; }
@@ -441,3 +459,26 @@ mark.pulled { background: rgba(220,185,111,0.3); color: var(--bone); border-radi
 .mpiece { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; background: rgba(159,224,173,0.18); box-shadow: inset 0 0 0 1px rgba(159,224,173,0.5); color: var(--bone); font-size: 11.5px; line-height: 22px; padding: 0 8px; white-space: nowrap; overflow: hidden; pointer-events: none; }
 .vend { position: absolute; top: 22px; bottom: 0; width: 0; border-left: 1px solid rgba(242,233,212,0.3); pointer-events: none; z-index: 3; }
 .vsnap { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid #9fe0ad; box-shadow: 0 0 6px #9fe0ad; pointer-events: none; z-index: 6; }
+
+/* The thumbnail step (docs/design/desk-thumbnails.md). */
+.thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; align-items: start; }
+.thumb-words { flex: 1; min-width: 180px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.chip.accent-red.on { color: #ff6a5c; border-color: #ff483a; }
+.chip.accent-white.on { color: #fff; border-color: var(--bone); }
+/* A mock of YouTube, in YouTube's own colours: phone home feed at 360px, up next at 168px. */
+.yt { --yt-bg: #0f0f0f; --yt-fg: #f1f1f1; --yt-sub: #aaa; --yt-avatar: #3a3a3a; display: flex; flex-wrap: wrap; gap: 24px; padding: 16px; border-radius: 12px; background: var(--yt-bg); color: var(--yt-fg); font-family: Roboto, Arial, sans-serif; }
+.yt.yt-light { --yt-bg: #fff; --yt-fg: #0f0f0f; --yt-sub: #606060; --yt-avatar: #d9d9d9; }
+.yt-home { width: 360px; display: flex; flex-direction: column; gap: 18px; }
+.yt-next { width: 400px; display: flex; flex-direction: column; gap: 10px; }
+.yt-card { display: flex; flex-direction: column; gap: 10px; }
+.yt-row { display: grid; grid-template-columns: 168px 1fr; gap: 10px; align-items: start; }
+.yt-thumb { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+.yt-row .yt-thumb { border-radius: 8px; }
+.yt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.yt-dur { position: absolute; right: 6px; bottom: 6px; background: rgba(0,0,0,0.8); color: #fff; font-size: 12px; font-weight: 500; padding: 1px 4px; border-radius: 4px; }
+.yt-row .yt-dur { font-size: 11px; right: 4px; bottom: 4px; }
+.yt-meta { display: grid; grid-template-columns: 36px 1fr; gap: 12px; padding: 0 4px; }
+.yt-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--yt-avatar); }
+.yt-title { font-size: 15px; line-height: 1.35; font-weight: 500; }
+.yt-row .yt-title { font-size: 14px; }
+.yt-sub { font-size: 12px; color: var(--yt-sub); margin-top: 2px; }

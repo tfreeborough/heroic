@@ -11,10 +11,6 @@ export const CHAPTER_CARD = 3.5;
 /** Seconds the end card runs: the reel (3s), the mosaic, the channel name and sign-off (by ~9s), then a hold for YouTube's end-screen elements. */
 export const END_CARD = 20;
 
-const NUMBERS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE"];
-/** "CHAPTER TWO". */
-export const chapterLabel = (n: number): string => `CHAPTER ${NUMBERS[n] ?? String(n)}`;
-
 const clock = (s: number) => {
   const t = Math.max(0, Math.round(s));
   const h = Math.floor(t / 3600);

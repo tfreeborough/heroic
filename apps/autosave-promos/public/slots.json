@@ -43,7 +43,7 @@
       "egg": "",
       "music": "synthwave",
       "batch": "slot-05-daytona",
-      "renderedAt": "2026-10-12T21:28:29.115Z"
+      "renderedAt": "2026-10-12T21:54:01.266Z"
     },
     {
       "slot": 6,
@@ -52,16 +52,34 @@
       "egg": "",
       "music": "felt",
       "batch": "slot-06-first-flight",
-      "renderedAt": "2026-10-12T21:31:51.044Z"
+      "renderedAt": "2026-10-12T21:54:59.127Z"
     },
     {
       "slot": 7,
       "seconds": 16,
       "playtimeFrom": 96,
-      "egg": "achievement",
+      "egg": "backwards",
       "music": "ambient",
       "batch": "slot-07-judicium",
-      "renderedAt": "2026-10-12T21:33:12.218Z"
+      "renderedAt": "2026-10-12T21:55:41.754Z"
+    },
+    {
+      "slot": 8,
+      "seconds": 16,
+      "playtimeFrom": 112,
+      "egg": "",
+      "music": "score",
+      "batch": "slot-08-going-for-goal",
+      "renderedAt": "2026-10-12T22:32:08.144Z"
+    },
+    {
+      "slot": 9,
+      "seconds": 16,
+      "playtimeFrom": 128,
+      "egg": "",
+      "music": "guitar",
+      "batch": "slot-09-herding",
+      "renderedAt": "2026-10-17T22:44:12.895Z"
     }
   ]
 }

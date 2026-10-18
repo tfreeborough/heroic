@@ -116,7 +116,7 @@ const GlyphCards: React.FC<{ seq: Playable; offset: number }> = ({ seq, offset }
         if (from + CHAPTER_CARD * fps <= 0 || from >= durationInFrames || footage) return null;
         return (
           <Sequence key={c.id} from={from} durationInFrames={Math.round((CHAPTER_CARD + 0.4) * fps)} layout="none">
-            <ChapterCard n={c.n ?? i + 1} name={c.text ?? ""} palette={pal} family={GLYPH_FAMILY} nameFont={`700 ${Math.round(Math.min(width, height) * 0.15)}px ${CINZEL}`} look={look} seed={500 + i} />
+            <ChapterCard name={c.text ?? ""} palette={pal} family={GLYPH_FAMILY} nameFont={`700 ${Math.round(Math.min(width, height) * 0.15)}px ${CINZEL}`} look={look} seed={500 + i} />
           </Sequence>
         );
       })}

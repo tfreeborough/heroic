@@ -8,7 +8,7 @@
  *                     itself large as it's said, then gives them back
  *   TextBuild         words built out of glyphs (the title, a chapter, the
  *                     channel name)
- *   ChapterCard       "CHAPTER TWO" typed, the name built, then rain
+ *   ChapterCard       the name built, then rain
  *   EndCard           every picture again as a reel, a mosaic of them all,
  *                     the channel name out of their glyphs, then a hold for
  *                     YouTube's end screen
@@ -24,10 +24,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import { AbsoluteFill, Sequence, continueRender, delayRender, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { type BuildCache, drawBuild, newCache } from "./draw";
-import { type Ink, inkFromImage, inkFromRGBA } from "./ink";
+import { type Ink, inkFromImage } from "./ink";
+import { inkFromText } from "./text";
 import { type Look, type Palette, clamp, hash, lerp, mulberry, rgba, smooth } from "./look";
 import { type Arrival, type Build, type Order, type Rect, lookFromSeed, planBuild } from "./plan";
-import { CHAPTER_CARD, chapterLabel } from "./video";
+import { CHAPTER_CARD } from "./video";
 
 const srcUrl = (src: string) => (/^(\/|https?:|blob:|data:)/.test(src) ? src : staticFile(src));
 
@@ -85,47 +86,7 @@ const usePictureInk = (src: string, family: string): Ink | null =>
     return inkFromImage(img, "light", 512, "auto");
   }, [src, family]);
 
-/**
- * Text as ink: white type on black, wrapped to `maxWidth` px at the size in
- * `font` (a CSS font, e.g. `700 160px Cinzel`), centred. Builds like a picture.
- * A word too long for the width can't wrap, so the whole text sets smaller
- * until it fits (it used to be cut off: "ULTIPLAYE").
- */
-export const inkFromText = (text: string, givenFont: string, maxWidth: number, lineHeight = 1.15): Ink => {
-  const probe = new OffscreenCanvas(8, 8).getContext("2d")!;
-  const given = Number(/(\d+(?:\.\d+)?)px/.exec(givenFont)?.[1] ?? 100);
-  probe.font = givenFont;
-  const widest = Math.max(1, ...text.split(/\s+/).filter(Boolean).map((w) => probe.measureText(w).width));
-  const px = widest > maxWidth ? Math.floor(given * (maxWidth / widest) * 0.98) : given;
-  const font = givenFont.replace(/(\d+(?:\.\d+)?)px/, `${px}px`);
-  probe.font = font;
-  const lines: string[] = [];
-  for (const para of text.split("\n")) {
-    let line = "";
-    for (const w of para.split(/\s+/).filter(Boolean)) {
-      const next = line ? `${line} ${w}` : w;
-      if (line && probe.measureText(next).width > maxWidth) {
-        lines.push(line);
-        line = w;
-      } else line = next;
-    }
-    if (line) lines.push(line);
-  }
-  const lh = px * lineHeight;
-  const pad = Math.round(px * 0.3);
-  const width = Math.ceil(Math.min(maxWidth, Math.max(1, ...lines.map((l) => probe.measureText(l).width)))) + pad * 2;
-  const height = Math.ceil(lines.length * lh) + pad * 2;
-  const c = new OffscreenCanvas(width, height);
-  const g = c.getContext("2d", { willReadFrequently: true })!;
-  g.fillStyle = "#000";
-  g.fillRect(0, 0, width, height);
-  g.fillStyle = "#fff";
-  g.font = font;
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  lines.forEach((l, i) => g.fillText(l, width / 2, pad + lh * (i + 0.5)));
-  return inkFromRGBA(g.getImageData(0, 0, width, height).data, width, height, "light", "empty");
-};
+export { inkFromText };
 
 /** Type builds best with a hard edge (the dither edge eats the first and last letters). */
 const textLook = (look: Look, cols: number): Look => ({ ...look, cols, edge: "hard", levels: Math.max(look.levels, 4) });
@@ -316,26 +277,20 @@ export const TextBuild: React.FC<{
 const typed = (text: string, from: number, t: number, cps = 26) => text.slice(0, Math.max(0, Math.floor((t - from) * cps)));
 
 /**
- * A chapter: the screen is clear, "CHAPTER TWO" types out small, the name
- * builds out of glyphs large in the middle, holds, and rains away into the
- * next picture. CHAPTER_CARD seconds; frame 0 is its start.
+ * A chapter: the screen is clear, the name builds out of glyphs large in
+ * the middle, holds, and rains away into the next picture. No "CHAPTER
+ * TWO" above it: the opening chapter sits under the title, so the first
+ * one anyone sees would say two. CHAPTER_CARD seconds; frame 0 is its start.
  */
-export const ChapterCard: React.FC<{ n: number; name: string; palette: Palette; family: string; nameFont: string; look: Look; seed: number }> = ({ n, name, palette, family, nameFont, look, seed }) => {
-  const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
-  const t = frame / fps;
-  const label = chapterLabel(n);
-  const fade = 1 - clamp((t - (CHAPTER_CARD - 0.7)) / 0.4, 0, 1);
+export const ChapterCard: React.FC<{ name: string; palette: Palette; family: string; nameFont: string; look: Look; seed: number }> = ({ name, palette, family, nameFont, look, seed }) => {
+  const { width, height } = useVideoConfig();
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
-      <div style={{ position: "absolute", top: height * 0.3, left: 0, right: 0, textAlign: "center", fontFamily: family, fontWeight: 700, fontSize: Math.round(height * 0.026), letterSpacing: "0.3em", color: rgba(palette.trail, 0.9), opacity: fade, whiteSpace: "pre" }}>
-        {typed(label, 0.15, t)}
-      </div>
       <TextBuild
         text={name}
         font={nameFont}
         maxWidth={1800}
-        box={{ x: width * 0.1, y: height * 0.36, w: width * 0.8, h: height * 0.34 }}
+        box={{ x: width * 0.1, y: height * 0.33, w: width * 0.8, h: height * 0.34 }}
         look={look}
         cols={190}
         seed={seed}

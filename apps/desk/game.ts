@@ -131,6 +131,10 @@ export type GameConfig = {
     footageRemote: string;
     /** rclone destination for finished videos, e.g. "gdrive,root_folder_id=…:Promos/Desk". */
     uploadTarget: string;
+    /** The Drive folder the video scripts (Google Docs) live in (the id from its URL): the Scripts tab pulls them from here (docs/design/desk-docs.md). */
+    scriptsFolderId?: string;
+    /** rclone remote (drive.readonly) rooted at that folder. */
+    scriptsRemote?: string;
   };
   templates: () => Promise<{ TEMPLATES: DeskTemplate[]; VOICE_PREVIEW?: VoicePreview }>;
   /** The posting queue's words: draft a title (Shorts) and description

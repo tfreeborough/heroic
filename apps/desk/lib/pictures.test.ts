@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { lookFromSeed } from "@heroic/ascii-build";
 import { lookFor } from "../../autosave-promos/src/Save";
-import { CHAPTER_GAP, CHAPTERS_FROM, LONG_BEAT, allowedChapters, picturesWanted } from "./scripts";
+import { CHAPTER_GAP, LONG_BEAT, allowedChapters, picturesWanted } from "./scripts";
 
 /** A beat that takes about `seconds` to say (2.6 words a second). */
 const said = (seconds: number) => Array.from({ length: Math.round(seconds * 2.6) }, () => "word").join(" ");
@@ -19,13 +19,13 @@ describe("pictures", () => {
 });
 
 describe("chapters", () => {
-  test("none in a short video", () => {
-    const beats = [beat("a", 60, "Start"), beat("b", CHAPTERS_FROM - 120, "Later")];
-    expect(allowedChapters(beats).size).toBe(0);
+  test("Tom's own chapters show however short the video or close together", () => {
+    const beats = [beat("a", 60, "One"), beat("b", 60, "Two"), beat("c", 60, "Three"), beat("d", 60, "Four"), beat("e", 60, "Five")];
+    expect([...allowedChapters(beats)]).toEqual(["a", "b", "c", "d", "e"]);
   });
 
   test("never two within the gap: the first wins", () => {
-    const beats = [beat("a", 60, "One"), beat("b", CHAPTER_GAP - 30, "Too soon"), beat("c", 120, "Two"), beat("d", 300)];
+    const beats = [beat("a", CHAPTER_GAP - 4, "One"), beat("b", 60, "Too soon"), beat("c", 60, "Two")];
     expect([...allowedChapters(beats)]).toEqual(["a", "c"]);
   });
 });

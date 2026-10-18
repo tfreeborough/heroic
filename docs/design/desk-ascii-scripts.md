@@ -90,6 +90,14 @@ The whole script goes into the call, so the pictures belong together:
 recurring subjects look the same, and an idea from beat 3 can come back
 in beat 30.
 
+Each video has its own **world** (`Script.theme`, 2026-10-17): Claude
+picks one from the script before planning (a lighthouse winter, a
+submarine crew, a heist…) and every metaphor lives in it, so the
+pictures aren't stuck in swords-and-sand fantasy just because the game
+is a gladiator arena. It's saved and kept on Plan again and on a single
+prompt's redo; Tom can write his own in the **world** box, or clear it
+for a fresh pick.
+
 **Generate** makes every picture that's missing: GPT Image through
 `packages/forge`, landscape 1536×1024, a few at a time, each one landing
 on its beat as it arrives. They go to `public/cards/<script>/<beat>-<n>.png`
@@ -211,7 +219,9 @@ or a soft hit on the beat).
 ### Chapters
 
 Claude proposes chapters during Plan pictures, from the script's shape,
-under strict rules:
+under strict rules (its own suggestions only: Doc headings and chapters
+Tom adds always show, short of two within 10 seconds, YouTube's floor;
+changed 2026-10-17):
 
 - **None** in a video under about 6 minutes (spoken, guessed).
 - At most one every **3 minutes**. A 12-minute video gets three or four.
@@ -220,8 +230,7 @@ under strict rules:
 
 Tom can move, rename or drop them on the page (a chapter starts at a
 beat). On screen a chapter is its own moment, not a corner label: the
-picture leaves, the screen goes empty for a breath, `CHAPTER TWO` types
-out small, then the name **builds out of glyphs** large in the middle,
+picture leaves, the screen goes empty for a breath, then the name **builds out of glyphs** large in the middle,
 holds for about 2.5 seconds and rains away into the next beat's picture.
 Organise leaves a silent gap for it (about 3.5 seconds). The score marks
 it too: the phrase lands home, a layer drops out, and the new chapter
@@ -457,7 +466,7 @@ chapter one; a later one leaves a CHAPTER_CARD gap with a `chapter` card
 (name + number `n`); the edit gets the cut's `title`; build cards carry
 the beat's `pulled` words; the YouTube list shows (with copy) after
 organising and on the last run. Remotion: `inkFromText` (type as white on
-black → ink), `TextBuild`, `ChapterCard` ("CHAPTER TWO" typed, the name
+black → ink), `TextBuild`, `ChapterCard` (the name
 decoding in, rain out; captions held off while it's up), pulled words
 inside `BuildCanvas` (the picture's brightest glyphs fly to spell the
 word in a 220px mono, picture dimmed and holes left, 0.45s out, 1s hold,

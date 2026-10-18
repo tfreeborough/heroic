@@ -4,6 +4,8 @@ import type { ImportJob } from "../lib/imports";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
 import type { Script, ScriptPatch, ScriptSummary } from "../lib/scripts";
+import type { ResearchState, ScriptResearch } from "../lib/research";
+import type { DocEntry } from "../lib/doc";
 /** A script's newest edit's score (lib/score.ts). */
 export type ScoreState = { seq: string; file: string; seed: number; state: "making" | "ready" | "failed"; label?: string; error?: string };
 import type { Platform, Post, Schedule } from "../lib/schedule";
@@ -156,7 +158,18 @@ export const gameApi = (game: string) => {
     /** The Scripts tab. `claude` = the server has a key and the game a script voice, so the rewrite steps are on. */
     scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean; palette: "matrix" | "sand" }>(r)),
     /** `pending`: beats whose sketch is being made right now. */
-    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null }>(r)),
+    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null; researching: ResearchState | null }>(r)),
+    /** The Google Docs in the game's scripts folder (docs/design/desk-docs.md). */
+    docs: (fresh = false) => fetch(`${base}/docs${fresh ? "?fresh=1" : ""}`).then((r) => j<{ docs: DocEntry[] }>(r)),
+    /** Pull a Doc into a script (`doc` links it; without, the latest of the one it's linked to). */
+    pullDoc: (id: string, doc?: string) => post(`${base}/scripts/${enc(id)}/doc`, doc ? { id: doc } : {}).then((r) => j<Script>(r)),
+    unlinkDoc: (id: string) => fetch(`${base}/scripts/${enc(id)}/doc`, { method: "DELETE" }).then((r) => j<Script>(r)),
+    /** Drive's modified time for the script's Doc now (null when it isn't linked or isn't there). */
+    docModified: (id: string) => fetch(`${base}/scripts/${enc(id)}/doc`).then((r) => j<{ modified: string | null }>(r)),
+    /** Research the draft (docs/design/desk-research.md): starts in the background; the script's `researching` says how it's going. */
+    research: (id: string) => post(`${base}/scripts/${enc(id)}/research`).then((r) => j<ResearchState>(r)),
+    /** Tom's call on one finding: accept, reject, his words, or where a lost one goes. */
+    decideFinding: (id: string, finding: string, d: { status?: string; text?: string; anchor?: string }) => post(`${base}/scripts/${enc(id)}/research/decide`, { finding, ...d }).then((r) => j<ScriptResearch>(r)),
     /** The newest edit's score made again; `another` = a new seed. */
     remakeScore: (id: string, another: boolean) => post(`${base}/scripts/${enc(id)}/score`, { another }).then((r) => j<Script>(r)),
     /** A recording → a take on the script (saved, transcribed). */
@@ -170,6 +183,17 @@ export const gameApi = (game: string) => {
     makePictures: (id: string, only?: { beat: string; k: number }[]) => post(`${base}/scripts/${enc(id)}/pictures`, { only }).then((r) => j<{ started: number }>(r)),
     /** One picture's prompt written again by Claude (to an instruction, or blank for just a better idea). */
     newPicturePrompt: (id: string, beat: string, k: number, instruction: string) => post(`${base}/scripts/${enc(id)}/prompt`, { beat, k, instruction }).then((r) => j<Script>(r)),
+    /** Three more thumbnail ideas (docs/design/desk-thumbnails.md), to an instruction or none. */
+    planThumbnails: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/thumbnails/plan`, { instruction }).then((r) => j<Script>(r)),
+    /** Three more YouTube titles to test, to an instruction or none. */
+    planTitles: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/titles/plan`, { instruction }).then((r) => j<Script>(r)),
+    /** The top of the YouTube description and the tags, written again (to an instruction or none). */
+    writeYouTube: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/youtube`, { instruction }).then((r) => j<Script>(r)),
+    /** Thumbnail pictures made in the background: every idea with none yet, or another try at `only`. */
+    makeThumbnails: (id: string, only?: string[]) => post(`${base}/scripts/${enc(id)}/thumbnails/make`, { only }).then((r) => j<{ started: number }>(r)),
+    /** Tom's own image as a thumbnail picture (no idea = a new idea of its own). */
+    ownThumbnail: (id: string, idea: string, file: File) =>
+      fetch(`${base}/scripts/${enc(id)}/thumbnails/own?idea=${enc(idea)}&ext=${enc(file.name.split(".").pop() ?? "png")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }).then((r) => j<Script>(r)),
     /** Tom's own image as a beat's picture. */
     ownPicture: (id: string, beat: string, k: number, file: File) =>
       fetch(`${base}/scripts/${enc(id)}/pictures/own?beat=${enc(beat)}&k=${k}&ext=${enc(file.name.split(".").pop() ?? "png")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file }).then((r) => j<Script>(r)),

@@ -134,7 +134,7 @@ export const Beats: React.FC<BeatsProps> = (p) => {
           if (from + CHAPTER_CARD * fps <= 0 || from >= bodyEnd) return null;
           return (
             <Sequence key={c.id} from={from} durationInFrames={Math.round((CHAPTER_CARD + 0.4) * fps)} layout="none">
-              <ChapterCard n={c.n ?? i + 1} name={c.text ?? ""} palette={pal} family={FAMILY} nameFont={nameFont} look={look} seed={500 + i} />
+              <ChapterCard name={c.text ?? ""} palette={pal} family={FAMILY} nameFont={nameFont} look={look} seed={500 + i} />
             </Sequence>
           );
         })}

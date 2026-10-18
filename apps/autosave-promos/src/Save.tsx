@@ -82,8 +82,8 @@ export const saveSchema = z.object({
    * like a bad CRT on the first frames (and the last, so the loop meets). */
   burst: z.boolean().default(true),
   glitch: z.boolean().default(true),
-  /** Once saved, "Journal entry recovered. Check the comments." where the
-   * hints were (only when there's a journal; post it as the pinned comment). */
+  /** Once saved, "Journal entry updated." where the
+   * hints were (only when there's a journal: it's in the TikTok caption and the YouTube pinned comment). */
   journalLine: z.boolean().default(true),
   /** Faint Matrix rain behind everything; 0 = none. */
   rain: z.number().min(0).max(1).default(0.3),
@@ -338,7 +338,7 @@ export const Save: React.FC<SaveProps> = (p) => {
   // Two hints while it saves (an older render's props may have none).
   const hint1 = p.hint1 ?? "", hint2 = p.hint2 ?? "";
   const tipSwap = tl.buildStart + (tl.buildEnd - tl.buildStart) * 0.5;
-  const journalLine = p.journalLine && p.journal.trim() && t < tl.rewind ? typed("Journal entry recovered. Check the comments.", tl.saved + 1.2, t, 32) : "";
+  const journalLine = p.journalLine && p.journal.trim() && t < tl.rewind ? typed("Journal entry updated.", tl.saved + 1.2, t, 32) : "";
   const tip = t < 1.2 || t >= tl.saved ? journalLine : t < tipSwap || !hint2 ? typed(hint1, 1.2, t, 32) : typed(hint2, tipSwap + 0.2, t, 32);
 
   const achievement = effect === "achievement";

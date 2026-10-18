@@ -9,6 +9,8 @@ import { Beats, beatsDurationSeconds, beatsSchema } from "./Beats";
 import { Talk, talkDurationSeconds, talkSchema } from "./Talk";
 import { APPLE_SHOT_SIZE, DevNote, FEATURE_SIZE, FeatureGraphic, SHOT_SIZE, StoreShot } from "./Store";
 import { STORE_SHOTS } from "./data/store";
+import { BANNER_SIZE, ChannelBanner } from "./Banner";
+import { THUMB_FRAME, ThumbMock, thumbMockSchema } from "./experiments/thumbnail/ThumbMock";
 import { ATTENTION_CHECKPOINTS, AttentionTest, attentionSchema, attentionSeconds } from "./experiments/attention/AttentionTest";
 
 /**
@@ -114,6 +116,16 @@ export const Root: React.FC = () => (
       defaultProps={{ clip: "", durationSeconds: 90, startFrom: 0, facts: [], checkpoints: ATTENTION_CHECKPOINTS, curve: 1.6, floor: 1 }}
       calculateMetadata={({ props }) => ({ durationInFrames: Math.round(attentionSeconds(props) * FPS), ...formatSize(props.format) })}
     />
+    <Composition
+      id="ThumbMock"
+      component={ThumbMock}
+      schema={thumbMockSchema}
+      durationInFrames={THUMB_FRAME + 1}
+      fps={FPS}
+      width={1280}
+      height={720}
+      defaultProps={{ src: "experiments/thumb-mock/face.png", cols: 140, text: "NOT LAG", accent: "bone" as const, font: "anton" as const, textCols: 80, seed: 3 }}
+    />
     {/* Store listing stills (bun run render:store) — one frame each. */}
     <Composition id="FeatureGraphic" component={FeatureGraphic} durationInFrames={1} fps={FPS} {...FEATURE_SIZE} />
     <Composition id="DevNote" component={DevNote} durationInFrames={1} fps={FPS} {...SHOT_SIZE} />
@@ -121,5 +133,7 @@ export const Root: React.FC = () => (
     {/* The same cards at App Store Connect's 6.5" iPhone size (bun run render:store -- --apple). */}
     <Composition id="DevNoteApple" component={DevNote} durationInFrames={1} fps={FPS} {...APPLE_SHOT_SIZE} />
     <Composition id="StoreShotApple" component={StoreShot} durationInFrames={1} fps={FPS} {...APPLE_SHOT_SIZE} defaultProps={STORE_SHOTS[0]!} />
+    {/* YouTube channel banner (bun run render:banner); guides=true marks the device crops. */}
+    <Composition id="ChannelBanner" component={ChannelBanner} durationInFrames={1} fps={FPS} {...BANNER_SIZE} defaultProps={{ guides: false }} />
   </>
 );

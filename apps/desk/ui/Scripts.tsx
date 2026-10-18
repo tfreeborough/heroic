@@ -3,7 +3,12 @@ import { type GameApi, type GameInfo, type ScoreState, type Script, type ScriptP
 import { go } from "./App";
 import { Markdown } from "./markdown";
 import { type Palette, PicturesStep } from "./Pictures";
+import { ThumbnailsStep } from "./Thumbnails";
 import { Prompter } from "./Prompter";
+import { ResearchPanel } from "./Research";
+import { DocPicker } from "./DocPicker";
+import { type ResearchState, wovenSource } from "../lib/research";
+import { spokenText } from "../lib/doc";
 import { type Beat, type Cut, type DiffOp, beatText, cutDiff, cutText, isStale, newId, paragraphs, spokenSeconds } from "../lib/scripts";
 
 /**
@@ -24,6 +29,7 @@ export const Scripts: React.FC<{ game: GameInfo; api: GameApi; id?: string }> = 
   const [showDone, setShowDone] = useState(false);
   const [title, setTitle] = useState("");
   const [msg, setMsg] = useState("");
+  const [picking, setPicking] = useState(false);
   // The edits made from each script (script id → edits), to jump to from its row.
   const [edits, setEdits] = useState<Map<string, { id: string; name: string }[]>>(new Map());
   const refresh = useCallback(() => api.scripts().then((r) => (setList(r.list), setClaude(r.claude), setImages(r.images), setPalette(r.palette))), [api]);
@@ -44,6 +50,19 @@ export const Scripts: React.FC<{ game: GameInfo; api: GameApi; id?: string }> = 
     try {
       const s = await api.addScript(title);
       setTitle("");
+      await refresh();
+      go({ name: "scripts", id: s.id });
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+
+  /** A new script from a Google Doc: made, then the Doc pulled into it. */
+  const fromDoc = async (doc: { id: string; name: string }) => {
+    setPicking(false);
+    try {
+      const s = await api.addScript(doc.name);
+      await api.pullDoc(s.id, doc.id);
       await refresh();
       go({ name: "scripts", id: s.id });
     } catch (e) {
@@ -72,6 +91,10 @@ export const Scripts: React.FC<{ game: GameInfo; api: GameApi; id?: string }> = 
             Add
           </button>
         </div>
+        <button className="ghost small" onClick={() => setPicking(true)} title="A new script from a Google Doc in the Video Scripts folder: its headings and formatting come with it, and Pull the latest replaces re-pasting.">
+          From a Google Doc…
+        </button>
+        {picking ? <DocPicker api={api} onPick={(d) => void fromDoc(d)} onClose={() => setPicking(false)} /> : null}
         {msg ? <div className="warn small">{msg}</div> : null}
         {open.length === 0 ? <div className="muted small">Nothing waiting.</div> : open.map(row)}
         {done.length ? (
@@ -98,6 +121,11 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
   const [pending, setPending] = useState<string[]>([]);
   // The newest edit's score: making, made, or failed (desk-ascii-scripts.md § The score).
   const [score, setScore] = useState<ScoreState | null>(null);
+  // A research run going (or just failed) on the server (desk-research.md).
+  const [researching, setResearching] = useState<ResearchState | null>(null);
+  // The Doc picker (desk-docs.md), and whether the linked Doc has been edited in Drive since the last pull.
+  const [picking, setPicking] = useState(false);
+  const [docChanged, setDocChanged] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState<Busy>("");
   const [saveState, setSaveState] = useState<"" | "saving" | "saved" | "failed">("");
@@ -107,11 +135,19 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
   useEffect(() => {
     void api
       .script(id)
-      .then(({ pending: p, score: sc, ...x }) => {
+      .then(({ pending: p, score: sc, researching: rs, ...x }) => {
         saved.current = JSON.stringify(patchOf(x));
         setS(x);
         setPending(p);
         setScore(sc);
+        setResearching(rs);
+        if (x.doc) {
+          const pulled = x.doc.modified;
+          void api
+            .docModified(id)
+            .then((r) => setDocChanged(Boolean(r.modified && r.modified > pulled)))
+            .catch(() => {});
+        }
       })
       .catch((e: Error) => setErr(e.message));
   }, [api, id]);
@@ -137,7 +173,15 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
                 return missed.length || h.error !== p.error ? { ...p, candidates: [...p.candidates, ...missed], chosen: missed.length ? h.chosen : p.chosen, approved: missed.length ? false : p.approved, check: missed.length ? undefined : p.check, error: h.error } : p;
               }) };
             }) });
-            const next = { ...cur, long: cur.long ? fold(cur.long) : undefined };
+            // The thumbnail ideas the same way (desk-thumbnails.md).
+            const freshThumbs = new Map((x.thumbnails ?? []).map((t) => [t.id, t] as const));
+            const thumbnails = cur.thumbnails?.map((t) => {
+              const h = freshThumbs.get(t.id);
+              if (!h) return t;
+              const missed = h.candidates.filter((c) => !t.candidates.includes(c));
+              return missed.length || h.error !== t.error ? { ...t, candidates: [...t.candidates, ...missed], chosen: missed.length ? h.chosen : t.chosen, error: h.error } : t;
+            });
+            const next = { ...cur, long: cur.long ? fold(cur.long) : undefined, thumbnails };
             // What the server has is what's saved: don't let the fold look like an edit to save.
             saved.current = JSON.stringify(patchOf(next));
             return next;
@@ -155,6 +199,21 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
     const t = setInterval(askScore, 4000);
     return () => clearInterval(t);
   }, [score?.state, askScore]);
+
+  // Research runs for minutes: ask after it every few seconds, and take the findings in when it's done (research isn't the page's to save).
+  useEffect(() => {
+    if (researching?.state !== "running") return;
+    const t = setInterval(() => {
+      void api
+        .script(id)
+        .then((r) => {
+          setResearching(r.researching);
+          if (r.researching?.state !== "running") setS((cur) => (cur ? { ...cur, research: r.research } : cur));
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(t);
+  }, [researching?.state, api, id]);
 
   // The script saves itself a moment after the last change (the title, the source, a beat edited by hand).
   useEffect(() => {
@@ -251,8 +310,54 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
       {err ? <div className="warn small">{err}</div> : null}
 
       {/* ── 1. the source ── */}
-      <Step n={1} title="The script" hint={s.source.trim() ? `${spokenSeconds(s.source)}s read aloud · ${paras.length} paragraph${paras.length === 1 ? "" : "s"}` : "paste it from the doc"} open={!s.long}>
-        <textarea className="script-source" rows={s.long ? 8 : 16} value={s.source} onChange={(e) => patch({ source: e.target.value })} placeholder="Paste the script here. Paragraphs as you wrote them; it saves as you go." />
+      <Step n={1} title="The script" hint={s.source.trim() ? `${spokenSeconds(spokenText(s.source))}s read aloud · ${paras.length} paragraph${paras.length === 1 ? "" : "s"}` : "paste it from the doc"} open={!s.long}>
+        {s.doc ? (
+          <>
+            <div className="row between small" style={{ flexWrap: "wrap", gap: 8 }}>
+              <span className="muted">
+                From the Google Doc{" "}
+                <a href={`https://docs.google.com/document/d/${s.doc.id}/edit`} target="_blank" rel="noreferrer">
+                  {s.doc.name}
+                </a>{" "}
+                · pulled {fmtDate(s.doc.pulledAt)}
+                {docChanged ? <span className="warn"> · edited in Drive since</span> : null}
+              </span>
+              <span className="row" style={{ gap: 12 }}>
+                <button
+                  className={docChanged ? "small" : "ghost small"}
+                  disabled={Boolean(busy)}
+                  onClick={() =>
+                    void step("pull", async () => {
+                      const x = await api.pullDoc(id);
+                      setDocChanged(false);
+                      return x;
+                    })
+                  }
+                  title="The Doc's words as they are in Drive now. Your research and the cuts stay; if the words changed, Adjust the cuts follows the change."
+                >
+                  {busy === "pull" ? "pulling…" : "Pull the latest"}
+                </button>
+                <button className="link small" onClick={() => setPicking(true)}>
+                  a different Doc…
+                </button>
+                <button className="link small muted" onClick={() => void step("unlink", () => api.unlinkDoc(id))} title="Forget the Doc: the words stay here and the box is editable again.">
+                  unlink
+                </button>
+              </span>
+            </div>
+            <Markdown className="desc script-doc" text={s.source} />
+          </>
+        ) : (
+          <>
+            <textarea className="script-source" rows={s.long ? 8 : 16} value={s.source} onChange={(e) => patch({ source: e.target.value })} placeholder="Paste the script here. Paragraphs as you wrote them; it saves as you go." />
+            <div className="small">
+              <button className="link small" onClick={() => setPicking(true)} title="Pull a Google Doc from the Video Scripts folder instead: its headings and formatting come with it, and Pull the latest replaces re-pasting.">
+                or pull it from a Google Doc…
+              </button>
+            </div>
+          </>
+        )}
+        {picking ? <DocPicker api={api} current={s.doc?.id} onPick={(d) => (setPicking(false), void step("pull", () => api.pullDoc(id, d.id)))} onClose={() => setPicking(false)} /> : null}
         <div className="row">
           {!s.long ? (
             <button onClick={() => void step("rewrite", () => api.rewriteScript(id))} disabled={!claude || !s.source.trim() || Boolean(busy)} title={claude ? "" : "Needs ANTHROPIC_API_KEY in apps/desk/.env and a script voice in the game's desk.config"}>
@@ -272,6 +377,21 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
           )}
           {!claude ? <span className="small warn">The rewrite steps need ANTHROPIC_API_KEY in apps/desk/.env and a script voice in the game's desk.config.</span> : null}
         </div>
+        <ResearchPanel
+          api={api}
+          id={id}
+          s={s}
+          claude={claude}
+          running={researching}
+          onStart={() =>
+            void api
+              .research(id)
+              .then(setResearching)
+              .catch((e: Error) => setErr(e.message))
+          }
+          onResearch={(research) => setS((cur) => (cur ? { ...cur, research } : cur))}
+          onError={setErr}
+        />
       </Step>
 
       {/* ── 2. the cuts ── */}
@@ -292,6 +412,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
             pending={pending}
             onBeat={(beatId, f) => setS((cur) => (cur?.long ? { ...cur, long: { ...cur.long, beats: cur.long.beats.map((b) => (b.id === beatId ? f(b) : b)) } } : cur))}
             onPlan={(all) => void step("plan", () => api.planPictures(id, all))}
+            onTheme={(theme) => patch({ theme })}
             onMake={(only) =>
               void api
                 .makePictures(id, only)
@@ -398,8 +519,57 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; claude: boolean; images: 
           </div>
         </Step>
       ) : null}
+      {s.long ? (
+        <Step n={6} title="The title and thumbnail" hint={thumbnailsHint(s, pending)} open={Boolean(s.thumbnails?.length || s.titles?.length)}>
+          <ThumbnailsStep
+            s={s}
+            api={api}
+            claude={claude}
+            images={images}
+            busy={busy}
+            pending={pending}
+            onIdea={(ideaId, f) => setS((cur) => (cur ? { ...cur, thumbnails: (cur.thumbnails ?? []).map((t) => (t.id === ideaId ? f(t) : t)) } : cur))}
+            onRemove={(ideaId) => setS((cur) => (cur ? { ...cur, thumbnails: (cur.thumbnails ?? []).filter((t) => t.id !== ideaId) } : cur))}
+            onPlan={(instruction) => void step("thumbs", () => api.planThumbnails(id, instruction))}
+            onMake={(only) =>
+              void api
+                .makeThumbnails(id, only)
+                .then((r) => {
+                  if (!r.started) return setErr(only ? "Nothing to make there: give the idea a prompt first." : "Every idea has a picture already. Press again on one to try another.");
+                  const ids = only ?? (s.thumbnails ?? []).filter((t) => t.prompt.trim() && !t.candidates.length).map((t) => t.id);
+                  setPending((p) => [...new Set([...p, ...ids.map((x) => `thumb:${x}`)])]);
+                })
+                .catch((e: Error) => setErr(e.message))
+            }
+            onOwn={(idea, file) => void step(`thumb-own:${idea}`, () => api.ownThumbnail(id, idea, file))}
+            onTitles={(f) => setS((cur) => (cur ? { ...cur, titles: f(cur.titles ?? []) } : cur))}
+            onPlanTitles={(instruction) => void step("titles", () => api.planTitles(id, instruction))}
+          />
+        </Step>
+      ) : null}
+      {s.long ? (
+        <Step n={7} title="Description and tags" hint={s.youtube ? `${s.youtube.tags.split(",").filter((t) => t.trim()).length} tags` : "not written yet"} open={Boolean(s.youtube)}>
+          <YouTubeStep
+            youtube={s.youtube}
+            chapters={s.sequences?.at(-1)?.youtube}
+            claude={claude}
+            busy={busy}
+            onChange={(youtube) => patch({ youtube })}
+            onWrite={(instruction) => void step("youtube", () => api.writeYouTube(id, instruction))}
+          />
+        </Step>
+      ) : null}
     </div>
   );
+};
+
+const thumbnailsHint = (s: Script, pending: string[]): string => {
+  const ideas = s.thumbnails ?? [];
+  const titles = s.titles?.length ? `${s.titles.length} title${s.titles.length === 1 ? "" : "s"} to test · ` : "";
+  if (!ideas.length) return `${titles}no thumbnail ideas yet`;
+  const made = ideas.filter((t) => t.chosen).length;
+  const making = pending.filter((k) => k.startsWith("thumb:")).length;
+  return `${titles}${ideas.length} idea${ideas.length === 1 ? "" : "s"} · ${made} with a picture${making ? ` · ${making} making` : ""}`;
 };
 
 /**
@@ -449,6 +619,72 @@ const YouTubeChapters: React.FC<{ text: string }> = ({ text }) => (
   </div>
 );
 
+/**
+ * The top of the long video's YouTube description and its tags: Claude
+ * writes them from the long cut, Tom changes what he likes and copies them
+ * across. The chapters (from the last organise) go under the lines, and his
+ * own links and the rest under those, in YouTube.
+ */
+const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; chapters?: string; claude: boolean; busy: Busy; onChange: (y: { description: string; tags: string }) => void; onWrite: (instruction: string) => void }> = ({ youtube, chapters, claude, busy, onChange, onWrite }) => {
+  const [ask, setAsk] = useState("");
+  const write = () => {
+    onWrite(ask);
+    setAsk("");
+  };
+  const tagsLength = (youtube?.tags ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .reduce((n, t, i) => n + t.length + (t.includes(" ") ? 2 : 0) + (i ? 1 : 0), 0);
+  const copy = (text: string) => void navigator.clipboard.writeText(text);
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+        <button onClick={write} disabled={!claude || Boolean(busy)} title="Claude reads the long cut and writes a couple of lines for the top of the description, plus the tags">
+          {busy === "youtube" ? "writing…" : youtube ? "Write them again" : "Write them"}
+        </button>
+        <input type="text" value={ask} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => e.key === "Enter" && claude && !busy && write()} placeholder='Steer it, or leave blank: "shorter", "mention the netcode"…' style={{ flex: 1, minWidth: 220, maxWidth: 460 }} />
+      </div>
+      {youtube ? (
+        <>
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="row between">
+              <strong className="small">The top of the description</strong>
+              <span className="row small" style={{ gap: 10 }}>
+                <span className={youtube.description.length > 250 ? "warn" : "muted"}>{youtube.description.length} characters (about the first 120 show before "more")</span>
+                <button className="link small" onClick={() => copy(youtube.description)}>
+                  copy
+                </button>
+                {chapters ? (
+                  <button className="link small" onClick={() => copy(`${youtube.description}\n\n${chapters}`)} title="These lines with the chapters under them">
+                    copy with the chapters
+                  </button>
+                ) : null}
+              </span>
+            </div>
+            <textarea rows={3} value={youtube.description} onChange={(e) => onChange({ ...youtube, description: e.target.value })} />
+          </div>
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="row between">
+              <strong className="small">Tags</strong>
+              <span className="row small" style={{ gap: 10 }}>
+                <span className={tagsLength > 500 ? "warn" : "muted"}>{tagsLength}/500</span>
+                <button className="link small" onClick={() => copy(youtube.tags)} title="Paste into YouTube Studio's tags box: the commas split them">
+                  copy
+                </button>
+              </span>
+            </div>
+            <textarea rows={2} value={youtube.tags} onChange={(e) => onChange({ ...youtube, tags: e.target.value })} />
+          </div>
+          {!chapters ? <div className="small muted">Organise once and the chapters show up here too, to copy under these lines.</div> : null}
+        </>
+      ) : (
+        <div className="small muted">Claude writes a couple of lines about this video for the top of the description (the chapters go under them, your links and the rest under those) and the tags.</div>
+      )}
+    </div>
+  );
+};
+
 const picturesHint = (s: Script, pending: string[]): string => {
   const beats = s.long?.beats ?? [];
   const pics = beats.flatMap((b) => b.pictures ?? []);
@@ -457,7 +693,7 @@ const picturesHint = (s: Script, pending: string[]): string => {
 };
 
 /** What the page saves of a script (the server owns the rest). */
-const patchOf = (s: Script): ScriptPatch => ({ title: s.title, source: s.source, long: s.long, shorts: s.shorts, gap: s.gap, takes: s.takes });
+const patchOf = (s: Script): ScriptPatch => ({ title: s.title, source: s.source, long: s.long, shorts: s.shorts, gap: s.gap, takes: s.takes, thumbnails: s.thumbnails, titles: s.titles, youtube: s.youtube, theme: s.theme ?? "" });
 
 const Step: React.FC<{ n: number; title: string; hint?: string; open?: boolean; children: React.ReactNode }> = ({ n, title, hint, open = true, children }) => {
   const [show, setShow] = useState(open);
@@ -488,7 +724,7 @@ const CutView: React.FC<{
 }> = ({ s, cut, paras, busy, onChange, onRedoBeat, onRedoCut }) => {
   const [ask, setAsk] = useState("");
   // The whole script against the whole cut in one alignment, shared out to the beats (lib/scripts.ts cutDiff).
-  const fits = useMemo(() => (cut.kind === "long" && s.source.trim() ? cutDiff(s.source, cut.beats.map((b) => beatText(s, b))) : null), [cut, s]);
+  const fits = useMemo(() => (cut.kind === "long" && s.source.trim() ? cutDiff(spokenText(wovenSource(s)), cut.beats.map((b) => beatText(s, b))) : null), [cut, s]);
   const setBeat = (b: Beat) => onChange({ ...cut, beats: cut.beats.map((x) => (x.id === b.id ? b : x)) });
   const dropBeat = (id: string) => onChange({ ...cut, beats: cut.beats.filter((x) => x.id !== id) });
   const addBeat = (after: number) => onChange({ ...cut, beats: [...cut.beats.slice(0, after + 1), { id: newId(), text: "", changed: true }, ...cut.beats.slice(after + 1)] });

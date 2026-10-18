@@ -10,7 +10,7 @@ import { ARRIVALS, LOCKED_LOOK, ORDERS, PALETTES, drawBuild, inkFromImage, lookF
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameApi, Script } from "./api";
-import { type Beat, type BeatMood, type BeatPicture, CHAPTERS_FROM, CHAPTER_GAP, SCORE_MOODS, type ScoreMood, allowedChapters, beatStarts, newLook, picturesWanted, spokenSeconds } from "../lib/scripts";
+import { type Beat, type BeatMood, type BeatPicture, CHAPTER_GAP, SCORE_MOODS, type ScoreMood, allowedChapters, beatStarts, newLook, picturesWanted, spokenSeconds } from "../lib/scripts";
 
 const { fontFamily } = loadFont("normal", { weights: ["700"], subsets: ["latin"] });
 const FAMILY = `"${fontFamily}", ui-monospace, monospace`;
@@ -111,17 +111,20 @@ export const PicturesStep: React.FC<{
   pending: string[];
   onBeat: BeatEdit;
   onPlan: (all: boolean) => void;
+  onTheme: (theme: string) => void;
   onMake: (only?: { beat: string; k: number }[]) => void;
   onOwn: (beat: string, k: number, file: File) => void;
   onNewPrompt: (beat: string, k: number, instruction: string) => void;
-}> = ({ s, api, claude, images, palette, busy, pending, onBeat, onPlan, onMake, onOwn, onNewPrompt }) => {
+}> = ({ s, api, claude, images, palette, busy, pending, onBeat, onPlan, onTheme, onMake, onOwn, onNewPrompt }) => {
   const beats = s.long?.beats ?? [];
   const planned = beats.some((b) => b.pictures?.length);
   const pics = beats.flatMap((b) => b.pictures ?? []);
   const toMake = beats.reduce((n, b) => n + (b.pictures ?? []).filter((p, k) => p.prompt.trim() && !p.candidates.length && !pending.includes(`${b.id}:${k}`)).length, 0);
   const unapproved = pics.filter((p) => p.chosen && !p.approved).length;
+  // Remake all: another try at every made picture not yet approved (an approved one is a keep). The old tries stay to pick from.
+  const toRemake = beats.flatMap((b) => (b.pictures ?? []).flatMap((p, k) => (p.prompt.trim() && p.candidates.length && !p.approved && !pending.includes(`${b.id}:${k}`) ? [{ beat: b.id, k }] : [])));
+  const [confirmRemake, setConfirmRemake] = useState(false);
   const starts = useMemo(() => beatStarts(beats), [beats]);
-  const total = beats.reduce((n, b) => n + spokenSeconds(b.text), 0);
   const allowed = useMemo(() => allowedChapters(beats), [beats]);
   const chapters = beats.filter((b) => b.chapter?.trim());
   // A picture that just landed builds once, so it's seen as glyphs straight away.
@@ -145,13 +148,30 @@ export const PicturesStep: React.FC<{
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-        <button onClick={() => onPlan(planned)} disabled={!claude || Boolean(busy)} title={planned ? "Every beat planned again: new prompts, moods, pulled words and chapters. Pictures already made are kept." : "Claude writes a picture prompt for every beat (two for a long one), the music's mood under it, a pulled word now and then, and the chapters."}>
+        <button onClick={() => onPlan(planned)} disabled={!claude || Boolean(busy)} title={planned ? "Every beat planned again in the world above: new prompts, moods, pulled words and chapters. Pictures already made are kept." : "Claude writes a picture prompt for every beat (two for a long one), the music's mood under it, a pulled word now and then, and the chapters."}>
           {busy === "plan" ? "planning…" : planned ? "Plan again" : "Plan the pictures"}
         </button>
         {planned ? (
           <button className="ghost" onClick={() => onMake()} disabled={!images || !toMake} title={images ? "Every picture not yet made, four at a time; each lands here as it finishes." : "Needs OPENAI_API_KEY in apps/desk/.env"}>
             {toMake ? `Make ${toMake} picture${toMake === 1 ? "" : "s"}` : pending.length ? `making ${pending.length}…` : "All made"}
           </button>
+        ) : null}
+        {toRemake.length ? (
+          confirmRemake ? (
+            <span className="row small" style={{ gap: 6 }}>
+              Remake {toRemake.length}?
+              <button className="ghost small" onClick={() => (setConfirmRemake(false), onMake(toRemake))}>
+                yes
+              </button>
+              <button className="link small" onClick={() => setConfirmRemake(false)}>
+                no
+              </button>
+            </span>
+          ) : (
+            <button className="ghost" onClick={() => setConfirmRemake(true)} disabled={!images} title="Another try at every picture already made that you haven't approved (approved ones are kept as they are). The old tries stay to pick from.">
+              Remake all {toRemake.length}
+            </button>
+          )
         ) : null}
         {unapproved ? (
           <button className="ghost small" onClick={() => beats.forEach((b) => b.pictures?.some((p) => p.chosen && !p.approved) && onBeat(b.id, (x) => ({ ...x, pictures: x.pictures?.map((p) => (p.chosen ? { ...p, approved: true } : p)) })))}>
@@ -163,13 +183,15 @@ export const PicturesStep: React.FC<{
         </span>
         {!images ? <span className="small warn">Pictures need OPENAI_API_KEY in apps/desk/.env.</span> : null}
       </div>
+      <div className="row" style={{ gap: 8 }} title="Every picture in the video lives in this world. Claude picks one at the first plan; write your own, or clear it and Plan again for a new one.">
+        <span className="small muted">world</span>
+        <input type="text" value={s.theme ?? ""} onChange={(e) => onTheme(e.target.value)} placeholder={planned ? "Empty: Plan again and Claude picks a new one" : "Empty: Claude picks one from the script. Or write your own (a submarine crew, a lighthouse winter…)"} style={{ flex: 1 }} />
+      </div>
       {planned ? (
         <div className="small muted">
-          {total < CHAPTERS_FROM
-            ? `No chapters: the video is about ${fmtTime(total)} and chapters start at ${CHAPTERS_FROM / 60} minutes.`
-            : chapters.length
-              ? `Chapters: ${chapters.map((b) => `${b.chapter} (${fmtTime(starts[beats.indexOf(b)]!)})${allowed.has(b.id) ? "" : " ✖ too close"}`).join(" · ")}. At most one every ${CHAPTER_GAP / 60} minutes.`
-              : `No chapters yet. Add one on the beat it starts at (at most one every ${CHAPTER_GAP / 60} minutes).`}
+          {chapters.length
+            ? `Chapters: ${chapters.map((b) => `${b.chapter} (${fmtTime(starts[beats.indexOf(b)]!)})${allowed.has(b.id) ? "" : " ✖ too close"}`).join(" · ")}. YouTube only shows its chapter bar with three or more.`
+            : `No chapters yet. Add one on the beat it starts at.`}
         </div>
       ) : (
         <div className="small muted">Plan the pictures and every beat gets a scene to build out of glyphs while you say it, plus a mood for the music. Change anything, make the pictures, then approve them or try again.</div>
@@ -186,7 +208,6 @@ export const PicturesStep: React.FC<{
               palette={palette}
               images={images}
               chapterOk={allowed.has(b.id)}
-              short={total < CHAPTERS_FROM}
               pending={pending}
               fresh={fresh}
               onBeat={(f) => onBeat(b.id, f)}
@@ -231,7 +252,6 @@ const PictureRow: React.FC<{
   palette: Palette;
   images: boolean;
   chapterOk: boolean;
-  short: boolean;
   pending: string[];
   fresh: Set<string>;
   onBeat: (f: (b: Beat) => Beat) => void;
@@ -240,7 +260,7 @@ const PictureRow: React.FC<{
   claude: boolean;
   busy: string;
   onNewPrompt: (k: number, instruction: string) => void;
-}> = ({ api, n, at, beat, palette, images, chapterOk, short, pending, fresh, onBeat, onMake, onOwn, claude, busy, onNewPrompt }) => {
+}> = ({ api, n, at, beat, palette, images, chapterOk, pending, fresh, onBeat, onMake, onOwn, claude, busy, onNewPrompt }) => {
   const [word, setWord] = useState("");
   const pictures = beat.pictures ?? [];
   const wants = picturesWanted(beat.text);
@@ -262,7 +282,7 @@ const PictureRow: React.FC<{
             <span className="small muted">chapter</span>
             <input type="text" value={beat.chapter} onChange={(e) => onBeat((b) => ({ ...b, chapter: e.target.value }))} placeholder="Two to four words" style={{ flex: 1, maxWidth: 360 }} />
             <span className="small muted">at {fmtTime(at)}</span>
-            {!chapterOk && beat.chapter.trim() ? <span className="small warn">{short ? "the video's too short for chapters" : "too close to the chapter before (it won't show)"}</span> : null}
+            {!chapterOk && beat.chapter.trim() ? <span className="small warn">{`within ${CHAPTER_GAP}s of the chapter before (it won't show)`}</span> : null}
             <button className="link small" onClick={() => onBeat((b) => ({ ...b, chapter: undefined }))} title="No chapter here">
               ×
             </button>

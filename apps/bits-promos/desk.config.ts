@@ -88,6 +88,9 @@ const config: GameConfig = {
     footageRemote: "gdrive-footage",
     // Heroic/BITS by id (drive.file scope can't see UI-made folders by path — see README).
     uploadTarget: "gdrive,root_folder_id=1BKUER-5XJJa2kRZZ1NwaTlPl080niB5Q:Promos/Desk",
+    // "Video Scripts" (Heroic/BITS): the Google Docs the Scripts tab pulls in.
+    scriptsFolderId: "1LyiDdAyVGfmpgVdKhKEamCihYkz44UYa",
+    scriptsRemote: "gdrive-scripts",
   },
   templates: () => import("./desk.templates"),
   post: { draft, ai },

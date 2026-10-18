@@ -22,8 +22,10 @@ import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } fr
 import { hasClaude } from "./lib/draft";
 import type { ScriptPatch } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, hasClaude as hasRewriter, makePictures, organise, ownPicture, pendingPictures, planPictures, redoBeat, redoCut, redoPicturePrompt, remakeScore, rewriteScript } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, hasClaude as hasRewriter, makePictures, makeThumbnails, organise, ownPicture, ownThumbnail, pendingPictures, planPictures, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, rewriteScript, planTitles, writeYouTube } from "./lib/scriptSteps";
 import { scoreState } from "./lib/score";
+import { decide, researchState, startResearch } from "./lib/researcher";
+import { docModified, listDocs, pullDoc, unlinkDoc } from "./lib/scriptDocs";
 import { hasImages } from "./lib/cards";
 import { type PostPatch, movePost, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
@@ -505,7 +507,7 @@ const server = Bun.serve({
       GET: withGame((g, req) => {
         const s = readScript(g, req.params.id!);
         const seqId = s?.sequences?.at(-1)?.id;
-        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(seqId) ?? null) : null }) : json({ error: "no such script" }, 404);
+        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(seqId) ?? null) : null, researching: researchState(s.id) ?? null }) : json({ error: "no such script" }, 404);
       }),
       PUT: withGame(async (g, req) => {
         try {
@@ -526,6 +528,46 @@ const server = Bun.serve({
       POST: withGame(async (g, req) => {
         const body = (await req.json()) as { cut: string; beat?: string; instruction?: string };
         return body.beat ? redoBeat(g, req.params.id!, body.cut, body.beat, body.instruction ?? "").then(json, fail) : redoCut(g, req.params.id!, body.cut, body.instruction ?? "").then(json, fail);
+      }),
+    },
+    /** The Google Docs in the game's scripts folder (docs/design/desk-docs.md), newest first; `?fresh=1` skips the half-minute cache. */
+    "/api/:game/docs": {
+      GET: withGame(async (g, req) => listDocs(g, new URL(req.url).searchParams.get("fresh") === "1").then((docs) => json({ docs }), fail)),
+    },
+    /** A script's Doc: GET = Drive's modified time now; POST `{ id? }` = pull it in (link to `id`, or the latest of the linked one); DELETE = unlink (the words stay). */
+    "/api/:game/scripts/:id/doc": {
+      GET: withGame(async (g, req) => docModified(g, req.params.id!).then((modified) => json({ modified }), fail)),
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { id?: string };
+        return pullDoc(g, req.params.id!, body.id ? String(body.id) : undefined).then(json, fail);
+      }),
+      DELETE: withGame((g, req) => {
+        try {
+          return json(unlinkDoc(g, req.params.id!));
+        } catch (e) {
+          return fail(e, 404);
+        }
+      }),
+    },
+    /** Research the draft in the background (docs/design/desk-research.md). Answers at once with the run's state; GET the script for progress. */
+    "/api/:game/scripts/:id/research": {
+      POST: withGame((g, req) => {
+        try {
+          return json(startResearch(g, req.params.id!));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Tom's call on one finding: `{ finding, status?, text?, anchor? }`. Answers with the research. */
+    "/api/:game/scripts/:id/research/decide": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { finding?: string; status?: string; text?: string; anchor?: string };
+        try {
+          return json(decide(g, req.params.id!, String(body.finding ?? ""), { status: body.status, text: body.text, anchor: body.anchor }));
+        } catch (e) {
+          return fail(e, 400);
+        }
       }),
     },
     /** The picture plan (docs/design/desk-ascii-scripts.md): prompts, mood, pulled word, chapter per beat (`?all=1`: every beat again). */
@@ -558,6 +600,52 @@ const server = Bun.serve({
           if (bytes.byteLength < 100) return json({ error: "that image is empty" }, 400);
           if (bytes.byteLength > 25e6) return json({ error: "that image is over 25 MB" }, 400);
           return json(ownPicture(g, req.params.id!, q.get("beat") ?? "", Math.round(Number(q.get("k"))) || 0, bytes, q.get("ext") ?? "png"));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Three more thumbnail ideas (docs/design/desk-thumbnails.md): `{ instruction? }`. Answers with the script. */
+    "/api/:game/scripts/:id/thumbnails/plan": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { instruction?: string };
+        return planThumbnails(g, req.params.id!, String(body.instruction ?? "")).then(json, fail);
+      }),
+    },
+    /** Three more YouTube titles to test: `{ instruction? }`. Answers with the script. */
+    "/api/:game/scripts/:id/titles/plan": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { instruction?: string };
+        return planTitles(g, req.params.id!, String(body.instruction ?? "")).then(json, fail);
+      }),
+    },
+    /** The top of the YouTube description and the tags, written again: `{ instruction? }`. Answers with the script. */
+    "/api/:game/scripts/:id/youtube": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { instruction?: string };
+        return writeYouTube(g, req.params.id!, String(body.instruction ?? "")).then(json, fail);
+      }),
+    },
+    /** Make thumbnail pictures in the background: every idea with none yet, or (`only`, idea ids) another try at those. */
+    "/api/:game/scripts/:id/thumbnails/make": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { only?: string[] };
+        try {
+          return json(makeThumbnails(g, req.params.id!, Array.isArray(body.only) ? body.only.map(String) : undefined));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Tom's own image (the body) as a thumbnail picture: `?idea=&ext=` (no idea = a new one). Answers with the script. */
+    "/api/:game/scripts/:id/thumbnails/own": {
+      POST: withGame(async (g, req) => {
+        const q = new URL(req.url).searchParams;
+        try {
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          if (bytes.byteLength < 100) return json({ error: "that image is empty" }, 400);
+          if (bytes.byteLength > 25e6) return json({ error: "that image is over 25 MB" }, 400);
+          return json(ownThumbnail(g, req.params.id!, q.get("idea") ?? "", bytes, q.get("ext") ?? "png"));
         } catch (e) {
           return fail(e);
         }

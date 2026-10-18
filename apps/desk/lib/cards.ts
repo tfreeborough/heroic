@@ -80,7 +80,11 @@ export const PICTURE_STYLE =
   "Chiaroscuro: one strong light source carves the subject out of darkness, so the lit faces, hands and surfaces are bright white and carry the detail, " +
   "the shadow side falls into solid black. The subject is drawn by light, never as a flat black silhouette. " +
   "The dark scene runs right off every edge of the frame, full bleed, and the edges of the frame fall into solid black shadow: nothing lit touches the border. " +
-  "No circle, oval or vignette, no white paper showing. Big simple shapes, high contrast, no mid-grey, no text, no letters, no border. The scene:";
+  "No circle, oval or vignette, no white paper showing. Big simple shapes, high contrast, no mid-grey, no text, no letters, no border. " +
+  "One clear subject large in the frame. No fine texture or busy detail: no crowds, no rain, snow, fog or smoke, no nets or mesh, no fields of small objects. The scene:";
+
+/** Added after a thumbnail's prompt (docs/design/desk-thumbnails.md): it has to read at 168px. */
+export const THUMB_STYLE = "This is a YouTube thumbnail: ONE subject, close and huge, that reads instantly at a tiny size, no small details.";
 
 /** A beat's picture: the style, then the prompt, landscape, kept as it comes (the glyphs read its brightness). Returns the path under the public dir. */
 export const makePicture = async (g: GameConfig, script: Pick<Script, "id">, beat: Pick<Beat, "id">, k: number, prompt: string, style: string): Promise<string> => {

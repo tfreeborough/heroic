@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { LOCKED_LOOK, type Look, inkFromRGBA, landedCount, planBuild, progress, sampleGrid } from "./index";
+import { type Ink, LOCKED_LOOK, type Look, darkSide, freeWidth, inkFromRGBA, landedCount, planBuild, progress, sampleGrid } from "./index";
 
 /** A white canvas with a dark square in the middle (opaque, like the tonal art). */
 const squareImage = (w = 64, h = 64) => {
@@ -125,5 +125,21 @@ describe("terminal captions", () => {
     const w = (text: string, start: number) => ({ text, start, end: start + 0.25 });
     const lines = terminalLines([w("one", 0), w("two", 0.3), w("three", 0.6), w("four", 0.9), w("after", 3)], 13);
     expect(lines.map((l) => l.words.map((x) => x.text).join(" "))).toEqual(["one two three", "four", "after"]);
+  });
+});
+
+describe("darkSide", () => {
+  const half = (lit: "left" | "right"): Ink => {
+    const w = 20, h = 10, data = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if ((lit === "left") === x < w / 2) data[y * w + x] = 1;
+    return { data, w, h };
+  };
+  test("the words go opposite the lit subject", () => {
+    expect(darkSide(half("right"))).toBe("left");
+    expect(darkSide(half("left"))).toBe("right");
+  });
+  test("the words get only the empty width", () => {
+    expect(freeWidth(half("right"), "left")).toBe(0.5);
+    expect(freeWidth(half("right"), "right")).toBe(0);
   });
 });

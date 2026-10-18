@@ -16,6 +16,13 @@ export const Markdown: React.FC<{ text: string; className?: string }> = ({ text,
       i++;
       continue;
     }
+    // A heading (a Google Doc's section title, docs/design/desk-docs.md).
+    const heading = /^\s{0,3}#{1,6}\s+/;
+    if (heading.test(line)) {
+      blocks.push(<h4 key={key++} className="md-heading">{inline(line.replace(heading, ""))}</h4>);
+      i++;
+      continue;
+    }
     const bullet = /^\s*[-*]\s+/;
     const number = /^\s*\d+[.)]\s+/;
     if (bullet.test(line) || number.test(line)) {
@@ -28,7 +35,7 @@ export const Markdown: React.FC<{ text: string; className?: string }> = ({ text,
     }
     // A paragraph runs until a blank line or a list; single line breaks stay as breaks.
     const para: ReactNode[] = [];
-    while (i < lines.length && lines[i]!.trim() && !bullet.test(lines[i]!) && !number.test(lines[i]!)) {
+    while (i < lines.length && lines[i]!.trim() && !bullet.test(lines[i]!) && !number.test(lines[i]!) && !heading.test(lines[i]!)) {
       if (para.length) para.push(<br key={`b${para.length}`} />);
       para.push(...inline(lines[i]!));
       i++;

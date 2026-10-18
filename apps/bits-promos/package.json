@@ -11,6 +11,7 @@
     "still": "bun run sync && remotion still",
     "render:roster": "bun run sync && bun scripts/render-roster.ts",
     "render:store": "bun run sync && bun scripts/render-store.ts",
+    "render:banner": "bun run sync && bun scripts/render-banner.ts",
     "capture": "bun run sync && bun scripts/capture.ts",
     "capture:roster": "bun run sync && bun scripts/capture.ts --all",
     "upload": "rclone copy out \"gdrive,root_folder_id=1BKUER-5XJJa2kRZZ1NwaTlPl080niB5Q:Promos\" --include \"*.mp4\" --progress",
