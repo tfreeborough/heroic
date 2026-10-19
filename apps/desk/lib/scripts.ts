@@ -101,7 +101,7 @@ export type BeatMood = {
   lift?: boolean;
 };
 
-/** One thought, a few sentences, five to fifteen seconds spoken. */
+/** One thought, a few sentences, ten to twenty seconds spoken. */
 export type Beat = {
   /** Stable through edits; what a take match and a card refer to. */
   id: string;
@@ -176,6 +176,10 @@ export type Script = {
   youtube?: { description: string; tags: string };
   /** The world every picture lives in (a submarine crew, a lighthouse winter…): Claude picks it at the first plan, Tom can write his own. */
   theme?: string;
+  /** What that world LOOKS like, in literal words: sent to the image model with every picture (it never sees the theme). Claude writes it at the plan; Tom's to change. */
+  look?: string;
+  /** The world's recurring characters, places and objects, each with one fixed look that's written out in every prompt they're in. */
+  cast?: { name: string; look: string }[];
   /** ISO timestamp once the video's made. */
   done?: string;
   createdAt: string;
@@ -185,7 +189,7 @@ export type Script = {
 /** What the list shows. */
 export type ScriptSummary = Pick<Script, "id" | "title" | "done" | "createdAt" | "updatedAt"> & { hasSource: boolean; hasCuts: boolean; shorts: number; stale: boolean };
 
-export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "theme">> & { done?: boolean };
+export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "theme" | "look" | "cast">> & { done?: boolean };
 
 export const DEFAULT_GAP = 0.3;
 
@@ -380,7 +384,7 @@ export const sketchesOf = (s: Pick<Script, "long" | "shorts">): { src: string; l
 // ── pictures, chapters ──
 
 /** A beat guessed at longer than this (spoken seconds) gets a second picture. */
-export const LONG_BEAT = 20;
+export const LONG_BEAT = 30;
 /** Never two chapters closer than this (spoken seconds): YouTube's own floor. Claude's suggestions keep to its stricter rules (rewrite.ts); Tom's own chapters only need this. */
 export const CHAPTER_GAP = 10;
 

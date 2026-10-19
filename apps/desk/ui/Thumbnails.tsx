@@ -85,9 +85,7 @@ export const ThumbnailsStep: React.FC<{
   onPlan: (instruction: string) => void;
   onMake: (only?: string[]) => void;
   onOwn: (idea: string, file: File) => void;
-  onTitles: (f: (t: TitleIdea[]) => TitleIdea[]) => void;
-  onPlanTitles: (instruction: string) => void;
-}> = ({ s, api, claude, images, busy, pending, onIdea, onRemove, onPlan, onMake, onOwn, onTitles, onPlanTitles }) => {
+}> = ({ s, api, claude, images, busy, pending, onIdea, onRemove, onPlan, onMake, onOwn }) => {
   const ideas = s.thumbnails ?? [];
   const working = s.long?.title || s.title;
   // The feed shows the working title or one of the titles to test.
@@ -123,8 +121,7 @@ export const ThumbnailsStep: React.FC<{
 
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <Titles working={working} titles={s.titles ?? []} claude={claude} busy={busy} onChange={onTitles} onPlan={onPlanTitles} />
-      <h4 style={{ margin: "6px 0 0" }}>Thumbnails</h4>
+      <h4 style={{ margin: 0 }}>Thumbnails</h4>
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
         <button onClick={plan} disabled={!claude || Boolean(busy)} title="Claude reads the title and the script and comes up with three different thumbnails: a picture each, and a few words or none. The ones you have stay.">
           {busy === "thumbs" ? "thinking…" : ideas.length ? "Three more ideas" : "Three ideas"}
@@ -236,7 +233,7 @@ export const ThumbnailsStep: React.FC<{
  * titles too). Claude's, or Tom's own; the working title is the long
  * cut's, the one the video builds on screen, and stays as it is.
  */
-const Titles: React.FC<{ working: string; titles: TitleIdea[]; claude: boolean; busy: string; onChange: (f: (t: TitleIdea[]) => TitleIdea[]) => void; onPlan: (instruction: string) => void }> = ({ working, titles, claude, busy, onChange, onPlan }) => {
+export const Titles: React.FC<{ working: string; titles: TitleIdea[]; claude: boolean; busy: string; onChange: (f: (t: TitleIdea[]) => TitleIdea[]) => void; onPlan: (instruction: string) => void }> = ({ working, titles, claude, busy, onChange, onPlan }) => {
   const [ask, setAsk] = useState("");
   const plan = () => {
     onPlan(ask);
@@ -278,7 +275,7 @@ const Titles: React.FC<{ working: string; titles: TitleIdea[]; claude: boolean; 
           </div>
         ))}
       </div>
-      {titles.length ? <div className="small muted">Test & compare tries up to three. Pick the ones you'd click, and check them against the thumbnails in the feed below.</div> : null}
+      {titles.length ? <div className="small muted">Test & compare tries up to three. Pick the ones you'd click, and check them against the thumbnails in the feed.</div> : null}
     </div>
   );
 };

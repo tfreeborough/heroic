@@ -8,7 +8,7 @@
 export const COLD_OPEN = 4.5;
 /** Seconds of silence organise leaves for a chapter card. */
 export const CHAPTER_CARD = 3.5;
-/** Seconds the end card runs: the reel (3s), the mosaic, the channel name and sign-off (by ~9s), then a hold for YouTube's end-screen elements. */
+/** Seconds the end card runs: the reel (6s), the mosaic, the channel name and sign-off (by ~11s), then a hold for YouTube's end-screen elements. */
 export const END_CARD = 20;
 
 const clock = (s: number) => {

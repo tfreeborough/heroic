@@ -76,8 +76,8 @@ Whisper, captions), [apps/desk/README.md](../../apps/desk/README.md).*
 - **Cut**: one video's worth of script: the **long cut** and each
   **short cut**. Each has a title and a list of beats.
 - **Beat**: one thought, as a few sentences, with a stable id. What a card
-  is hung on, what a take is matched to, what a short borrows. About five
-  to fifteen seconds spoken.
+  is hung on, what a take is matched to, what a short borrows. About ten
+  to twenty seconds spoken.
 - **Card**: something on screen for a stretch of time that isn't footage:
   a **text card**, a **sketch** (a generated picture), or a **b-roll
   slot** (a note of what to film, invisible in the render).

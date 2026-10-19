@@ -50,7 +50,7 @@ export type JourneyPlan = {
 /** The styles that suit a long piece under talking (4/4, nothing that won't sit back). */
 export const JOURNEY_STYLES: StyleName[] = ["felt", "rhodes", "ambient", "guitar", "downtempo", "chip"];
 /** When the end card's mosaic lands (seconds into the card): home lands with it. */
-const END_LAND = 4.6;
+const END_LAND = 7.6;
 /** Where layers come in, by intensity. */
 const AT = { chords: 0.12, bass: 0.3, theme: 0.35, arp: 0.5, drums: 0.72 };
 

@@ -10,7 +10,7 @@ import { Renders } from "./Renders";
 import { Editor, OpenEdit } from "./edit/Editor";
 import { Scripts } from "./Scripts";
 
-/** Hash routes: #<game>/clips · #<game>/edit/<id> · #<game>/clean/<file>[?from=<cut>][&fresh=1] · #<game>/make[/<file> | /batch:<id>] · #<game>/renders · #<game>/queue · #<game>/scripts[/<id>] (#<game>/ideas still opens it)
+/** Hash routes: #<game>/clips · #<game>/edit/<id> · #<game>/clean/<file>[?from=<cut>][&fresh=1] · #<game>/make[/<file> | /batch:<id>] · #<game>/renders · #<game>/queue · #<game>/scripts[/<id>[/<stage>]] (#<game>/ideas still opens it)
  * `edit` is the sequence editor (tracks of clips, the voice, the music,
  * captions). `clean` opens the edit for a recording, starting one if there
  * isn't one (`fresh`: always a new one); `from` = a cut the old editor
@@ -23,7 +23,8 @@ export type Route =
   | { name: "make"; file?: string; batch?: string }
   | { name: "renders" }
   | { name: "queue" }
-  | { name: "scripts"; id?: string }
+  /** `stage`: the script page's stage tab (docs/design/desk-scripts-ux.md). */
+  | { name: "scripts"; id?: string; stage?: string }
   /** A game's own tab (desk.config `tabs`): #<game>/x/<tab>[/<arg>]. */
   | { name: "x"; tab: string; arg?: string };
 
@@ -43,7 +44,10 @@ const parse = (hash: string): { game?: string; route: Route } => {
   else if (name === "make") route = { name: "make", file: arg?.startsWith("batch:") ? undefined : arg, batch: arg?.startsWith("batch:") ? arg.slice(6) : undefined };
   else if (name === "renders") route = { name: "renders" };
   else if (name === "queue") route = { name: "queue" };
-  else if (name === "scripts" || name === "ideas") route = { name: "scripts", id: arg };
+  else if (name === "scripts" || name === "ideas") {
+    const [sid, stage] = (rawArg ?? "").split("/");
+    route = { name: "scripts", id: sid ? decodeURIComponent(sid) : undefined, stage: stage || undefined };
+  }
   else if (name === "x" && arg) {
     const [tab, ...more] = arg.split("/");
     route = { name: "x", tab: tab!, arg: more.length ? more.join("/") : undefined };
@@ -66,7 +70,7 @@ const hashFor = (game: string, r: Route) =>
     : r.name === "make"
       ? `make${r.batch ? `/batch:${encodeURIComponent(r.batch)}` : r.file ? `/${encodeURIComponent(r.file)}` : ""}`
       : r.name === "scripts"
-        ? `scripts${r.id ? `/${encodeURIComponent(r.id)}` : ""}`
+        ? `scripts${r.id ? `/${encodeURIComponent(r.id)}${r.stage ? `/${r.stage}` : ""}` : ""}`
         : r.name === "x"
           ? `x/${encodeURIComponent(r.tab)}${r.arg ? `/${encodeURIComponent(r.arg)}` : ""}`
           : r.name);
@@ -163,7 +167,7 @@ export const App = () => {
         {route.name === "make" ? <Make game={game} api={api} file={route.file} batch={route.batch} /> : null}
         {route.name === "renders" ? <Renders game={game} api={api} /> : null}
         {route.name === "queue" ? <Queue game={game} api={api} /> : null}
-        {route.name === "scripts" ? <Scripts game={game} api={api} id={route.id} /> : null}
+        {route.name === "scripts" ? <Scripts game={game} api={api} id={route.id} stage={route.stage} /> : null}
         {ownTab && route.name === "x" ? <GameTabView tab={ownTab} game={game.id} arg={route.arg} key={ownTab.id} /> : null}
       </main>
     </>

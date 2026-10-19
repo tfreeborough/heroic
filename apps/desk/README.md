@@ -196,7 +196,7 @@ then `docs/design/desk-ascii-scripts.md` for the pictures and the score).
 The list down the left; a script with only a title is an idea, as before.
 Open one and the page is steps: **1. The script**: paste what you wrote
 (it saves as you go); **Rewrite into cuts** has Claude turn it into **2.
-The long cut** (the whole script, lightly edited, as *beats*: one thought each, five to fifteen seconds spoken, each
+The long cut** (the whole script, lightly edited, as *beats*: one thought each, ten to twenty seconds spoken, each
 with a stable id everything later hangs on). One long video for YouTube:
 shorts are parked (TikTok splits a long video into parts itself), and an
 older script's shorts are kept on file but not shown. Each beat shows what changed from what you wrote
@@ -217,7 +217,7 @@ pictures** has Claude give every beat a picture prompt (a scene as a film
 still, all in one **world** Claude picks for the video (a submarine
 crew, a lighthouse winter…), editable in the world box and kept on Plan
 again; two prompts on a beat over
-20s spoken), the score's **mood** (13: the six Autosave ones plus focus,
+30s spoken), the score's **mood** (13: the six Autosave ones plus focus,
 curious, tense, eerie, driving, melancholy, triumph), its **intensity**
 and the odd **big moment** (the music steps up a key there), a **pulled** word now and then (never two beats
 running), and **chapters** (Claude suggests none under 6 minutes spoken and

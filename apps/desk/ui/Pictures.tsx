@@ -1,10 +1,11 @@
 /**
- * The Scripts tab's Pictures step (docs/design/desk-ascii-scripts.md): a
+ * The Scripts tab's Pictures stage (docs/design/desk-ascii-scripts.md): a
  * picture per beat (two on a long one), each shown AS GLYPHS with the real
  * engine and its own look seed, because a picture that's fine as a photo
- * can turn to mush as glyphs. Approve, again, edit the prompt, my own,
- * reroll the look; the beat's mood for the score, its pulled word, a
- * chapter starting there.
+ * can turn to mush as glyphs. A grid of them, the picked one's beat open
+ * on the right (docs/design/desk-scripts-ux.md): approve, again, edit the
+ * prompt, my own, reroll the look; the beat's mood for the score, its
+ * pulled word, a chapter starting there.
  */
 import { ARRIVALS, LOCKED_LOOK, ORDERS, PALETTES, drawBuild, inkFromImage, lookFromSeed, newCache, planBuild } from "@heroic/ascii-build";
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
@@ -25,67 +26,59 @@ const loadImage = (src: string) =>
     img.src = src;
   });
 
-/** One loop of the preview: build, hold, leave. */
+/** The build's timing, only so the still lands at the same moment the video holds on: everything landed, nothing left yet. */
 const BUILD = { start: 0.1, end: 2.6 };
 const EXIT = { start: 4.4, end: 5.6 };
-const LOOP = 6;
-/** The still: everything landed, nothing left yet. */
 const STILL = 4;
 
+/** The Beats video's frame and its default glyph columns (apps/bits-promos/src/Beats.tsx `cols`): the preview shows exactly the detail the video will. */
+const FRAME = { w: 1920, h: 1080 };
+export const VIDEO_COLS = 280;
+
+/** One canvas for every still: each picture is drawn at full frame size once, then kept as an image. */
+let frameCanvas: HTMLCanvasElement | null = null;
+
 /**
- * A picture as the video will build it: the real engine, the locked look,
- * this picture's look seed. A still until hovered (or just landed), then it
- * builds on a loop. Forty animating canvases would melt the page.
+ * A picture as the video will show it once built: the real engine at the
+ * video's frame size and columns, drawn once as a still (no animation:
+ * the build order is a random seed anyway, so watching it told nothing).
  */
-export const GlyphPicture: React.FC<{ url: string; look: number; palette: Palette; play?: boolean }> = ({ url, look, palette, play }) => {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const [build, setBuild] = useState<ReturnType<typeof planBuild> | null>(null);
-  const [hover, setHover] = useState(false);
+export const GlyphPicture: React.FC<{ url: string; look: number; palette: Palette }> = ({ url, look, palette }) => {
+  const [still, setStill] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
-  const cache = useRef(newCache());
   useEffect(() => {
     let live = true;
-    setBuild(null);
+    let made: string | null = null;
+    setStill(null);
     void Promise.all([loadImage(url), document.fonts.load(`700 12px "${fontFamily}"`)])
       .then(([img]) => {
-        if (!live || !canvas.current) return;
-        const { width: w, height: h } = canvas.current;
+        if (!live) return;
+        frameCanvas ??= Object.assign(document.createElement("canvas"), { width: FRAME.w, height: FRAME.h });
+        const ctx = frameCanvas.getContext("2d")!;
         const ink = inkFromImage(img, "light", 512, "auto");
         const { arrival, order } = lookFromSeed(look);
-        setBuild(planBuild({ ink, look: LOCKED_LOOK, box: { x: 0, y: 0, w, h }, frame: { w, h }, start: BUILD.start, end: BUILD.end, seed: look, arrival, order, exit: EXIT }));
+        const build = planBuild({ ink, look: { ...LOCKED_LOOK, cols: VIDEO_COLS }, box: { x: 0, y: 0, ...FRAME }, frame: FRAME, start: BUILD.start, end: BUILD.end, seed: look, arrival, order, exit: EXIT });
+        const pal = PALETTES[palette];
+        ctx.fillStyle = pal.bg;
+        ctx.fillRect(0, 0, FRAME.w, FRAME.h);
+        drawBuild(ctx, build, STILL, { palette: pal, family: FAMILY, ambient: true, glow: 0.25, glowFrom: BUILD.end + 0.3, cache: newCache() });
+        // toBlob copies the canvas as it is right now, so the shared canvas is free for the next picture straight away.
+        frameCanvas.toBlob((blob) => {
+          if (!blob) return;
+          made = URL.createObjectURL(blob);
+          if (live) setStill(made);
+          else URL.revokeObjectURL(made);
+        });
       })
       .catch(() => {});
     return () => {
       live = false;
+      if (made) URL.revokeObjectURL(made);
     };
-  }, [url, look]);
-  const playing = Boolean(play || hover) && !showOriginal;
-  useEffect(() => {
-    const ctx = canvas.current?.getContext("2d");
-    if (!ctx || !build) return;
-    const pal = PALETTES[palette];
-    const draw = (t: number) => {
-      ctx.fillStyle = pal.bg;
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      drawBuild(ctx, build, t, { palette: pal, family: FAMILY, ambient: true, glow: 0.25, glowFrom: BUILD.end + 0.3, cache: cache.current });
-    };
-    if (!playing) {
-      draw(STILL);
-      return;
-    }
-    let raf = 0;
-    const t0 = performance.now();
-    const tick = (now: number) => {
-      draw(((now - t0) / 1000) % LOOP);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [build, playing, palette]);
+  }, [url, look, palette]);
   return (
-    <div className="glyphs" onMouseEnter={() => setHover(true)} onMouseLeave={() => (setHover(false), setShowOriginal(false))}>
-      <canvas ref={canvas} width={640} height={360} style={{ display: showOriginal ? "none" : "block" }} />
-      {showOriginal ? <img src={url} alt="" /> : null}
+    <div className="glyphs" onMouseLeave={() => setShowOriginal(false)}>
+      {showOriginal ? <img src={url} alt="" /> : still ? <img src={still} alt="" /> : null}
       <button className="link small glyphs-orig" onMouseEnter={() => setShowOriginal(true)} onMouseLeave={() => setShowOriginal(false)} title="The picture as it came">
         original
       </button>
@@ -101,6 +94,35 @@ const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60
 
 type BeatEdit = (beatId: string, f: (b: Beat) => Beat) => void;
 
+const castText = (cast: Script["cast"]) => (cast ?? []).map((c) => `${c.name}: ${c.look}`).join("\n");
+
+/** The world's look (sent with every picture) and its cast (written out in every prompt they're in). The cast saves when the box loses focus, so a half-typed line isn't dropped. */
+const WorldLook: React.FC<{ s: Script; onWorld: (w: Pick<Script, "theme" | "look" | "cast">) => void }> = ({ s, onWorld }) => {
+  const [cast, setCast] = useState(castText(s.cast));
+  useEffect(() => setCast(castText(s.cast)), [s.cast]);
+  const saveCast = () =>
+    onWorld({
+      theme: s.theme,
+      look: s.look,
+      cast: cast.split("\n").flatMap((line) => {
+        const at = line.indexOf(":");
+        return at > 0 && line.slice(at + 1).trim() ? [{ name: line.slice(0, at).trim(), look: line.slice(at + 1).trim() }] : [];
+      }),
+    });
+  return (
+    <>
+      <div className="row" style={{ gap: 8 }} title="Sent to the image model with every picture: it never sees the world above or the script, so this is how it knows what era and genre it's drawing. Literal things only, no colours. Empty: Plan again writes it.">
+        <span className="small muted">look</span>
+        <input type="text" value={s.look ?? ""} onChange={(e) => onWorld({ theme: s.theme, look: e.target.value, cast: s.cast })} placeholder="Empty: Plan again writes what this world looks like" style={{ flex: 1 }} />
+      </div>
+      <div className="row" style={{ gap: 8, alignItems: "flex-start" }} title="Who and what comes back from picture to picture, one per line as name: look. A cast member's look is written out word for word in every prompt they're in, so they're drawn the same each time. Changes apply at the next Plan again or new prompt.">
+        <span className="small muted">cast</span>
+        <textarea rows={Math.min(6, Math.max(2, (s.cast?.length ?? 0) + 1))} value={cast} onChange={(e) => setCast(e.target.value)} onBlur={saveCast} placeholder="Empty: Plan again writes it. One per line, name: what they look like" style={{ flex: 1 }} />
+      </div>
+    </>
+  );
+};
+
 export const PicturesStep: React.FC<{
   s: Script;
   api: GameApi;
@@ -111,11 +133,11 @@ export const PicturesStep: React.FC<{
   pending: string[];
   onBeat: BeatEdit;
   onPlan: (all: boolean) => void;
-  onTheme: (theme: string) => void;
+  onWorld: (w: Pick<Script, "theme" | "look" | "cast">) => void;
   onMake: (only?: { beat: string; k: number }[]) => void;
   onOwn: (beat: string, k: number, file: File) => void;
   onNewPrompt: (beat: string, k: number, instruction: string) => void;
-}> = ({ s, api, claude, images, palette, busy, pending, onBeat, onPlan, onTheme, onMake, onOwn, onNewPrompt }) => {
+}> = ({ s, api, claude, images, palette, busy, pending, onBeat, onPlan, onWorld, onMake, onOwn, onNewPrompt }) => {
   const beats = s.long?.beats ?? [];
   const planned = beats.some((b) => b.pictures?.length);
   const pics = beats.flatMap((b) => b.pictures ?? []);
@@ -127,23 +149,34 @@ export const PicturesStep: React.FC<{
   const starts = useMemo(() => beatStarts(beats), [beats]);
   const allowed = useMemo(() => allowedChapters(beats), [beats]);
   const chapters = beats.filter((b) => b.chapter?.trim());
-  // A picture that just landed builds once, so it's seen as glyphs straight away.
-  const [fresh, setFresh] = useState<Set<string>>(new Set());
-  const seen = useRef<Map<string, string | undefined>>(new Map());
+
+  // The grid: a tile per picture (a beat not planned yet gets one empty tile), filtered; the picked one open on the right.
+  const tiles = useMemo<Tile[]>(() => beats.flatMap((beat, i): Tile[] => ((beat.pictures ?? []).length ? beat.pictures!.map((p, k) => ({ beat, n: i + 1, k, p, of: beat.pictures!.length })) : [{ beat, n: i + 1, k: 0, p: undefined, of: 0 }])), [beats]);
+  const [show, setShow] = useState<"all" | "approve" | "unmade">("all");
+  const shown = tiles.filter((t) => (show === "approve" ? t.p?.chosen && !t.p.approved : show === "unmade" ? !t.p?.chosen : true));
+  const [picked, setPicked] = useState("");
+  const sel = shown.find((t) => `${t.beat.id}:${t.k}` === picked) ?? tiles.find((t) => `${t.beat.id}:${t.k}` === picked) ?? shown[0];
+  // ← → through the tiles shown, A approves the picked one.
   useEffect(() => {
-    const now = new Set<string>();
-    for (const b of beats)
-      (b.pictures ?? []).forEach((p, k) => {
-        const key = `${b.id}:${k}`;
-        const was = seen.current.get(key);
-        if (seen.current.has(key) && p.chosen && p.chosen !== was) now.add(key);
-        seen.current.set(key, p.chosen);
-      });
-    if (!now.size) return;
-    setFresh((f) => new Set([...f, ...now]));
-    const t = setTimeout(() => setFresh((f) => new Set([...f].filter((k) => !now.has(k)))), LOOP * 1000);
-    return () => clearTimeout(t);
-  }, [beats]);
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || el?.tagName === "SELECT" || e.metaKey || e.ctrlKey || e.altKey || !sel) return;
+      const i = shown.indexOf(sel);
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const to = shown[i + (e.key === "ArrowRight" ? 1 : -1)];
+        if (to) {
+          e.preventDefault();
+          setPicked(`${to.beat.id}:${to.k}`);
+          document.getElementById(`tile-${to.beat.id}-${to.k}`)?.scrollIntoView({ block: "nearest" });
+        }
+      } else if ((e.key === "a" || e.key === "A") && sel.p?.chosen) {
+        e.preventDefault();
+        onBeat(sel.beat.id, (b) => ({ ...b, pictures: b.pictures?.map((p, k) => (k === sel.k ? { ...p, approved: !p.approved } : p)) }));
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  });
 
   return (
     <div className="stack" style={{ gap: 10 }}>
@@ -179,14 +212,16 @@ export const PicturesStep: React.FC<{
           </button>
         ) : null}
         <span className="small muted">
-          {pics.filter((p) => p.approved).length}/{pics.length} approved · {pending.length ? `${pending.length} making · ` : ""}hover a picture to watch it build
+          {pics.filter((p) => p.approved).length}/{pics.length} approved{pending.length ? ` · ${pending.length} making` : ""}
         </span>
         {!images ? <span className="small warn">Pictures need OPENAI_API_KEY in apps/desk/.env.</span> : null}
       </div>
       <div className="row" style={{ gap: 8 }} title="Every picture in the video lives in this world. Claude picks one at the first plan; write your own, or clear it and Plan again for a new one.">
         <span className="small muted">world</span>
-        <input type="text" value={s.theme ?? ""} onChange={(e) => onTheme(e.target.value)} placeholder={planned ? "Empty: Plan again and Claude picks a new one" : "Empty: Claude picks one from the script. Or write your own (a submarine crew, a lighthouse winter…)"} style={{ flex: 1 }} />
+        {/* A new world needs a new look and cast: they're cleared so Plan again writes them for it. */}
+        <input type="text" value={s.theme ?? ""} onChange={(e) => onWorld({ theme: e.target.value, look: undefined, cast: undefined })} placeholder={planned ? "Empty: Plan again and Claude picks a new one" : "Empty: Claude picks one from the script. Or write your own (a submarine crew, a lighthouse winter…)"} style={{ flex: 1 }} />
       </div>
+      {s.theme?.trim() ? <WorldLook s={s} onWorld={onWorld} /> : null}
       {planned ? (
         <div className="small muted">
           {chapters.length
@@ -197,27 +232,61 @@ export const PicturesStep: React.FC<{
         <div className="small muted">Plan the pictures and every beat gets a scene to build out of glyphs while you say it, plus a mood for the music. Change anything, make the pictures, then approve them or try again.</div>
       )}
       {planned ? (
-        <div className="beats">
-          {beats.map((b, i) => (
-            <PictureRow
-              key={b.id}
-              api={api}
-              n={i + 1}
-              at={starts[i]!}
-              beat={b}
-              palette={palette}
-              images={images}
-              chapterOk={allowed.has(b.id)}
-              pending={pending}
-              fresh={fresh}
-              onBeat={(f) => onBeat(b.id, f)}
-              onMake={(k) => onMake([{ beat: b.id, k }])}
-              onOwn={(k, f) => onOwn(b.id, k, f)}
-              claude={claude}
-              busy={busy}
-              onNewPrompt={(k, ins) => onNewPrompt(b.id, k, ins)}
-            />
-          ))}
+        <div className="pic-stage">
+          <div className="stack" style={{ gap: 8, minWidth: 0 }}>
+            <div className="row" style={{ gap: 4 }}>
+              {(
+                [
+                  ["all", `all ${tiles.length}`],
+                  ["approve", `to approve ${tiles.filter((t) => t.p?.chosen && !t.p.approved).length}`],
+                  ["unmade", `not made ${tiles.filter((t) => !t.p?.chosen).length}`],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} className={`chip ${show === k ? "on" : ""}`} onClick={() => setShow(k)}>
+                  {label}
+                </button>
+              ))}
+              <span className="grow" />
+              <span className="small muted">← → move · A approves</span>
+            </div>
+            <div className="pic-tiles">
+              {shown.map((t) => (
+                <PictureTile
+                  key={`${t.beat.id}:${t.k}`}
+                  api={api}
+                  t={t}
+                  palette={palette}
+                  on={sel?.beat.id === t.beat.id && sel.k === t.k}
+                  making={pending.includes(`${t.beat.id}:${t.k}`)}
+                  onPick={() => setPicked(`${t.beat.id}:${t.k}`)}
+                />
+              ))}
+              {!shown.length ? <div className="small muted">Nothing here.</div> : null}
+            </div>
+          </div>
+          <div className="pic-detail">
+            {sel ? (
+              <PictureRow
+                key={sel.beat.id}
+                api={api}
+                n={sel.n}
+                at={starts[sel.n - 1]!}
+                beat={sel.beat}
+                palette={palette}
+                images={images}
+                chapterOk={allowed.has(sel.beat.id)}
+                pending={pending}
+                onBeat={(f) => onBeat(sel.beat.id, f)}
+                onMake={(k) => onMake([{ beat: sel.beat.id, k }])}
+                onOwn={(k, f) => onOwn(sel.beat.id, k, f)}
+                claude={claude}
+                busy={busy}
+                onNewPrompt={(k, ins) => onNewPrompt(sel.beat.id, k, ins)}
+              />
+            ) : (
+              <div className="small muted">Pick a picture.</div>
+            )}
+          </div>
         </div>
       ) : null}
     </div>
@@ -244,6 +313,24 @@ const Words: React.FC<{ text: string; pulled: string[] }> = ({ text, pulled }) =
   );
 };
 
+type Tile = { beat: Beat; n: number; k: number; p: BeatPicture | undefined; of: number };
+
+/** One picture in the grid: the glyph still, the beat's number, how it stands. */
+const PictureTile: React.FC<{ api: GameApi; t: Tile; palette: Palette; on: boolean; making: boolean; onPick: () => void }> = ({ api, t, palette, on, making, onPick }) => (
+  <div id={`tile-${t.beat.id}-${t.k}`} className={`pic-tile${on ? " on" : ""}${t.p?.approved ? " approved" : ""}`} onClick={onPick}>
+    {t.p?.chosen ? <GlyphPicture url={api.publicUrl(t.p.chosen)} look={t.p.look} palette={palette} /> : <div className="glyphs empty small muted">{making ? "making…" : t.p?.error ? "✖ failed" : t.p ? "not made" : "not planned"}</div>}
+    <div className="pic-tile-meta small">
+      <span className="muted">
+        {t.n}
+        {t.of > 1 ? (t.k ? "b" : "a") : ""}
+      </span>
+      {t.beat.chapter?.trim() ? <span className="pic-tile-chapter">{t.beat.chapter}</span> : <span className="muted pic-tile-words">{t.beat.text}</span>}
+      <span className="grow" />
+      {t.p?.approved ? <span className="ok">✓</span> : making ? <span className="muted">…</span> : t.p?.check ? <span className="warn" title="Changed since it was made">!</span> : null}
+    </div>
+  </div>
+);
+
 const PictureRow: React.FC<{
   api: GameApi;
   n: number;
@@ -253,14 +340,13 @@ const PictureRow: React.FC<{
   images: boolean;
   chapterOk: boolean;
   pending: string[];
-  fresh: Set<string>;
   onBeat: (f: (b: Beat) => Beat) => void;
   onMake: (k: number) => void;
   onOwn: (k: number, f: File) => void;
   claude: boolean;
   busy: string;
   onNewPrompt: (k: number, instruction: string) => void;
-}> = ({ api, n, at, beat, palette, images, chapterOk, pending, fresh, onBeat, onMake, onOwn, claude, busy, onNewPrompt }) => {
+}> = ({ api, n, at, beat, palette, images, chapterOk, pending, onBeat, onMake, onOwn, claude, busy, onNewPrompt }) => {
   const [word, setWord] = useState("");
   const pictures = beat.pictures ?? [];
   const wants = picturesWanted(beat.text);
@@ -301,7 +387,6 @@ const PictureRow: React.FC<{
               palette={palette}
               images={images}
               making={pending.includes(`${beat.id}:${k}`)}
-              play={fresh.has(`${beat.id}:${k}`)}
               onChange={(f) => setPic(k, f)}
               onMake={() => onMake(k)}
               onOwn={(f) => onOwn(k, f)}
@@ -369,7 +454,6 @@ const PictureCard: React.FC<{
   palette: Palette;
   images: boolean;
   making: boolean;
-  play: boolean;
   onChange: (f: (p: BeatPicture) => BeatPicture) => void;
   onMake: () => void;
   onOwn: (f: File) => void;
@@ -377,7 +461,7 @@ const PictureCard: React.FC<{
   writing: boolean;
   onNewPrompt: (instruction: string) => void;
   onDrop?: () => void;
-}> = ({ api, p, label, palette, images, making, play, onChange, onMake, onOwn, claude, writing, onNewPrompt, onDrop }) => {
+}> = ({ api, p, label, palette, images, making, onChange, onMake, onOwn, claude, writing, onNewPrompt, onDrop }) => {
   const file = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -399,7 +483,7 @@ const PictureCard: React.FC<{
       onDrop={(e) => (e.preventDefault(), setOver(false), take(e.dataTransfer.files))}
     >
       {p.chosen ? (
-        <GlyphPicture url={api.publicUrl(p.chosen)} look={p.look} palette={palette} play={play} />
+        <GlyphPicture url={api.publicUrl(p.chosen)} look={p.look} palette={palette} />
       ) : (
         <div className="glyphs empty small muted">{making ? "making…" : p.error ? "" : "not made yet · drop an image here"}</div>
       )}

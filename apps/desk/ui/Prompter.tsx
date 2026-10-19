@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Take } from "@heroic/voiceover";
 import { type GameApi, type Script, type WhisperStatus, fmtSeconds } from "./api";
 import { go } from "./App";
@@ -8,24 +8,29 @@ import { type Cover, LONG_PAUSE, type Span, autoTrim, cutRegion, keptSeconds, ma
 import { type Beat, type Cut, type ScriptTake, plannedBeats } from "../lib/scripts";
 
 /**
- * Step 5 of a script (docs/design/desk-scripts.md § Recording): the
- * prompter and the takes bin. The beats that still need a take, large,
- * to read from; press Record, 3-2-1, read as many as you like, press
- * again. The take is saved, Whisper writes its words, and every beat it
- * reads gets a tick. Under it the takes: the waveform, the words, the
- * beats each covers; open one to trim its edges or cut a stretch out
- * (the file is never touched: the take keeps a list of kept regions, and
- * everything after only sees those). Delete a bad one and read it again.
+ * The Record stage of a script (docs/design/desk-scripts.md § Recording,
+ * laid out per docs/design/desk-scripts-ux.md). On the left the prompter:
+ * the beats, large, the one you're on in the middle; press Record, 3-2-1,
+ * read as many as you like, press again. The take is saved, Whisper writes
+ * its words, every beat it reads gets a tick, and the prompter moves on to
+ * the next beat still to read. On the right a column that stays put: the
+ * take just made (Space plays it), the takes of the beat you're on (each
+ * plays just that beat's stretch), and every take. Open one to trim its
+ * edges or cut a stretch out, in a panel along the bottom (the file is
+ * never touched: the take keeps a list of kept regions, and everything
+ * after only sees those). Delete a bad one and read it again.
  */
 
 type Rec = { state: "idle" } | { state: "count"; n: number } | { state: "on"; since: number } | { state: "saving" };
 
 /** Which beats each take covers, by take file. */
-const coversOf = (s: Script): Map<string, Cover[]> => new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
+export const coversOf = (s: Pick<Script, "takes" | "long" | "shorts">): Map<string, Cover[]> => new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
 
-export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: (takes: ScriptTake[]) => void; onReplace: (s: Script) => void; onError: (e: string) => void }> = ({ api, s, id, onTakes, onReplace, onError }) => {
-  const beats = useMemo(() => plannedBeats(s), [s]);
-  const covers = useMemo(() => coversOf(s), [s]);
+/** What's playing: a stretch of a take, through its kept parts. */
+type Playing = { file: string; start: number; end: number };
+
+export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: Map<string, Cover[]>; onTakes: (takes: ScriptTake[]) => void; onReplace: (s: Script) => void; onError: (e: string) => void }> = ({ api, s, id, covers, onTakes, onReplace, onError }) => {
+  const beats = useMemo(() => plannedBeats(s), [s.long, s.shorts]);
   const covered = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const [file, cs] of covers) for (const c of cs) m.set(c.beat, [...(m.get(c.beat) ?? []), file]);
@@ -36,6 +41,8 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
   const [peaks, setPeaks] = useState<Record<string, Float32Array>>({});
   const [whisper, setWhisper] = useState<WhisperStatus | null>(null);
   const asked = useRef(new Set<string>());
+  const list = useRef<HTMLDivElement>(null);
+  const [showAll, setShowAll] = useState(() => remember("takes-all") === "open");
   // the mic
   const mic = useRef<Mic | null>(null);
   const [micOn, setMicOn] = useState(false);
@@ -57,6 +64,26 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
   const cur = beats.find((b) => b.beat.id === current) ?? next ?? beats[0];
   const curIndex = cur ? beats.findIndex((b) => b.beat.id === cur.beat.id) : -1;
   const after = curIndex >= 0 ? beats[curIndex + 1] : undefined;
+  const numberOf = (beat: string) => beats.findIndex((b) => b.beat.id === beat) + 1;
+
+  // The stage fills the window under the stage bar, so nothing on it scrolls away: the prompter and the takes scroll inside it.
+  const stage = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = stage.current;
+      if (el) el.style.height = `${Math.max(420, innerHeight - (el.getBoundingClientRect().top + scrollY) - 16)}px`;
+    };
+    fit();
+    addEventListener("resize", fit);
+    return () => removeEventListener("resize", fit);
+  }, []);
+  // The beat you're on sits in the middle of the prompter.
+  useEffect(() => {
+    const box = list.current;
+    const el = box?.querySelector<HTMLElement>(".pbeat.on");
+    if (!box || !el) return;
+    box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2, behavior: "smooth" });
+  }, [cur?.beat.id]);
 
   useEffect(() => void api.whisper().then(setWhisper).catch(() => {}), [api]);
   useEffect(() => {
@@ -68,6 +95,66 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
         .catch(() => {});
     }
   }, [s.takes, api]);
+
+  // ── the player: one stretch of one take at a time, skipping what's cut ──
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const head = useRef<HTMLDivElement>(null);
+  const [playing, setPlayingState] = useState<Playing | null>(null);
+  const playRef = useRef<Playing | null>(null);
+  const setPlaying = (p: Playing | null) => {
+    playRef.current = p;
+    setPlayingState(p);
+  };
+  useEffect(() => {
+    const a = new Audio();
+    audio.current = a;
+    return () => {
+      a.pause();
+      a.removeAttribute("src");
+    };
+  }, []);
+  const stopPlay = useCallback(() => {
+    audio.current?.pause();
+    setPlaying(null);
+  }, []);
+  const play = (take: ScriptTake, start?: number, end?: number) => {
+    const a = audio.current;
+    if (!a) return;
+    const keep = take.keep?.length ? take.keep : [{ start: 0, end: take.seconds }];
+    const from = start ?? keep[0]!.start;
+    const to = end ?? keep.at(-1)!.end;
+    const was = playRef.current;
+    stopPlay();
+    // Pressing what's playing stops it.
+    if (was?.file === take.file && was.start === from) return;
+    const url = new URL(api.publicUrl(take.file), location.href).href;
+    if (a.src !== url) a.src = url;
+    a.currentTime = from;
+    void a.play().catch((e: Error) => onError(`play: ${e.message}`));
+    setPlaying({ file: take.file, start: from, end: to });
+  };
+  useEffect(() => {
+    if (!playing) return;
+    const take = s.takes.find((t) => t.file === playing.file);
+    if (!take) return stopPlay();
+    const keep = take.keep?.length ? take.keep : null;
+    let raf = 0;
+    const loop = () => {
+      const a = audio.current;
+      if (!a) return;
+      let t = a.currentTime;
+      if (keep && !keep.some((k) => t >= k.start && t < k.end)) {
+        const on = keep.find((k) => k.start > t);
+        if (!on || on.start >= playing.end) return stopPlay();
+        a.currentTime = t = on.start;
+      }
+      if (a.ended || t >= playing.end) return stopPlay();
+      if (head.current) head.current.style.left = `${(t / take.seconds) * 100}%`;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, s.takes, stopPlay]);
 
   const turnMicOn = useCallback(
     async (want = device): Promise<Mic | null> => {
@@ -142,14 +229,23 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
       if (take.error) onError(`The take is saved but Whisper couldn't hear it: ${take.error}`);
       const fresh: ScriptTake = { file: take.file, seconds: take.seconds, recordedAt: take.recordedAt, words: take.words, transcribed: take.transcribed };
       const keep = autoOn && take.transcribed ? autoTrim(fresh, pausesOn) : undefined;
-      onTakes([...s.takes, { ...fresh, ...(keep?.length ? { keep } : {}) }]);
+      const made: ScriptTake = { ...fresh, ...(keep?.length ? { keep } : {}) };
+      onTakes([...s.takes, made]);
+      // The prompter moves on: to the first beat after the last one this take read that still needs reading.
+      const read = matchScript(made, s).map((c) => beats.findIndex((b) => b.beat.id === c.beat)).filter((i) => i >= 0);
+      if (read.length) {
+        const heard = new Set([...covered.keys(), ...read.map((i) => beats[i]!.beat.id)]);
+        const to = beats.slice(Math.max(...read) + 1).find((b) => !heard.has(b.beat.id)) ?? beats.find((b) => !heard.has(b.beat.id));
+        setCurrent(to?.beat.id ?? null);
+      }
     },
-    [s.takes, onTakes, onError, autoOn, pausesOn],
+    [s, beats, covered, onTakes, onError, autoOn, pausesOn],
   );
   /** Every take tidied at once (cuts made by hand stay). */
   const trimAll = () => onTakes(s.takes.map((t) => (t.transcribed ? { ...t, keep: autoTrim(t, pausesOn) ?? t.keep } : t)));
   const start = async () => {
     if (recRef.current.state !== "idle") return;
+    stopPlay();
     const m = mic.current ?? (await turnMicOn());
     if (!m) return;
     for (let n = 3; n >= 1; n--) {
@@ -192,11 +288,16 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
   const remove = async (take: ScriptTake) => {
     if (!confirm(`Delete this take (${fmtSeconds(take.seconds)})? It goes to the voice folder's .trash.`)) return;
     try {
+      if (playRef.current?.file === take.file) stopPlay();
       onReplace(await api.removeScriptTake(id, take.file));
       if (open === take.file) setOpen(null);
     } catch (e) {
       onError((e as Error).message);
     }
+  };
+  const openTakeView = (file: string | null) => {
+    stopPlay();
+    setOpen(file);
   };
   const setKeep = (take: ScriptTake, keep: Span[] | undefined) => onTakes(s.takes.map((t) => (t.file === take.file ? { ...t, keep: keep?.length ? keep : undefined } : t)));
   /** Tom says which beats a take reads ("7", "7-9", "7, 9"; blank = let the matcher decide again). */
@@ -217,23 +318,35 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
     return undefined;
   };
 
-  // Keys: R records / stops, ↓ ↑ move the prompter, Esc closes a take.
+  const last = s.takes.at(-1);
+  // Keys: R records / stops, Space plays the last take, Delete bins it, ↓ ↑ move the prompter, Esc closes a take.
   useEffect(() => {
     const typing = (el: EventTarget | null) => {
       const n = el as HTMLElement | null;
       return Boolean(n?.tagName && (n.tagName === "TEXTAREA" || n.tagName === "SELECT" || (n.tagName === "INPUT" && (n as HTMLInputElement).type !== "range")));
     };
     const onKey = (e: KeyboardEvent) => {
-      if (typing(e.target)) return;
+      if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const r = recRef.current.state;
       if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         if (r === "on" || r === "count") void stop();
         else if (r === "idle") void start();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        // A focused button would take the space as a click too.
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        if (r !== "idle" || open) return;
+        if (playRef.current) stopPlay();
+        else if (last) play(last);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && r === "idle" && !open && last) {
+        e.preventDefault();
+        void remove(last);
       } else if (e.key === "Escape") {
         if (r === "on" || r === "count") void stop();
-        else setOpen(null);
-      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && cur) {
+        else if (open) setOpen(null);
+        else stopPlay();
+      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && cur && !open) {
         e.preventDefault();
         const to = beats[curIndex + (e.key === "ArrowDown" ? 1 : -1)];
         if (to) setCurrent(to.beat.id);
@@ -247,127 +360,218 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; onTakes: 
   const recording = rec.state === "on" || rec.state === "count";
   const openTake = open ? s.takes.find((t) => t.file === open) : undefined;
   if (!beats.length) return <div className="small muted">Rewrite the script first: the prompter reads from the beats.</div>;
+  const beatsOf = (t: ScriptTake) => {
+    const cs = covers.get(t.file) ?? [];
+    return cs.length ? `beat${cs.length === 1 ? "" : "s"} ${cs.map((c) => numberOf(c.beat)).join(", ")}` : t.transcribed ? "no beat heard" : "listening…";
+  };
+  const wordsOf = (t: ScriptTake) => t.words.filter((w) => !w.hidden).map((w) => w.text).join(" ") || (t.transcribed ? "no words heard" : "listening…");
+  const assignBox = (t: ScriptTake) => <AssignBox take={t} onAssign={(text) => setAssign(t, text)} onError={onError} label={t.assign?.length ? (covers.get(t.file) ?? []).map((c) => `${numberOf(c.beat)}`).join(", ") : ""} />;
+  // The takes that read the beat you're on, each with the stretch that reads it.
+  const beatTakes = cur ? s.takes.flatMap((take) => (covers.get(take.file) ?? []).filter((c) => c.beat === cur.beat.id).map((cover) => ({ take, cover }))) : [];
+  const isPlaying = (file: string, start?: number) => playing?.file === file && (start === undefined || playing.start === start);
   return (
-    <div className="stack prompter" style={{ gap: 14 }}>
-      <div className="row" style={{ gap: 12 }}>
-        <strong className="small">
-          {done} of {beats.length} beats recorded
-        </strong>
-        {micOn ? (
-          <select value={device} disabled={recording} onChange={(e) => (setDevice(e.target.value), void turnMicOn(e.target.value))} style={{ width: "auto", maxWidth: 220 }}>
-            {mics.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <button className="ghost small" onClick={() => void turnMicOn()}>
-            Turn the mic on
+    <div ref={stage} className="rec-stage">
+      <div className="rec-main">
+        <div className="rec-bar">
+          <strong className="small">
+            {done} of {beats.length} beats recorded
+          </strong>
+          {micOn ? (
+            <select value={device} disabled={recording} onChange={(e) => (setDevice(e.target.value), void turnMicOn(e.target.value))} style={{ width: "auto", maxWidth: 200 }}>
+              {mics.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <button className="ghost small" onClick={() => void turnMicOn()}>
+              Turn the mic on
+            </button>
+          )}
+          <div className="meter" style={{ maxWidth: 160 }}>
+            <div ref={meter} />
+          </div>
+          <span ref={meterText} className="small muted mono" style={{ width: 56 }}>
+            {micOn ? "" : "mic off"}
+          </span>
+          <span className="grow" />
+          <input ref={file} type="file" accept="audio/*,.wav,.m4a,.mp3,.aac,.ogg,.flac" style={{ display: "none" }} onChange={(e) => (e.target.files?.[0] && void addFile(e.target.files[0]), (e.target.value = ""))} />
+          <button className="link small" disabled={recording || rec.state === "saving"} onClick={() => file.current?.click()} title="A recording made elsewhere (the phone, another app)">
+            add a file…
           </button>
-        )}
-        <div className="meter" style={{ maxWidth: 220 }}>
-          <div ref={meter} />
+          {recording ? (
+            <button className="recbtn on" onClick={() => void stop()} title="R or Esc">
+              ■ Stop {rec.state === "on" ? fmtSeconds((Date.now() - rec.since) / 1000) : ""}
+            </button>
+          ) : (
+            <button className="recbtn" disabled={rec.state !== "idle"} onClick={() => void start()} title="R. A 3-2-1, then read as many beats as you like; press again to stop.">
+              {rec.state === "saving" ? "saving…" : "● Record"}
+            </button>
+          )}
         </div>
-        <span ref={meterText} className="small muted mono" style={{ width: 56 }}>
-          {micOn ? "" : "mic off"}
-        </span>
-        <span className="grow" />
-        {recording ? (
-          <button className="recbtn on" onClick={() => void stop()} title="R or Esc">
-            ■ Stop {rec.state === "on" ? fmtSeconds((Date.now() - rec.since) / 1000) : ""}
-          </button>
-        ) : (
-          <button className="recbtn" disabled={rec.state !== "idle"} onClick={() => void start()} title="R. A 3-2-1, then read as many beats as you like; press again to stop.">
-            {rec.state === "saving" ? "saving…" : "● Record"}
-          </button>
-        )}
-        <input ref={file} type="file" accept="audio/*,.wav,.m4a,.mp3,.aac,.ogg,.flac" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && void addFile(e.target.files[0])} />
-        <button className="ghost small" disabled={recording || rec.state === "saving"} onClick={() => file.current?.click()} title="A recording made elsewhere (the phone, another app)">
-          Add a recording from a file
-        </button>
-      </div>
-      {whisper && !whisper.ready ? (
-        <div className="small warn">
-          Whisper isn't set up, so takes can't be matched to the beats. Set it up on the editor's Captions tab (
-          <button className="link small" onClick={() => go({ name: "make" })}>
-            Make a video → Start a timeline
-          </button>
-          ), then record.
-        </div>
-      ) : null}
+        {whisper && !whisper.ready ? (
+          <div className="small warn">
+            Whisper isn't set up, so takes can't be matched to the beats. Set it up on the editor's Captions tab (
+            <button className="link small" onClick={() => go({ name: "make" })}>
+              Make a video → Start a timeline
+            </button>
+            ), then record.
+          </div>
+        ) : null}
 
-      {/* ── the prompter ── */}
-      <div className="prompt-list">
-        {beats.map((b, i) => {
-          const files = covered.get(b.beat.id) ?? [];
-          const on = cur?.beat.id === b.beat.id;
-          const n = b.cut.beats.findIndex((x) => x.id === b.beat.id) + 1;
-          return (
-            <div key={b.beat.id} className={`pbeat${on ? " on" : ""}${files.length ? " done" : ""}${files.length > 1 ? " twice" : ""}${after?.beat.id === b.beat.id ? " next" : ""}`} onClick={() => setCurrent(b.beat.id)}>
-              <div className="pbeat-n small muted">
-                {b.cut.kind === "short" ? `${b.cut.title.slice(0, 24)} · ${n}` : n}
-                {files.length ? <span title={files.length > 1 ? `Read in ${files.length} takes: delete the ones you don't want, or organise will ask.` : "Recorded"}> {files.length > 1 ? "✓✓" : "✓"}</span> : null}
+        {/* ── the prompter ── */}
+        <div ref={list} className="prompt-list">
+          {beats.map((b) => {
+            const files = covered.get(b.beat.id) ?? [];
+            const on = cur?.beat.id === b.beat.id;
+            const n = b.cut.beats.findIndex((x) => x.id === b.beat.id) + 1;
+            return (
+              <div key={b.beat.id} className={`pbeat${on ? " on" : ""}${files.length ? " done" : ""}${files.length > 1 ? " twice" : ""}${after?.beat.id === b.beat.id ? " next" : ""}`} onClick={() => setCurrent(b.beat.id)}>
+                {b.beat.chapter?.trim() ? <div className="pbeat-chapter">{b.beat.chapter}</div> : null}
+                <div className="pbeat-n small muted">
+                  {n}
+                  {files.length ? <span title={files.length > 1 ? `Read in ${files.length} takes: delete the ones you don't want, or organise will ask.` : "Recorded"}> {files.length > 1 ? "✓✓" : "✓"}</span> : null}
+                </div>
+                <div className="pbeat-text">{b.beat.text}</div>
               </div>
-              <div className="pbeat-text">{b.beat.text}</div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        <div className="small muted">
+          <b>R</b> records and stops · <b>Space</b> plays the last take · <b>Delete</b> bins it · <b>↓ ↑</b> move the prompter · click a beat to read it again
+        </div>
       </div>
       {rec.state === "count" ? <div className="countin" style={{ position: "fixed" }}>{rec.n}</div> : null}
       {rec.state === "on" ? <div className="recdot" style={{ position: "fixed", left: 24, bottom: 24, fontSize: 14, padding: "6px 12px" }}>● REC {fmtSeconds((Date.now() - rec.since) / 1000)}</div> : null}
 
-      {/* ── the takes bin ── */}
-      <div className="stack" style={{ gap: 8 }}>
-        <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-          <strong className="small">Takes {s.takes.length ? `(${s.takes.length})` : ""}</strong>
-          <button className="ghost small" disabled={!s.takes.some((t) => t.transcribed)} onClick={trimAll} title={`Every take: the silence off both ends${pausesOn ? `, and pauses over ${LONG_PAUSE}s inside it shortened` : ""}. Cuts you made by hand stay; running it again changes nothing.`}>
-            Trim all
-          </button>
-          <label className="row small muted" style={{ gap: 4 }} title="New takes get the same tidy as they land.">
-            <input type="checkbox" checked={autoOn} onChange={(e) => (setAutoOn(e.target.checked), remember("autotrim", e.target.checked ? "on" : "off"))} />
-            trim new takes as they land
-          </label>
-          <label className="row small muted" style={{ gap: 4 }} title={`Pauses longer than ${LONG_PAUSE}s between words are cut down to about 0.4s.`}>
-            <input type="checkbox" checked={pausesOn} onChange={(e) => (setPausesOn(e.target.checked), remember("autotrim-pauses", e.target.checked ? "on" : "off"))} />
-            shorten long pauses
-          </label>
+      {/* ── the takes, beside it ── */}
+      <aside className="rec-side">
+        <div className="rec-card">
+          <div className="row between">
+            <strong className="small">Just recorded</strong>
+            {last && rec.state === "idle" ? <span className="small muted">take {s.takes.length}</span> : null}
+          </div>
+          {rec.state === "on" || rec.state === "count" ? (
+            <div className="small muted">Recording… stop it and it lands here.</div>
+          ) : rec.state === "saving" ? (
+            <div className="small muted">Saving it and listening for the words…</div>
+          ) : last ? (
+            <>
+              <div className="take-wave big" onClick={() => play(last)} title="Play it (Space)">
+                <Wave peaks={peaks[last.file]} start={0} end={last.seconds} width={400} height={56} />
+                {(last.keep ?? []).length ? <KeepShade keep={last.keep!} seconds={last.seconds} /> : null}
+                {isPlaying(last.file) ? <div ref={head} className="tv-head" /> : null}
+              </div>
+              <div className="row" style={{ gap: 10 }}>
+                <button className="small" onClick={() => play(last)} title="Space">
+                  {isPlaying(last.file) ? "■ Stop" : "▶ Play"}
+                </button>
+                <span className="small">
+                  {fmtSeconds(keptSeconds(last))} <span className="muted">· {beatsOf(last)}</span>
+                </span>
+                <span className="grow" />
+                <button className="link small" onClick={() => openTakeView(last.file)} title="Trim its edges or cut a stretch out">
+                  trim…
+                </button>
+                <button className="link small muted" onClick={() => void remove(last)} title="Delete (or Backspace)">
+                  delete
+                </button>
+              </div>
+              <div className="small muted words clamp3">{wordsOf(last)}</div>
+              {!(covers.get(last.file) ?? []).length && last.transcribed ? <div className="small">{assignBox(last)}</div> : null}
+            </>
+          ) : (
+            <div className="small muted">Nothing yet. Press Record (or R), read, press again.</div>
+          )}
         </div>
-        {!s.takes.length ? <div className="small muted">Nothing recorded yet. Press Record, read, press again.</div> : null}
-        {[...s.takes].reverse().map((t) => {
-          const i = s.takes.indexOf(t);
-          const cs = covers.get(t.file) ?? [];
-          const words = t.words.filter((w) => !w.hidden).map((w) => w.text).join(" ");
-          const label = cs.length ? cs.map((c) => `${beats.findIndex((b) => b.beat.id === c.beat) + 1}`).join(", ") : t.transcribed ? "no beat heard" : "listening…";
-          return (
-            <div key={t.file} className={`take-row${open === t.file ? " on" : ""}`} onClick={() => setOpen(open === t.file ? null : t.file)}>
-              <div className="num">{i + 1}</div>
-              <div className="take-wave">
-                <Wave peaks={peaks[t.file]} start={0} end={t.seconds} width={600} height={34} />
-                {(t.keep ?? []).length ? <KeepShade keep={t.keep!} seconds={t.seconds} /> : null}
-              </div>
-              <div className="what">
-                <div className="name row" style={{ gap: 6 }}>
-                  <span>
-                    {fmtSeconds(keptSeconds(t))}
-                    {t.keep ? <span className="muted small"> of {fmtSeconds(t.seconds)}</span> : null} <span className="muted small">· beats {label}</span>
-                    {t.assign?.length ? <span className="muted small" title="You said which beats this take reads"> (yours)</span> : null}
+
+        {cur ? (
+          <div className="rec-card">
+            <strong className="small">Beat {curIndex + 1}'s takes</strong>
+            {beatTakes.length ? (
+              beatTakes.map(({ take, cover }) => (
+                <div key={take.file} className={`beat-take${isPlaying(take.file, cover.start) ? " on" : ""}`}>
+                  <button className="playbtn" onClick={() => play(take, cover.start, cover.end)} title="Just this beat's stretch of the take">
+                    {isPlaying(take.file, cover.start) ? "■" : "▶"}
+                  </button>
+                  <span className="small">take {s.takes.indexOf(take) + 1}</span>
+                  <span className="small muted">
+                    {fmtSeconds(cover.end - cover.start)} · {Math.round(cover.score * 100)}% heard
                   </span>
-                  <AssignBox take={t} onAssign={(text) => setAssign(t, text)} onError={onError} label={t.assign?.length ? cs.map((c) => `${beats.findIndex((b) => b.beat.id === c.beat) + 1}`).join(", ") : ""} />
+                  <span className="grow" />
+                  <button className="link small" onClick={() => openTakeView(take.file)}>
+                    trim…
+                  </button>
+                  <button className="link small muted" onClick={() => void remove(take)} title="Delete this take">
+                    ×
+                  </button>
                 </div>
-                <div className="small muted words">{words || (t.transcribed ? "no words heard" : "listening…")}</div>
+              ))
+            ) : (
+              <div className="small muted">Not read yet.</div>
+            )}
+            {beatTakes.length > 1 ? <div className="small warn">Read in {beatTakes.length} takes: delete the ones you don't want, or organise skips the beat.</div> : null}
+          </div>
+        ) : null}
+
+        <div className="rec-card">
+          <button className="link small" onClick={() => setShowAll((v) => (remember("takes-all", v ? "closed" : "open"), !v))}>
+            {showAll ? "▾" : "▸"} Every take {s.takes.length ? `(${s.takes.length})` : ""}
+          </button>
+          {showAll ? (
+            <>
+              <div className="row small" style={{ gap: 10 }}>
+                <button className="ghost small" disabled={!s.takes.some((t) => t.transcribed)} onClick={trimAll} title={`Every take: the silence off both ends${pausesOn ? `, and pauses over ${LONG_PAUSE}s inside it shortened` : ""}. Cuts you made by hand stay; running it again changes nothing.`}>
+                  Trim all
+                </button>
+                <label className="row muted" style={{ gap: 4 }} title="New takes get the same tidy as they land.">
+                  <input type="checkbox" checked={autoOn} onChange={(e) => (setAutoOn(e.target.checked), remember("autotrim", e.target.checked ? "on" : "off"))} />
+                  trim as they land
+                </label>
+                <label className="row muted" style={{ gap: 4 }} title={`Pauses longer than ${LONG_PAUSE}s between words are cut down to about 0.4s.`}>
+                  <input type="checkbox" checked={pausesOn} onChange={(e) => (setPausesOn(e.target.checked), remember("autotrim-pauses", e.target.checked ? "on" : "off"))} />
+                  shorten pauses
+                </label>
               </div>
-              <button className="link small muted" onClick={(e) => (e.stopPropagation(), void remove(t))} title="Delete this take">
-                ×
-              </button>
-            </div>
-          );
-        })}
-        {openTake ? <TakeView take={openTake} peaks={peaks[openTake.file]} covers={covers.get(openTake.file) ?? []} beats={beats} audio={api.publicUrl(openTake.file)} onKeep={(k) => setKeep(openTake, k)} onClose={() => setOpen(null)} /> : null}
-      </div>
-      <div className="small muted">
-        <b>R</b> records and stops · <b>↓ ↑</b> move the prompter · click a take to trim it or cut a bit out · <b>×</b> deletes it. The kept parts of every take are what organise and the matching see.
-      </div>
+              {!s.takes.length ? <div className="small muted">Nothing recorded yet.</div> : null}
+              {[...s.takes].reverse().map((t) => {
+                const i = s.takes.indexOf(t);
+                return (
+                  <div key={t.file} className={`side-take${open === t.file ? " on" : ""}`}>
+                    <button className="playbtn" onClick={() => play(t)}>
+                      {isPlaying(t.file) && playing?.start === (t.keep?.[0]?.start ?? 0) ? "■" : "▶"}
+                    </button>
+                    <div className="what" onClick={() => openTakeView(open === t.file ? null : t.file)} title="Open it to trim">
+                      <div className="take-wave">
+                        <Wave peaks={peaks[t.file]} start={0} end={t.seconds} width={300} height={28} />
+                        {(t.keep ?? []).length ? <KeepShade keep={t.keep!} seconds={t.seconds} /> : null}
+                      </div>
+                      <div className="small">
+                        <span className="muted">#{i + 1} ·</span> {fmtSeconds(keptSeconds(t))} <span className="muted">· {beatsOf(t)}</span>
+                        {t.assign?.length ? <span className="muted" title="You said which beats this take reads"> (yours)</span> : null}
+                      </div>
+                      <div className="small muted words">{wordsOf(t)}</div>
+                    </div>
+                    <div className="stack" style={{ gap: 2, alignItems: "flex-end" }}>
+                      <button className="link small muted" onClick={() => void remove(t)} title="Delete this take">
+                        ×
+                      </button>
+                      {assignBox(t)}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          ) : null}
+        </div>
+      </aside>
+
+      {openTake ? (
+        <div className="take-sheet">
+          <TakeView take={openTake} peaks={peaks[openTake.file]} covers={covers.get(openTake.file) ?? []} beats={beats} audio={api.publicUrl(openTake.file)} onKeep={(k) => setKeep(openTake, k)} onClose={() => setOpen(null)} />
+        </div>
+      ) : null}
     </div>
   );
 };

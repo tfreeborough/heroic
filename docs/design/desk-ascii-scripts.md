@@ -98,6 +98,23 @@ is a gladiator arena. It's saved and kept on Plan again and on a single
 prompt's redo; Tom can write his own in the **world** box, or clear it
 for a fresh pick.
 
+**The image model sees none of that** (2026-10-19). It gets the style,
+one **look** line and the prompt, and reads every word literally: "a
+colossal black megatower" in a cyberpunk world came out as a plain dark
+slab, and "the black tower's door" as a medieval castle. So the plan
+also writes `Script.look` (what the world literally looks like: genre,
+era, buildings, clothes, tech, light sources, no colours or weather),
+sent with every picture as "The world: …", and `Script.cast` (each
+recurring character, place or object with one fixed look, written out
+word for word in every prompt it's in). Prompts stand alone (no "the
+tower" without describing it), name brightness never colour, keep the
+subject lit (dark builds as nothing), and show one frozen instant.
+Then a **literal reader** pass (`checkPrompts`, one cheap Claude call)
+reads each prompt as the image model would and fixes what it would get
+wrong before any picture is paid for; it runs after a plan and after a
+single prompt's redo. Look and cast sit under the world box, editable;
+changing the world clears them so Plan again writes new ones.
+
 **Generate** makes every picture that's missing: GPT Image through
 `packages/forge`, landscape 1536×1024, a few at a time, each one landing
 on its beat as it arrives. They go to `public/cards/<script>/<beat>-<n>.png`
@@ -107,9 +124,8 @@ straight from the picture.
 
 **Long beats get two pictures.** At plan time the beat's length is only
 a guess (`spokenSeconds`), so Claude writes a second prompt for any beat
-guessed at over 20 seconds: the same moment from another angle, or what
-it leads to. At organise time the real length decides. A beat that comes
-in under 20 seconds uses only its first picture. One that runs over
+guessed at over 30 seconds (`LONG_BEAT`): the same moment from another angle, or what
+it leads to. At organise time a beat with two chosen pictures
 splits at the sentence break nearest its middle (from the Whisper word
 times), and a long beat with only one picture shows **wants a second
 picture** on the page. The second picture follows straight on from the
@@ -250,10 +266,13 @@ and title are one material, and the opening shows it straight away.
 The last beat's picture holds, then:
 
 1. **The whole video, again.** Every picture from the video flashes past
-   as a fast cut, one or two frames each, getting faster, in the order
-   they appeared. It's the journey in about three seconds.
+   as a reel getting faster, in the order they appeared, each one on
+   long enough to read (1.1s down to 0.4s). It's the journey in about six
+   seconds.
 2. **The mosaic.** They land as a grid of tiny thumbnails filling the
-   frame, every picture still shimmering as glyphs.
+   frame, every picture still shimmering as glyphs (a glyph every 2px or
+   so, at least 90 across, with the picture glowing faintly under them
+   as in the reel, so a small tile still shows what it is).
 3. **The sign-off.** The grid's glyphs drain away and leave the channel
    name built out of them, with one line under it in Tom's voice (per
    game in `desk.config.ts`, e.g. "Thanks for watching. I'm making a
@@ -437,7 +456,7 @@ varied on busy odd ones, resting otherwise; a big moment lifts the key
 a tone from its phrase (two at most); a chapter card holds the home
 chord on the pad with two bell notes and a muffled filter; a pulled
 word gets a soft bell; the end card has the theme in full over a
-lead-in, home landing with the mosaic (4.6s in), ringing out with a 6s
+lead-in, home landing with the mosaic (7.6s in), ringing out with a 6s
 fade; brightness and level glide over the bar and a half before each
 chord. `scripts/journey.ts` (plan JSON → WAV) runs in its own process:
 about 10× real time (3 minutes in 18–26s). Desk: `lib/score.ts`
@@ -470,8 +489,8 @@ black → ink), `TextBuild`, `ChapterCard` (the name
 decoding in, rain out; captions held off while it's up), pulled words
 inside `BuildCanvas` (the picture's brightest glyphs fly to spell the
 word in a 220px mono, picture dimmed and holes left, 0.45s out, 1s hold,
-0.45s back, starting 0.15s before it's said), `EndCard` (3s reel that
-speeds up from 0.45s to 0.12s a picture and DISSOLVES each into the next
+0.45s back, starting 0.15s before it's said), `EndCard` (6s reel that
+speeds up from 1.1s to 0.4s a picture and DISSOLVES each into the next
 rather than cutting, so no strobe; mosaic tiles pop in and rain away;
 the channel name converges in Cinzel glyphs with the sign-off typed
 under; hold to 20s, lower half clear for YouTube's end-screen

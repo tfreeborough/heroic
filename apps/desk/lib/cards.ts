@@ -81,17 +81,23 @@ export const PICTURE_STYLE =
   "the shadow side falls into solid black. The subject is drawn by light, never as a flat black silhouette. " +
   "The dark scene runs right off every edge of the frame, full bleed, and the edges of the frame fall into solid black shadow: nothing lit touches the border. " +
   "No circle, oval or vignette, no white paper showing. Big simple shapes, high contrast, no mid-grey, no text, no letters, no border. " +
-  "One clear subject large in the frame. No fine texture or busy detail: no crowds, no rain, snow, fog or smoke, no nets or mesh, no fields of small objects. The scene:";
+  "One clear subject large in the frame. No fine texture or busy detail: no crowds, no rain, snow, fog or smoke, no nets or mesh, no fields of small objects.";
 
 /** Added after a thumbnail's prompt (docs/design/desk-thumbnails.md): it has to read at 168px. */
 export const THUMB_STYLE = "This is a YouTube thumbnail: ONE subject, close and huge, that reads instantly at a tiny size, no small details.";
 
-/** A beat's picture: the style, then the prompt, landscape, kept as it comes (the glyphs read its brightness). Returns the path under the public dir. */
-export const makePicture = async (g: GameConfig, script: Pick<Script, "id">, beat: Pick<Beat, "id">, k: number, prompt: string, style: string): Promise<string> => {
+/**
+ * A beat's picture: the style, the world's look (the image model never sees
+ * the theme or the script, so this is how a tower knows it's cyberpunk),
+ * then the prompt, landscape, kept as it comes (the glyphs read its
+ * brightness). Returns the path under the public dir.
+ */
+export const makePicture = async (g: GameConfig, script: Pick<Script, "id">, beat: Pick<Beat, "id">, k: number, prompt: string, style: string, look = ""): Promise<string> => {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
   if (!prompt.trim()) throw new Error("the picture has no prompt");
-  const png = await generateImage(key, `${style.trim()} ${prompt.trim()}`, "1536x1024", "opaque");
+  const full = [style.trim().replace(/\s*The scene:$/, ""), look.trim() ? `The world: ${look.trim()}` : "", `The scene: ${prompt.trim()}`].filter(Boolean).join(" ");
+  const png = await generateImage(key, full, "1536x1024", "opaque");
   const out = nextFile(g, script.id, k ? `${beat.id}-p${k + 1}` : beat.id);
   writeFileSync(out, png);
   return relative(publicDir(g), out);

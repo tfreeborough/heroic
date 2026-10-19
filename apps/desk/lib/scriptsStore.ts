@@ -180,6 +180,11 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
   if (patch.source !== undefined && !s.doc) s.source = String(patch.source);
   if (patch.gap !== undefined) s.gap = num(patch.gap, 0, 3, s.gap);
   if (patch.theme !== undefined) s.theme = String(patch.theme) || undefined;
+  if (patch.look !== undefined) s.look = String(patch.look) || undefined;
+  if (patch.cast !== undefined) {
+    const cast = (Array.isArray(patch.cast) ? patch.cast : []).flatMap((c) => (c?.name?.trim() && c.look?.trim() ? [{ name: String(c.name).trim(), look: String(c.look).trim() }] : []));
+    s.cast = cast.length ? cast : undefined;
+  }
   if (patch.titles !== undefined) s.titles = (Array.isArray(patch.titles) ? patch.titles : []).flatMap((t) => (t?.id ? [{ id: String(t.id), text: String(t.text ?? "").slice(0, 100), ...(t.why ? { why: String(t.why) } : {}) }] : []));
   if (patch.youtube !== undefined) s.youtube = patch.youtube ? { description: String(patch.youtube.description ?? "").slice(0, 5000), tags: String(patch.youtube.tags ?? "").slice(0, 500) } : undefined;
   // A picture lands on a beat from the background (makeSketches) while the page may be mid-edit: a src only

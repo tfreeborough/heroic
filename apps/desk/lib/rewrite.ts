@@ -68,7 +68,7 @@ const CutOut = z.object({ title: z.string(), hook: z.string().nullable(), beats:
 // ── prompts ──
 
 const BEAT_RULES = [
-  "A BEAT is one thought: one to three sentences, roughly fifteen to forty words, a stretch that takes five to fifteen seconds to say. Every beat must read aloud on its own, because each is recorded on its own and a picture is hung on it.",
+  "A BEAT is one thought: two to four sentences, roughly thirty to fifty-five words, a stretch that takes ten to twenty seconds to say. Don't split a thought just to keep beats short: each beat is a picture on screen, and pictures that change too often feel rushed. Every beat must read aloud on its own, because each is recorded on its own and a picture is hung on it.",
   "The long cut is the whole script, in the author's order, with every point kept. The job is a light edit to the voice, not a rewrite: keep the author's words wherever they already read well, fix what doesn't, and never invent a fact, a number or a feature that isn't in the source.",
   "The script may be markdown from the author's Google Doc. A line starting with # is a section heading: it is never read aloud and never becomes a beat or part of one (the pictures step uses headings for chapters). The author's notes (a Sources list, anything quoted with >) are already left out. **Bold** and *italics* are the author's emphasis: the words stay, the marks go.",
 ].join("\n\n");
@@ -258,16 +258,34 @@ const PictureItemOut = z.object({
   pulled: z.array(z.string()).describe("Zero or one word, copied exactly as it appears in the beat, that the point turns on (a number, a name, a 'never'). Give one in roughly one beat in four, only where the word really is the point, never in two beats running. Empty for the rest."),
   chapter: z.string().nullable().describe("When a new chapter starts at this beat: its name, two to four words, plain, no numbering. null otherwise."),
 });
+const CastOut = z.object({
+  name: z.string().describe("A short handle for you to plan with. It never goes in a prompt on its own."),
+  look: z.string().describe("What it literally looks like, so an image model that has never read the script draws the same thing every time: for a person, age, build, hair, clothes and one thing that marks them out; for a place or object, its shape, size, material and what lights it. One sentence, no colours, nothing the eye can't see."),
+});
 const PicturesOut = z.object({
-  theme: z.string().describe("The video's world, decided before any picture: the setting, its people, its era, its light, in one or two sentences. When the world is given, copy it back exactly."),
+  theme: z.string().describe("The video's world, decided before any picture: the setting, its people, its era, its light, in one or two sentences, and which idea in the script it stands for. When the world is given, copy it back exactly."),
+  look: z.string().describe("What the world LOOKS like, for an image model that never sees the theme or the script: the genre named plainly, the era, the buildings, materials, clothing, technology and light sources, in one or two literal sentences. Only things that can be drawn: no story, no ideas, no feelings, no colours, and none of what the pictures must avoid (weather, mist, smoke, crowds, fine texture), since it goes with every picture. When the look is given, copy it back exactly."),
+  cast: z.array(CastOut).describe("Every character, place and object that comes back in more than one picture, each with its fixed look. When a cast is given, copy every one back exactly and add only new ones."),
   items: z.array(PictureItemOut),
 });
 
+/** What every picture prompt must survive: the image model sees the look line and this one prompt, nothing else, and takes every word literally. */
+const PROMPT_LITERAL = [
+  "THE IMAGE MODEL KNOWS NOTHING BUT THE PROMPT. Each picture is made on its own by an image model that's given the style, the world's look and that one prompt: never the script, the theme, the cast list or any other picture. It takes every word literally. So:",
+  "- Every prompt stands alone. Never lean on another picture or on the story: nothing it hasn't been told about in this prompt (no 'the' for something introduced elsewhere, no 'again', 'same', 'still', 'rival', 'her', 'his'). A cast member is written out with their look, word for word, every time they appear.",
+  "- Say what things literally look like. Never a label, coined word or genre shorthand that only makes sense with the story, and never an adjective meant as mood: a word like dark, black, dead or cold is drawn as exactly what it says.",
+  "- Show the world in every prompt: at least one concrete detail from its look in the scene, so nothing could be taken for another era or genre.",
+  "- The picture is black and white. Never name a colour: say what's bright, what's lit and what falls into shadow, and name each light source as a thing that glows.",
+  "- Dark builds as empty screen, so the thing that matters is always lit. Never describe the subject as black or dark, and a silhouette only when something bright behind it shows its outline.",
+  "- One frozen instant. Nothing that takes time to see: no change, before and after, 'slowly', 'about to', one thing turning into another, no comparing, deciding or remembering. A feeling is shown by a pose, a gesture or a face.",
+].join("\n");
+
 const PICTURE_RULES = [
   "You plan the pictures for a video one person made about making their game. Every beat of the script gets a picture on screen while it's said. Each picture is turned into ASCII art (built out of typed characters, light becoming glyphs, shadow becoming empty screen), so it must read as strong shapes of light against darkness.",
-  "A picture prompt describes ONE scene as a still from a film: the subject, what it's doing, where the light falls from, the camera's angle and distance. One or two sentences, concrete and visual. No words, letters, numbers, screens full of text or UI in the picture (they turn to mush as glyphs). No style words (woodcut, ink, chiaroscuro): the style is added for you. Never a flat diagram or an icon.",
-  "Every video has its own world, and every picture lives in it. Find it in this script before planning a single picture: read what the script is really arguing (what's at stake, who is up against what, what it feels like to be in the author's shoes) and pick a setting where that same struggle plays out, then run with it like a film director would. It must belong to this script and no other: if the same world would fit any video about making games, it's the wrong one. Real, historical, everyday or science fiction all work, as long as every beat can be shown in it. Swords, castles and fantasy are the obvious picks, so take them only when this script really calls for them. In the theme, name the world and say which idea in the script it stands for.",
-  "Show the beat's point as a moment in that world, often a metaphor. Give the world recurring characters, places and objects and keep them the same from picture to picture, so the video feels like one story told in pictures, and let an image from early on come back when its idea does. Even a beat about the game itself is shown in the video's world, never as the game.",
+  "A picture prompt describes ONE scene as a still from a film: the subject, what it's doing, where the light falls from, the camera's angle and distance. Two or three sentences, concrete and visual. No words, letters, numbers, screens full of text or UI in the picture (they turn to mush as glyphs). No style words (woodcut, ink, chiaroscuro): the style is added for you. Never a flat diagram or an icon.",
+  "Every video has its own world, and every picture lives in it. Find it in this script before planning a single picture: read what the script is really arguing (what's at stake, who is up against what, what it feels like to be in the author's shoes) and pick a setting where that same struggle plays out, then run with it like a film director would. It must belong to this script and no other: if the same world would fit any video about making games, it's the wrong one. Real, historical, everyday or science fiction all work, as long as every beat can be shown in it. Swords, castles and fantasy are the obvious picks, so take them only when this script really calls for them. In the theme, name the world and say which idea in the script it stands for. Then write down what the world looks like (the look) and its cast.",
+  "Show the beat's point as a moment in that world, often a metaphor. Give the world recurring characters, places and objects (the cast) and keep them the same from picture to picture, so the video feels like one story told in pictures, and let an image from early on come back when its idea does. Even a beat about the game itself is shown in the video's world, never as the game.",
+  PROMPT_LITERAL,
   "EVERY PICTURE MUST READ AS GLYPHS. About 280 characters across the screen is all the detail there is, so: one subject (two at most) that fills at least a third of the frame, in big simple shapes, lit by one strong light against darkness. Close-ups and medium shots carry most of the video. A wide shot is one big clear silhouette or shape against a lit sky, doorway or window, never a scene full of small things. Never: crowds, fleets, queues or rows of many small things, fine textures (nets, mesh, rain, snow, fog, smoke, foliage, crowds of stars), anything tiny that carries the point (a small figure far away, a coin, a ring, a key in a big scene), or a picture whose point depends on reading a detail. If the beat's point needs many things (thousands of games, a packed market), show one of them close, standing for the rest.",
   "Vary the light as the world allows (a window, a screen, a fire, a doorway, headlights, the low sun, a desk lamp): it shouldn't be the same lamp in every picture.",
   "Vary the framing down the video: close-ups, medium shots, from above, from low down, the odd wide shot. Never two pictures in a row with the same framing and subject.",
@@ -284,8 +302,9 @@ export const planPictures = async (
   beats: { n: number; text: string }[],
   all: { n: number; text: string }[],
   headings: { heading: string; before: string }[] = [],
-  theme = "",
-): Promise<{ theme: string; plan: Map<number, PicturePlan> }> => {
+  world: World = { theme: "", look: "", cast: [] },
+): Promise<{ world: World; plan: Map<number, PicturePlan> }> => {
+  const { theme } = world;
   // No game blurb here: it pulled every picture towards gladiators. The script says what the video is about.
   const sys = PICTURE_RULES;
   const total = all.reduce((t, b) => t + spokenSeconds(b.text), 0);
@@ -294,6 +313,8 @@ export const planPictures = async (
     `The video: "${title}". About ${Math.round(total / 60)} minutes spoken (${total} seconds).`,
     "",
     theme.trim() ? `The video's world is already set, so every picture lives in it: ${theme.trim()}` : "Pick the video's world first (theme), then plan every picture in it.",
+    ...(theme.trim() && world.look.trim() ? [`Its look is set too: ${world.look.trim()}`] : theme.trim() ? ["Write its look for that world."] : []),
+    ...(theme.trim() && world.cast.length ? ["Its cast so far (copy these back exactly, add any new ones):", ...world.cast.map((c) => `- ${c.name}: ${c.look}`)] : []),
     "",
     "The whole script, beat by beat (roughly how long each takes to say in brackets; LONG = give two pictures):",
     ...all.map((b) => `${b.n}. (${spokenSeconds(b.text)}s${picturesWanted(b.text) > 1 ? ", LONG" : ""}) ${b.text}`),
@@ -308,6 +329,11 @@ export const planPictures = async (
     want.size === all.length ? "Give one item for every beat, by number." : `Give items only for these beats, by number: ${[...want].join(", ")}. The rest are already planned and are here for context.`,
   ].join("\n");
   const out = await ask(sys, user, PicturesOut, "medium");
+  // A look or cast member already set is kept as it stands (Tom may have written it); Claude only adds.
+  const look = (theme.trim() && world.look.trim()) || clean(out.look);
+  const kept = theme.trim() ? world.cast : [];
+  const cast = [...kept, ...out.cast.map((c) => ({ name: clean(c.name), look: clean(c.look) })).filter((c) => c.name && c.look && !kept.some((k) => same(k.name, c.name)))];
+  const next: World = { theme: theme.trim() || clean(out.theme), look, cast };
   const plan = new Map<number, PicturePlan>();
   // A pulled word only lands if it's rare: never two beats running (the earlier one keeps it).
   let lastPulled = -9;
@@ -329,10 +355,13 @@ export const planPictures = async (
       ...(it.chapter?.trim() ? { chapter: clean(it.chapter) } : {}),
     });
   }
-  return { theme: theme.trim() || clean(out.theme), plan };
+  // Every prompt read once more as the image model will read it, before a penny goes on pictures.
+  const checked = await checkPrompts(next, [...plan].flatMap(([n, p]) => p.prompts.map((prompt, k) => ({ key: `${n}:${k}`, beat: beats.find((b) => b.n === n)!.text, prompt }))));
+  for (const [n, p] of plan) p.prompts = p.prompts.map((prompt, k) => checked.get(`${n}:${k}`) ?? prompt);
+  return { world: next, plan };
 };
 
-const OnePromptOut = z.object({ prompt: z.string().describe("The new picture prompt: one scene as a film still, one or two sentences, no style words, no words in the picture.") });
+const OnePromptOut = z.object({ prompt: z.string().describe("The new picture prompt: one scene as a film still, two or three sentences, standing alone, no style words, no words in the picture.") });
 
 /** One picture's prompt written again (to an instruction, or just differently), the whole script and the other pictures' prompts for context. */
 export const redoPicturePrompt = async (
@@ -342,16 +371,19 @@ export const redoPicturePrompt = async (
   n: number,
   k: number,
   instruction: string,
-  theme = "",
+  world: World = { theme: "", look: "", cast: [] },
 ): Promise<string> => {
   // No game blurb here: it pulled every picture towards gladiators. The script says what the video is about.
   const sys = PICTURE_RULES;
+  const { theme } = world;
   const beat = beats.find((b) => b.n === n);
   if (!beat) throw new Error("that beat isn't in the script");
   const current = beat.prompts[k] ?? "";
   const user = [
     `The video: "${title}".`,
     ...(theme.trim() ? [`The video's world: ${theme.trim()}`] : []),
+    ...(world.look.trim() ? [`Its look: ${world.look.trim()}`] : []),
+    ...(world.cast.length ? ["Its cast (write a cast member's look out word for word whenever they're in the picture):", ...world.cast.map((c) => `- ${c.name}: ${c.look}`)] : []),
     "",
     "The script, beat by beat, with each picture's prompt as it stands (keep the new one in the same world):",
     ...beats.map((b) => [`${b.n}. ${b.text}`, ...b.prompts.map((p, i) => `   picture${b.prompts.length > 1 ? ` ${i + 1}` : ""}: ${p || "(none yet)"}`)].join("\n")),
@@ -363,7 +395,62 @@ export const redoPicturePrompt = async (
     .filter(Boolean)
     .join("\n");
   const out = await ask(sys, user, OnePromptOut, "medium");
-  return clean(out.prompt);
+  const prompt = clean(out.prompt);
+  return (await checkPrompts(world, [{ key: "one", beat: beat.text, prompt }])).get("one") ?? prompt;
+};
+
+// ── the literal reader: every prompt checked before it costs a picture ──
+
+/** The world every picture lives in: the story (theme), what it looks like (sent with every picture) and the recurring cast. */
+export type World = { theme: string; look: string; cast: { name: string; look: string }[] };
+
+const CheckOut = z.object({
+  items: z.array(
+    z.object({
+      key: z.string().describe("The prompt's key, as given."),
+      problems: z.array(z.string()).describe("What the image model would get wrong, one short line each. Empty when the prompt is fine."),
+      prompt: z.string().describe("The prompt fixed, or copied back exactly when there are no problems."),
+    }),
+  ),
+});
+
+const CHECK_RULES = [
+  "You check picture prompts before they're paid for. Each one goes to an image model with a fixed style (a black and white print, one strong light carving the subject out of darkness) and one line describing the world's look, and nothing else. It has never seen the script, the story, the cast list or the other pictures, and it takes every word literally. Read each prompt exactly as that model would, picture what it would actually draw, and fix the prompt wherever that's not what was meant. The beat it's for is given so you know what was meant; the model never sees it.",
+  "What goes wrong:",
+  "- A word drawn literally that was meant as mood, genre or a label (a 'dark' or 'black' subject comes out as a dark block; a coined or genre word comes out as whatever it most plainly names).",
+  "- Something the model hasn't been told about in this prompt: 'the' for a thing introduced elsewhere, 'again', 'same', 'still', 'rival', a pronoun with nobody named. Write it out in full; for a cast member, use their look word for word.",
+  "- A colour named. The picture is black and white: say what's bright, lit or in shadow, and name the light source as something that glows.",
+  "- The subject unlit, black, or a silhouette with nothing bright behind it. Dark builds as empty screen, so the thing that matters must be lit.",
+  "- Time or thought: change, before and after, 'slowly', 'about to', comparing, deciding, remembering. Make it one frozen instant; a feeling is a pose, a gesture or a face.",
+  "- Fine texture or tiny things: rain, snow, fog, smoke, crowds, nets, mesh, rows of many small things, or a small detail that carries the point. Swap for one big clear shape.",
+  "- Words, letters, numbers or screens of text in the picture.",
+  "- Nothing in the scene says which world it is: add one concrete detail from the look (never its weather or texture).",
+  "- More than two subjects, or a subject too small to fill a third of the frame.",
+  "When you fix one, keep its idea, subject, framing and light, change only what's wrong, and keep it to two or three sentences with no style words. A prompt with no problems is copied back exactly.",
+].join("\n");
+
+/** Every prompt read as the image model will read it (only the look line beside it); returns each one fixed, by key. */
+export const checkPrompts = async (world: World, items: { key: string; beat: string; prompt: string }[]): Promise<Map<string, string>> => {
+  const out = new Map<string, string>();
+  if (!items.length) return out;
+  const user = [
+    `The look line every picture gets: ${world.look.trim() || "(none)"}`,
+    ...(world.cast.length ? ["", "The cast, each with the look to write out word for word wherever they appear:", ...world.cast.map((c) => `- ${c.name}: ${c.look}`)] : []),
+    "",
+    "The prompts:",
+    ...items.map((it) => `[${it.key}] beat: "${it.beat}"\n   prompt: ${it.prompt}`),
+    "",
+    "Check every one, by key.",
+  ].join("\n");
+  const res = await ask(CHECK_RULES, user, CheckOut, "medium");
+  for (const it of res.items) {
+    const was = items.find((x) => x.key === it.key);
+    const fixed = clean(it.prompt);
+    if (!was || !fixed) continue;
+    if (it.problems.length) console.log(`  picture ${it.key}: ${it.problems.join("; ")}`);
+    out.set(it.key, fixed);
+  }
+  return out;
 };
 
 // ── the thumbnail (docs/design/desk-thumbnails.md) ──

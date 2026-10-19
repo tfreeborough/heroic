@@ -7,6 +7,9 @@
  * MISSING, skipped), sliced from where the beat starts in the take to
  * where the next beat starts in the same take (or the take's kept end),
  * laid on the audio track one after another with `gap` seconds between.
+ * A slice takes in the whole run of speech round the beat's words, not just
+ * the words the script has, and keeps out what the take's trim cut (a
+ * shortened pause): one clip per kept piece, back to back.
  * The beat's card lands on the overlay at the beat's start: its chosen
  * picture as a BUILD (docs/design/desk-ascii-scripts.md; two pictures on a
  * long beat, split at the sentence break nearest its middle), or on an
@@ -14,8 +17,8 @@
  * b-roll slot until its beat ends). A marker at every beat start. The video tracks are empty: that's
  * the editor's job, after.
  */
-import { type AudioClip, type Card, type Sequence, type Take, emptySequence, newId } from "@heroic/voiceover";
-import type { Cover } from "./match";
+import { type AudioClip, type Card, type Sequence, type Take, type Word, emptySequence, newId } from "@heroic/voiceover";
+import { type Cover, type Span, keptWords } from "./match";
 import { CHAPTER_CARD } from "@heroic/ascii-build";
 import { type Beat, type Cut, type Script, allowedChapters, cardOfBeat } from "./scripts";
 
@@ -29,16 +32,49 @@ export type Organised = {
   chapters: { name: string; at: number }[];
 };
 
-/** A little of the take before the first word and after the last, so a slice doesn't start on a consonant. */
+/** A little of the take before the first word and after the last, so a slice doesn't start on a consonant. Never more than halfway to the next word along. */
 const LEAD = 0.12;
 const TAIL = 0.18;
+/** Words closer than this are one run of speech: a slice takes in all of a run, never part of one. */
+const JOINED = 0.4;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
-/** The kept region of a take that holds `t` (the whole take when none are set). */
-const regionAt = (take: Script["takes"][number], t: number): { start: number; end: number } => {
-  const keep = take.keep?.length ? take.keep : [{ start: 0, end: take.seconds }];
-  return keep.find((k) => t >= k.start - 1e-3 && t <= k.end + 1e-3) ?? keep[0]!;
+/**
+ * Where a beat's slice of a take starts and ends, in take seconds. The
+ * cover only runs from the first to the last word the script has, so it's
+ * widened over the words said in the same breath either side (an "And" or
+ * "To be fair," Tom added, a number heard as digits at the end). Words that
+ * run on into another beat's cover belong to that beat.
+ */
+export const sliceOf = (take: Script["takes"][number], cover: Cover, covers: Cover[]): Span => {
+  const words = keptWords(take);
+  const claimed = (w: Word) => covers.some((c) => c.beat !== cover.beat && w.start >= c.start - 1e-3 && w.end <= c.end + 1e-3);
+  const joined = (a: Word, b: Word) => b.start - a.end < JOINED;
+  let i = words.findIndex((w) => w.start >= cover.start - 1e-3);
+  let j = words.findLastIndex((w) => w.end <= cover.end + 1e-3);
+  if (i < 0 || j < i) return { start: Math.max(0, cover.start - LEAD), end: Math.min(take.seconds, cover.end + TAIL) };
+  while (i > 0 && !claimed(words[i - 1]!) && joined(words[i - 1]!, words[i]!)) i--;
+  let k = j;
+  while (k + 1 < words.length && !claimed(words[k + 1]!) && joined(words[k]!, words[k + 1]!)) k++;
+  if (!(k + 1 < words.length && claimed(words[k + 1]!) && joined(words[k]!, words[k + 1]!))) j = k;
+  const first = words[i]!;
+  const last = words[j]!;
+  const before = words[i - 1];
+  const after = words[j + 1];
+  return {
+    start: r3(Math.max(0, first.start - LEAD, before ? (before.end + first.start) / 2 : 0)),
+    end: r3(Math.min(take.seconds, last.end + TAIL, after ? (last.end + after.start) / 2 : Infinity)),
+  };
 };
+
+/** start..end of a take with what its trim cut taken out: the kept pieces, in order. */
+const keptPieces = (take: Script["takes"][number], start: number, end: number): Span[] =>
+  (take.keep?.length ? take.keep : [{ start: 0, end: take.seconds }])
+    .map((k) => ({ start: r3(Math.max(k.start, start)), end: r3(Math.min(k.end, end)) }))
+    .filter((k) => k.end - k.start > 0.02);
+
+/** Seconds into a slice that a moment of the take lands, the cut pieces taken out. */
+const intoSlice = (pieces: Span[], t: number) => pieces.reduce((s, p) => s + Math.max(0, Math.min(p.end, t) - p.start), 0);
 
 /**
  * Where a slice of a take (start..end, take seconds) is best split in two:
@@ -85,13 +121,15 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
     }
     const { take, cover } = r[0]!;
     const tk = s.takes[take]!;
-    const region = regionAt(tk, cover.start);
+    const inTake = covers.get(tk.file) ?? [];
     // The slice: from just before the beat's first word to where the next beat starts in this same take, else just after its last word.
     const next = cut.beats[k + 1];
     const nextHere = next ? reads(next).find((x) => x.take === take && x.cover.start > cover.start) : undefined;
-    const start = r3(Math.max(region.start, cover.start - LEAD));
-    const end = r3(Math.min(region.end, nextHere ? nextHere.cover.start - LEAD : cover.end + TAIL));
-    if (end - start < 0.1) {
+    const { start } = sliceOf(tk, cover, inTake);
+    const end = nextHere ? sliceOf(tk, nextHere.cover, inTake).start : sliceOf(tk, cover, inTake).end;
+    const pieces = keptPieces(tk, start, end);
+    const seconds = pieces.reduce((n, p) => n + (p.end - p.start), 0);
+    if (seconds < 0.1) {
       missing.push(b.id);
       return;
     }
@@ -108,14 +146,17 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
       pendingChapter = undefined;
     }
     const at = r3(cursor);
-    audio.push({ id: newId(), take, start, end, at });
+    let laid = at;
+    for (const p of pieces) {
+      audio.push({ id: newId(), take, start: p.start, end: p.end, at: r3(laid) });
+      laid += p.end - p.start;
+    }
     markers.push({ id: newId(), at });
-    const seconds = end - start;
     // The beat's pictures, as glyph builds.
     const pics = (b.pictures ?? []).filter((p) => p.chosen);
     if (pics.length) {
       if (lastCard && lastCard.kind !== "broll" && lastCard.kind !== "chapter") lastCard.seconds = r3(at - lastCard.at);
-      const split = pics.length > 1 ? r3(at + splitPoint(tk.words, start, end)) : at + seconds;
+      const split = pics.length > 1 ? r3(at + intoSlice(pieces, start + splitPoint(tk.words, start, end))) : at + seconds;
       pics.slice(0, 2).forEach((p, k) => {
         const from = k ? split : at;
         const to = k || pics.length === 1 ? at + seconds : split;

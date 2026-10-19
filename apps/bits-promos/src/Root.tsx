@@ -11,6 +11,7 @@ import { APPLE_SHOT_SIZE, DevNote, FEATURE_SIZE, FeatureGraphic, SHOT_SIZE, Stor
 import { STORE_SHOTS } from "./data/store";
 import { BANNER_SIZE, ChannelBanner } from "./Banner";
 import { THUMB_FRAME, ThumbMock, thumbMockSchema } from "./experiments/thumbnail/ThumbMock";
+import { ThumbReal, thumbRealSchema } from "./experiments/thumbnail/ThumbReal";
 import { ATTENTION_CHECKPOINTS, AttentionTest, attentionSchema, attentionSeconds } from "./experiments/attention/AttentionTest";
 
 /**
@@ -125,6 +126,16 @@ export const Root: React.FC = () => (
       width={1280}
       height={720}
       defaultProps={{ src: "experiments/thumb-mock/face.png", cols: 140, text: "NOT LAG", accent: "bone" as const, font: "anton" as const, textCols: 80, seed: 3 }}
+    />
+    <Composition
+      id="ThumbReal"
+      component={ThumbReal}
+      schema={thumbRealSchema}
+      durationInFrames={1}
+      fps={FPS}
+      width={1280}
+      height={720}
+      defaultProps={{ src: "experiments/thumb-mock/eye.png", words: "I SEE YOU", accent: "red" as const, shade: true, outline: true, body: true }}
     />
     {/* Store listing stills (bun run render:store) — one frame each. */}
     <Composition id="FeatureGraphic" component={FeatureGraphic} durationInFrames={1} fps={FPS} {...FEATURE_SIZE} />

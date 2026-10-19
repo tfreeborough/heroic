@@ -306,16 +306,16 @@ export const ChapterCard: React.FC<{ name: string; palette: Palette; family: str
 // ── the end card ──
 
 /** The end card's phases, seconds from its start. */
-const REEL = 3;
+const REEL = 6;
 const MOSAIC = { from: REEL, to: REEL + 1.6 };
 const NAME = { from: REEL + 2.1, to: REEL + 3.5 };
 
-/** The reel: each picture's slot, faster and faster (each cross-dissolves into the next, so it never strobes). */
+/** The reel: each picture's slot, faster and faster but never under 0.4s, so each one still reads (each cross-dissolves into the next, so it never strobes). */
 const reelSlots = (n: number): { i: number; from: number; to: number }[] => {
   const out: { i: number; from: number; to: number }[] = [];
   let at = 0;
   for (let k = 0; at < REEL && n; k++) {
-    const d = Math.max(0.12, 0.45 * 0.86 ** k);
+    const d = Math.max(0.4, 1.1 * 0.85 ** k);
     out.push({ i: k, from: at, to: Math.min(REEL, at + d) });
     at += d;
   }
@@ -360,7 +360,7 @@ export const EndCard: React.FC<{ pictures: string[]; channel: string; line: stri
     const m = new Map<number, Build>();
     for (const s of reel) {
       const ink = inks[s.i];
-      if (ink && !m.has(s.i)) m.set(s.i, planBuild({ ink, look: { ...look, cols: 110 }, box: { x: 0, y: height * 0.04, w: width, h: height * 0.92 }, frame: { w: width, h: height }, start: -2, end: -1.9, seed: 7 + s.i, arrival: "fade", order: "random" }));
+      if (ink && !m.has(s.i)) m.set(s.i, planBuild({ ink, look, box: { x: 0, y: height * 0.04, w: width, h: height * 0.92 }, frame: { w: width, h: height }, start: -2, end: -1.9, seed: 7 + s.i, arrival: "fade", order: "random" }));
     }
     return m;
   }, [inks, reel, look, width, height]);
@@ -380,7 +380,8 @@ export const EndCard: React.FC<{ pictures: string[]; channel: string; line: stri
       const cy = Math.floor(i / g.cols);
       const start = MOSAIC.from + hash(i * 3 + 1) * 0.7;
       const leave = NAME.from - 0.5 + hash(i * 5 + 2) * 0.4;
-      return [planBuild({ ink, look: { ...look, cols: Math.max(18, Math.round(tw / 9)) }, box: { x: ox + cx * tw + 3, y: oy + cy * th + 3, w: tw - 6, h: th - 6 }, frame: { w: width, h: height }, start, end: start + 0.45, seed: 11 + i, arrival: "pop", order: "random", exit: { start: leave, end: leave + 1.4 } })];
+      // A glyph about every 2px, so a small tile still shows what it is.
+      return [planBuild({ ink, look: { ...look, cols: Math.max(90, Math.round(tw / 2)) }, box: { x: ox + cx * tw + 3, y: oy + cy * th + 3, w: tw - 6, h: th - 6 }, frame: { w: width, h: height }, start, end: start + 0.45, seed: 11 + i, arrival: "pop", order: "random", exit: { start: leave, end: leave + 1.4 } })];
     });
   }, [inks, look, width, height]);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -400,7 +401,8 @@ export const EndCard: React.FC<{ pictures: string[]; channel: string; line: stri
       const slot = reel[Math.max(0, k)];
       if (slot) {
         const next = reel[k + 1];
-        const mix = next ? smooth(clamp((t - (slot.to - Math.min(0.12, (slot.to - slot.from) * 0.6))) / Math.min(0.12, (slot.to - slot.from) * 0.6), 0, 1)) : 0;
+        const fade = Math.min(0.2, (slot.to - slot.from) * 0.4);
+        const mix = next ? smooth(clamp((t - (slot.to - fade)) / fade, 0, 1)) : 0;
         const a = reelBuilds.get(slot.i);
         const b = next ? reelBuilds.get(next.i) : undefined;
         if (a) {
@@ -414,7 +416,8 @@ export const EndCard: React.FC<{ pictures: string[]; channel: string; line: stri
         ctx.globalAlpha = 1;
       }
     }
-    if (t >= MOSAIC.from - 0.1 && t < NAME.to + 1.5) for (const b of tiles) drawBuild(ctx, b, t, { palette, family, cache: cacheOf(b) });
+    // The tinted picture glows faintly under each tile, as in the reel, so the shapes read.
+    if (t >= MOSAIC.from - 0.1 && t < NAME.to + 1.5) for (const b of tiles) drawBuild(ctx, b, t, { palette, family, glow: 0.22, glowFrom: MOSAIC.from, cache: cacheOf(b) });
   }, [t, width, height, reel, reelBuilds, tiles, palette, family]);
   const lineFrom = NAME.to + 0.3;
   return (

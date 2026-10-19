@@ -20,6 +20,7 @@ const long: Cut = {
   ],
 };
 const script = (takes: Script["takes"]): Script => ({ ...emptyScript("s", "Three things"), long, takes, gap: 0.3 });
+const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const covers = (s: Script) => new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
 
 describe("organise", () => {
@@ -33,9 +34,9 @@ describe("organise", () => {
     expect(clips[0]!.at).toBe(0);
     // The second clip starts where the first ends plus the gap.
     expect(clips[1]!.at).toBeCloseTo(clips[0]!.end - clips[0]!.start + 0.3, 2);
-    // Slices run from just before the beat's first word to just before the next beat's first word.
+    // Slices run from just before the beat's first word to halfway into the gap before the next beat's first word.
     expect(clips[0]!.start).toBeCloseTo(1 - 0.12, 2);
-    expect(clips[0]!.end).toBeCloseTo(1 + 19 * 0.3 - 0.12, 2);
+    expect(clips[0]!.end).toBeCloseTo(1 + 19 * 0.3 - 0.025, 2);
     expect(seq.markers?.length).toBe(3);
     const cards = seq.overlay!.cards;
     expect(cards.map((c) => c.kind)).toEqual(["text", "image"]);
@@ -73,6 +74,25 @@ describe("organise", () => {
     const { seq, missing } = organiseCut(s, long, covers(s), { id: "x", name: "x" });
     expect(missing).toEqual(["b1", "b3"]);
     expect(seq.audio[0]!.clips[0]!.start).toBeCloseTo(b2At - 0.05, 2);
+  });
+
+  test("words said round the script's (an added opening, a number heard as digits) stay in, and the slice never starts inside a word", () => {
+    const words = said(`So to be fair, ${B1} Honestly 100%`, 1);
+    const s = script([{ file: "voice/takes/t1.wav", seconds: 30, recordedAt: "", words, transcribed: true }]);
+    const clip = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips[0]!;
+    expect(clip.start).toBeCloseTo(1 - 0.12, 2);
+    expect(clip.end).toBeCloseTo(words.at(-1)!.end + 0.18, 2);
+  });
+
+  test("a pause the trim shortened stays short, and the beat carries on after it", () => {
+    const words = [...said(B1.split(". ")[0]! + ".", 1), ...said(B1.split(". ")[1]!, 6)];
+    const s = script([{ file: "voice/takes/t1.wav", seconds: 12, recordedAt: "", words, transcribed: true, keep: [{ start: 0.8, end: 3.75 }, { start: 5.8, end: 11 }] }]);
+    const clips = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips;
+    expect(clips.map((c) => [c.start, c.end])).toEqual([
+      [0.88, 3.75],
+      [5.8, r3(words.at(-1)!.end + 0.18)],
+    ]);
+    expect(clips[1]!.at).toBeCloseTo(3.75 - 0.88, 3);
   });
 
   test("a short's shared beat is read by the long beat's take", () => {

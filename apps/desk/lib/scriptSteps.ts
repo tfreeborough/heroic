@@ -88,6 +88,8 @@ const withBeat = (s: Script, beatId: string, f: (b: Beat) => Beat): Script => {
 const withPicture = (s: Script, beatId: string, k: number, f: (p: BeatPicture) => BeatPicture): Script =>
   withBeat(s, beatId, (b) => ({ ...b, pictures: (b.pictures ?? []).map((p, i) => (i === k ? f(p) : p)) }));
 
+const worldOf = (s: Script): ai.World => ({ theme: s.theme ?? "", look: s.look ?? "", cast: s.cast ?? [] });
+
 /**
  * A picture plan for every beat that hasn't one (`all`: every beat again).
  * A re-plan keeps every picture already made and its look seed; a prompt
@@ -100,8 +102,8 @@ export const planPictures = async (g: GameConfig, id: string, all = false): Prom
   const every = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, beat: b }));
   const want = every.filter((x) => all || !x.beat.pictures?.length);
   if (!want.length) return s;
-  const { theme, plan } = await ai.planPictures(v, s.long.title, want, every, docHeadings(scriptText(s)), s.theme);
-  let next: Script = { ...s, theme };
+  const { world, plan } = await ai.planPictures(v, s.long.title, want, every, docHeadings(scriptText(s)), worldOf(s));
+  let next: Script = { ...s, theme: world.theme, look: world.look || undefined, cast: world.cast.length ? world.cast : undefined };
   for (const x of want) {
     const p = plan.get(x.n);
     if (!p) continue;
@@ -125,7 +127,7 @@ export const redoPicturePrompt = async (g: GameConfig, id: string, beatId: strin
   const beats = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, prompts: (b.pictures ?? []).map((p) => p.prompt), id: b.id }));
   const beat = beats.find((b) => b.id === beatId);
   if (!beat) throw new Error("that beat isn't in the script any more");
-  const prompt = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction, s.theme);
+  const prompt = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction, worldOf(s));
   return saveScript(
     g,
     withBeat(s, beatId, (b) => {
@@ -167,7 +169,7 @@ export const makePictures = (g: GameConfig, id: string, only?: { beat: string; k
     const worker = async () => {
       for (let t = queue.shift(); t; t = queue.shift()) {
         try {
-          const src = await makePicture(g, s, t.beat, t.k, t.prompt, style);
+          const src = await makePicture(g, s, t.beat, t.k, t.prompt, style, s.look);
           const now = readScript(g, id);
           // The newest try is the one on screen; the older ones stay to pick from.
           if (now) saveScript(g, withPicture(now, t.beat.id, t.k, (p) => ({ ...p, candidates: [...p.candidates, src], chosen: src, approved: false, check: undefined, error: undefined })));
