@@ -13,8 +13,8 @@ import { organiseCut } from "./organise";
 import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText } from "./scripts";
 import { readScript, saveScript, voiceSamples } from "./scriptsStore";
 import { docHeadings } from "./doc";
-import { makeScore } from "./score";
-import { seqSlug, writeSequence } from "./sequences";
+import { type ScoreListing, listScores, makeScore, useScore } from "./score";
+import { readSequence, seqSlug, trashSequence, writeSequence } from "./sequences";
 
 export const hasClaude = ai.hasClaude;
 
@@ -293,7 +293,11 @@ export const ownThumbnail = (g: GameConfig, id: string, ideaId: string, bytes: U
 
 export type OrganiseResult = { script: Script; made: { cut: string; title: string; id: string; missing: string[]; conflicts: { beat: string; takes: string[] }[]; youtube: string }[] };
 
-/** The takes → one fresh sequence per cut (never touching an earlier one). Needs no key: it's all maths. */
+/**
+ * The takes → one fresh sequence per cut (never touching an earlier one). Needs no key: it's all maths.
+ * The music isn't made here (Tom, 10-19: organising again kept bringing a new song): the newest edit's bed
+ * comes across as it is, and the score panel's buttons make or refit it.
+ */
 export const organise = (g: GameConfig, id: string): OrganiseResult => {
   const s = readScript(g, id);
   if (!s) throw new Error(`no script ${id}`);
@@ -305,26 +309,55 @@ export const organise = (g: GameConfig, id: string): OrganiseResult => {
   const now = new Date().toISOString();
   const made: OrganiseResult["made"] = [];
   const entries: NonNullable<Script["sequences"]> = [];
+  const lastId = s.sequences?.at(-1)?.id;
+  const music = lastId ? readSequence(g, lastId)?.music : undefined;
   // The long cut only: shorts are parked (desk-ascii-scripts.md decision 1).
   [s.long].forEach((cut) => {
     const n = cut.kind === "short" ? s.shorts.indexOf(cut) + 1 : 0;
     const seqId = `${base}-${cut.kind === "long" ? "long" : `short-${n}`}-r${run}`;
     const name = `${s.title} · ${cut.kind === "long" ? "long" : `short ${n}: ${cut.title}`} (run ${run})`;
     const { seq, missing, conflicts, chapters } = organiseCut(s, cut, covers, { id: seqId, name });
-    writeSequence(g, seq);
+    writeSequence(g, music ? { ...seq, music } : seq);
     // The chapter list for the YouTube description (empty when YouTube wouldn't take it).
     const youtube = youtubeChapters(chapters);
     made.push({ cut: cut.id, title: cut.title, id: seqId, missing, conflicts, youtube });
     entries.push({ id: seqId, cut: cut.id, run, at: now, missing: missing.length, conflicts: conflicts.length, ...(youtube ? { youtube } : {}) });
   });
-  const scoreSeed = s.scoreSeed ?? 1 + Math.floor(Math.random() * 99999);
-  const script = saveScript(g, { ...s, scoreSeed, runs: run, sequences: [...(s.sequences ?? []), ...entries] });
-  // The score makes itself in the background (a minute or so); the page shows it when it's in.
-  for (const m of made) void makeScore(g, script, m.id, scoreSeed);
+  const script = saveScript(g, { ...s, runs: run, sequences: [...(s.sequences ?? []), ...entries] });
   return { script, made };
 };
 
+/** One of the script's edits into the sequences' .trash, and off its list (the script's takes stay: trashTakes never bins a script's). */
+export const binEdit = (g: GameConfig, id: string, seqId: string): Script => {
+  const s = readScript(g, id);
+  if (!s) throw new Error(`no script ${id}`);
+  if (!(s.sequences ?? []).some((x) => x.id === seqId)) throw new Error("that edit isn't one of this script's");
+  trashSequence(g, seqId);
+  return saveScript(g, { ...s, sequences: (s.sequences ?? []).filter((x) => x.id !== seqId) });
+};
+
 // ── the score ──
+
+/** Every score made for the script's edits that's still on disk, newest first. */
+export const scriptScores = (g: GameConfig, id: string): ScoreListing[] => {
+  const s = readScript(g, id);
+  if (!s) throw new Error(`no script ${id}`);
+  return listScores(g, (s.sequences ?? []).map((x) => x.id));
+};
+
+/**
+ * An earlier score back on the newest edit, and its seed made the script's,
+ * so Fit to the edit refits that one. It was written for its own edit's
+ * timings: Fit to the edit lines it up with this one.
+ */
+export const chooseScore = (g: GameConfig, id: string, file: string): Script => {
+  const s = readScript(g, id);
+  if (!s) throw new Error(`no script ${id}`);
+  const seqId = s.sequences?.at(-1)?.id;
+  if (!seqId) throw new Error("organise the script first");
+  const st = useScore(g, seqId, file);
+  return st.seed && st.seed !== s.scoreSeed ? saveScript(g, { ...s, scoreSeed: st.seed }) : s;
+};
 
 /**
  * The score for the script's newest edit, made again: for the edit as it

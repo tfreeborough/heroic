@@ -8,7 +8,7 @@
  * instant; any change to the edit's timing makes a new one from the same
  * seed (the same piece, refitted). Server only.
  */
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { COLD_OPEN, END_CARD } from "@heroic/ascii-build";
@@ -79,7 +79,43 @@ const trim = (g: GameConfig) => {
   const dir = join(publicDir(g), "music", DIR);
   if (!existsSync(dir)) return;
   const files = readdirSync(dir).filter((f) => f.startsWith("score-") && f.endsWith(".wav")).map((f) => ({ f, t: statSync(join(dir, f)).mtimeMs }));
-  for (const { f } of files.sort((a, b) => b.t - a.t).slice(KEEP)) rmSync(join(dir, f));
+  for (const { f } of files.sort((a, b) => b.t - a.t).slice(KEEP)) {
+    rmSync(join(dir, f));
+    rmSync(join(dir, `${f}.json`), { force: true });
+  }
+};
+
+/** One score on disk: the edit it was written for, its seed, and what the seed chose (scores made before 10-19 have no label). */
+export type ScoreListing = { file: string; seq: string; seed: number; label?: string; at: string };
+
+/** Every score still on disk for these edits, newest first (only the newest KEEP per game are kept). */
+export const listScores = (g: GameConfig, seqIds: string[]): ScoreListing[] => {
+  const dir = join(publicDir(g), "music", DIR);
+  if (!existsSync(dir)) return [];
+  const prefixes = seqIds.map((id) => ({ id, prefix: `score-${id.replace(/[^a-zA-Z0-9_-]/g, "")}-s` }));
+  const out: ScoreListing[] = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith(".wav")) continue;
+    const of = prefixes.find((p) => f.startsWith(p.prefix) && /^\d+-/.test(f.slice(p.prefix.length)));
+    if (!of) continue;
+    const side = join(dir, `${f}.json`);
+    const label = existsSync(side) ? (JSON.parse(readFileSync(side, "utf8")) as { label?: string }).label : undefined;
+    out.push({ file: `${DIR}/${f}`, seq: of.id, seed: Number(/-s(\d+)-/.exec(f)?.[1] ?? 0), ...(label ? { label } : {}), at: statSync(join(dir, f)).mtime.toISOString() });
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
+};
+
+/** A score from the list onto an edit as its bed (at the bed's level), whatever was there. */
+export const useScore = (g: GameConfig, seqId: string, file: string): ScoreState => {
+  const seq = readSequence(g, seqId);
+  if (!seq) throw new Error("that edit isn't there any more");
+  if (!file.startsWith(`${DIR}/score-`) || file.includes("..") || !existsSync(join(publicDir(g), "music", file))) throw new Error("that score isn't there any more");
+  writeSequence(g, { ...seq, music: { song: file, from: 0, level: seq.music?.level ?? SCORE_LEVEL } });
+  const side = join(publicDir(g), "music", `${file}.json`);
+  const label = existsSync(side) ? (JSON.parse(readFileSync(side, "utf8")) as { label?: string }).label : undefined;
+  const st: ScoreState = { seq: seqId, file, seed: Number(/-s(\d+)-/.exec(file)?.[1] ?? 0), state: "ready", ...(label ? { label } : {}) };
+  states.set(seqId, st);
+  return st;
 };
 
 export type ScoreState = { seq: string; file: string; seed: number; state: "making" | "ready" | "failed"; label?: string; error?: string };
@@ -87,7 +123,14 @@ export type ScoreState = { seq: string; file: string; seed: number; state: "maki
 /** Scores in hand, by edit id: what's making, made, or failed (this Desk run). */
 const states = new Map<string, ScoreState>();
 const jobs = new Map<string, Promise<ScoreState>>();
-export const scoreState = (seqId: string): ScoreState | undefined => states.get(seqId);
+/** The edit's score: the one this Desk run is making or made, else the one already on the edit (carried over by organise, or from before a restart). */
+export const scoreState = (g: GameConfig, seqId: string): ScoreState | undefined => {
+  const st = states.get(seqId);
+  if (st) return st;
+  const song = readSequence(g, seqId)?.music?.song;
+  if (!song?.startsWith(`${DIR}/score-`) || !existsSync(join(publicDir(g), "music", song))) return undefined;
+  return { seq: seqId, file: song, seed: Number(/-s(\d+)-/.exec(song)?.[1] ?? 0), state: "ready" };
+};
 
 /**
  * The edit's score: made if it isn't there yet (in the background: the
@@ -119,8 +162,11 @@ export const makeScore = (g: GameConfig, s: Pick<Script, "long">, seqId: string,
     .then((r) => {
       rmSync(planPath, { force: true });
       if (!r.ok) return place({ seq: seqId, file, seed, state: "failed", error: r.err.trim().split("\n").pop() || "the score didn't make" });
+      const label = r.out.trim().split("\n")[0];
+      // Beside the file, so the list of past scores can say what each one is after a restart.
+      writeFileSync(`${out}.json`, JSON.stringify({ label, seed, seq: seqId }));
       trim(g);
-      return place({ seq: seqId, file, seed, state: "ready", label: r.out.trim().split("\n")[0] });
+      return place({ seq: seqId, file, seed, state: "ready", label });
     })
     .finally(() => jobs.delete(file));
   jobs.set(file, job);

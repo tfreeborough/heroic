@@ -465,10 +465,14 @@ one section per beat from its build cards and the beat's mood; chapter
 cards → breaks; pulled words → accents), `makeScore` (file
 `music/generated/score-<edit>-s<seed>-<hash>.wav`, gitignored, newest
 30 kept; set as the edit's bed at 0.25 unless Tom put his own song
-there); organise sets `script.scoreSeed` and makes it in the
-background; the Organise step's **Score** panel shows the label, a
-player, **Fit to the edit** (same seed, the edit's timings now) and
-**Another soundtrack** (new seed). Beats lifts the bed ×2 where nobody
+there); the Organise step's **Score** panel shows the label, a
+player, **Make the music** (no score on the newest edit yet),
+**Fit to the edit** (same seed, the edit's timings now) and
+**Another soundtrack** (new seed). 2026-10-19, decoupled on Tom's ask:
+organise no longer makes the score (each re-organise refitted it, and a
+shift in the main mood swapped the style, so it sounded like a new song);
+a new edit takes the previous edit's music bed as it was, and only the
+panel's buttons write music. Beats lifts the bed ×2 where nobody
 talks (the title, the end card). Checked: a throwaway edit end to end
 (plan from the edit, score in 17s, bed set, a 74s Beats render: the
 score ~12–15 dB under the voice), spectrogram and loudness of two

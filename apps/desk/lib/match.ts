@@ -227,25 +227,31 @@ export const assignedCovers = (take: Pick<Take, "words" | "seconds"> & { keep?: 
 
 /** A pause longer than this inside a take is shortened by the auto trim… */
 export const LONG_PAUSE = 0.7;
-/** …to about this. */
-const KEEP_PAUSE = 0.4;
+/**
+ * …to this much after the word before it (a word's end is where it stops
+ * being loud: the "t" of "it" is a silence then a little burst up to 0.25s
+ * later, and 0.2 cut it off)…
+ */
+export const KEEP_AFTER = 0.3;
+/** …and this much before the word after. */
+export const KEEP_BEFORE = 0.15;
 
 /**
  * The tidy-up a take gets without Tom touching it: the silence off both
  * ends (to just before the first word and just after the last) and,
  * with `pauses`, every pause longer than LONG_PAUSE between two words cut
- * down to about KEEP_PAUSE. Works on what's already kept, so cuts Tom
+ * down to KEEP_AFTER + KEEP_BEFORE. Works on what's already kept, so cuts Tom
  * made by hand stay; running it again changes nothing. Undefined = no
  * words to go by (left as it is).
  */
 export const autoTrim = (take: Pick<Take, "words" | "seconds"> & { keep?: Span[] }, pauses = true): Span[] | undefined => {
   const words = keptWords(take).filter((w) => !w.hidden);
   if (!words.length) return take.keep;
-  let keep = trimRegion(take.keep, take.seconds, Math.max(0, words[0]!.start - 0.15), Math.min(take.seconds, words.at(-1)!.end + 0.2));
+  let keep = trimRegion(take.keep, take.seconds, Math.max(0, words[0]!.start - KEEP_BEFORE), Math.min(take.seconds, words.at(-1)!.end + KEEP_AFTER));
   if (pauses)
     for (let i = 1; i < words.length; i++) {
       const gap = words[i]!.start - words[i - 1]!.end;
-      if (gap > LONG_PAUSE) keep = cutRegion(keep, take.seconds, { start: words[i - 1]!.end + KEEP_PAUSE / 2, end: words[i]!.start - KEEP_PAUSE / 2 });
+      if (gap > LONG_PAUSE) keep = cutRegion(keep, take.seconds, { start: words[i - 1]!.end + KEEP_AFTER, end: words[i]!.start - KEEP_BEFORE });
     }
   return keep;
 };

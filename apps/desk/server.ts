@@ -22,7 +22,7 @@ import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } fr
 import { hasClaude } from "./lib/draft";
 import type { ScriptPatch } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, hasClaude as hasRewriter, makePictures, makeThumbnails, organise, ownPicture, ownThumbnail, pendingPictures, planPictures, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, rewriteScript, planTitles, writeYouTube } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planPictures, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, writeYouTube } from "./lib/scriptSteps";
 import { scoreState } from "./lib/score";
 import { decide, researchState, startResearch } from "./lib/researcher";
 import { docModified, listDocs, pullDoc, unlinkDoc } from "./lib/scriptDocs";
@@ -507,7 +507,7 @@ const server = Bun.serve({
       GET: withGame((g, req) => {
         const s = readScript(g, req.params.id!);
         const seqId = s?.sequences?.at(-1)?.id;
-        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(seqId) ?? null) : null, researching: researchState(s.id) ?? null }) : json({ error: "no such script" }, 404);
+        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null }) : json({ error: "no such script" }, 404);
       }),
       PUT: withGame(async (g, req) => {
         try {
@@ -685,6 +685,34 @@ const server = Bun.serve({
         const body = (await req.json().catch(() => ({}))) as { another?: boolean };
         try {
           return json(remakeScore(g, req.params.id!, Boolean(body.another)));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Every score made for the script's edits (GET), or one of them back on the newest edit (POST `{ file }`, answers with the script). */
+    "/api/:game/scripts/:id/scores": {
+      GET: withGame((g, req) => {
+        try {
+          return json(scriptScores(g, req.params.id!));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { file?: string };
+        try {
+          return json(chooseScore(g, req.params.id!, String(body.file ?? "")));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** One of the script's edits binned (into the sequences' .trash) and off its list. Answers with the script. */
+    "/api/:game/scripts/:id/sequences/:seq": {
+      DELETE: withGame((g, req) => {
+        try {
+          return json(binEdit(g, req.params.id!, req.params.seq!));
         } catch (e) {
           return fail(e);
         }

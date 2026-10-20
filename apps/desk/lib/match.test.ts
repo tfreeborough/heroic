@@ -111,15 +111,19 @@ describe("auto trim", () => {
     const take = { seconds: 20, words: [w("one", 2, 2.4), w("two", 2.5, 2.9), w("three", 6, 6.4), w("four", 6.5, 6.9), w("five", 12, 12.4)] };
     const keep = autoTrim(take)!;
     expect(keep[0]!.start).toBeCloseTo(1.85, 5);
-    expect(keep.at(-1)!.end).toBeCloseTo(12.6, 5);
-    // The 3.1s pause after "two" comes down to 0.4s.
-    expect(keep[1]!.start - keep[0]!.end).toBeCloseTo(6 - 0.2 - (2.9 + 0.2), 5);
+    expect(keep.at(-1)!.end).toBeCloseTo(12.7, 5);
+    // The 3.1s pause after "two" comes down to 0.45s, most of it after "two" (a closing "t" lands up to 0.25s late).
+    expect(keep[0]!.end).toBeCloseTo(2.9 + 0.3, 5);
+    expect(keep[1]!.start).toBeCloseTo(6 - 0.15, 5);
     expect(autoTrim({ ...take, keep })).toEqual(keep);
     // Tom cut "four" out by hand: it stays out.
     const cut = [{ start: 0, end: 6.45 }, { start: 6.95, end: 20 }];
     const again = autoTrim({ ...take, keep: cut })!;
     expect(again.some((k) => k.start <= 6.6 && k.end >= 6.8)).toBe(false);
     // Without pauses: just the ends.
-    expect(autoTrim(take, false)).toEqual([{ start: 1.85, end: 12.6 }]);
+    const ends = autoTrim(take, false)!;
+    expect(ends.length).toBe(1);
+    expect(ends[0]!.start).toBeCloseTo(1.85, 5);
+    expect(ends[0]!.end).toBeCloseTo(12.7, 5);
   });
 });

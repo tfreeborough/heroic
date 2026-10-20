@@ -414,8 +414,18 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
   useEffect(() => {
     const p = player.current;
     if (!p || !ready) return;
+    // The player sends frames from inside its own effect. Setting state straight from there, every frame, chains each
+    // commit to the next once a render outlasts a frame (React's "Maximum update depth exceeded"), so the playhead
+    // moves once per screen refresh instead, outside it.
+    let raf = 0;
+    let latest = 0;
     const onFrame = (e: { detail: { frame: number } }) => {
-      setT(e.detail.frame / FPS);
+      latest = e.detail.frame;
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          setT(latest / FPS);
+        });
       // The first frame the clip actually moves: how long the mic had been live by then.
       const s = sync.current;
       if (recRef.current.state === "on" && s.skip === null && e.detail.frame > s.frame0 && mic.current) s.skip = mic.current.elapsed() - (e.detail.frame - s.frame0) / FPS;
@@ -431,6 +441,7 @@ export const Editor: React.FC<{ game: GameInfo; api: GameApi; id: string }> = ({
     p.addEventListener("pause", onPause);
     p.addEventListener("ended", onEnded);
     return () => {
+      cancelAnimationFrame(raf);
       p.removeEventListener("frameupdate", onFrame);
       p.removeEventListener("play", onPlay);
       p.removeEventListener("pause", onPause);

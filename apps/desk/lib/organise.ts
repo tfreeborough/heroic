@@ -18,7 +18,7 @@
  * the editor's job, after.
  */
 import { type AudioClip, type Card, type Sequence, type Take, type Word, emptySequence, newId } from "@heroic/voiceover";
-import { type Cover, type Span, keptWords } from "./match";
+import { type Cover, KEEP_AFTER, type Span, keptWords } from "./match";
 import { CHAPTER_CARD } from "@heroic/ascii-build";
 import { type Beat, type Cut, type Script, allowedChapters, cardOfBeat } from "./scripts";
 
@@ -32,9 +32,15 @@ export type Organised = {
   chapters: { name: string; at: number }[];
 };
 
-/** A little of the take before the first word and after the last, so a slice doesn't start on a consonant. Never more than halfway to the next word along. */
+/** A little of the take before the first word, so a slice doesn't start on a consonant… */
 const LEAD = 0.12;
-const TAIL = 0.18;
+/** …and after the last, the trim's own margin, which a closing "t" needs (see KEEP_AFTER). */
+const TAIL = KEEP_AFTER;
+/** Where to cut between two words not said in one breath: TAIL after the first, LEAD before the second, the pause shared out in that proportion when it's too short for both. */
+const between = (a: Word, b: Word) => {
+  const k = Math.min(1, Math.max(0, b.start - a.end) / (TAIL + LEAD));
+  return { end: a.end + TAIL * k, start: b.start - LEAD * k };
+};
 /** Words closer than this are one run of speech: a slice takes in all of a run, never part of one. */
 const JOINED = 0.4;
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -62,8 +68,8 @@ export const sliceOf = (take: Script["takes"][number], cover: Cover, covers: Cov
   const before = words[i - 1];
   const after = words[j + 1];
   return {
-    start: r3(Math.max(0, first.start - LEAD, before ? (before.end + first.start) / 2 : 0)),
-    end: r3(Math.min(take.seconds, last.end + TAIL, after ? (last.end + after.start) / 2 : Infinity)),
+    start: r3(Math.max(0, first.start - LEAD, before ? between(before, first).start : 0)),
+    end: r3(Math.min(take.seconds, last.end + TAIL, after ? between(last, after).end : Infinity)),
   };
 };
 

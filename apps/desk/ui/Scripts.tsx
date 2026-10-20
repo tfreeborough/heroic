@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type GameApi, type GameInfo, type ScoreState, type Script, type ScriptPatch, type ScriptSummary, fmtDate } from "./api";
+import { type GameApi, type GameInfo, type ScoreListing, type ScoreState, type Script, type ScriptPatch, type ScriptSummary, fmtDate } from "./api";
 import type { Cover } from "../lib/match";
 import { go } from "./App";
 import { Markdown } from "./markdown";
@@ -591,20 +591,38 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
                 <div className="small muted">Open the edit, check it, then Done › to Make with the Beats template: the title builds out of glyphs, then each picture while you say its beat, your words along the foot, a card for each chapter, and the end card.</div>
               </div>
             ) : null}
-            {s.sequences?.length && !made ? (
+            {s.sequences?.length ? (
               <div className="stack" style={{ gap: 4 }}>
                 <span className="small muted">Edits made so far, newest first:</span>
-                {[...s.sequences].reverse().slice(0, 8).map((x) => (
-                  <div key={x.id} className="small">
-                    <button className="link small" onClick={() => go({ name: "edit", id: x.id })}>
-                      {x.id}
-                    </button>
-                    <span className="muted">
-                      {" "}
-                      · run {x.run} · {x.at.slice(0, 16).replace("T", " ")}
-                      {x.missing ? ` · ${x.missing} not recorded` : ""}
-                      {x.conflicts ? ` · ${x.conflicts} in two takes` : ""}
+                {[...s.sequences].reverse().map((x) => (
+                  <div key={x.id} className="row small" style={{ gap: 8 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <button className="link small" onClick={() => go({ name: "edit", id: x.id })}>
+                        {x.id}
+                      </button>
+                      <span className="muted">
+                        {" "}
+                        · run {x.run} · {x.at.slice(0, 16).replace("T", " ")}
+                        {x.missing ? ` · ${x.missing} not recorded` : ""}
+                        {x.conflicts ? ` · ${x.conflicts} in two takes` : ""}
+                      </span>
                     </span>
+                    <button
+                      className="ghost small danger"
+                      disabled={Boolean(busy)}
+                      title="Into the edits' .trash, off this list. The takes stay: the script still has them."
+                      onClick={() => {
+                        if (!confirm(`Bin the edit "${x.id}"?\n\nIt goes to the edits' .trash. The takes stay with the script, and its score stays in the list of scores until the Desk tidies old ones away.`)) return;
+                        void step(`bin-${x.id}`, async () => {
+                          const next = await api.binScriptEdit(id, x.id);
+                          setMade((m) => m?.filter((y) => y.id !== x.id) ?? null);
+                          askScore();
+                          return next;
+                        });
+                      }}
+                    >
+                      Bin
+                    </button>
                   </div>
                 ))}
               </div>
@@ -624,8 +642,25 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
                   })
                 }
               />
+            ) : null}
+            {s.sequences?.length ? (
+              <ScoreHistory
+                api={api}
+                id={id}
+                current={score?.state === "ready" ? score.file : undefined}
+                making={score?.state === "making"}
+                runs={new Map(s.sequences.map((x) => [x.id, x.run]))}
+                busy={busy}
+                onChoose={(file) =>
+                  void step("score-pick", async () => {
+                    const x = await api.chooseScore(id, file);
+                    askScore();
+                    return x;
+                  })
+                }
+              />
             ) : (
-              <div className="small muted">Organise once and the score for the edit, and the chapters for YouTube, show up here.</div>
+              <div className="small muted">Organise once, then make the music for the edit here. The chapters for YouTube show up here too.</div>
             )}
             {made?.find((m) => m.youtube) ? <YouTubeChapters text={made.find((m) => m.youtube)!.youtube} /> : !made && s.sequences?.at(-1)?.youtube ? <YouTubeChapters text={s.sequences.at(-1)!.youtube!} /> : null}
           </div>
@@ -683,25 +718,35 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
 };
 
 /**
- * The score under the newest edit: what the seed chose, a player, and
- * the two ways to make it again (for the edit as it is now, or a whole new
- * soundtrack). It's the edit's music bed already: Make plays it.
+ * The score under the newest edit: what the seed chose, a player, and the
+ * buttons that make it (organising never does: the newest edit's bed comes
+ * across as it was). Make the music when there's none, then Fit to the edit
+ * (same seed, the edit as it is now) or Another soundtrack (a new seed).
+ * It's the edit's music bed: Make plays it.
  */
 const ScorePanel: React.FC<{ api: GameApi; score: ScoreState | null; busy: Busy; onRemake: (another: boolean) => void }> = ({ api, score, busy, onRemake }) => (
   <div className="panel stack" style={{ gap: 8 }}>
     <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
       <strong className="small">The score</strong>
       <span className="row" style={{ gap: 8 }}>
-        <button className="ghost small" disabled={Boolean(busy) || score?.state === "making"} onClick={() => onRemake(false)} title="Write it again for the edit as it is now (after moving things in the editor). Same seed: the same piece, refitted.">
-          Fit to the edit
-        </button>
-        <button className="ghost small" disabled={Boolean(busy) || score?.state === "making"} onClick={() => onRemake(true)} title="A new seed: a different key, tempo, style, instruments and theme.">
-          Another soundtrack
-        </button>
+        {!score || score.state === "failed" ? (
+          <button className="small" disabled={Boolean(busy)} onClick={() => onRemake(false)} title="Write the score for the newest edit, about a minute for ten minutes of video. Organising again leaves it alone.">
+            Make the music
+          </button>
+        ) : (
+          <>
+            <button className="ghost small" disabled={Boolean(busy) || score.state === "making"} onClick={() => onRemake(false)} title="Write it again for the edit as it is now (after organising again or moving things in the editor). Same seed: the same key, tempo and theme, refitted.">
+              Fit to the edit
+            </button>
+            <button className="ghost small" disabled={Boolean(busy) || score.state === "making"} onClick={() => onRemake(true)} title="A new seed: a different key, tempo, style, instruments and theme.">
+              Another soundtrack
+            </button>
+          </>
+        )}
       </span>
     </div>
     {!score ? (
-      <div className="small muted">Organise makes the score for the edit (about a minute for ten minutes of video). Press Fit to the edit if this Desk was restarted since.</div>
+      <div className="small muted">The newest edit has no score yet. Organising never makes one, so the song only changes when you press a button here.</div>
     ) : score.state === "making" ? (
       <div className="small muted">Writing the score… (seed {score.seed})</div>
     ) : score.state === "failed" ? (
@@ -715,6 +760,52 @@ const ScorePanel: React.FC<{ api: GameApi; score: ScoreState | null; busy: Busy;
     )}
   </div>
 );
+
+/**
+ * Every score made for the script's edits, newest first, like the edits
+ * list: listen to any of them (one player, the one you pressed), and Use
+ * this puts it back on the newest edit. The Desk keeps a game's newest 30.
+ */
+const ScoreHistory: React.FC<{ api: GameApi; id: string; current?: string; making: boolean; runs: Map<string, number>; busy: Busy; onChoose: (file: string) => void }> = ({ api, id, current, making, runs, busy, onChoose }) => {
+  const [list, setList] = useState<ScoreListing[] | null>(null);
+  const [listening, setListening] = useState<string | null>(null);
+  // Again whenever the edit's score changes or one finishes making.
+  useEffect(() => {
+    let alive = true;
+    void api
+      .scores(id)
+      .then((x) => alive && setList(x))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [api, id, current, making]);
+  if (!list?.length) return null;
+  return (
+    <div className="panel stack" style={{ gap: 6 }}>
+      <strong className="small">Scores so far, newest first</strong>
+      {listening ? <audio key={listening} controls autoPlay src={api.publicUrl(`music/${listening}`)} style={{ width: "100%" }} /> : null}
+      {list.map((x) => (
+        <div key={x.file} className="row small" style={{ gap: 8, flexWrap: "wrap" }}>
+          <button className="link small" onClick={() => setListening(listening === x.file ? null : x.file)}>
+            {listening === x.file ? "stop" : "listen"}
+          </button>
+          <span className="muted" style={{ flex: 1, minWidth: 0 }}>
+            {runs.has(x.seq) ? `run ${runs.get(x.seq)}` : x.seq} · seed {x.seed}
+            {x.label ? ` · ${x.label}` : ""} · {x.at.slice(0, 16).replace("T", " ")}
+          </span>
+          {x.file === current ? (
+            <span className="small">on the edit</span>
+          ) : (
+            <button className="ghost small" disabled={Boolean(busy) || making} onClick={() => onChoose(x.file)} title="Put this score on the newest edit, and make its seed the one Fit to the edit uses. It was written for its own edit's timings: press Fit to the edit to line it up with this one.">
+              Use this
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 /** The chapters as YouTube's description wants them (timestamps include the title's cold open). */
 const YouTubeChapters: React.FC<{ text: string }> = ({ text }) => (

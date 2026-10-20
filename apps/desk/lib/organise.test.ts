@@ -34,9 +34,9 @@ describe("organise", () => {
     expect(clips[0]!.at).toBe(0);
     // The second clip starts where the first ends plus the gap.
     expect(clips[1]!.at).toBeCloseTo(clips[0]!.end - clips[0]!.start + 0.3, 2);
-    // Slices run from just before the beat's first word to halfway into the gap before the next beat's first word.
+    // Slices run from just before the beat's first word to the next beat's start; a gap too short for both margins is shared out 0.3 : 0.12.
     expect(clips[0]!.start).toBeCloseTo(1 - 0.12, 2);
-    expect(clips[0]!.end).toBeCloseTo(1 + 19 * 0.3 - 0.025, 2);
+    expect(clips[0]!.end).toBeCloseTo(1 + 19 * 0.3 - 0.05 + (0.05 * 0.3) / 0.42, 3);
     expect(seq.markers?.length).toBe(3);
     const cards = seq.overlay!.cards;
     expect(cards.map((c) => c.kind)).toEqual(["text", "image"]);
@@ -81,7 +81,7 @@ describe("organise", () => {
     const s = script([{ file: "voice/takes/t1.wav", seconds: 30, recordedAt: "", words, transcribed: true }]);
     const clip = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips[0]!;
     expect(clip.start).toBeCloseTo(1 - 0.12, 2);
-    expect(clip.end).toBeCloseTo(words.at(-1)!.end + 0.18, 2);
+    expect(clip.end).toBeCloseTo(words.at(-1)!.end + 0.3, 2);
   });
 
   test("a pause the trim shortened stays short, and the beat carries on after it", () => {
@@ -90,7 +90,7 @@ describe("organise", () => {
     const clips = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips;
     expect(clips.map((c) => [c.start, c.end])).toEqual([
       [0.88, 3.75],
-      [5.8, r3(words.at(-1)!.end + 0.18)],
+      [5.8, r3(words.at(-1)!.end + 0.3)],
     ]);
     expect(clips[1]!.at).toBeCloseTo(3.75 - 0.88, 3);
   });

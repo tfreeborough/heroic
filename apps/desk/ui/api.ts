@@ -8,6 +8,8 @@ import type { ResearchState, ScriptResearch } from "../lib/research";
 import type { DocEntry } from "../lib/doc";
 /** A script's newest edit's score (lib/score.ts). */
 export type ScoreState = { seq: string; file: string; seed: number; state: "making" | "ready" | "failed"; label?: string; error?: string };
+/** A score on disk, for the list of past ones (lib/score.ts). */
+export type ScoreListing = { file: string; seq: string; seed: number; label?: string; at: string };
 import type { Platform, Post, Schedule } from "../lib/schedule";
 import type { CleanupSpec, FootageSidecar } from "../lib/sidecar";
 import type { Sequence, Take, VoiceOver } from "@heroic/voiceover";
@@ -172,6 +174,12 @@ export const gameApi = (game: string) => {
     decideFinding: (id: string, finding: string, d: { status?: string; text?: string; anchor?: string }) => post(`${base}/scripts/${enc(id)}/research/decide`, { finding, ...d }).then((r) => j<ScriptResearch>(r)),
     /** The newest edit's score made again; `another` = a new seed. */
     remakeScore: (id: string, another: boolean) => post(`${base}/scripts/${enc(id)}/score`, { another }).then((r) => j<Script>(r)),
+    /** One of the script's edits binned (into the sequences' .trash) and off its list. */
+    binScriptEdit: (id: string, seq: string) => fetch(`${base}/scripts/${enc(id)}/sequences/${enc(seq)}`, { method: "DELETE" }).then((r) => j<Script>(r)),
+    /** Every score made for the script's edits still on disk, newest first. */
+    scores: (id: string) => fetch(`${base}/scripts/${enc(id)}/scores`).then((r) => j<ScoreListing[]>(r)),
+    /** An earlier score back on the newest edit (its seed becomes the script's). */
+    chooseScore: (id: string, file: string) => post(`${base}/scripts/${enc(id)}/scores`, { file }).then((r) => j<Script>(r)),
     /** A recording → a take on the script (saved, transcribed). */
     addScriptTake: (id: string, audio: Blob, opts: { tidy: boolean; denoise?: number; ext?: string }) =>
       fetch(`${base}/scripts/${enc(id)}/takes?tidy=${opts.tidy ? 1 : 0}&denoise=${opts.denoise ?? 0}&ext=${enc(opts.ext ?? "wav")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: audio }).then((r) => j<Take & { error?: string }>(r)),

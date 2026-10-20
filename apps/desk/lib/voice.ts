@@ -18,6 +18,7 @@ import { NOISE_LEVELS, type Take, type VoiceOver, denoise, emptyVoiceOver, pause
 import type { GameConfig } from "../game";
 import { exec } from "./exec";
 import { publicDir } from "./footage";
+import { listScripts, readScript } from "./scriptsStore";
 import { transcribeFile } from "./whisper";
 
 export const voiceDir = (g: GameConfig) => join(g.root, g.voiceDir ?? join(g.publicDir, "voice"));
@@ -210,12 +211,14 @@ export const resound = async (g: GameConfig, voice: VoiceOver, want: Partial<Sou
 };
 export const soundStrength = strength;
 
-/** Takes nobody uses any more → the voice folder's .trash (every file of each: raw and made). */
+/** Takes nobody uses any more → the voice folder's .trash (every file of each: raw and made). A take a voice-over or a script still has stays. */
 export const trashTakes = (g: GameConfig, takes: Take[]) => {
   if (!takes.length) return;
   ensure(g);
   mkdirSync(trashDir(g), { recursive: true });
-  const keep = new Set(listVoices(g).flatMap((o) => readVoice(g, o.id)?.takes ?? []).map(stemOf));
+  // A script's takes are what its every edit is organised from: binning its edits must never take them.
+  const scripts = listScripts(g).flatMap((x) => readScript(g, x.id)?.takes ?? []);
+  const keep = new Set([...listVoices(g).flatMap((o) => readVoice(g, o.id)?.takes ?? []), ...scripts].map(stemOf));
   for (const t of takes) {
     if (keep.has(stemOf(t))) continue;
     for (const f of readdirSync(takesDir(g)).filter((f) => f.startsWith(`${stemOf(t)}.`))) renameSync(join(takesDir(g), f), join(trashDir(g), f));
