@@ -401,3 +401,74 @@ one-frame fade, and plays the chime pre-pitched into its key
 playbackRate keeps pitch in a render so it can't do this). The Make note
 says which tune, its mood words and "Making it…". Verified with a real
 Remotion render (tune at lag 0, chime a semitone up for slot 1).
+
+## Story comments (Tom, 2026-10-21)
+
+> With each save I have a short story written with it. Discoverability
+> relies on me remembering to go to each video and post it as a comment.
+
+**The job.** A script that looks at our uploads, finds any Save video
+without a comment from us, and posts the save's journal under it. Once
+by hand to backfill, then on a schedule shortly after the 8 AM go-live.
+
+**Built: `apps/autosave-promos/scripts/comments.ts`** (`bun run comments`
+in the app). No packages, plain fetch against the YouTube Data API.
+
+- **Which story.** The title is "Save NN: words" (desk.config.ts). The
+  words win: they're matched against every sidecar's tagline, title and
+  memory, because the ledger's slot can be stale (slots 02–04 still say
+  the-mentor / empty-halls / the-late-shift, which were renamed to
+  on-the-crate / the-long-table / quiet-time and titled with the save's
+  title). Only then NN → public/slots.json → the sidecar. The journal
+  goes up verbatim.
+- **Already there?** commentThreads.list on the video, any top-level
+  comment whose author is our channel counts (including ones Tom posted
+  by hand). Comments off → reported, skipped.
+- **Only public videos.** A scheduled Short is private until 8 AM;
+  the uploads list shows it, the privacy filter leaves it alone.
+- **Dry run by default.** `bun run comments` prints would/done/none for
+  every upload; `--post` posts. `stories` lists the slot → story mapping
+  with no credentials at all.
+- **Quota.** 1 unit per list page, 50 per comment, against 10,000 a day.
+  A daily run is a few units; the backfill of 13 is under 700.
+- **Not possible via the API:** pinning the comment. Still a tap in the
+  app if Tom wants it on top.
+
+**Credentials (Tom, once, in Google Cloud):** a project with the YouTube
+Data API v3 enabled, an OAuth client of type **Desktop app**, and the
+consent screen set to **In production** (not Testing, whose refresh
+tokens expire after 7 days). Scope youtube.force-ssl is "sensitive", so
+Google shows an unverified-app warning on consent and caps it at 100
+users; one channel is fine. Then locally, with YT_CLIENT_ID and
+YT_CLIENT_SECRET in apps/desk/.env:
+
+    cd apps/autosave-promos && bun run comments auth
+
+opens the consent page signed in as the Autosave channel, catches the
+code on 127.0.0.1:48123, and prints YT_REFRESH_TOKEN.
+
+**Render cron job** (the pattern of the HQ README):
+
+| Setting | Value |
+|---|---|
+| Type | Cron Job, same repo |
+| Root Directory | blank (repo root, so workspaces resolve) |
+| Build Command | `bun install` |
+| Command | `bun run --cwd apps/autosave-promos comments -- --post` |
+| Schedule | `20 7,8 * * *` (Render crons are UTC; 08:20 London is 07:20 in summer, 08:20 in winter, so both, idempotently) |
+| Env | YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN |
+
+Render charges a $1/month minimum per cron service. The same command
+would run free as a GitHub Actions schedule (the saves and ledger are in
+the repo either way), at the cost of looser timing; Tom asked for
+Render, so Render.
+
+**TikTok: parked.** TikTok's Business API does list "Create a new
+comment on an owned video", but it lives under Business Messaging access,
+which needs a US Data Security review of the developer app (7–10 business
+days, can be refused) and is "not yet available in the European Economic
+Area, Switzerland or the UK market". The Display and Content Posting APIs
+have no comment endpoints at all. Converting the account to a business
+account doesn't change that. If TikTok opens the region, the script's
+shape (list own videos, check for our comment, post the journal) carries
+over.

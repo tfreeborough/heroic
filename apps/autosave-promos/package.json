@@ -8,6 +8,7 @@
     "sync": "bun scripts/sync-library.ts",
     "studio": "bun run sync && remotion studio",
     "sfx": "bun scripts/forge-sfx.ts",
+    "comments": "bun scripts/comments.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
