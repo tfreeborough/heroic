@@ -37,6 +37,7 @@
       ],
       "expo-secure-store",
       "expo-iap",
+      "./plugins/withPodsDeploymentTarget.js",
       "expo-web-browser",
       "expo-apple-authentication"
     ],
