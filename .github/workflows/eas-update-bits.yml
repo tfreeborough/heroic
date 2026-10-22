@@ -19,7 +19,12 @@ on:
       - "packages/blood-in-the-sand-sim/**"
       - "packages/core/**"
       - "packages/engine/**"
-      - "bun.lock"
+      # bun.lock is deliberately NOT a trigger: it changes whenever any app in
+      # the monorepo (Desk, HQ, promos…) adds a dependency, which used to fire
+      # OTA updates for commits that never touched the game. A real BITS
+      # dependency change edits apps/blood-in-the-sand/package.json, which is
+      # covered above. For a bare `bun update` run the workflow by hand.
+  workflow_dispatch:
 
 concurrency:
   # A rapid push train publishes in order, last one wins — never interleaved.

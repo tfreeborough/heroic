@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ladderTop, loadoutStats, rankedOverview, ratingSpread } from "@heroic/blood-in-the-sand-persistence";
+import { ladderTop, loadoutStats, namesOf, rankedOverview, ratingSpread } from "@heroic/blood-in-the-sand-persistence";
 import { Bars } from "@/components/Bars";
+import { PlayerLink } from "@/components/PlayerLink";
 import { Stat, Tiles } from "@/components/Stat";
 import { BRACKETS, SEASON, abilityName, weaponName } from "@/lib/bits";
 import { db } from "@/lib/db";
-import { ms, n, pct, short } from "@/lib/format";
+import { ms, n, pct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function Ranked({ searchParams }: { searchParams: Promise<{
     ratingSpread(handle, SEASON, bracket),
     loadoutStats(handle, SEASON, bracket),
   ]);
+  const names = await namesOf(handle, ladder.map((r) => r.subjectId));
   return (
     <>
       <h1>Ranked</h1>
@@ -108,7 +110,9 @@ export default async function Ranked({ searchParams }: { searchParams: Promise<{
             {ladder.map((r, i) => (
               <tr key={r.subjectId}>
                 <td className="num">{i + 1}</td>
-                <td className="mono">{short(r.subjectId)}</td>
+                <td>
+                  <PlayerLink id={r.subjectId} name={names.get(r.subjectId)} />
+                </td>
                 <td className="r num">{r.rating}</td>
                 <td className="r num">{r.peak}</td>
                 <td className="r num">{r.wins}</td>

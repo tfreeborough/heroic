@@ -14,7 +14,8 @@ export function Shell({ email, children }: { email: string; children: React.Reac
         <nav className="nav">
           <NavLink href="/">Overview</NavLink>
           <h4>Blood in the Sand</h4>
-          <NavLink href="/blood-in-the-sand">Dashboard</NavLink>
+          <NavLink href="/blood-in-the-sand">Health</NavLink>
+          <NavLink href="/blood-in-the-sand/activity">Activity</NavLink>
           <NavLink href="/blood-in-the-sand/players">Players</NavLink>
           <NavLink href="/blood-in-the-sand/ranked">Ranked</NavLink>
           <NavLink href="/blood-in-the-sand/economy">Economy</NavLink>

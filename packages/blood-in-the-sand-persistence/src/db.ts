@@ -252,6 +252,39 @@ const applySchema = async (db: Db): Promise<void> => {
       )`,
       `CREATE INDEX IF NOT EXISTS idx_match_log_created
         ON match_log (created_at)`,
+      // One row per HUMAN seat per online match (hq-v2.md § Stage 2): the
+      // per-player match history v1 threw away — ranked keeps its rating
+      // truth in ranked_match_players; this is the one table that also
+      // sees skirmish and brawl seats, with what each seat did. Written in
+      // the same fire-and-forget call as the match_log row. Bots never
+      // land here (every player number excludes them anyway).
+      `CREATE TABLE IF NOT EXISTS match_players (
+        match_id TEXT NOT NULL REFERENCES match_log(id),
+        player_id TEXT NOT NULL,
+        team INTEGER NOT NULL,
+        won INTEGER NOT NULL,
+        weapon TEXT,
+        abilities TEXT,
+        kills INTEGER NOT NULL DEFAULT 0,
+        deaths INTEGER NOT NULL DEFAULT 0,
+        damage_dealt INTEGER NOT NULL DEFAULT 0,
+        damage_taken INTEGER NOT NULL DEFAULT 0,
+        rtt_ms INTEGER,
+        PRIMARY KEY (match_id, player_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_match_players_player
+        ON match_players (player_id)`,
+      // One row per player per UTC day they opened the app (hq-v2.md):
+      // written by touchPlayerSeen (already throttled), so daily actives
+      // become a HISTORY and retention (D1/D7/D30 by cohort) is computable.
+      // Nothing gameplay-facing reads it.
+      `CREATE TABLE IF NOT EXISTS player_days (
+        player_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        PRIMARY KEY (player_id, day)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_player_days_day
+        ON player_days (day)`,
     ],
     "write",
   );
@@ -272,6 +305,16 @@ const applySchema = async (db: Db): Promise<void> => {
   // straight off this column. NULL = never seen since the column landed.
   await addColumnIfMissing(db, "players", "last_seen_at INTEGER");
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_players_last_seen ON players (last_seen_at)`);
+  // The name the player last joined a room with (hq-v2.md, Tom 2026-10-22):
+  // stamped by the game server on every seat/queue with a resolved account
+  // — already shown to every opponent, so no new privacy surface. NULL =
+  // never seen since the column landed. `note` is HQ's own free text about
+  // the player; nothing player-facing reads either.
+  await addColumnIfMissing(db, "players", "name TEXT");
+  await addColumnIfMissing(db, "players", "note TEXT");
+  // Which map and who won (hq-v2.md): absent on rows from before the columns.
+  await addColumnIfMissing(db, "match_log", "arena TEXT");
+  await addColumnIfMissing(db, "match_log", "winner_team INTEGER");
   // One player per Clerk account (bits-accounts.md) — partial so the unlinked
   // majority (NULL) never collide. Outside the batch: players predates it.
   await db.execute(

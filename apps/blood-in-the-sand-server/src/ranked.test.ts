@@ -148,9 +148,9 @@ const makeServer = () => {
   return { server, published };
 };
 
-const until = async (pred: () => boolean, ms = 2000): Promise<void> => {
+const until = async (pred: () => boolean | Promise<boolean>, ms = 2000): Promise<void> => {
   const start = Date.now();
-  while (!pred()) {
+  while (!(await pred())) {
     if (Date.now() - start > ms) throw new Error("timed out waiting");
     await Bun.sleep(5);
   }
@@ -539,6 +539,20 @@ describe("ranked flow", () => {
     const accountA = a.ws.data.accountId!;
     expect(await gloryEarned(db, accountA)).toBe(23); // match pay alone — deed bounties land on top
     expect((await getRating(db, accountA, SEASON, "1v1")).rating).toBe(1512);
+
+    // The match log carries both human seats, the map and the winner, and
+    // the queue stamped each account's name (hq-v2.md § Stage 2).
+    await until(async () => (await db.execute("SELECT COUNT(*) AS n FROM match_players")).rows[0]!["n"] === 2);
+    const seats = await db.execute("SELECT player_id, won FROM match_players ORDER BY won DESC");
+    expect(seats.rows.map((r) => [r["player_id"], r["won"]])).toEqual([
+      [accountA, 1],
+      [b.ws.data.accountId!, 0],
+    ]);
+    const head = await db.execute("SELECT arena, winner_team FROM match_log");
+    expect(head.rows[0]!["winner_team"]).toBe(winnerTeam);
+    expect(typeof head.rows[0]!["arena"]).toBe("string");
+    const names = await db.execute("SELECT name FROM players ORDER BY name");
+    expect(names.rows.map((r) => r["name"])).toEqual(["Alice", "Bob"]);
 
     // Settled + ceremony held ⇒ the room closes on the next beat. (A ranked
     // room never returns to lobby — the room stops stepping the sim at the

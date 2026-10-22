@@ -1,7 +1,9 @@
 # HQ — the studio console
 
 Status: **designed + BUILT 2026-09-11** (`apps/hq`, Next 16 + Auth.js; M2
-data additions built the same day) — owed: Tom's Google OAuth client +
+data additions built the same day; **v2 — the player window, activity
+feed, health dashboard and the data behind them — is
+[hq-v2.md](./hq-v2.md), built 2026-10-22**) — owed: Tom's Google OAuth client +
 Render service + env (§ Deploy), `STATS_TOKEN` on the game server, a first
 real-data look · Applies to: **every Free the Borough game** (Blood in the
 Sand is the only tenant today) ·

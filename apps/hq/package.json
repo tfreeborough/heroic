@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/backend": "^3.16.10",
     "@heroic/blood-in-the-sand-persistence": "workspace:*",
     "@heroic/blood-in-the-sand-sim": "workspace:*",
     "next": "16.3.5",

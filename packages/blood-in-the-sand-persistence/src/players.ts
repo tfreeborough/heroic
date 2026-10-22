@@ -96,9 +96,31 @@ export const findPlayerByToken = async (db: Db, token: string): Promise<string |
  */
 export const SEEN_THROTTLE_S = 600;
 export const touchPlayerSeen = async (db: Db, playerId: string): Promise<void> => {
-  await db.execute({
+  const r = await db.execute({
     sql: `UPDATE players SET last_seen_at = unixepoch()
           WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < unixepoch() - ?)`,
     args: [playerId, SEEN_THROTTLE_S],
+  });
+  // The day row (hq-v2.md): only on the throttled path, so the write stays
+  // one per ten minutes at most — and OR IGNORE makes it one per day.
+  if (r.rowsAffected > 0) {
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO player_days (player_id, day) VALUES (?, date('now'))`,
+      args: [playerId],
+    });
+  }
+};
+
+/**
+ * Remember the name a player last joined a room with (hq-v2.md). The write
+ * only happens when it changed, so a regular's every join costs one cheap
+ * no-op UPDATE. Empty names are ignored rather than stored.
+ */
+export const stampPlayerName = async (db: Db, playerId: string, name: string): Promise<void> => {
+  const clean = name.trim().slice(0, 40);
+  if (!clean) return;
+  await db.execute({
+    sql: `UPDATE players SET name = ? WHERE id = ? AND (name IS NULL OR name != ?)`,
+    args: [clean, playerId, clean],
   });
 };

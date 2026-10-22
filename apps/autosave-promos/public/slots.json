@@ -116,6 +116,24 @@
       "music": "felt",
       "batch": "slot-13-snow-day",
       "renderedAt": "2026-10-18T21:42:48.743Z"
+    },
+    {
+      "slot": 14,
+      "seconds": 16,
+      "playtimeFrom": 208,
+      "egg": "",
+      "music": "guitar",
+      "batch": "slot-14-strangers-kindness",
+      "renderedAt": "2026-10-22T22:01:45.299Z"
+    },
+    {
+      "slot": 15,
+      "seconds": 16,
+      "playtimeFrom": 224,
+      "egg": "",
+      "music": "harp",
+      "batch": "slot-15-the-creature",
+      "renderedAt": "2026-10-22T22:35:46.599Z"
     }
   ]
 }

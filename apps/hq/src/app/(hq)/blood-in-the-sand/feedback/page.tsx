@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { feedbackOverview, listFeedback } from "@heroic/blood-in-the-sand-persistence";
+import { feedbackOverview, listFeedback, namesOf } from "@heroic/blood-in-the-sand-persistence";
+import { PlayerLink } from "@/components/PlayerLink";
 import { Stat, Tiles } from "@/components/Stat";
 import { db, nowS } from "@/lib/db";
-import { ago, short, when } from "@/lib/format";
+import { ago, when } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function Feedback({ searchParams }: { searchParams: Promise
     feedbackOverview(handle, now),
     listFeedback(handle, { before: Number.isFinite(beforeId) ? beforeId : undefined, limit: PAGE }),
   ]);
+  const names = await namesOf(handle, reports.map((r) => r.playerId));
   const last = reports[reports.length - 1];
   return (
     <>
@@ -35,8 +37,7 @@ export default async function Feedback({ searchParams }: { searchParams: Promise
             <div className="stamps">
               <span className={`pill ${r.kind === "bug" ? "bad" : r.kind === "idea" ? "ok" : ""}`}>{r.kind}</span>
               <span title={when(r.createdAt)}>{ago(r.createdAt, now)}</span>
-              {r.playerName ? <span>{r.playerName}</span> : null}
-              <span className="mono">{short(r.playerId)}</span>
+              <PlayerLink id={r.playerId} name={names.get(r.playerId) ?? r.playerName} />
               {r.contactEmail ? <a href={`mailto:${r.contactEmail}`}>{r.contactEmail}</a> : <span>no email</span>}
             </div>
             <p className="msg">{r.message}</p>

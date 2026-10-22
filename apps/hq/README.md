@@ -24,6 +24,7 @@ Env (a gitignored `apps/hq/.env.local`):
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | same values as the API. Unset = the repo's local `db/dev.db` |
 | `BITS_SERVER_URL` | the game server, e.g. `https://blood-in-the-sand.onrender.com` |
 | `BITS_STATS_TOKEN` | must equal the game server's `STATS_TOKEN` env |
+| `CLERK_SECRET_KEY` | optional; the API's key. Set = the player window shows a linked account's email |
 
 Without Google creds the sign-in page renders but the button fails with
 `Configuration`. Without `BITS_*` the live tiles say "not configured".

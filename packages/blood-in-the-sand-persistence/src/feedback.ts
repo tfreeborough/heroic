@@ -86,18 +86,19 @@ export const recordFeedback = async (db: Db, input: FeedbackInput): Promise<numb
  */
 export const listFeedback = async (
   db: Db,
-  opts: { before?: number; limit?: number } = {},
+  opts: { before?: number; limit?: number; playerId?: string } = {},
 ): Promise<FeedbackRecord[]> => {
   const limit = Math.min(200, Math.max(1, Math.trunc(opts.limit ?? 50)));
   const before = opts.before !== undefined && Number.isFinite(opts.before) ? Math.trunc(opts.before) : null;
+  const playerId = opts.playerId ?? null;
   const result = await db.execute({
     sql: `SELECT id, player_id, kind, message, contact_email, player_name, platform, os_version,
                  app_binary, app_bundle, rtt_ms, created_at
             FROM feedback
-           WHERE (? IS NULL OR id < ?)
+           WHERE (? IS NULL OR id < ?) AND (? IS NULL OR player_id = ?)
            ORDER BY id DESC
            LIMIT ?`,
-    args: [before, before, limit],
+    args: [before, before, playerId, playerId, limit],
   });
   return result.rows.map((row) => ({
     id: Number(row["id"]),

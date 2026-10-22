@@ -7,8 +7,8 @@ import { ListClip, listClipDurationSeconds, listClipSchema } from "./ListClip";
 import { Spotlight, spotlightSchema, spotlightSeconds } from "./Spotlight";
 import { Beats, beatsDurationSeconds, beatsSchema } from "./Beats";
 import { Talk, talkDurationSeconds, talkSchema } from "./Talk";
-import { APPLE_SHOT_SIZE, DevNote, FEATURE_SIZE, FeatureGraphic, SHOT_SIZE, StoreShot } from "./Store";
-import { STORE_SHOTS } from "./data/store";
+import { APPLE_SHOT_SIZE, BANNER_SIZES, DevNote, FEATURE_SIZE, FeatureGraphic, PREVIEW_SIZES, SHOT_SIZE, StoreBanner, StoreBannerStill, StorePreview, StoreShot } from "./Store";
+import { STORE_SHOTS, bannerSeconds, previewSeconds } from "./data/store";
 import { BANNER_SIZE, ChannelBanner } from "./Banner";
 import { THUMB_FRAME, ThumbMock, thumbMockSchema } from "./experiments/thumbnail/ThumbMock";
 import { ThumbReal, thumbRealSchema } from "./experiments/thumbnail/ThumbReal";
@@ -144,6 +144,13 @@ export const Root: React.FC = () => (
     {/* The same cards at App Store Connect's 6.5" iPhone size (bun run render:store -- --apple). */}
     <Composition id="DevNoteApple" component={DevNote} durationInFrames={1} fps={FPS} {...APPLE_SHOT_SIZE} />
     <Composition id="StoreShotApple" component={StoreShot} durationInFrames={1} fps={FPS} {...APPLE_SHOT_SIZE} defaultProps={STORE_SHOTS[0]!} />
+    {/* The store preview video (bun run render:store -- --video): the same cut for App Store Connect (portrait, ≤30s) and YouTube/Play (landscape). */}
+    <Composition id="StorePreviewApple" component={StorePreview} durationInFrames={Math.round(previewSeconds() * FPS)} fps={FPS} {...PREVIEW_SIZES.apple} defaultProps={{ platform: "apple" as const }} />
+    <Composition id="StorePreviewPlay" component={StorePreview} durationInFrames={Math.round(previewSeconds() * FPS)} fps={FPS} {...PREVIEW_SIZES.play} defaultProps={{ platform: "play" as const }} />
+    <Composition id="StoreHeader" component={StoreBanner} durationInFrames={Math.round(bannerSeconds() * FPS)} fps={FPS} {...BANNER_SIZES.header} defaultProps={{ placement: "header" as const }} />
+    <Composition id="StoreSearch" component={StoreBanner} durationInFrames={Math.round(bannerSeconds() * FPS)} fps={FPS} {...BANNER_SIZES.search} defaultProps={{ placement: "search" as const }} />
+    <Composition id="StoreHeaderStill" component={StoreBannerStill} durationInFrames={1} fps={FPS} {...BANNER_SIZES.header} defaultProps={{ placement: "header" as const }} />
+    <Composition id="StoreSearchStill" component={StoreBannerStill} durationInFrames={1} fps={FPS} {...BANNER_SIZES.search} defaultProps={{ placement: "search" as const }} />
     {/* YouTube channel banner (bun run render:banner); guides=true marks the device crops. */}
     <Composition id="ChannelBanner" component={ChannelBanner} durationInFrames={1} fps={FPS} {...BANNER_SIZE} defaultProps={{ guides: false }} />
   </>

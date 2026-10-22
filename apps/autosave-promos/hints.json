@@ -210,19 +210,35 @@
     },
     {
       "id": "h00r",
-      "text": "Did you know? There's a seed behind every save. Same seed, same video."
+      "text": "Did you know? There's a seed behind every save. Same seed, same video.",
+      "used": {
+        "at": 1792706505299,
+        "in": "slot-14-strangers-kindness"
+      }
     },
     {
       "id": "h00s",
-      "text": "Lore: The old king saved every night and never once loaded."
+      "text": "Lore: The old king saved every night and never once loaded.",
+      "used": {
+        "at": 1792706505298,
+        "in": "slot-14-strangers-kindness"
+      }
     },
     {
       "id": "h00t",
-      "text": "Tip: Never split the party. Unless it's a big party."
+      "text": "Tip: Never split the party. Unless it's a big party.",
+      "used": {
+        "at": 1792708546569,
+        "in": "slot-15-the-creature"
+      }
     },
     {
       "id": "h00u",
-      "text": "Tip: Old friends are a good save point."
+      "text": "Tip: Old friends are a good save point.",
+      "used": {
+        "at": 1792708546568,
+        "in": "slot-15-the-creature"
+      }
     },
     {
       "id": "h00v",
