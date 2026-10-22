@@ -72,7 +72,7 @@ import {
   type WeaponId,
 } from "@heroic/blood-in-the-sand-sim";
 import { getActiveAnnouncer } from "../audio/announcer";
-import { noteChallengeAttempt, noteChallengeClear } from "../challenges/progress";
+import { loadChallengeProgress, noteChallengeAttempt, noteChallengeClear, progressOf } from "../challenges/progress";
 import { DEV_MENU_ENABLED, devFlags, type AutopilotMode } from "../dev";
 import { grantFromDeedUnlocks } from "../deeds/entitlements";
 import { ensureIdentity, reportChallenge } from "./api";
@@ -691,15 +691,18 @@ export class PracticeClient implements LobbyClient {
 
   /** Tell the API (bits-challenges.md § trust): the local tally moves first
    * and stands on its own; the server's answer brings the deeds to
-   * celebrate. Fire-and-forget — a dead API costs nothing but the Glory,
-   * which the next report's absolute attempt count still lets it pay. */
+   * celebrate. Fire-and-forget — a dead API costs nothing but the Glory
+   * for now: the report carries the device's absolute attempt and clear
+   * totals, so a later report (or the Challenges screen's resync) still
+   * lets it pay. */
   private report(result: ChallengeResult): void {
     const def = this.challenge!;
     void (async () => {
-      const attempts = result.cleared ? await noteChallengeClear(def.id) : this.attempt;
+      if (result.cleared) await noteChallengeClear(def.id);
+      const { attempts, clears } = progressOf(await loadChallengeProgress(), def.id);
       const identity = await ensureIdentity();
       if (!identity) return;
-      const res = await reportChallenge(identity, { id: def.id, cleared: result.cleared, attempts });
+      const res = await reportChallenge(identity, { id: def.id, cleared: result.cleared, attempts, clears });
       if (!res || res.unlocks.length === 0) return;
       grantFromDeedUnlocks(res.unlocks);
       this.challengeUnlocks = res.unlocks;

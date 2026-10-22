@@ -46,6 +46,17 @@ export const CHALLENGE_COUNTERS = {
   attemptsTotal: `${CHALLENGE_COUNTER_PREFIX}attempts`,
 } as const;
 
+/** One client report: the challenge, whether THIS round was a win, and the
+ * device's running tallies. `attempts` and `clears` are absolute totals. */
+export interface ChallengeReport {
+  id: string;
+  cleared: boolean;
+  attempts: number;
+  /** The device's clear total for this challenge (2026-10-22). Optional
+   * for clients that predate it. */
+  clears?: number;
+}
+
 /**
  * Fold one client report into a player's counters (absolute values, the
  * persistence shape). `attempts` is the client's running total for that
@@ -53,17 +64,27 @@ export const CHALLENGE_COUNTERS = {
  * lower it), and the aggregates are recomputed from the per-challenge keys
  * so they can never drift. Unknown ids are ignored (an older server than
  * the client). Returns the full "after" map.
+ *
+ * Clears were a one-shot flag only until 2026-10-22: a clear whose report
+ * never landed (a dead API, a 404 from an API older than the client) was
+ * lost for good — no later report could say "I have cleared this one", so
+ * the tier title and the capstone stayed locked while the phone read every
+ * card ticked. Now the device's clear total rides along too, and the
+ * server takes the larger of what it holds (plus one for this round's win)
+ * and what the device says — so ANY later report for the challenge heals
+ * a dropped clear, the way attempts always did. A clear can still only
+ * pay once (the per-challenge deed is a milestone at 1, once-only).
  */
-export const challengeCountersAfter = (
-  before: Counters,
-  report: { id: string; cleared: boolean; attempts: number },
-): Record<string, number> => {
+export const challengeCountersAfter = (before: Counters, report: ChallengeReport): Record<string, number> => {
   const after: Record<string, number> = { ...before };
   const def = challengeById(report.id);
   if (!def) return after;
   const attempts = Math.max(0, Math.floor(report.attempts));
   after[CHALLENGE_COUNTERS.attempts(def.id)] = Math.max(before[CHALLENGE_COUNTERS.attempts(def.id)] ?? 0, attempts);
-  if (report.cleared) after[CHALLENGE_COUNTERS.clears(def.id)] = (before[CHALLENGE_COUNTERS.clears(def.id)] ?? 0) + 1;
+  const clearsBefore = before[CHALLENGE_COUNTERS.clears(def.id)] ?? 0;
+  const clearsReported = Math.max(0, Math.floor(report.clears ?? 0));
+  const clears = Math.max(clearsBefore + (report.cleared ? 1 : 0), clearsReported);
+  if (clears > 0) after[CHALLENGE_COUNTERS.clears(def.id)] = clears;
   let cleared = 0;
   let attemptsTotal = 0;
   const perTier: Record<ChallengeTier, number> = { easy: 0, medium: 0, hard: 0, deathwish: 0 };

@@ -171,6 +171,16 @@ buys real things. Two stages:
    "verify ranked, trust skirmish", Tom 2026-08-08). Exposure is capped at
    1 125 Glory per account, one-off, so a spoofed clear is a nuisance, not an
    economy.
+   **Reports carry absolute totals (2026-10-22).** A clear was a one-shot
+   flag until a player cleared all 13 with "Hard as nails" stuck at 3/4: one
+   hard clear's report never landed (fire-and-forget; a dead API or a 404
+   from an API older than the client), and no later report could say "I have
+   cleared this one". Now the report carries the device's attempt AND clear
+   totals, the server takes the larger of what it holds and what the device
+   says, and the Challenges screen's open-time sync runs both ways — any
+   challenge the server is short of is re-reported, so the clear deed, the
+   tier title and the capstone land through the normal ceremony. Old clients
+   (no total) behave exactly as before.
 2. **Verify (later):** the sim is deterministic, so the client uploads seed +
    per-tick input log and the server replays the match headlessly (the bot
    script's sim) and pays only if the replay clears. Same cost as one bot

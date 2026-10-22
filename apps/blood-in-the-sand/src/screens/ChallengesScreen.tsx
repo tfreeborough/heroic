@@ -24,9 +24,11 @@ import {
 import { ScreenHeader, ScreenSign } from "../components/ScreenHeader";
 import { DISPLAY_FONT } from "../typography";
 import { playSound, unlockAudio } from "../audio";
-import { ensureIdentity, fetchAchievements } from "../net/api";
+import { ensureIdentity, fetchAchievements, reportChallenge } from "../net/api";
+import { grantFromDeedUnlocks } from "../deeds/entitlements";
 import {
   adoptServerCounters,
+  challengesServerIsShortOf,
   loadChallengeProgress,
   onChallengeProgress,
   peekChallengeProgress,
@@ -70,10 +72,20 @@ export const ChallengesScreen = ({ onBack, onArmory, onStart, focusId = null }: 
     });
     // The server's tally — a reinstall or a second phone picks up where
     // the account left off. Best effort; offline the device's copy stands.
+    // Then the other way: any clear (or attempts) the server is short of
+    // is re-reported, so a clear whose own report never landed still pays
+    // its deed, the tier title and the capstone (2026-10-22).
     void (async () => {
       const identity = await ensureIdentity();
       const me = identity ? await fetchAchievements(identity) : null;
-      if (live && me) await adoptServerCounters(me.counters);
+      if (!live || !identity || !me) return;
+      await adoptServerCounters(me.counters);
+      const local = await loadChallengeProgress();
+      for (const short of challengesServerIsShortOf(local, me.counters)) {
+        if (!live) return;
+        const res = await reportChallenge(identity, { id: short.id, cleared: false, attempts: short.attempts, clears: short.clears });
+        if (res && res.unlocks.length > 0) grantFromDeedUnlocks(res.unlocks);
+      }
     })();
     return () => {
       live = false;

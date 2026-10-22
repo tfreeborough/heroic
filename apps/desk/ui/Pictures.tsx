@@ -9,9 +9,9 @@
  */
 import { ARRIVALS, LOCKED_LOOK, ORDERS, PALETTES, drawBuild, inkFromImage, lookFromSeed, newCache, planBuild } from "@heroic/ascii-build";
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { GameApi, Script } from "./api";
-import { type Beat, type BeatMood, type BeatPicture, CHAPTER_GAP, SCORE_MOODS, type ScoreMood, allowedChapters, beatStarts, newLook, picturesWanted, spokenSeconds } from "../lib/scripts";
+import { type Beat, type BeatMood, type BeatPicture, CHAPTER_GAP, type PlanState, SCORE_MOODS, type ScoreMood, allowedChapters, beatStarts, newLook, picturesWanted, spokenSeconds } from "../lib/scripts";
 
 const { fontFamily } = loadFont("normal", { weights: ["700"], subsets: ["latin"] });
 const FAMILY = `"${fontFamily}", ui-monospace, monospace`;
@@ -131,15 +131,22 @@ export const PicturesStep: React.FC<{
   palette: Palette;
   busy: string;
   pending: string[];
+  /** The story or the prompts running on the server, or how the last run failed. */
+  planning: PlanState | null;
   onBeat: BeatEdit;
-  onPlan: (all: boolean) => void;
+  onStory: () => void;
+  onPrompts: (all: boolean) => void;
   onWorld: (w: Pick<Script, "theme" | "look" | "cast">) => void;
   onMake: (only?: { beat: string; k: number }[]) => void;
   onOwn: (beat: string, k: number, file: File) => void;
   onNewPrompt: (beat: string, k: number, instruction: string) => void;
-}> = ({ s, api, claude, images, palette, busy, pending, onBeat, onPlan, onWorld, onMake, onOwn, onNewPrompt }) => {
+}> = ({ s, api, claude, images, palette, busy, pending, planning, onBeat, onStory, onPrompts, onWorld, onMake, onOwn, onNewPrompt }) => {
   const beats = s.long?.beats ?? [];
+  // The story first (a scene line a beat), then the prompts from it, then the pictures.
+  const storied = beats.some((b) => b.scene?.trim());
   const planned = beats.some((b) => b.pictures?.length);
+  const planRunning = planning?.state === "running";
+  const toWrite = beats.filter((b) => !b.pictures?.length).length;
   const pics = beats.flatMap((b) => b.pictures ?? []);
   const toMake = beats.reduce((n, b) => n + (b.pictures ?? []).filter((p, k) => p.prompt.trim() && !p.candidates.length && !pending.includes(`${b.id}:${k}`)).length, 0);
   const unapproved = pics.filter((p) => p.chosen && !p.approved).length;
@@ -181,11 +188,16 @@ export const PicturesStep: React.FC<{
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-        <button onClick={() => onPlan(planned)} disabled={!claude || Boolean(busy)} title={planned ? "Every beat planned again in the world above: new prompts, moods, pulled words and chapters. Pictures already made are kept." : "Claude writes a picture prompt for every beat (two for a long one), the music's mood under it, a pulled word now and then, and the chapters."}>
-          {busy === "plan" ? "planning…" : planned ? "Plan again" : "Plan the pictures"}
+        <button onClick={onStory} disabled={!claude || Boolean(busy) || planRunning} title={storied ? "The story again, in the world above: a new scene line for every beat, the moods, the pulled words and the chapters. Prompts and pictures already written stay until you write them again." : "One call over the whole script: Claude picks the video's world and cast, the chapters, and writes one line per beat saying what its picture shows, so you can read the story before any prompt is written."}>
+          {planRunning && planning.stage === "story" ? "planning the story…" : storied ? "Plan the story again" : "Plan the story"}
         </button>
+        {storied ? (
+          <button onClick={() => onPrompts(planned && !toWrite)} disabled={!claude || Boolean(busy) || planRunning} title={planned && !toWrite ? "Every prompt written again from the story as it stands now. Pictures already made are kept, and marked to check where their prompt changed." : "Each beat's scene line told as a full picture prompt (two for a long beat), a batch of beats at a time, each landing here as it's done."}>
+            {planRunning && planning.stage === "prompts" ? `writing prompts ${planning.done}/${planning.total}…` : planned && !toWrite ? "Write the prompts again" : `Write the prompts${planned ? ` (${toWrite} left)` : ""}`}
+          </button>
+        ) : null}
         {planned ? (
-          <button className="ghost" onClick={() => onMake()} disabled={!images || !toMake} title={images ? "Every picture not yet made, four at a time; each lands here as it finishes." : "Needs OPENAI_API_KEY in apps/desk/.env"}>
+          <button className="ghost" onClick={() => onMake()} disabled={!images || !toMake || planRunning} title={images ? "Every picture not yet made, four at a time; each lands here as it finishes." : "Needs OPENAI_API_KEY in apps/desk/.env"}>
             {toMake ? `Make ${toMake} picture${toMake === 1 ? "" : "s"}` : pending.length ? `making ${pending.length}…` : "All made"}
           </button>
         ) : null}
@@ -222,16 +234,17 @@ export const PicturesStep: React.FC<{
         <input type="text" value={s.theme ?? ""} onChange={(e) => onWorld({ theme: e.target.value, look: undefined, cast: undefined })} placeholder={planned ? "Empty: Plan again and Claude picks a new one" : "Empty: Claude picks one from the script. Or write your own (a submarine crew, a lighthouse winter…)"} style={{ flex: 1 }} />
       </div>
       {s.theme?.trim() ? <WorldLook s={s} onWorld={onWorld} /> : null}
-      {planned ? (
+      {storied ? (
         <div className="small muted">
           {chapters.length
             ? `Chapters: ${chapters.map((b) => `${b.chapter} (${fmtTime(starts[beats.indexOf(b)]!)})${allowed.has(b.id) ? "" : " ✖ too close"}`).join(" · ")}. YouTube only shows its chapter bar with three or more.`
             : `No chapters yet. Add one on the beat it starts at.`}
         </div>
       ) : (
-        <div className="small muted">Plan the pictures and every beat gets a scene to build out of glyphs while you say it, plus a mood for the music. Change anything, make the pictures, then approve them or try again.</div>
+        <div className="small muted">Plan the story and Claude picks the video's world and writes one line per beat saying what its picture shows. Read it, change what's wrong, then write the prompts from it, make the pictures, and approve them or try again.</div>
       )}
-      {planned ? (
+      {storied ? <Story beats={beats} open={!planned} starts={starts} onBeat={onBeat} onPick={(id) => (setPicked(`${id}:0`), document.getElementById(`tile-${id}-0`)?.scrollIntoView({ block: "nearest" }))} /> : null}
+      {storied || planned ? (
         <div className="pic-stage">
           <div className="stack" style={{ gap: 8, minWidth: 0 }}>
             <div className="row" style={{ gap: 4 }}>
@@ -292,6 +305,35 @@ export const PicturesStep: React.FC<{
     </div>
   );
 };
+
+/**
+ * The story as a page: one line per beat saying what its picture shows,
+ * chapters as headings, each line yours to change before the prompts are
+ * written from it. Open by default until the prompts exist.
+ */
+const Story: React.FC<{ beats: Beat[]; open: boolean; starts: number[]; onBeat: BeatEdit; onPick: (id: string) => void }> = ({ beats, open, starts, onBeat, onPick }) => (
+  <details className="story" open={open}>
+    <summary className="small">
+      The story: {beats.length} scenes{beats.some((b) => !b.scene?.trim()) ? ` (${beats.filter((b) => !b.scene?.trim()).length} without a line)` : ""}. Change a line here, then write its prompt again.
+    </summary>
+    <div className="stack story-lines" style={{ gap: 2 }}>
+      {beats.map((b, i) => (
+        <Fragment key={b.id}>
+          {b.chapter?.trim() ? <div className="rail-chapter">{b.chapter}</div> : null}
+          <div className="row story-line" style={{ gap: 8, alignItems: "baseline" }}>
+            <button className="link small muted story-n" onClick={() => onPick(b.id)} title={`${fmtTime(starts[i] ?? 0)} · ${b.text}`}>
+              {i + 1}
+            </button>
+            <input type="text" value={b.scene ?? ""} onChange={(e) => onBeat(b.id, (x) => ({ ...x, scene: e.target.value }))} placeholder="What we see while this is said" style={{ flex: 1 }} />
+            <span className="small muted story-mark" title={b.pictures?.length ? "prompt written" : "no prompt yet"}>
+              {b.pictures?.length ? "✓" : "·"}
+            </span>
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  </details>
+);
 
 /** The beat's words with its pulled words lit. */
 const Words: React.FC<{ text: string; pulled: string[] }> = ({ text, pulled }) => {
@@ -377,6 +419,10 @@ const PictureRow: React.FC<{
         <div className="small plan-words">
           <Words text={beat.text} pulled={beat.pulled ?? []} />
         </div>
+        <div className="row" style={{ gap: 8 }} title="The story line: what the picture shows. The prompts are written from it; change it, then write the prompt again.">
+          <span className="small muted">shows</span>
+          <input type="text" value={beat.scene ?? ""} onChange={(e) => onBeat((b) => ({ ...b, scene: e.target.value }))} placeholder="What we see while this is said (Plan the story writes it)" style={{ flex: 1 }} />
+        </div>
         <div className="pic-grid">
           {pictures.map((p, k) => (
             <PictureCard
@@ -401,7 +447,7 @@ const PictureRow: React.FC<{
               + second picture
             </button>
           ) : null}
-          {!pictures.length ? <div className="small muted">Not planned yet: Plan the pictures, or drop your own image here.</div> : null}
+          {!pictures.length ? <div className="small muted">{beat.scene?.trim() ? "No prompt yet: Write the prompts, or drop your own image here." : "Not planned yet: Plan the story, then write the prompts, or drop your own image here."}</div> : null}
         </div>
         <div className="row small muted beat-tools" style={{ gap: 10, flexWrap: "wrap" }}>
           <span>{spokenSeconds(beat.text)}s</span>

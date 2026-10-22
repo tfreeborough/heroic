@@ -405,6 +405,12 @@ label.button.ghost { background: transparent; color: var(--sand); border: 1.5px 
 .pic-tile-meta { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .pic-tile-words { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .pic-tile-chapter { font-family: Cinzel, Georgia, serif; color: var(--sand); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.story { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: rgba(0,0,0,0.15); }
+.story summary { cursor: pointer; color: var(--muted); }
+.story-lines { max-height: 46vh; overflow-y: auto; margin-top: 6px; padding-right: 4px; }
+.story-line input { padding: 3px 8px; font-size: 13px; }
+.story-n { min-width: 26px; text-align: right; }
+.story-mark { min-width: 12px; }
 .pic-detail { position: sticky; top: calc(var(--top-h) + var(--stage-h) + 10px); max-height: calc(100vh - var(--top-h) - var(--stage-h) - 24px); overflow-y: auto; padding: 4px 12px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .pic-detail .beat { border-top: 0; }
 .pic-detail .pic-grid { grid-template-columns: 1fr; }

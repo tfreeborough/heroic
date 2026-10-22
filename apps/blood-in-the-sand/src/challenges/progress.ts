@@ -129,6 +129,29 @@ export const adoptServerCounters = async (counters: Record<string, number>): Pro
   }
 };
 
+/**
+ * The other direction (2026-10-22): the challenges the server's `challenge:`
+ * counters are SHORT of — a clear or attempts the device has and the server
+ * doesn't. A clear whose report never landed (a dead API, a 404 from an API
+ * older than the client) used to be lost for good, and with it the tier
+ * title and the capstone; the Challenges screen re-reports these so the
+ * server catches up and the deeds fire through the normal ceremony.
+ */
+export const challengesServerIsShortOf = (
+  map: ChallengeProgressMap,
+  counters: Record<string, number>,
+): { id: string; attempts: number; clears: number }[] => {
+  const short: { id: string; attempts: number; clears: number }[] = [];
+  for (const c of CHALLENGES) {
+    const local = map[c.id];
+    if (!local || (local.attempts === 0 && local.clears === 0)) continue;
+    const attempts = counters[CHALLENGE_COUNTERS.attempts(c.id)] ?? 0;
+    const clears = counters[CHALLENGE_COUNTERS.clears(c.id)] ?? 0;
+    if (local.clears > clears || local.attempts > attempts) short.push({ id: c.id, attempts: local.attempts, clears: local.clears });
+  }
+  return short;
+};
+
 /** Dev only: forget every tally. */
 export const forgetChallengeProgress = async (): Promise<void> => {
   cache = {};

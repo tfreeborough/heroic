@@ -22,7 +22,7 @@ import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } fr
 import { hasClaude } from "./lib/draft";
 import type { ScriptPatch } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planPictures, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, writeYouTube } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, writePrompts, writeYouTube } from "./lib/scriptSteps";
 import { scoreState } from "./lib/score";
 import { decide, researchState, startResearch } from "./lib/researcher";
 import { docModified, listDocs, pullDoc, unlinkDoc } from "./lib/scriptDocs";
@@ -507,7 +507,7 @@ const server = Bun.serve({
       GET: withGame((g, req) => {
         const s = readScript(g, req.params.id!);
         const seqId = s?.sequences?.at(-1)?.id;
-        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null }) : json({ error: "no such script" }, 404);
+        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null, planning: planState(s.id) ?? null }) : json({ error: "no such script" }, 404);
       }),
       PUT: withGame(async (g, req) => {
         try {
@@ -570,8 +570,26 @@ const server = Bun.serve({
         }
       }),
     },
-    /** The picture plan (docs/design/desk-ascii-scripts.md): prompts, mood, pulled word, chapter per beat (`?all=1`: every beat again). */
-    "/api/:game/scripts/:id/plan": { POST: withGame(async (g, req) => planPictures(g, req.params.id!, new URL(req.url).searchParams.get("all") === "1").then(json, fail)) },
+    /** The story (docs/design/desk-ascii-scripts.md § Pictures): world, cast, chapters and a scene line a beat, in one call. Starts in the background; answers with the state, the script's `planning` says how it's going. */
+    "/api/:game/scripts/:id/story": {
+      POST: withGame((g, req) => {
+        try {
+          return json(planStory(g, req.params.id!));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** The prompts from the story, a batch of beats a call in the background (`?all=1`: every beat again). Answers with the state. */
+    "/api/:game/scripts/:id/prompts": {
+      POST: withGame((g, req) => {
+        try {
+          return json(writePrompts(g, req.params.id!, new URL(req.url).searchParams.get("all") === "1"));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
     /** One picture's prompt written again by Claude: `{ beat, k, instruction }`. Answers with the script. */
     "/api/:game/scripts/:id/prompt": {
       POST: withGame(async (g, req) => {

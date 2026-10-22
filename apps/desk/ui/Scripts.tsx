@@ -10,7 +10,7 @@ import { ResearchPanel } from "./Research";
 import { DocPicker } from "./DocPicker";
 import { type ResearchState, wovenSource } from "../lib/research";
 import { spokenText } from "../lib/doc";
-import { type Beat, type Cut, type DiffOp, beatText, cutDiff, cutText, isStale, newId, paragraphs, spokenSeconds } from "../lib/scripts";
+import { type Beat, type Cut, type DiffOp, type PlanState, beatText, cutDiff, cutText, isStale, newId, paragraphs, spokenSeconds } from "../lib/scripts";
 
 /**
  * The Scripts tab (docs/design/desk-scripts.md): the list down the left
@@ -185,6 +185,8 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   const [score, setScore] = useState<ScoreState | null>(null);
   // A research run going (or just failed) on the server (desk-research.md).
   const [researching, setResearching] = useState<ResearchState | null>(null);
+  // The picture plan running on the server, a batch of beats at a time (desk-ascii-scripts.md); the page polls and folds each batch in.
+  const [planning, setPlanning] = useState<PlanState | null>(null);
   // The Doc picker (desk-docs.md), and whether the linked Doc has been edited in Drive since the last pull.
   const [picking, setPicking] = useState(false);
   const [docChanged, setDocChanged] = useState(false);
@@ -197,12 +199,13 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   useEffect(() => {
     void api
       .script(id)
-      .then(({ pending: p, score: sc, researching: rs, ...x }) => {
+      .then(({ pending: p, score: sc, researching: rs, planning: pl, ...x }) => {
         saved.current = JSON.stringify(patchOf(x));
         setS(x);
         setPending(p);
         setScore(sc);
         setResearching(rs);
+        setPlanning(pl);
         if (x.doc) {
           const pulled = x.doc.modified;
           void api
@@ -253,6 +256,40 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
     }, 2500);
     return () => clearInterval(t);
   }, [pending.length, api, id]);
+
+  // The plan lands a batch at a time: poll while it runs and take each beat's new plan (and the world) into the page's copy.
+  // (onChanged is a fresh function each render: held in a ref so the poll isn't restarted on every keystroke.)
+  const changed = useRef(onChanged);
+  changed.current = onChanged;
+  useEffect(() => {
+    if (planning?.state !== "running") return;
+    const t = setInterval(() => {
+      void api
+        .script(id)
+        .then(({ planning: pl, ...x }) => {
+          const fresh = new Map((x.long?.beats ?? []).map((b) => [b.id, b] as const));
+          setS((cur) => {
+            if (!cur?.long) return cur;
+            // While the story or the prompts land, the server's story and plan are the truth for every beat (its words stay the page's), and so is the world.
+            const planOf = (b: Beat) => JSON.stringify([b.scene, b.mood, b.pulled, b.chapter, b.pictures]);
+            const beats = cur.long.beats.map((b) => {
+              const f = fresh.get(b.id);
+              if (!f || planOf(f) === planOf(b)) return b;
+              return { ...b, scene: f.scene, mood: f.mood, pulled: f.pulled, chapter: f.chapter, pictures: f.pictures };
+            });
+            const next = { ...cur, long: { ...cur.long, beats }, theme: x.theme, look: x.look, cast: x.cast };
+            // What the server has is what's saved: don't let the fold look like an edit to save.
+            saved.current = JSON.stringify(patchOf(next));
+            return next;
+          });
+          setPlanning(pl);
+          if (pl?.state === "failed") setErr(pl.stage === "story" ? `The story didn't come back: ${pl.error}. Press Plan the story again.` : `The prompts stopped after ${pl.done} of ${pl.total} beats: ${pl.error}. Press Write the prompts again for the rest.`);
+          if (!pl) changed.current();
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => clearInterval(t);
+  }, [planning?.state, api, id]);
 
   // A score being made: ask after it every few seconds until it's in.
   const askScore = useCallback(() => void api.script(id).then((r) => setScore(r.score)).catch(() => {}), [api, id]);
@@ -353,7 +390,14 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   const hint: Record<Stage, React.ReactNode> = {
     write: !s.source.trim() ? "paste it" : stale && s.long ? <span className="warn">changed since the cut</span> : `${clock(spokenSeconds(spokenText(s.source)))} read aloud`,
     cut: s.long ? `${beats.length} beats · ${clock(spokenSeconds(cutText(s, s.long)))}` : "after the rewrite",
-    pictures: !pics.length ? "not planned" : `${pics.filter((p) => p.approved).length}/${pics.length} approved${pending.some((k) => !k.startsWith("thumb:")) ? " · making" : ""}`,
+    pictures:
+      planning?.state === "running"
+        ? planning.stage === "story"
+          ? "planning the story"
+          : `writing prompts ${planning.done}/${planning.total}`
+        : !pics.length
+          ? s.long?.beats.some((b) => b.scene) ? "story planned" : "not planned"
+          : `${pics.filter((p) => p.approved).length}/${pics.length} approved${pending.some((k) => !k.startsWith("thumb:")) ? " · making" : ""}`,
     record: beats.length ? `${beats.filter((b) => recorded.has(b.id)).length}/${beats.length} read` : "",
     organise: s.sequences?.length ? `${s.sequences.length} edit${s.sequences.length === 1 ? "" : "s"}` : "not yet",
     publish: [s.titles?.length ? `${s.titles.length} title${s.titles.length === 1 ? "" : "s"}` : "", s.thumbnails?.some((t) => t.chosen) ? `${s.thumbnails.filter((t) => t.chosen).length} thumbnail${s.thumbnails.filter((t) => t.chosen).length === 1 ? "" : "s"}` : "", s.youtube ? "tags" : ""].filter(Boolean).join(" · ") || "not yet",
@@ -517,7 +561,21 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
           busy={busy}
           pending={pending}
           onBeat={(beatId, f) => setS((cur) => (cur?.long ? { ...cur, long: { ...cur.long, beats: cur.long.beats.map((b) => (b.id === beatId ? f(b) : b)) } } : cur))}
-          onPlan={(all) => void step("plan", () => api.planPictures(id, all))}
+          planning={planning}
+          onStory={() => {
+            setErr("");
+            void api
+              .planStory(id)
+              .then(setPlanning)
+              .catch((e: Error) => setErr(e.message));
+          }}
+          onPrompts={(all) => {
+            setErr("");
+            void api
+              .writePrompts(id, all)
+              .then((pl) => (pl.total ? setPlanning(pl) : setErr("Every beat has its prompt already. Write them again does them all afresh.")))
+              .catch((e: Error) => setErr(e.message));
+          }}
           onWorld={(w) => patch(w)}
           onMake={(only) =>
             void api

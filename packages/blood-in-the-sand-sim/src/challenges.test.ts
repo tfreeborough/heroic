@@ -518,6 +518,46 @@ describe("the deeds board + report adapter", () => {
     expect(c).toEqual(b);
   });
 
+  test("a dropped clear is healed by the device's clear total on any later report (2026-10-22)", () => {
+    // The clear's own report never landed: the server holds attempts only.
+    const a = challengeCountersAfter({}, { id: "the-tide-waits", cleared: false, attempts: 5 });
+    expect(a[CHALLENGE_COUNTERS.clears("the-tide-waits")]).toBeUndefined();
+    // The screen's resync — a loss-shaped report carrying the device's totals.
+    const b = challengeCountersAfter(a, { id: "the-tide-waits", cleared: false, attempts: 6, clears: 1 });
+    expect(b[CHALLENGE_COUNTERS.clears("the-tide-waits")]).toBe(1);
+    expect(b[CHALLENGE_COUNTERS.cleared]).toBe(1);
+    expect(b[CHALLENGE_COUNTERS.tierCleared("hard")]).toBe(1);
+    expect(fire(a, b, "the-tide-waits")).toContain("challenge-the-tide-waits");
+    // A stale total can't lower it; a win still counts one on top of what's held.
+    const c = challengeCountersAfter(b, { id: "the-tide-waits", cleared: true, attempts: 7, clears: 0 });
+    expect(c[CHALLENGE_COUNTERS.clears("the-tide-waits")]).toBe(2);
+    const d = challengeCountersAfter(c, { id: "the-tide-waits", cleared: true, attempts: 8, clears: 1 });
+    expect(d[CHALLENGE_COUNTERS.clears("the-tide-waits")]).toBe(3);
+    // An old client (no total) behaves exactly as before.
+    const e = challengeCountersAfter({}, { id: "the-tide-waits", cleared: false, attempts: 1 });
+    expect(e[CHALLENGE_COUNTERS.clears("the-tide-waits")]).toBeUndefined();
+  });
+
+  test("the resync lands the tier title and the capstone the player was short of", () => {
+    // Every challenge cleared on the device, but one hard clear never reached the server.
+    let counters: Record<string, number> = {};
+    const unlocked = new Set<string>();
+    for (const c of CHALLENGES) {
+      if (c.id === "the-tide-waits") continue;
+      const before = counters;
+      counters = challengeCountersAfter(counters, { id: c.id, cleared: true, attempts: 1 });
+      for (const id of fire(before, counters, c.id, unlocked)) unlocked.add(id);
+    }
+    expect(unlocked.has("challenge-tier-hard")).toBe(false);
+    expect(unlocked.has("challenge-all")).toBe(false);
+    const before = counters;
+    counters = challengeCountersAfter(counters, { id: "the-tide-waits", cleared: false, attempts: 3, clears: 1 });
+    const fired = fire(before, counters, "the-tide-waits", unlocked);
+    expect(fired).toContain("challenge-the-tide-waits");
+    expect(fired).toContain("challenge-tier-hard");
+    expect(fired).toContain("challenge-all");
+  });
+
   test("a tier's last clear crowns the tier; the last clear of all crowns the capstone in the same ceremony", () => {
     let counters: Record<string, number> = {};
     const unlocked = new Set<string>();

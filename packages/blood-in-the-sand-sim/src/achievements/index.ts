@@ -18,6 +18,7 @@ export {
   CHALLENGE_COUNTERS,
   challengeCountersAfter,
   challengeSummary,
+  type ChallengeReport,
 } from "./defsChallenges";
 export {
   ACHIEVEMENT_DEFS_SKIRMISH,

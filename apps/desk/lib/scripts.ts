@@ -112,6 +112,8 @@ export type Beat = {
   changed?: boolean;
   /** The old visual plan (desk-scripts.md), left on older scripts; organise only falls back to it. */
   card?: BeatCard;
+  /** The story line: what we see while this beat is said, decided for the whole video at once (Plan the story). The prompts are written from it. */
+  scene?: string;
   /** Its picture, or two for a long beat. */
   pictures?: BeatPicture[];
   /** What the score does under it. */
@@ -188,6 +190,9 @@ export type Script = {
 
 /** What the list shows. */
 export type ScriptSummary = Pick<Script, "id" | "title" | "done" | "createdAt" | "updatedAt"> & { hasSource: boolean; hasCuts: boolean; shorts: number; stale: boolean };
+
+/** The story (one call) or the prompts (a batch of beats a call) running on the server; the page polls. Or how the last run failed. `done`/`total` are beats. */
+export type PlanState = { state: "running"; stage: "story" | "prompts"; done: number; total: number; startedAt: string } | { state: "failed"; stage: "story" | "prompts"; error: string; done: number; total: number };
 
 export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "theme" | "look" | "cast">> & { done?: boolean };
 

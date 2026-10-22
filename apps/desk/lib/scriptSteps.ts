@@ -10,7 +10,7 @@ import { PICTURE_STYLE, THUMB_STYLE, hasImages, makePicture, saveOwnPicture } fr
 import * as ai from "./rewrite";
 import { matchScript } from "./match";
 import { organiseCut } from "./organise";
-import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText } from "./scripts";
+import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, type PlanState } from "./scripts";
 import { readScript, saveScript, voiceSamples } from "./scriptsStore";
 import { docHeadings } from "./doc";
 import { type ScoreListing, listScores, makeScore, useScore } from "./score";
@@ -96,35 +96,109 @@ const worldOf = (s: Script): ai.World => ({ theme: s.theme ?? "", look: s.look ?
  * that changed under a made picture marks it check. Mood, pulled word and
  * chapter are Claude's again.
  */
-export const planPictures = async (g: GameConfig, id: string, all = false): Promise<Script> => {
+/** Beats whose prompts are written per call: about 20 keeps the reply (two prompts for a long beat) well inside the cap. */
+const PLAN_BATCH = 20;
+
+const plans = new Map<string, PlanState>();
+/** How a script's story or prompts run is going (nothing once it's finished and saved; the failure until the next press). */
+export const planState = (id: string): PlanState | undefined => plans.get(id);
+
+/** A background run over the script with the page polling planState: the state while it goes, gone when done, the failure kept. */
+const background = (id: string, state: PlanState & { state: "running" }, run: () => Promise<void>): PlanState => {
+  plans.set(id, state);
+  void run().then(
+    () => plans.delete(id),
+    (e: Error) => {
+      console.warn(`⚠ ${state.stage} ${id}: ${e.message}`);
+      plans.set(id, { state: "failed", stage: state.stage, error: e.message, done: plans.get(id)?.done ?? 0, total: state.total });
+    },
+  );
+  return state;
+};
+
+/**
+ * The story (docs/design/desk-ascii-scripts.md § Pictures): one call over
+ * every beat decides the world, its cast, the chapters and what each
+ * picture shows (a scene line a beat, with the mood and pulled word), so the
+ * prompts can then be written a batch at a time with nothing left to choose.
+ * Runs in the background and lands on the script in one go. A story again
+ * keeps the world Tom has set (and its look and cast) and writes new lines;
+ * the prompts already written stay until they're written again.
+ */
+export const planStory = (g: GameConfig, id: string): PlanState => {
   const { s, v } = need(g, id);
   if (!s.long) throw new Error("rewrite the script first");
-  const every = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, beat: b }));
-  const want = every.filter((x) => all || !x.beat.pictures?.length);
-  if (!want.length) return s;
-  const { world, plan } = await ai.planPictures(v, s.long.title, want, every, docHeadings(scriptText(s)), worldOf(s));
-  let next: Script = { ...s, theme: world.theme, look: world.look || undefined, cast: world.cast.length ? world.cast : undefined };
-  for (const x of want) {
-    const p = plan.get(x.n);
-    if (!p) continue;
-    next = withBeat(next, x.beat.id, (b) => {
-      const had = b.pictures ?? [];
-      const pictures = p.prompts.map((prompt, k): BeatPicture => {
-        const h = had[k];
-        if (!h) return { prompt, candidates: [], look: newLook() };
-        return { ...h, prompt, ...(h.candidates.length && h.prompt.trim() !== prompt.trim() ? { check: true } : {}) };
-      });
-      return { ...b, pictures, mood: p.mood, pulled: p.pulled.length ? p.pulled : undefined, chapter: p.chapter };
-    });
-  }
-  return saveScript(g, next);
+  const cur = plans.get(id);
+  if (cur?.state === "running") return cur;
+  const every = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, id: b.id }));
+  const headings = docHeadings(scriptText(s));
+  return background(id, { state: "running", stage: "story", done: 0, total: every.length, startedAt: new Date().toISOString() }, async () => {
+    const { world, lines } = await ai.planStory(v, s.long!.title, every, headings, worldOf(s));
+    // The script as it is now (Tom may have edited while this ran), the story on it.
+    const now = readScript(g, id);
+    if (!now) throw new Error("the script went away");
+    let next: Script = { ...now, theme: world.theme, look: world.look || undefined, cast: world.cast.length ? world.cast : undefined };
+    for (const x of every) {
+      const l = lines.get(x.n);
+      if (!l) continue;
+      next = withBeat(next, x.id, (b) => ({ ...b, scene: l.scene, mood: l.mood, pulled: l.pulled.length ? l.pulled : undefined, chapter: l.chapter }));
+    }
+    saveScript(g, next);
+    plans.set(id, { state: "running", stage: "story", done: every.length, total: every.length, startedAt: new Date().toISOString() });
+  });
+};
+
+/**
+ * The prompts, from the story: every beat with a scene line and no prompt
+ * yet (`all`: every beat again), a batch of beats a call, each batch saved
+ * to the script as it lands so the page fills in as it goes. A rewrite
+ * keeps every picture already made and its look seed; a prompt that
+ * changed under a made picture marks it check.
+ */
+export const writePrompts = (g: GameConfig, id: string, all = false): PlanState => {
+  const { s, v } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  if (!s.long.beats.some((b) => b.scene?.trim())) throw new Error("plan the story first");
+  const cur = plans.get(id);
+  if (cur?.state === "running") return cur;
+  const want = s.long.beats.map((b, i) => ({ n: i + 1, beat: b })).filter((x) => all || !x.beat.pictures?.length);
+  const state: PlanState = { state: "running", stage: "prompts", done: 0, total: want.length, startedAt: new Date().toISOString() };
+  if (!want.length) return state;
+  return background(id, state, async () => {
+    for (let i = 0; i < want.length; i += PLAN_BATCH) {
+      const batch = want.slice(i, i + PLAN_BATCH);
+      // The story as it stands now, prompts included, so this batch sits beside what's written already.
+      const at = readScript(g, id);
+      if (!at?.long) throw new Error("the script went away");
+      const every = at.long.beats.map((b, j) => ({ n: j + 1, text: b.text, scene: b.scene ?? "", prompts: (b.pictures ?? []).map((p) => p.prompt) }));
+      const plan = await ai.writePrompts(v, at.long.title, batch.map((x) => ({ n: x.n, text: every[x.n - 1]?.text ?? x.beat.text, scene: every[x.n - 1]?.scene ?? "" })), every, worldOf(at));
+      const now = readScript(g, id);
+      if (!now) throw new Error("the script went away");
+      let next: Script = now;
+      for (const x of batch) {
+        const prompts = plan.get(x.n);
+        if (!prompts) continue;
+        next = withBeat(next, x.beat.id, (b) => {
+          const had = b.pictures ?? [];
+          const pictures = prompts.map((prompt, k): BeatPicture => {
+            const h = had[k];
+            if (!h) return { prompt, candidates: [], look: newLook() };
+            return { ...h, prompt, ...(h.candidates.length && h.prompt.trim() !== prompt.trim() ? { check: true } : {}) };
+          });
+          return { ...b, pictures };
+        });
+      }
+      saveScript(g, next);
+      plans.set(id, { ...state, done: Math.min(want.length, i + batch.length) });
+    }
+  });
 };
 
 /** One picture's prompt written again by Claude (to Tom's instruction, if any). A picture already made is marked check; the next Again makes it from the new prompt. */
 export const redoPicturePrompt = async (g: GameConfig, id: string, beatId: string, k: number, instruction: string): Promise<Script> => {
   const { s, v } = need(g, id);
   if (!s.long) throw new Error("rewrite the script first");
-  const beats = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, prompts: (b.pictures ?? []).map((p) => p.prompt), id: b.id }));
+  const beats = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, scene: b.scene ?? "", prompts: (b.pictures ?? []).map((p) => p.prompt), id: b.id }));
   const beat = beats.find((b) => b.id === beatId);
   if (!beat) throw new Error("that beat isn't in the script any more");
   const prompt = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction, worldOf(s));

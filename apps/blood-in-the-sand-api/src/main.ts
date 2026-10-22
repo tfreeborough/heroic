@@ -572,15 +572,20 @@ app.post("/challenges/report", async (c) => {
   if (!playerId) return c.json({ error: "unauthorized" }, 401);
   if (overLimit(`challenges:${playerId}`, 30)) return c.json({ error: "rate_limited" }, 429);
   const body = (await c.req.json().catch(() => null)) as
-    | { id?: unknown; cleared?: unknown; attempts?: unknown }
+    | { id?: unknown; cleared?: unknown; attempts?: unknown; clears?: unknown }
     | null;
   const id = typeof body?.id === "string" ? body.id : null;
   const def = id ? challengeById(id) : undefined;
   if (!def) return c.json({ error: "unknown challenge" }, 404);
   const cleared = body?.cleared === true;
-  const attempts = typeof body?.attempts === "number" && Number.isFinite(body.attempts) ? Math.min(1_000_000, Math.max(0, Math.floor(body.attempts))) : 0;
+  const tally = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(1_000_000, Math.max(0, Math.floor(v))) : 0);
+  const attempts = tally(body?.attempts);
+  // The device's clear total (2026-10-22) — absent from older clients. Lets
+  // a later report heal a clear whose own report never landed; the
+  // Challenges screen re-sends any the server is short of.
+  const clears = tally(body?.clears);
   const [before, unlockedList] = await Promise.all([achievementCounters(db, playerId), achievementUnlocks(db, playerId)]);
-  const after = challengeCountersAfter(before, { id: def.id, cleared, attempts });
+  const after = challengeCountersAfter(before, { id: def.id, cleared, attempts, clears });
   const unlocked = new Set(unlockedList.map((u) => u.id));
   const fired = evaluate({
     defs: ACHIEVEMENT_DEFS,
@@ -601,8 +606,14 @@ app.post("/challenges/report", async (c) => {
   });
   // One mark per distinct report: a clear is keyed by its ordinal (the
   // n-th clear), a loss by the attempt count it carried — a double-sent
-  // report is a no-op, a genuinely new one always lands.
-  const ordinal = cleared ? `clear:${after[CHALLENGE_COUNTERS.clears(def.id)] ?? 0}` : `attempts:${after[CHALLENGE_COUNTERS.attempts(def.id)] ?? 0}`;
+  // report is a no-op, a genuinely new one always lands. A loss mark also
+  // carries the clear total, so a resync at an unchanged attempt count
+  // (the screen pushing up a clear the server missed) isn't mistaken for
+  // the loss report that already landed at that count.
+  const clearsAfter = after[CHALLENGE_COUNTERS.clears(def.id)] ?? 0;
+  const ordinal = cleared
+    ? `clear:${clearsAfter}`
+    : `attempts:${after[CHALLENGE_COUNTERS.attempts(def.id)] ?? 0}${clearsAfter > 0 ? `:clears:${clearsAfter}` : ""}`;
   await applyMatchAchievements(db, {
     matchId: `challenge:${playerId}:${def.id}:${ordinal}`,
     playerId,

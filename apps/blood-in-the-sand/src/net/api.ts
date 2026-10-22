@@ -391,13 +391,15 @@ export interface ChallengeReportResult {
 
 /**
  * Report a finished challenge round (bits-challenges.md) — cleared or not,
- * with the device's running attempt count. Null = the API is off or
- * unreachable; the local tally stands and the next report carries the
- * total anyway (attempts are absolute, never deltas).
+ * with the device's running attempt AND clear totals. Null = the API is
+ * off or unreachable; the local tally stands and the next report carries
+ * the totals anyway (both absolute, never deltas — so a clear whose own
+ * report was lost is healed by any later one, or by the Challenges
+ * screen's resync, syncChallengeProgress).
  */
 export const reportChallenge = async (
   identity: Identity,
-  report: { id: string; cleared: boolean; attempts: number },
+  report: { id: string; cleared: boolean; attempts: number; clears: number },
 ): Promise<ChallengeReportResult | null> => {
   if (!API_URL) return null;
   try {

@@ -76,8 +76,27 @@ music (`apps/autosave-promos/src/music`).*
 
 ## Pictures (replaces "Beats and the visual plan")
 
-**Plan pictures** is one Claude call over the long cut. For each beat it
-returns:
+Planning is two steps (2026-10-22, Tom: decide the story once, then
+write the prompts from it; one call for a 78-beat script had overrun the
+reply cap and outlived the browser, and batching the prompts alone would
+have lost the thread between batches).
+
+**Plan the story** is one Claude call over the whole long cut, whose
+output is small enough to always fit: the world, its look, its cast, the
+chapters, and for every beat one short **scene line** saying what we see
+(a shot, never a summary; cast named by their cast names; callbacks by
+beat number; a LONG beat names two moments). Mood, intensity, big moment
+and pulled word are decided here too. The story shows on the Pictures
+stage as a page of lines under the world, each yours to change before a
+prompt is written from it.
+
+**Write the prompts** turns each scene line into the full picture prompt,
+a batch of about twenty beats a call in the background, each batch saved
+and shown as it lands (the button counts beats done). Every call gets the
+world, the cast with their looks, the whole story and the prompts already
+written, so a batch is telling a scene, never choosing one; the literal
+reader check runs after each batch. "New prompt…" on one picture works
+from its scene line too. For each beat the plan holds:
 
 - a **picture prompt**: one scene that carries the beat's point, written
   for the chiaroscuro film-still style (one strong light carving a subject
@@ -86,9 +105,10 @@ returns:
   `desk.server.ts` is the starting point.
 - a **mood** and an **intensity** (0 to 1) for the score (see below).
 
-The whole script goes into the call, so the pictures belong together:
-recurring subjects look the same, and an idea from beat 3 can come back
-in beat 30.
+The whole script and the whole story go into every call, so the pictures
+belong together: recurring subjects look the same (their looks are written
+out word for word), and an idea from beat 3 comes back in beat 30 because
+the story says so.
 
 Each video has its own **world** (`Script.theme`, 2026-10-17): Claude
 picks one from the script before planning (a lighthouse winter, a

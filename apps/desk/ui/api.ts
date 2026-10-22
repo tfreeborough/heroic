@@ -3,7 +3,7 @@ import type { Binned } from "../lib/footage";
 import type { ImportJob } from "../lib/imports";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
-import type { Script, ScriptPatch, ScriptSummary } from "../lib/scripts";
+import type { PlanState, Script, ScriptPatch, ScriptSummary } from "../lib/scripts";
 import type { ResearchState, ScriptResearch } from "../lib/research";
 import type { DocEntry } from "../lib/doc";
 /** A script's newest edit's score (lib/score.ts). */
@@ -160,7 +160,7 @@ export const gameApi = (game: string) => {
     /** The Scripts tab. `claude` = the server has a key and the game a script voice, so the rewrite steps are on. */
     scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean; palette: "matrix" | "sand" }>(r)),
     /** `pending`: beats whose sketch is being made right now. */
-    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null; researching: ResearchState | null }>(r)),
+    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null; researching: ResearchState | null; planning: PlanState | null }>(r)),
     /** The Google Docs in the game's scripts folder (docs/design/desk-docs.md). */
     docs: (fresh = false) => fetch(`${base}/docs${fresh ? "?fresh=1" : ""}`).then((r) => j<{ docs: DocEntry[] }>(r)),
     /** Pull a Doc into a script (`doc` links it; without, the latest of the one it's linked to). */
@@ -185,8 +185,10 @@ export const gameApi = (game: string) => {
       fetch(`${base}/scripts/${enc(id)}/takes?tidy=${opts.tidy ? 1 : 0}&denoise=${opts.denoise ?? 0}&ext=${enc(opts.ext ?? "wav")}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: audio }).then((r) => j<Take & { error?: string }>(r)),
     removeScriptTake: (id: string, file: string) => fetch(`${base}/scripts/${enc(id)}/takes/${enc(file)}`, { method: "DELETE" }).then((r) => j<Script>(r)),
     organise: (id: string) => post(`${base}/scripts/${enc(id)}/organise`).then((r) => j<{ script: Script; made: { cut: string; title: string; id: string; missing: string[]; conflicts: { beat: string; takes: string[] }[]; youtube: string }[] }>(r)),
-    /** The picture plan (docs/design/desk-ascii-scripts.md); `all` = every beat again. */
-    planPictures: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/plan${all ? "?all=1" : ""}`).then((r) => j<Script>(r)),
+    /** The story (docs/design/desk-ascii-scripts.md § Pictures): world, cast, chapters and a scene line a beat, in one call in the background; the script's `planning` says how it's going. */
+    planStory: (id: string) => post(`${base}/scripts/${enc(id)}/story`).then((r) => j<PlanState>(r)),
+    /** The prompts from the story; `all` = every beat again. A batch of beats a call in the background, each landing on the beats as it's done. */
+    writePrompts: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/prompts${all ? "?all=1" : ""}`).then((r) => j<PlanState>(r)),
     /** Pictures made in the background: every one not yet made, or another try at exactly `only`. */
     makePictures: (id: string, only?: { beat: string; k: number }[]) => post(`${base}/scripts/${enc(id)}/pictures`, { only }).then((r) => j<{ started: number }>(r)),
     /** One picture's prompt written again by Claude (to an instruction, or blank for just a better idea). */

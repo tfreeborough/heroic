@@ -91,12 +91,14 @@ const cleanBeat = (b: Partial<Beat>): Beat | undefined => {
   const mood = cleanMood(b.mood);
   const pulled = Array.isArray(b.pulled) ? b.pulled.map((w) => String(w).trim().slice(0, 40)).filter(Boolean).slice(0, 4) : [];
   const chapter = String(b.chapter ?? "").trim().slice(0, 80);
+  const scene = String(b.scene ?? "").trim().slice(0, 400);
   return {
     id,
     text,
     ...(b.from ? { from: String(b.from) } : {}),
     ...(b.changed ? { changed: true } : {}),
     ...(card ? { card } : {}),
+    ...(scene ? { scene } : {}),
     ...(pictures.length ? { pictures } : {}),
     ...(mood ? { mood } : {}),
     ...(pulled.length ? { pulled } : {}),
@@ -194,11 +196,18 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
   // Same for pictures: candidates only ever come from the server (made, or Tom's own uploaded), so any the page
   // hasn't seen yet are kept, and so is a choice the server made that the page hasn't caught up with.
   const knownPics = new Map(cutsOf(s).flatMap((c) => c.beats.map((b) => [b.id, b.pictures ?? []] as const)));
+  const knownBeats = new Map(cutsOf(s).flatMap((c) => c.beats.map((b) => [b.id, b] as const)));
   const keepPics = (c: Cut): Cut => ({
     ...c,
     beats: c.beats.map((b) => {
+      const was = knownBeats.get(b.id);
+      // The story (planStory) and the prompts (writePrompts) land on beats from the background while the page
+      // may be mid-edit. The page never clears a scene line or a plan itself, so ones it doesn't know about
+      // yet are kept: a story line with its mood, pulled word and chapter; a plan with its pictures.
+      if (was?.scene && !b.scene) b = { ...b, scene: was.scene, mood: was.mood, pulled: was.pulled, chapter: was.chapter };
       const had = knownPics.get(b.id);
-      if (!had?.length || !b.pictures) return b;
+      if (!had?.length) return b;
+      if (!b.pictures) return { ...b, pictures: had };
       return {
         ...b,
         pictures: b.pictures.map((p, k) => {
