@@ -10,7 +10,7 @@ the output is plain HTML, no client framework, no cookies of our own.
 - `/terms/` — terms of service
 - `/delete-account/` — how to request account/data deletion (Play Console data-deletion URL)
 - `/support/` — contact, purchases, community (App Store Connect support URL)
-- `/robots.txt`, `/sitemap-index.xml` — generated; `/404.html` is Render's not-found page
+- `/robots.txt`, `/sitemap-index.xml` (pages + `/sitemap-video.xml`, the posts' videos) — generated; `/404.html` is Render's not-found page
 
 URLs are folder-style with a trailing slash (`trailingSlash: "always"`), exactly as
 the old hand-written site had them. The store forms and Apple's review link to
