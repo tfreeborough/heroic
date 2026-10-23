@@ -22,7 +22,7 @@ import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } fr
 import { hasClaude } from "./lib/draft";
 import type { ScriptPatch } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, writePrompts, writeYouTube } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, ownSiteStill, saveArticle, videoPublishDate, writeArticle, writePrompts, writeYouTube } from "./lib/scriptSteps";
 import { scoreState } from "./lib/score";
 import { decide, researchState, startResearch } from "./lib/researcher";
 import { docModified, listDocs, pullDoc, unlinkDoc } from "./lib/scriptDocs";
@@ -644,6 +644,32 @@ const server = Bun.serve({
         return writeYouTube(g, req.params.id!, String(body.instruction ?? "")).then(json, fail);
       }),
     },
+    /** The long cut as an article for the site's dev log (docs/design/desk-writeup.md), to an instruction. Answers with the script. */
+    "/api/:game/scripts/:id/writeup": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { instruction?: string };
+        return writeArticle(g, req.params.id!, String(body.instruction ?? "")).then(json, fail);
+      }),
+    },
+    /** A glyph still the page drew for the article (the body, PNG): `?key=<beat id>` or `?key=cover`. Saved beside the script's pictures; Save to the site uses them. */
+    "/api/:game/scripts/:id/writeup/still": {
+      POST: withGame(async (g, req) => {
+        const key = new URL(req.url).searchParams.get("key") ?? "";
+        try {
+          const bytes = new Uint8Array(await req.arrayBuffer());
+          if (bytes.byteLength < 100) return json({ error: "that still is empty" }, 400);
+          if (bytes.byteLength > 25e6) return json({ error: "that still is over 25 MB" }, 400);
+          ownSiteStill(g, req.params.id!, key, bytes);
+          return json({ ok: true });
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** When a YouTube video went live (`?v=` id or link), for the post's date: `{ date: "YYYY-MM-DD" | "" }`. */
+    "/api/:game/scripts/:id/writeup/video": { GET: withGame(async (_g, req) => json({ date: await videoPublishDate(new URL(req.url).searchParams.get("v") ?? "") })) },
+    /** Write the article (and its cover) into the site's content folder for Tom to commit. Answers with the script. */
+    "/api/:game/scripts/:id/writeup/save": { POST: withGame((g, req) => saveArticle(g, req.params.id!, req.signal).then(json, fail)) },
     /** Make thumbnail pictures in the background: every idea with none yet, or (`only`, idea ids) another try at those. */
     "/api/:game/scripts/:id/thumbnails/make": {
       POST: withGame(async (g, req) => {

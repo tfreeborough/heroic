@@ -1,0 +1,189 @@
+---
+import Base from "../layouts/Base.astro";
+import YouTube from "../components/YouTube.astro";
+import { appStoreRating } from "../lib/appStore";
+
+const SITE = "https://free-the-borough.com";
+const APP_STORE = "https://apple.co/4gY0KDK";
+const APP_STORE_ID = "6793047587";
+const PLAY = "https://play.google.com/store/apps/details?id=com.heroic.blood_in_the_sand";
+const DISCORD = "https://discord.gg/8FHgBmaSnT";
+const REDDIT = "https://www.reddit.com/r/FreeTheBoroughGames/";
+
+const description =
+  "Blood in the Sand is a short, bloody multiplayer arena game for iPhone and Android from Free the Borough. You don't aim, you time it.";
+
+const rating = await appStoreRating(APP_STORE_ID);
+const screenshots = ["01-dies", "02-blood", "03-dodge", "04-mates", "05-standing", "06-arenas", "07-arms", "08-bots"].map((f) => `${SITE}/img/bits/${f}.jpg`);
+
+// Google's software-app rich result wants SoftwareApplication (or a subtype); a
+// VideoGame on its own gets none, so the game is both. The rating is only ever the
+// App Store's real one, and goes in once there is one.
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${SITE}/#org`,
+    name: "Free the Borough",
+    url: `${SITE}/`,
+    logo: `${SITE}/img/bits/icon.png`,
+    sameAs: [DISCORD, REDDIT],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": ["MobileApplication", "VideoGame"],
+    name: "Blood in the Sand",
+    url: `${SITE}/`,
+    image: `${SITE}/img/bits/og.jpg`,
+    description,
+    applicationCategory: "GameApplication",
+    operatingSystem: "iOS, Android",
+    gamePlatform: ["iOS", "Android"],
+    playMode: "MultiPlayer",
+    genre: "Arena fighting",
+    publisher: { "@id": `${SITE}/#org` },
+    downloadUrl: [APP_STORE, PLAY],
+    installUrl: [APP_STORE, PLAY],
+    screenshot: screenshots,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "GBP", availability: "https://schema.org/InStock" },
+    ...(rating ? { aggregateRating: { "@type": "AggregateRating", ratingValue: rating.value, ratingCount: rating.count, bestRating: 5, worstRating: 1 } } : {}),
+  },
+];
+---
+<Base
+  title="Blood in the Sand — Free the Borough Games"
+  description={description}
+  bodyClass="home"
+  jsonLd={jsonLd}
+>
+  <main class="home">
+    <section class="hero" style="--art: url('/img/bits/arena-blur.webp')">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+        <div class="hero-title">
+          <img class="app-icon" src="/img/bits/icon.png" width="96" height="96" alt="Blood in the Sand app icon">
+          <div>
+            <span class="status">Out now on iPhone and Android</span>
+            <h1>Blood in the Sand</h1>
+          </div>
+        </div>
+        <p class="pitch">Short, bloody duels. You don't aim, you time it.</p>
+        <p>Pick a weapon and a few abilities, walk out onto the sand and fight
+        until one side is dead. Every attack has a windup you can see coming, so
+        the whole game is spacing and timing. You get one life a round, and first
+        to three wins.</p>
+        <div class="stores">
+          <a class="store" href={APP_STORE} target="_blank" rel="noopener">Get it on the App Store</a>
+          <a class="store" href={PLAY} target="_blank" rel="noopener">Get it on Google Play</a>
+          <a class="store ghost" href={DISCORD} target="_blank" rel="noopener">Discord</a>
+          <a class="store ghost" href={REDDIT} target="_blank" rel="noopener">Reddit</a>
+        </div>
+        </div>
+        <!-- Hidden on phones, where the source swaps to the backdrop thumbnail
+             (already loaded) so the full art never downloads. -->
+        <picture>
+          <source media="(max-width: 860px)" srcset="/img/bits/arena-blur.webp">
+          <img class="hero-art" src="/img/bits/arena.webp" width="640" height="960" fetchpriority="high" alt="The arena at Blood in the Sand, sun overhead and blood on the sand">
+        </picture>
+      </div>
+    </section>
+
+    <section class="wrap trailer" aria-label="Trailer">
+      <!-- Click-to-load: nothing comes from YouTube (and no cookies get set)
+           until someone presses play. Without JS the link just opens YouTube. -->
+      <YouTube
+        id="74bl8trUE3M"
+        title="Blood in the Sand trailer"
+        poster={{ src: "/img/bits/promo-poster.webp", width: 1280, height: 720, alt: "Blood in the Sand trailer" }}
+      />
+    </section>
+
+    <section class="wrap shots" aria-label="Screenshots" aria-roledescription="carousel">
+      <!-- Without JS this is just a swipeable strip; the script adds the
+           arrows' behaviour and the dots. -->
+      <button class="shot-nav prev" type="button" aria-label="Previous screenshots" hidden></button>
+      <button class="shot-nav next" type="button" aria-label="Next screenshots" hidden></button>
+      <div class="shot-row">
+        <img src="/img/bits/01-dies.webp" width="506" height="900" loading="lazy" alt="Someone dies every round">
+        <img src="/img/bits/02-blood.webp" width="506" height="900" loading="lazy" alt="Blood stays on the sand">
+        <img src="/img/bits/03-dodge.webp" width="506" height="900" loading="lazy" alt="Dodge it or wear it">
+        <img src="/img/bits/04-mates.webp" width="506" height="900" loading="lazy" alt="Bring a mate">
+        <img src="/img/bits/05-standing.webp" width="506" height="900" loading="lazy" alt="Last one standing">
+        <img src="/img/bits/06-arenas.webp" width="506" height="900" loading="lazy" alt="Different arenas, different cover">
+        <img src="/img/bits/07-arms.webp" width="506" height="900" loading="lazy" alt="Choose your arms">
+        <img src="/img/bits/08-bots.webp" width="506" height="900" loading="lazy" alt="The bots don't go easy">
+      </div>
+      <div class="shot-dots"></div>
+    </section>
+
+    <section class="wrap">
+      <ul class="features">
+        <li><strong>Ranked 1v1 and 2v2</strong>, with a solo queue for 2v2 if you haven't got a mate around.</li>
+        <li><strong>Private rooms</strong> with a passcode for playing friends, up to 4v4, plus a six-player free-for-all.</li>
+        <li><strong>Practice bots.</strong> The easy ones are genuinely bad at the game. The hard ones will beat you.</li>
+        <li><strong>Free to play.</strong> Nothing in the shop makes you hit harder, it just gives you more to build with.</li>
+      </ul>
+
+      <h2 class="section">Who's behind this</h2>
+      <p>Free the Borough is me, Tom. I make small games and I'd rather get one
+      fight feeling right than ship lots of things that don't. If you want to say
+      hello, report a bug or tell me something's broken, the
+      <a href={DISCORD}>Discord</a> and
+      <a href={REDDIT}>r/FreeTheBoroughGames</a>
+      are the best places, or have a look at the <a href="/support/">support page</a>.</p>
+    </section>
+  </main>
+</Base>
+
+<script>
+// Screenshot carousel: arrows and dots move a page at a time, the strip
+// itself stays native scroll-snap so swiping works as normal.
+(function () {
+  var root = document.querySelector('.shots');
+  var row = root.querySelector('.shot-row');
+  var cards = row.children;
+  var prev = root.querySelector('.prev');
+  var next = root.querySelector('.next');
+  var dotsBox = root.querySelector('.shot-dots');
+  var dots = [];
+
+  function step() { return cards[1].offsetLeft - cards[0].offsetLeft; }
+  function perPage() { return Math.max(1, Math.round((row.clientWidth + 16) / step())); }
+  function maxScroll() { return row.scrollWidth - row.clientWidth; }
+  function pages() { return Math.ceil(cards.length / perPage()); }
+  function goTo(page) {
+    row.scrollTo({ left: Math.min(page * perPage() * step(), maxScroll()), behavior: 'smooth' });
+  }
+  function current() {
+    if (row.scrollLeft >= maxScroll() - 2) return pages() - 1;
+    return Math.round(row.scrollLeft / (perPage() * step()));
+  }
+
+  function buildDots() {
+    dotsBox.textContent = '';
+    dots = [];
+    for (var i = 0; i < pages(); i++) {
+      var d = document.createElement('button');
+      d.type = 'button';
+      d.setAttribute('aria-label', 'Screenshots page ' + (i + 1));
+      d.onclick = goTo.bind(null, i);
+      dotsBox.appendChild(d);
+      dots.push(d);
+    }
+    update();
+  }
+  function update() {
+    var c = current();
+    dots.forEach(function (d, i) { d.setAttribute('aria-current', i === c); });
+    prev.disabled = row.scrollLeft <= 2;
+    next.disabled = row.scrollLeft >= maxScroll() - 2;
+  }
+
+  prev.hidden = next.hidden = false;
+  prev.onclick = function () { goTo(current() - 1); };
+  next.onclick = function () { goTo(current() + 1); };
+  row.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', buildDots);
+  buildDots();
+})();
+</script>

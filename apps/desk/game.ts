@@ -152,6 +152,10 @@ export type GameConfig = {
    * plans a picture per beat (docs/design/desk-ascii-scripts.md), previewed
    * as glyphs in `palette` (ascii-build's PALETTES; default matrix). */
   script?: { ai: ScriptVoice; palette?: "matrix" | "sand" };
+  /** The studio site's dev log (docs/design/desk-writeup.md): the folder
+   * Save to the site on a script's Site stage writes a post into, one
+   * folder per post (index.md, cover.jpg, the pictures). Relative to root. */
+  site?: { content: string };
   /** The game's own tabs (browser, lazy), after the Desk's. Their server
    * side is `desk.server.ts` beside the config (see GameRoutes). */
   tabs?: GameTab[];

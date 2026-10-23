@@ -42,7 +42,23 @@ let frameCanvas: HTMLCanvasElement | null = null;
  * A picture as the video will show it once built: the real engine at the
  * video's frame size and columns, drawn once as a still (no animation:
  * the build order is a random seed anyway, so watching it told nothing).
+ * The Site stage saves these same stills into the dev log.
  */
+export const glyphStill = async (url: string, look: number, palette: Palette): Promise<Blob> => {
+  const [img] = await Promise.all([loadImage(url), document.fonts.load(`700 12px "${fontFamily}"`)]);
+  frameCanvas ??= Object.assign(document.createElement("canvas"), { width: FRAME.w, height: FRAME.h });
+  const ctx = frameCanvas.getContext("2d")!;
+  const ink = inkFromImage(img, "light", 512, "auto");
+  const { arrival, order } = lookFromSeed(look);
+  const build = planBuild({ ink, look: { ...LOCKED_LOOK, cols: VIDEO_COLS }, box: { x: 0, y: 0, ...FRAME }, frame: FRAME, start: BUILD.start, end: BUILD.end, seed: look, arrival, order, exit: EXIT });
+  const pal = PALETTES[palette];
+  ctx.fillStyle = pal.bg;
+  ctx.fillRect(0, 0, FRAME.w, FRAME.h);
+  drawBuild(ctx, build, STILL, { palette: pal, family: FAMILY, ambient: true, glow: 0.25, glowFrom: BUILD.end + 0.3, cache: newCache() });
+  // toBlob copies the canvas as it is right now, so the shared canvas is free for the next picture straight away.
+  return new Promise<Blob>((ok, no) => frameCanvas!.toBlob((blob) => (blob ? ok(blob) : no(new Error("the still didn't draw"))), "image/png"));
+};
+
 export const GlyphPicture: React.FC<{ url: string; look: number; palette: Palette }> = ({ url, look, palette }) => {
   const [still, setStill] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -50,25 +66,11 @@ export const GlyphPicture: React.FC<{ url: string; look: number; palette: Palett
     let live = true;
     let made: string | null = null;
     setStill(null);
-    void Promise.all([loadImage(url), document.fonts.load(`700 12px "${fontFamily}"`)])
-      .then(([img]) => {
-        if (!live) return;
-        frameCanvas ??= Object.assign(document.createElement("canvas"), { width: FRAME.w, height: FRAME.h });
-        const ctx = frameCanvas.getContext("2d")!;
-        const ink = inkFromImage(img, "light", 512, "auto");
-        const { arrival, order } = lookFromSeed(look);
-        const build = planBuild({ ink, look: { ...LOCKED_LOOK, cols: VIDEO_COLS }, box: { x: 0, y: 0, ...FRAME }, frame: FRAME, start: BUILD.start, end: BUILD.end, seed: look, arrival, order, exit: EXIT });
-        const pal = PALETTES[palette];
-        ctx.fillStyle = pal.bg;
-        ctx.fillRect(0, 0, FRAME.w, FRAME.h);
-        drawBuild(ctx, build, STILL, { palette: pal, family: FAMILY, ambient: true, glow: 0.25, glowFrom: BUILD.end + 0.3, cache: newCache() });
-        // toBlob copies the canvas as it is right now, so the shared canvas is free for the next picture straight away.
-        frameCanvas.toBlob((blob) => {
-          if (!blob) return;
-          made = URL.createObjectURL(blob);
-          if (live) setStill(made);
-          else URL.revokeObjectURL(made);
-        });
+    void glyphStill(url, look, palette)
+      .then((blob) => {
+        made = URL.createObjectURL(blob);
+        if (live) setStill(made);
+        else URL.revokeObjectURL(made);
       })
       .catch(() => {});
     return () => {

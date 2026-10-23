@@ -651,3 +651,60 @@ export const planTitles = async (v: ScriptVoice, title: string, beats: string[],
     .map((t) => ({ text: clean(t.text).replace(/!/g, "").replace(/^["']|["']$/g, ""), why: clean(t.why) }))
     .filter((t) => t.text);
 };
+
+// ── the write-up: the long video as an article for the site's dev log (docs/design/desk-writeup.md) ──
+
+const ArticleOut = z.object({
+  title: z.string().describe("The article's title: what it is actually about, in the words someone would type to find it. Sentence case, under 70 characters."),
+  description: z.string().describe("One or two sentences, under 160 characters, on what the article covers, specifically. Never starts with 'In this article'."),
+  slug: z.string().describe("The URL: three to six lower-case words from the title joined by hyphens, no filler words, ascii only."),
+  body: z.string().describe("The article, as markdown: paragraphs, ## headings between sections, - lists where the script lists. No title line at the top."),
+});
+
+export type Article = z.infer<typeof ArticleOut>;
+
+const ARTICLE_RULES = [
+  "You turn the script of a long YouTube video one person made about making their game into an article for their own website. The article goes on a page with the video at the top, but the reader is someone who found the page by searching, not someone watching, so the article has to stand on its own. Nothing in it refers to the video, to watching, to the screen, to what is being shown, to subscribing, liking, commenting, links below, the channel, or earlier or later videos. Where the script says 'as you can see' or 'here's what that looks like', say the thing in words instead, from what the script says about it.",
+  "It is the author's writing, taken from spoken to written, not a new piece. Keep every point and the author's order. Keep their sentences wherever they read fine on the page; change a sentence only where spoken rhythm doesn't read (a false start, a run-on, 'so', 'right', 'okay'), and then change as little of it as will fix that. Never add a fact, a number, a feature or a claim that isn't in the script. Never add an introduction saying what the article covers, a summary at the end, a sign-off, or a transition the author didn't write. Start with the first real point. End with the last real point.",
+  "Sections get ## headings in plain words, sentence case: the script's chapters if there are any, otherwise one every three to six paragraphs, and none at all for a short piece. Paragraphs of two to five sentences. A list only where the script lists things. No bold or italics for emphasis, no title line. Markdown only: paragraphs, ## headings, - lists.",
+  "Hard rules: first person singular, British spelling, everyday words, no em dashes, no ALL CAPS, no exclamation marks, no three-beat slogans, no coined aphorisms, no emoji, no hashtags.",
+  "The title is for search, so it says what the piece is actually about in the words people would type, and it reads well written down (a title that only works beside a thumbnail doesn't). The description adds to the title; it never repeats it.",
+  "The author's sources are listed under the article by the tool afterwards, so write no Sources, References or Links section and no footnotes.",
+].join("\n\n");
+
+/** The long cut as an article (to Tom's instruction, if any; `had` = what's there now, which he wants done again). */
+export const writeArticle = async (v: ScriptVoice, game: string, samples: string[], title: string, beats: string[], chapters: string[], had: Pick<Article, "title" | "body"> | undefined, instruction: string): Promise<Article> => {
+  const sys = [
+    `About the game and the person (for you, not for the article): ${v.about}`,
+    "",
+    ...(samples.length
+      ? [
+          "THE AUTHOR'S OWN SCRIPTS, in full, so you can hear exactly how they write. Their voice is these, not a tidier version of these.",
+          ...samples.map((s, i) => `--- script ${i + 1} ---\n${s}\n--- end ---`),
+          "",
+        ]
+      : []),
+    "The voice, in rules:",
+    v.rules,
+    "",
+    ARTICLE_RULES,
+  ].join("\n");
+  const user = [
+    `The game: ${game}. The video's title: "${title}".`,
+    ...(chapters.length ? ["", `Its chapters, in order: ${chapters.join(" / ")}.`] : []),
+    "",
+    "The script, beat by beat, as it was read aloud:",
+    ...beats.map((b, i) => `${i + 1}. ${b}`),
+    "",
+    ...(had ? [`What was written last time, which the author wants done again:\n# ${had.title}\n${had.body}`, ""] : []),
+    ...(instruction.trim() ? [`The author says: ${instruction.trim()}`] : []),
+    "Write the article.",
+  ].join("\n");
+  const out = await ask(sys, user, ArticleOut, "high");
+  return {
+    title: clean(out.title).replace(/!/g, "").slice(0, 120),
+    description: clean(out.description).replace(/!/g, ".").slice(0, 300),
+    slug: out.slug,
+    body: out.body.replace(/—/g, ",").replace(/^#\s+.*\n+/, "").trim(),
+  };
+};

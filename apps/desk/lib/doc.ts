@@ -47,6 +47,20 @@ export const unsaidLines = (md: string): boolean[] => {
 };
 
 /**
+ * The author's own notes: every line in a section headed Sources,
+ * References, Links or Notes, and every quoted (>) line, with the bullet or
+ * quote mark off. The article's Sources list is built from these.
+ */
+export const sourceNotes = (md: string): string[] => {
+  const unsaid = unsaidLines(md);
+  return md
+    .split("\n")
+    .filter((l, i) => unsaid[i] && !isHeading(l))
+    .map((l) => l.replace(/^\s{0,3}>\s?/, "").replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean);
+};
+
+/**
  * Google's markdown, tidied: images and their base64 tails gone, the
  * backslash escapes undone (Docs escapes every . - ! it thinks might be
  * markdown), no more than one blank line in a row, no trailing spaces.

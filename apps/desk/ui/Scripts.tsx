@@ -5,6 +5,7 @@ import { go } from "./App";
 import { Markdown } from "./markdown";
 import { type Palette, PicturesStep } from "./Pictures";
 import { ThumbnailsStep, Titles } from "./Thumbnails";
+import { WriteupStep } from "./Writeup";
 import { Prompter, coversOf } from "./Prompter";
 import { ResearchPanel } from "./Research";
 import { DocPicker } from "./DocPicker";
@@ -22,7 +23,7 @@ import { type Beat, type Cut, type DiffOp, type PlanState, beatText, cutDiff, cu
  * mine, change it), Pictures (docs/design/desk-ascii-scripts.md: one per
  * beat, built out of glyphs, plus the music's mood and the chapters),
  * Record (the prompter and the takes), Organise, Publish (titles,
- * thumbnails, the description and tags).
+ * thumbnails, the description and tags), Site (the write-up for the dev log).
  */
 export const Scripts: React.FC<{ game: GameInfo; api: GameApi; id?: string; stage?: string }> = ({ api, id, stage }) => {
   const [list, setList] = useState<ScriptSummary[] | null>(null);
@@ -159,6 +160,7 @@ const STAGES = [
   ["record", "Record"],
   ["organise", "Organise"],
   ["publish", "Publish"],
+  ["site", "Site"],
 ] as const;
 type Stage = (typeof STAGES)[number][0];
 /** 8:50, for the stage bar. */
@@ -401,6 +403,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
     record: beats.length ? `${beats.filter((b) => recorded.has(b.id)).length}/${beats.length} read` : "",
     organise: s.sequences?.length ? `${s.sequences.length} edit${s.sequences.length === 1 ? "" : "s"}` : "not yet",
     publish: [s.titles?.length ? `${s.titles.length} title${s.titles.length === 1 ? "" : "s"}` : "", s.thumbnails?.some((t) => t.chosen) ? `${s.thumbnails.filter((t) => t.chosen).length} thumbnail${s.thumbnails.filter((t) => t.chosen).length === 1 ? "" : "s"}` : "", s.youtube ? "tags" : ""].filter(Boolean).join(" · ") || "not yet",
+    site: s.writeup?.saved ? (s.writeup.saved.at < s.writeup.writtenAt ? "written again since saved" : `on the site as /log/${s.writeup.slug}/`) : s.writeup ? "written, not saved" : "not yet",
   };
   const nextStage = STAGES[STAGES.findIndex(([k]) => k === at) + 1];
   return (
@@ -764,6 +767,22 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
         </div>
       ) : null}
 
+      {/* ── Site: the video written up as an article for the dev log ── */}
+      {at === "site" && s.long ? (
+        <div className="panel">
+          <WriteupStep
+            s={s}
+            api={api}
+            claude={claude}
+            palette={palette}
+            busy={busy}
+            onChange={(writeup) => patch({ writeup })}
+            onWrite={(instruction) => void step("writeup", () => api.writeArticle(id, instruction))}
+            onSave={(prepare) => void step("writeup-save", () => prepare().then(() => api.saveArticle(id)))}
+          />
+        </div>
+      ) : null}
+
       {s.long && nextStage && at !== "record" ? (
         <div className="row" style={{ justifyContent: "flex-end" }}>
           <button className="ghost small" onClick={() => goStage(nextStage[0])}>
@@ -945,7 +964,7 @@ const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; c
 };
 
 /** What the page saves of a script (the server owns the rest). */
-const patchOf = (s: Script): ScriptPatch => ({ title: s.title, source: s.source, long: s.long, shorts: s.shorts, gap: s.gap, takes: s.takes, thumbnails: s.thumbnails, titles: s.titles, youtube: s.youtube, theme: s.theme ?? "", look: s.look ?? "", cast: s.cast ?? [] });
+const patchOf = (s: Script): ScriptPatch => ({ title: s.title, source: s.source, long: s.long, shorts: s.shorts, gap: s.gap, takes: s.takes, thumbnails: s.thumbnails, titles: s.titles, youtube: s.youtube, writeup: s.writeup, theme: s.theme ?? "", look: s.look ?? "", cast: s.cast ?? [] });
 
 /**
  * The Cut stage: the beats down a rail on the left (what the rewrite

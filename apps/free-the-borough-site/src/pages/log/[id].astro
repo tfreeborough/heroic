@@ -1,0 +1,68 @@
+---
+import { render } from "astro:content";
+import { logPosts } from "../../lib/log";
+import Base from "../../layouts/Base.astro";
+import YouTube from "../../components/YouTube.astro";
+import { Image } from "astro:assets";
+
+export async function getStaticPaths() {
+  const posts = await logPosts();
+  return posts.map((post) => ({ params: { id: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const { title, description, date, updated, youtube, cover } = post.data;
+
+const SITE = "https://free-the-borough.com";
+const url = `${SITE}/log/${post.id}/`;
+const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+const jsonLd: object[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: title,
+    description,
+    datePublished: date.toISOString(),
+    dateModified: (updated ?? date).toISOString(),
+    mainEntityOfPage: url,
+    ...(cover ? { image: `${SITE}${cover.src}` } : {}),
+    author: { "@type": "Person", name: "Tom", url: `${SITE}/` },
+    publisher: { "@type": "Organization", name: "Free the Borough", url: `${SITE}/`, logo: { "@type": "ImageObject", url: `${SITE}/img/bits/icon.png` } },
+  },
+];
+if (youtube) {
+  jsonLd.push({
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    name: title,
+    description,
+    uploadDate: date.toISOString(),
+    thumbnailUrl: cover ? `${SITE}${cover.src}` : `https://i.ytimg.com/vi/${youtube}/hqdefault.jpg`,
+    contentUrl: `https://www.youtube.com/watch?v=${youtube}`,
+    embedUrl: `https://www.youtube-nocookie.com/embed/${youtube}`,
+  });
+}
+---
+<Base title={`${title} — Free the Borough`} description={description} type="article" image={cover?.src} jsonLd={jsonLd}>
+  <main>
+    <article class="wrap post">
+      <h1>{title}</h1>
+      <p class="updated">
+        <time datetime={date.toISOString()}>{fmt(date)}</time>
+        {updated && <span> · Updated {fmt(updated)}</span>}
+        {youtube && <span> · <a href={`https://www.youtube.com/watch?v=${youtube}`} target="_blank" rel="noopener">Watch on YouTube</a></span>}
+      </p>
+      {youtube ? (
+        <div class="post-video">
+          <YouTube id={youtube} title={title} poster={cover ? { src: cover.src, width: cover.width, height: cover.height, alt: title } : undefined} eager />
+        </div>
+      ) : cover ? (
+        <Image class="post-cover" src={cover} width={1280} alt="" loading="eager" />
+      ) : null}
+      <Content />
+      <p class="post-foot"><a href="/log/">All dev log posts</a></p>
+    </article>
+  </main>
+</Base>

@@ -1,6 +1,7 @@
 /* Free the Borough — brochure + legal pages.
-   One stylesheet, no JS, no build step. The palette is the games' arena
-   language: near-black ground, bone text, rationed gold + blood-red. */
+   One stylesheet, no build step; the only JS is the trailer's click-to-play.
+   The palette is the games' arena language: near-black ground, bone text,
+   rationed gold + blood-red. */
 
 @font-face {
   font-family: 'Cinzel';
@@ -229,26 +230,123 @@ main.home { padding: 0 0 72px; }
 .store.ghost { background: transparent; color: var(--gold); }
 .store.ghost:hover { background: rgba(232,200,122,0.1); color: var(--bone); }
 
-/* Screenshots: one scrolling strip, snaps on touch */
-.shots { padding: 40px 0 8px; }
+/* Trailer: a poster with a play button that swaps itself for the YouTube
+   player on click (the only JS on the site). */
+.trailer { padding-top: 44px; }
+.video {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(232,200,122,0.3);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  background: #000;
+}
+.video img, .video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+}
+.video .play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 0 -42px;
+  border-radius: 50%;
+  background: rgba(20,18,16,0.72);
+  border: 2px solid var(--gold);
+  transition: transform 0.15s, background 0.15s;
+}
+.video .play::after {
+  content: "";
+  position: absolute;
+  left: 33px;
+  top: 25px;
+  border-style: solid;
+  border-width: 16px 0 16px 26px;
+  border-color: transparent transparent transparent var(--gold);
+}
+.video:hover .play { transform: scale(1.08); background: rgba(140,47,47,0.85); }
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* Screenshots: a carousel of --per cards a page. The strip is native
+   scroll-snap (swipes on touch); the arrows and dots are added by the script. */
+.shots { --per: 4; position: relative; padding-top: 40px; }
 .shot-row {
   display: flex;
   gap: 16px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  padding: 0 max(24px, calc((100vw - 960px) / 2)) 16px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
+  scrollbar-width: none;
+  /* room for the cards' shadows, which the scroller would otherwise clip */
+  padding: 4px 0 28px;
+  margin-bottom: -16px;
 }
+.shot-row::-webkit-scrollbar { display: none; }
 .shot-row img {
   flex: none;
-  width: 200px;
+  width: calc((100% - (var(--per) - 1) * 16px) / var(--per));
   height: auto;
   border-radius: 14px;
   border: 1px solid var(--line);
-  scroll-snap-align: center;
+  scroll-snap-align: start;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
+.shot-nav {
+  position: absolute;
+  top: calc(40px + (100% - 40px - 40px) / 2);
+  z-index: 1;
+  width: 46px;
+  height: 46px;
+  margin-top: -23px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: rgba(20,18,16,0.85);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s, transform 0.15s;
+}
+.shot-nav.prev { left: 2px; }
+.shot-nav.next { right: 2px; }
+.shot-nav::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border: solid var(--gold);
+  border-width: 0 2px 2px 0;
+  transform: translate(-65%, -50%) rotate(-45deg);
+}
+.shot-nav.prev::after { transform: translate(-35%, -50%) rotate(135deg); }
+.shot-nav:hover:not(:disabled) { background: rgba(140,47,47,0.9); transform: scale(1.06); }
+.shot-nav:disabled { opacity: 0; pointer-events: none; }
+.shot-nav[hidden] { display: none; }
+
+.shot-dots { display: flex; justify-content: center; gap: 10px; height: 32px; align-items: center; }
+.shot-dots button {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 0;
+  background: var(--line);
+  transform: rotate(45deg);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.shot-dots button[aria-current="true"] { background: var(--gold); }
 
 .features {
   list-style: none;
@@ -287,7 +385,9 @@ footer a:hover { color: var(--gold); }
 
 @media (max-width: 860px) {
   .hero-grid { grid-template-columns: 1fr; }
+  .log-grid { grid-template-columns: 1fr; }
   .hero-art { display: none; }
+  .shots { --per: 3; }
 }
 
 @media (max-width: 600px) {
@@ -299,5 +399,81 @@ footer a:hover { color: var(--gold); }
   .hero h1 { font-size: 30px; }
   .app-icon { width: 72px; height: 72px; border-radius: 17px; }
   .features { grid-template-columns: 1fr; }
-  .shot-row img { width: 160px; }
+  .shots { --per: 2; padding-top: 32px; }
+  .shot-nav { display: none; }
+  .trailer { padding-top: 32px; }
+  .video .play { transform: scale(0.8); }
 }
+
+/* Dev log: the list and the article page. The player is the homepage trailer
+   facade; without a cover image it shows a plain plate so nothing is fetched
+   from YouTube until play. */
+.video-plate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 20px 24px;
+  background: linear-gradient(160deg, var(--panel), #0d0b09);
+  color: var(--muted);
+  font-size: 15px;
+}
+/* The dev log index: a grid of cards, the cover (glyph art, 16:9) on top. */
+.log-wrap { max-width: 1008px; }
+.log-wrap .lede { max-width: 640px; }
+.log-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 8px;
+}
+.log-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--body);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.log-card:hover { border-color: rgba(232,200,122,0.55); transform: translateY(-2px); }
+.log-card img, .log-plate {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #000;
+  border-bottom: 1px solid var(--line);
+}
+.log-plate {
+  display: flex;
+  align-items: flex-end;
+  padding: 18px 20px;
+  background: linear-gradient(160deg, #221c16, #0d0b09);
+  color: var(--muted);
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+.log-card-body { padding: 18px 20px 22px; }
+.log-card time { display: block; color: var(--muted); font-size: 13px; letter-spacing: 1px; margin-bottom: 8px; }
+.log-card h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  color: var(--bone);
+  font-size: 20px;
+  letter-spacing: 0.5px;
+  text-transform: none;
+  line-height: 1.3;
+  margin: 0 0 10px;
+}
+.log-card:hover h2 { color: var(--gold); }
+.log-card p { margin: 0; font-size: 15px; line-height: 1.55; }
+.post-cover { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(232,200,122,0.3); box-shadow: 0 24px 60px rgba(0,0,0,0.6); margin: 0 0 32px; }
+.post-video { margin: 0 0 32px; }
+.post img { max-width: 100%; height: auto; border-radius: 10px; }
+.post blockquote { margin: 0 0 14px; padding-left: 16px; border-left: 2px solid var(--gold); color: var(--body); }
+.post-foot { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); }
+.post p > img, .post > img { display: block; width: 100%; height: auto; margin: 4px 0 22px; border: 1px solid rgba(232,200,122,0.18); }

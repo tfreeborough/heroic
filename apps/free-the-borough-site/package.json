@@ -1,0 +1,15 @@
+{
+  "name": "free-the-borough-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bunx --bun astro dev --port 7790",
+    "build": "bunx --bun astro build",
+    "preview": "bunx --bun astro preview --port 7790"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.4",
+    "astro": "7.4.2"
+  }
+}

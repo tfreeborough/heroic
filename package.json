@@ -10,7 +10,7 @@
     "test": "bun test packages",
     "typecheck": "bun run --filter '*' typecheck",
     "desk": "bun run --cwd apps/desk start",
-    "site": "bun apps/free-the-borough-site/dev.ts",
+    "site": "bun run --cwd apps/free-the-borough-site dev",
     "sand": "bun run --cwd apps/sand-table start"
   },
   "devDependencies": {

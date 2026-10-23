@@ -4,13 +4,16 @@
  * as samples, snapshots the source it ran on, saves, and answers with the
  * whole script. Throws plainly when there's no key or no voice.
  */
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import type { GameConfig } from "../game";
 import { youtubeChapters } from "@heroic/ascii-build";
-import { PICTURE_STYLE, THUMB_STYLE, hasImages, makePicture, saveOwnPicture } from "./cards";
+import { PICTURE_STYLE, THUMB_STYLE, cardsDir, hasImages, makePicture, saveOwnPicture } from "./cards";
 import * as ai from "./rewrite";
 import { matchScript } from "./match";
 import { organiseCut } from "./organise";
-import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, type PlanState } from "./scripts";
+import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, slugify, articlePictures, sourcesList, sourcesMarkdown, withoutSources, youtubeId, type PlanState } from "./scripts";
+import { exec } from "./exec";
 import { readScript, saveScript, voiceSamples } from "./scriptsStore";
 import { docHeadings } from "./doc";
 import { type ScoreListing, listScores, makeScore, useScore } from "./score";
@@ -447,4 +450,132 @@ export const remakeScore = (g: GameConfig, id: string, another: boolean): Script
   const next = seed === s.scoreSeed ? s : saveScript(g, { ...s, scoreSeed: seed });
   void makeScore(g, next, seqId, seed);
   return next;
+};
+
+// ── the write-up (docs/design/desk-writeup.md) ──
+
+/** The long cut as an article for the site's dev log (to Tom's instruction, if any). His pasted video id and where it was last saved stay. */
+export const writeArticle = async (g: GameConfig, id: string, instruction: string): Promise<Script> => {
+  const { s, v, samples } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  const chapters = s.long.beats.flatMap((b) => (b.chapter?.trim() ? [b.chapter.trim()] : []));
+  const a = await ai.writeArticle(v, g.name, samples, s.long.title, s.long.beats.map((b) => b.text), chapters, s.writeup, instruction);
+  const now = readScript(g, id) ?? s;
+  const slug = slugify(a.slug) || slugify(a.title) || slugify(now.title) || `post-${now.id}`;
+  // The author's sources go on the end, as links (his notes and the accepted research), never Claude's.
+  const sources = sourcesMarkdown(sourcesList(now));
+  const body = [withoutSources(a.body), ...(sources ? ["", sources] : [])].join("\n");
+  return saveScript(g, { ...now, writeup: { ...a, body, slug, youtube: now.writeup?.youtube, writtenAt: new Date().toISOString(), saved: now.writeup?.saved } });
+};
+
+/**
+ * The glyph stills the page draws for the article (docs/design/desk-writeup.md):
+ * a beat's picture as the video shows it, or the thumbnail picture with no
+ * words as the cover. The server can't draw them (the engine is canvas), so
+ * the Site stage draws and sends each one just before Save to the site. Kept
+ * beside the script's pictures as cards/<script>/site-<key>.png.
+ */
+const siteStillFile = (g: GameConfig, script: string, key: string) => join(cardsDir(g, script), `site-${key.replace(/[^a-z0-9_-]/gi, "")}.png`);
+export const ownSiteStill = (g: GameConfig, id: string, key: string, bytes: Uint8Array): void => {
+  if (!readScript(g, id)) throw new Error(`no script ${id}`);
+  if (!key.replace(/[^a-z0-9_-]/gi, "")) throw new Error("the still needs a key");
+  mkdirSync(cardsDir(g, id), { recursive: true });
+  writeFileSync(siteStillFile(g, id, key), bytes);
+};
+
+/**
+ * When a YouTube video went live, as a YYYY-MM-DD in the UK, read off its
+ * watch page (the `publishDate` in the page's data; no API key needed), or
+ * "" if the page doesn't say. The dev log orders posts by this date.
+ */
+export const videoPublishDate = async (videoId: string): Promise<string> => {
+  const id = youtubeId(videoId);
+  if (!id) return "";
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${id}`, { headers: { "user-agent": "Mozilla/5.0", "accept-language": "en-GB" }, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return "";
+    const html = await res.text();
+    const iso = html.match(/"publishDate":"([^"]+)"/)?.[1] ?? html.match(/itemprop="datePublished" content="([^"]+)"/)?.[1];
+    if (!iso) return "";
+    const at = new Date(iso);
+    return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  } catch {
+    return "";
+  }
+};
+
+const yamlString = (s: string) => JSON.stringify(s.replace(/\s+/g, " ").trim());
+
+/**
+ * Write the post into the site as ONE FOLDER, `<site.content>/<slug>/`:
+ * `index.md` with its frontmatter, the cover as `cover.jpg` (1280×720) and
+ * the pictures as `1.jpg`, `2.jpg`… beside it, so deleting the folder deletes
+ * the post. The page's date is the first save's; a later save on another day
+ * adds `updated`. A save under a new slug removes the old folder. Tom
+ * commits and pushes; Render builds the site. Answers with the script.
+ */
+export const saveArticle = async (g: GameConfig, id: string, signal?: AbortSignal): Promise<Script> => {
+  const s = readScript(g, id);
+  if (!s) throw new Error(`no script ${id}`);
+  const w = s.writeup;
+  if (!w) throw new Error("write the article first");
+  if (!g.site) throw new Error(`${g.name} has no site to save to (site in its desk.config)`);
+  const slug = slugify(w.slug);
+  if (!slug) throw new Error("the article needs a slug (its URL)");
+  if (!w.title.trim()) throw new Error("the article needs a title");
+  if (!w.body.trim()) throw new Error("the article has no words");
+  const repo = resolve(g.root, "../..");
+  const finalDir = resolve(g.root, g.site.content, slug);
+  // The stills the page drew (siteStillFile) must all be there before anything is written.
+  const pics = articlePictures(s, w.body.trim());
+  const missing = pics.filter((p) => !existsSync(siteStillFile(g, s.id, p.beat)));
+  if (missing.length) throw new Error(`${missing.length} picture${missing.length === 1 ? " wasn't" : "s weren't"} drawn as glyphs (the page draws them just before saving); try again`);
+  const coverStill = siteStillFile(g, s.id, "cover");
+  const wantCover = w.cover ?? (s.thumbnails ?? []).find((t) => t.chosen)?.chosen;
+  const hasCover = Boolean(wantCover && existsSync(coverStill));
+
+  // Built beside the post and renamed into place in one go: the site's dev server watches this folder, and a
+  // folder written file by file can be read half-made (a cover.jpg named in the frontmatter that isn't there yet).
+  const dir = `${finalDir}.writing`;
+  if (existsSync(dir)) rmSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true });
+  const convert = async (from: string, to: string, vf: string) => {
+    const r = await exec(["ffmpeg", "-y", "-loglevel", "error", "-i", from, "-vf", vf, "-q:v", "4", to], undefined, signal);
+    if (!r.ok) throw new Error(`a picture didn't convert: ${r.err.trim().split("\n").at(-1) ?? "ffmpeg failed"}`);
+  };
+  if (hasCover) await convert(coverStill, join(dir, "cover.jpg"), "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720");
+  // One picture per heading, as a markdown image beside the file (Astro sizes it and adds width and height).
+  const lines = w.body.trim().split("\n");
+  const inserts = new Map<number, string>();
+  for (const [n, p] of pics.entries()) {
+    await convert(siteStillFile(g, s.id, p.beat), join(dir, `${n + 1}.jpg`), "scale='min(1280,iw)':-2");
+    inserts.set(p.line, `\n\n![${p.alt.replace(/[[\]]/g, "")}](./${n + 1}.jpg)`);
+  }
+  const body = lines.map((l, i) => (inserts.has(i) ? `${l}${inserts.get(i)}` : l)).join("\n");
+
+  // The page's date: the video's (Tom's field), else the first save's. A re-save on a later day marks it updated.
+  const today = new Date().toISOString().slice(0, 10);
+  const date = w.date ?? w.saved?.date ?? today;
+  const front = [
+    "---",
+    `title: ${yamlString(w.title)}`,
+    `description: ${yamlString(w.description)}`,
+    `date: ${date}`,
+    ...(w.saved && date !== today ? [`updated: ${today}`] : []),
+    ...(w.youtube ? [`youtube: ${yamlString(w.youtube)}`] : []),
+    ...(hasCover ? ["cover: ./cover.jpg"] : []),
+    "---",
+    "",
+  ].join("\n");
+  writeFileSync(join(dir, "index.md"), `${front}${body}\n`);
+  // A fresh folder every save (pictures no longer used don't linger): the old one goes, the new one takes its name.
+  if (existsSync(finalDir)) rmSync(finalDir, { recursive: true });
+  renameSync(dir, finalDir);
+  // Saved before under another slug: that folder is ours to remove (older saves wrote a loose file; that goes too).
+  const file = relative(repo, finalDir);
+  if (w.saved && w.saved.file !== file) {
+    const old = join(repo, w.saved.file);
+    if (existsSync(old)) rmSync(old, { recursive: true });
+  }
+  return saveScript(g, { ...s, writeup: { ...w, slug, saved: { at: new Date().toISOString(), date, file, ...(hasCover ? { cover: "cover.jpg" } : {}) } } });
 };

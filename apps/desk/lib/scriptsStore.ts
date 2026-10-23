@@ -10,7 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GameConfig } from "../game";
-import { type Beat, type BeatCard, type BeatMood, type BeatPicture, type Cut, SCORE_MOODS, type ScoreMood, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, summarise } from "./scripts";
+import { type Beat, type BeatCard, type BeatMood, type BeatPicture, type Cut, SCORE_MOODS, type ScoreMood, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, isoDate, slugify, summarise, youtubeId } from "./scripts";
 import { rendersDir } from "./render";
 import { forRewrite } from "./doc";
 
@@ -188,6 +188,24 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
     s.cast = cast.length ? cast : undefined;
   }
   if (patch.titles !== undefined) s.titles = (Array.isArray(patch.titles) ? patch.titles : []).flatMap((t) => (t?.id ? [{ id: String(t.id), text: String(t.text ?? "").slice(0, 100), ...(t.why ? { why: String(t.why) } : {}) }] : []));
+  if (patch.writeup !== undefined) {
+    // The words are the page's to change; where it was saved is the server's.
+    const w = patch.writeup;
+    s.writeup = w
+      ? {
+          title: String(w.title ?? "").slice(0, 120),
+          description: String(w.description ?? "").slice(0, 300),
+          slug: slugify(String(w.slug ?? "")),
+          body: String(w.body ?? "").slice(0, 60000),
+          ...(youtubeId(String(w.youtube ?? "")) ? { youtube: youtubeId(String(w.youtube ?? "")) } : {}),
+          ...(isoDate(String(w.date ?? "")) ? { date: isoDate(String(w.date ?? "")) } : {}),
+          // The cover is one of the thumbnail tries, which only ever come from the server.
+          ...(typeof w.cover === "string" && (s.thumbnails ?? []).some((t) => t.candidates.includes(w.cover!)) ? { cover: w.cover } : {}),
+          writtenAt: String(w.writtenAt ?? s.writeup?.writtenAt ?? new Date().toISOString()),
+          ...(s.writeup?.saved ? { saved: s.writeup.saved } : {}),
+        }
+      : undefined;
+  }
   if (patch.youtube !== undefined) s.youtube = patch.youtube ? { description: String(patch.youtube.description ?? "").slice(0, 5000), tags: String(patch.youtube.tags ?? "").slice(0, 500) } : undefined;
   // A picture lands on a beat from the background (makeSketches) while the page may be mid-edit: a src only
   // ever comes from the server, so one the page doesn't know about yet is kept.

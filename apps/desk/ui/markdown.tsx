@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 
 /**
  * Just enough markdown for a note: paragraphs, `- ` / `* ` bullets, `1. `
- * numbered lists, **bold**, *italics* / _italics_, `code`. Built as React
- * elements, never HTML, so nothing typed can run.
+ * numbered lists, **bold**, *italics* / _italics_, `code`, [links](url)
+ * and bare URLs (open in a new tab). Built as React elements, never HTML,
+ * so nothing typed can run; only http(s) links become links.
  */
 export const Markdown: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
   const blocks: ReactNode[] = [];
@@ -45,10 +46,10 @@ export const Markdown: React.FC<{ text: string; className?: string }> = ({ text,
   return <div className={className}>{blocks}</div>;
 };
 
-/** **bold**, *italic*, _italic_, `code`; anything else is text. */
+/** **bold**, *italic*, _italic_, `code`, [text](url), a bare URL; anything else is text. */
 const inline = (s: string): ReactNode[] => {
   const out: ReactNode[] = [];
-  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_|`(.+?)`)/g;
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_|`(.+?)`|\[([^\]\n]+)\]\((https?:[^)\s]+)\)|(https?:\/\/[^\s<>()\]]+))/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s))) {
@@ -57,6 +58,22 @@ const inline = (s: string): ReactNode[] => {
     if (m[2] !== undefined) out.push(<strong key={k}>{m[2]}</strong>);
     else if (m[3] !== undefined || m[4] !== undefined) out.push(<em key={k}>{m[3] ?? m[4]}</em>);
     else if (m[5] !== undefined) out.push(<code key={k}>{m[5]}</code>);
+    else if (m[6] !== undefined && m[7] !== undefined)
+      out.push(
+        <a key={k} href={m[7]} target="_blank" rel="noopener">
+          {m[6]}
+        </a>,
+      );
+    else if (m[8] !== undefined) {
+      // A full stop or comma after a bare URL is the sentence's, not the link's.
+      const url = m[8].replace(/[.,;:]+$/, "");
+      out.push(
+        <a key={k} href={url} target="_blank" rel="noopener">
+          {url}
+        </a>,
+        m[8].slice(url.length),
+      );
+    }
     last = m.index + m[0].length;
   }
   if (last < s.length) out.push(s.slice(last));

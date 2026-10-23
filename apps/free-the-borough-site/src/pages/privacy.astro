@@ -1,23 +1,7 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy Policy — Free the Borough</title>
-  <meta name="description" content="Privacy policy for Free the Borough games, including Blood in the Sand.">
-  <link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-  <header>
-    <div class="wrap">
-      <a class="mark" href="/">Free the Borough</a>
-      <nav>
-        <a href="/privacy/" aria-current="page">Privacy</a>
-        <a href="/terms/">Terms</a>
-      </nav>
-    </div>
-  </header>
-
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Privacy Policy — Free the Borough" description="Privacy policy for Free the Borough games, including Blood in the Sand.">
   <main>
     <div class="wrap">
       <h1>Privacy Policy</h1>
@@ -67,7 +51,9 @@
       <p>Our servers briefly process your IP address to deliver the service and to
       rate-limit abuse. We keep routine, short-lived server logs for debugging and
       security. We do not use advertising identifiers, third-party analytics SDKs,
-      tracking pixels, or ads of any kind. This website sets no cookies.</p>
+      tracking pixels, or ads of any kind. This website sets no cookies of its own.
+      The trailer on the homepage is a YouTube video that only loads when you press
+      play, and from then on YouTube's own privacy policy and cookies apply.</p>
 
       <h2>What we don't do</h2>
       <ul>
@@ -130,17 +116,4 @@
       results are recorded.</p>
     </div>
   </main>
-
-  <footer>
-    <div class="wrap">
-      <div>
-        <a href="/privacy/">Privacy Policy</a>
-        <a href="/terms/">Terms of Service</a>
-        <a href="/delete-account/">Delete Account</a>
-        <a href="/support/">Support</a>
-      </div>
-      <div>© 2026 Free the Borough</div>
-    </div>
-  </footer>
-</body>
-</html>
+</Base>

@@ -280,6 +280,13 @@ picks between takes for you). Earlier runs' edits are never touched.
 Open an edit, drop footage on the b-roll slots, pick a song, Done › to
 Make: **Talk** for the long cut, any vertical template for a short.
 
+**Site**, the last stage, is **the write-up** (docs/design/desk-writeup.md): Claude
+turns the long cut into an article for the dev log on free-the-borough.com
+(every point kept, nothing about watching or the channel, headings from the
+chapters), you edit it and paste the YouTube link, and **Save to the site**
+writes `apps/free-the-borough-site/src/content/log/<slug>.md` plus the chosen
+thumbnail as its cover for you to commit. Render builds the page.
+
 In the editor, the **Script** panel beside Record picks the script an
 edit is making; its long cut (or the pasted script, before a rewrite)
 sits there, large, to read from while recording. The edit remembers it

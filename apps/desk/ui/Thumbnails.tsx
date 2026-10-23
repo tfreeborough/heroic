@@ -27,6 +27,15 @@ const loadImage = (src: string) =>
     img.src = src;
   });
 
+/** The thumbnail drawn once, offscreen, as a PNG: what the Site stage saves as the article's cover. */
+export const thumbStill = async (url: string, words: string, accent: ThumbAccent, side?: ThumbSide): Promise<Blob> => {
+  const [img] = await Promise.all([loadImage(url), document.fonts.load(`700 12px ${FAMILY}`), document.fonts.load(`400 40px ${WORDS_FAMILY}`)]);
+  const canvas = Object.assign(document.createElement("canvas"), { width: THUMB.w, height: THUMB.h });
+  const plan = planThumbnail({ picture: inkFromImage(img, "light", 512, "auto"), words, seed: 3, side, family: WORDS_FAMILY });
+  drawThumbnail(canvas.getContext("2d")!, plan, { accent, family: FAMILY });
+  return new Promise<Blob>((ok, no) => canvas.toBlob((b) => (b ? ok(b) : no(new Error("the thumbnail didn't draw"))), "image/png"));
+};
+
 /** A picture dragged from one idea's card to another's. */
 const PICTURE = "application/x-desk-thumb-picture";
 

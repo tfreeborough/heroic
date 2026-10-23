@@ -1,0 +1,86 @@
+---
+import "../styles/site.css";
+import { logPosts } from "../lib/log";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Social image, a path under public/. Defaults to the studio card. */
+  image?: string;
+  type?: "website" | "article";
+  bodyClass?: string;
+  noindex?: boolean;
+  /** schema.org structured data, emitted as JSON-LD. */
+  jsonLd?: object | object[];
+}
+
+const {
+  title,
+  description,
+  image = "/img/bits/og.jpg",
+  type = "website",
+  bodyClass,
+  noindex = false,
+  jsonLd,
+} = Astro.props;
+
+const site = Astro.site!;
+const canonical = new URL(Astro.url.pathname, site).href;
+const imageUrl = new URL(image, site).href;
+const path = Astro.url.pathname;
+const current = (href: string) => (path === href ? "page" : undefined);
+const hasLog = (await logPosts()).length > 0;
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <meta name="description" content={description}>
+  <link rel="canonical" href={canonical}>
+  {noindex && <meta name="robots" content="noindex">}
+  <meta name="theme-color" content="#141210">
+  <meta property="og:site_name" content="Free the Borough">
+  <meta property="og:type" content={type}>
+  <meta property="og:url" content={canonical}>
+  <meta property="og:title" content={title}>
+  <meta property="og:description" content={description}>
+  <meta property="og:image" content={imageUrl}>
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content={title}>
+  <meta name="twitter:description" content={description}>
+  <meta name="twitter:image" content={imageUrl}>
+  <link rel="icon" href="/img/bits/icon.png">
+  <link rel="sitemap" href="/sitemap-index.xml">
+  {jsonLd && <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+  <slot name="head" />
+</head>
+<body class={bodyClass}>
+  <header>
+    <div class="wrap">
+      <a class="mark" href="/">Free the Borough</a>
+      <nav>
+        {hasLog && <a href="/log/" aria-current={current("/log/")}>Dev log</a>}
+        <a href="/support/" aria-current={current("/support/")}>Support</a>
+        <a href="/privacy/" aria-current={current("/privacy/")}>Privacy</a>
+        <a href="/terms/" aria-current={current("/terms/")}>Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <slot />
+
+  <footer>
+    <div class="wrap">
+      <div>
+        <a href="/privacy/">Privacy Policy</a>
+        <a href="/terms/">Terms of Service</a>
+        <a href="/delete-account/">Delete Account</a>
+        <a href="/support/">Support</a>
+      </div>
+      <div>© {new Date().getFullYear()} Free the Borough</div>
+    </div>
+  </footer>
+</body>
+</html>

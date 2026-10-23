@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free the Borough Games</title>
+  <meta name="description" content="Free the Borough makes small, handcrafted multiplayer games. Home of Blood in the Sand.">
+  <meta property="og:title" content="Free the Borough Games">
+  <meta property="og:description" content="Small, handcrafted multiplayer games. Home of Blood in the Sand.">
+  <meta property="og:image" content="https://free-the-borough.com/img/bits/og.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/img/bits/icon.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="home">
+  <header>
+    <div class="wrap">
+      <a class="mark" href="/">Free the Borough</a>
+      <nav>
+        <a href="/support/">Support</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/terms/">Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="home">
+    <section class="hero" style="--art: url('/img/bits/arena.jpg')">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+        <div class="hero-title">
+          <img class="app-icon" src="/img/bits/icon.png" width="96" height="96" alt="Blood in the Sand app icon">
+          <div>
+            <span class="status">Out now on iPhone and Android</span>
+            <h1>Blood in the Sand</h1>
+          </div>
+        </div>
+        <p class="pitch">Short, bloody duels. You don't aim, you time it.</p>
+        <p>Pick a weapon and a few abilities, walk out onto the sand and fight
+        until one side is dead. Every attack has a windup you can see coming, so
+        the whole game is spacing and timing. You get one life a round, and first
+        to three wins.</p>
+        <div class="stores">
+          <a class="store" href="https://apple.co/4gY0KDK" target="_blank" rel="noopener">Get it on the App Store</a>
+          <a class="store" href="https://play.google.com/store/apps/details?id=com.heroic.blood_in_the_sand" target="_blank" rel="noopener">Get it on Google Play</a>
+          <a class="store ghost" href="https://discord.gg/8FHgBmaSnT" target="_blank" rel="noopener">Discord</a>
+          <a class="store ghost" href="https://www.reddit.com/r/FreeTheBoroughGames/" target="_blank" rel="noopener">Reddit</a>
+        </div>
+        </div>
+        <img class="hero-art" src="/img/bits/arena.jpg" width="933" height="1400" alt="The arena at Blood in the Sand, sun overhead and blood on the sand">
+      </div>
+    </section>
+
+    <section class="wrap trailer" aria-label="Trailer">
+      <!-- Click-to-load: nothing comes from YouTube (and no cookies get set)
+           until someone presses play. Without JS the link just opens YouTube. -->
+      <a class="video" href="https://youtu.be/74bl8trUE3M" target="_blank" rel="noopener" data-yt="74bl8trUE3M">
+        <img src="/img/bits/promo-poster.jpg" width="1280" height="720" loading="lazy" alt="Blood in the Sand trailer">
+        <span class="play" aria-hidden="true"></span>
+        <span class="sr">Play the trailer</span>
+      </a>
+    </section>
+
+    <section class="wrap shots" aria-label="Screenshots" aria-roledescription="carousel">
+      <!-- Without JS this is just a swipeable strip; the script adds the
+           arrows' behaviour and the dots. -->
+      <button class="shot-nav prev" type="button" aria-label="Previous screenshots" hidden></button>
+      <button class="shot-nav next" type="button" aria-label="Next screenshots" hidden></button>
+      <div class="shot-row">
+        <img src="/img/bits/01-dies.jpg" width="506" height="900" loading="lazy" alt="Someone dies every round">
+        <img src="/img/bits/02-blood.jpg" width="506" height="900" loading="lazy" alt="Blood stays on the sand">
+        <img src="/img/bits/03-dodge.jpg" width="506" height="900" loading="lazy" alt="Dodge it or wear it">
+        <img src="/img/bits/04-mates.jpg" width="506" height="900" loading="lazy" alt="Bring a mate">
+        <img src="/img/bits/05-standing.jpg" width="506" height="900" loading="lazy" alt="Last one standing">
+        <img src="/img/bits/06-arenas.jpg" width="506" height="900" loading="lazy" alt="Different arenas, different cover">
+        <img src="/img/bits/07-arms.jpg" width="506" height="900" loading="lazy" alt="Choose your arms">
+        <img src="/img/bits/08-bots.jpg" width="506" height="900" loading="lazy" alt="The bots don't go easy">
+      </div>
+      <div class="shot-dots"></div>
+    </section>
+
+    <section class="wrap">
+      <ul class="features">
+        <li><strong>Ranked 1v1 and 2v2</strong>, with a solo queue for 2v2 if you haven't got a mate around.</li>
+        <li><strong>Private rooms</strong> with a passcode for playing friends, up to 4v4, plus a six-player free-for-all.</li>
+        <li><strong>Practice bots.</strong> The easy ones are genuinely bad at the game. The hard ones will beat you.</li>
+        <li><strong>Free to play.</strong> Nothing in the shop makes you hit harder, it just gives you more to build with.</li>
+      </ul>
+
+      <h2 class="section">Who's behind this</h2>
+      <p>Free the Borough is me, Tom. I make small games and I'd rather get one
+      fight feeling right than ship lots of things that don't. If you want to say
+      hello, report a bug or tell me something's broken, the
+      <a href="https://discord.gg/8FHgBmaSnT">Discord</a> and
+      <a href="https://www.reddit.com/r/FreeTheBoroughGames/">r/FreeTheBoroughGames</a>
+      are the best places, or have a look at the <a href="/support/">support page</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div>
+        <a href="/privacy/">Privacy Policy</a>
+        <a href="/terms/">Terms of Service</a>
+        <a href="/delete-account/">Delete Account</a>
+        <a href="/support/">Support</a>
+      </div>
+      <div>© 2026 Free the Borough</div>
+    </div>
+  </footer>
+  <script>
+    document.querySelectorAll('[data-yt]').forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        var f = document.createElement('iframe');
+        f.src = 'https://www.youtube-nocookie.com/embed/' + a.dataset.yt + '?autoplay=1&rel=0&playsinline=1';
+        f.title = 'Blood in the Sand trailer';
+        f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+        f.allowFullscreen = true;
+        var box = document.createElement('div');
+        box.className = 'video';
+        box.appendChild(f);
+        a.replaceWith(box);
+      });
+    });
+
+    // Screenshot carousel: arrows and dots move a page at a time, the strip
+    // itself stays native scroll-snap so swiping works as normal.
+    (function () {
+      var root = document.querySelector('.shots');
+      var row = root.querySelector('.shot-row');
+      var cards = row.children;
+      var prev = root.querySelector('.prev');
+      var next = root.querySelector('.next');
+      var dotsBox = root.querySelector('.shot-dots');
+      var dots = [];
+
+      function step() { return cards[1].offsetLeft - cards[0].offsetLeft; }
+      function perPage() { return Math.max(1, Math.round((row.clientWidth + 16) / step())); }
+      function maxScroll() { return row.scrollWidth - row.clientWidth; }
+      function pages() { return Math.ceil(cards.length / perPage()); }
+      function goTo(page) {
+        row.scrollTo({ left: Math.min(page * perPage() * step(), maxScroll()), behavior: 'smooth' });
+      }
+      function current() {
+        if (row.scrollLeft >= maxScroll() - 2) return pages() - 1;
+        return Math.round(row.scrollLeft / (perPage() * step()));
+      }
+
+      function buildDots() {
+        dotsBox.textContent = '';
+        dots = [];
+        for (var i = 0; i < pages(); i++) {
+          var d = document.createElement('button');
+          d.type = 'button';
+          d.setAttribute('aria-label', 'Screenshots page ' + (i + 1));
+          d.onclick = goTo.bind(null, i);
+          dotsBox.appendChild(d);
+          dots.push(d);
+        }
+        update();
+      }
+      function update() {
+        var c = current();
+        dots.forEach(function (d, i) { d.setAttribute('aria-current', i === c); });
+        prev.disabled = row.scrollLeft <= 2;
+        next.disabled = row.scrollLeft >= maxScroll() - 2;
+      }
+
+      prev.hidden = next.hidden = false;
+      prev.onclick = function () { goTo(current() - 1); };
+      next.onclick = function () { goTo(current() + 1); };
+      row.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', buildDots);
+      buildDots();
+    })();
+  </script>
+</body>
+</html>

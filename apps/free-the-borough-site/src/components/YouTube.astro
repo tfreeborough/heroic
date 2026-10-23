@@ -1,0 +1,35 @@
+---
+// Click-to-play facade. Nothing comes from YouTube (and no cookies get set)
+// until someone presses play; without JS the link just opens YouTube.
+interface Props {
+  id: string;
+  title: string;
+  poster?: { src: string; width: number; height: number; alt: string };
+  eager?: boolean;
+}
+const { id, title, poster, eager = false } = Astro.props;
+---
+<a class="video" href={`https://youtu.be/${id}`} target="_blank" rel="noopener" data-yt={id} data-title={title}>
+  {poster
+    ? <img src={poster.src} width={poster.width} height={poster.height} loading={eager ? "eager" : "lazy"} alt={poster.alt} />
+    : <span class="video-plate" aria-hidden="true"><span>{title}</span></span>}
+  <span class="play" aria-hidden="true"></span>
+  <span class="sr">Play the video</span>
+</a>
+
+<script>
+  document.querySelectorAll<HTMLAnchorElement>("[data-yt]").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const f = document.createElement("iframe");
+      f.src = `https://www.youtube-nocookie.com/embed/${a.dataset.yt}?autoplay=1&rel=0&playsinline=1`;
+      f.title = a.dataset.title ?? "Video";
+      f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      f.allowFullscreen = true;
+      const box = document.createElement("div");
+      box.className = "video";
+      box.appendChild(f);
+      a.replaceWith(box);
+    });
+  });
+</script>

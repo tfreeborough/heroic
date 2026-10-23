@@ -1,6 +1,6 @@
 import type { Take } from "@heroic/voiceover";
 import { type ScriptResearch, wovenSource } from "./research";
-import { type ScriptDoc, forRewrite } from "./doc";
+import { forRewrite, sourceNotes, type ScriptDoc } from "./doc";
 
 /**
  * A SCRIPT: a video's words, as a project on the Scripts tab (what Ideas
@@ -147,6 +147,33 @@ export type SourceVersion = { at: string; text: string };
  */
 export type ScriptTake = Take & { keep?: { start: number; end: number }[]; assign?: string[] };
 
+/**
+ * The long video written up as an article for the studio site's dev log
+ * (docs/design/desk-writeup.md): Claude drafts it from the long cut, Tom
+ * edits it, Save to the site writes the markdown (and the chosen thumbnail
+ * as its cover) into the site's content folder for him to commit.
+ */
+export type Writeup = {
+  /** The page's title, for search: what it's about in words someone would type. */
+  title: string;
+  /** One or two sentences: the listing, the meta description, the social card. */
+  description: string;
+  /** The URL: /log/<slug>/. */
+  slug: string;
+  /** Markdown: paragraphs, ## headings, lists. No title line. */
+  body: string;
+  /** The YouTube video's id, once it's up (the page gets the player). Tom's to paste. */
+  youtube?: string;
+  /** The page's date (YYYY-MM-DD): the video's publish date, fetched when the link is pasted, Tom's to change. Unset = the first save's date. The dev log orders by it. */
+  date?: string;
+  /** The cover's picture: any of the thumbnail tries (under the game's public dir), drawn as glyphs with no words. Unset = the chosen thumbnail's. */
+  cover?: string;
+  /** When Claude last wrote it. */
+  writtenAt: string;
+  /** Where Save to the site last wrote it (paths from the repo root), with the date the page carries. */
+  saved?: { at: string; date: string; file: string; cover?: string };
+};
+
 export type Script = {
   id: string;
   title: string;
@@ -176,6 +203,8 @@ export type Script = {
   titles?: TitleIdea[];
   /** The top of the long video's YouTube description and its tags, written by Claude, Tom's to change. The chapters go under it. */
   youtube?: { description: string; tags: string };
+  /** The long video as an article for the site's dev log (docs/design/desk-writeup.md). */
+  writeup?: Writeup;
   /** The world every picture lives in (a submarine crew, a lighthouse winter…): Claude picks it at the first plan, Tom can write his own. */
   theme?: string;
   /** What that world LOOKS like, in literal words: sent to the image model with every picture (it never sees the theme). Claude writes it at the plan; Tom's to change. */
@@ -194,9 +223,30 @@ export type ScriptSummary = Pick<Script, "id" | "title" | "done" | "createdAt" |
 /** The story (one call) or the prompts (a batch of beats a call) running on the server; the page polls. Or how the last run failed. `done`/`total` are beats. */
 export type PlanState = { state: "running"; stage: "story" | "prompts"; done: number; total: number; startedAt: string } | { state: "failed"; stage: "story" | "prompts"; error: string; done: number; total: number };
 
-export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "theme" | "look" | "cast">> & { done?: boolean };
+export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "writeup" | "theme" | "look" | "cast">> & { done?: boolean };
 
 export const DEFAULT_GAP = 0.3;
+
+/** A URL slug: lower case ascii words joined by hyphens, at most 80 characters. */
+export const slugify = (text: string): string =>
+  text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/, "");
+
+/** A YYYY-MM-DD date, or "" for anything else. */
+export const isoDate = (text: string): string => (/^\d{4}-\d{2}-\d{2}$/.test(text.trim()) && !Number.isNaN(Date.parse(text.trim())) ? text.trim() : "");
+
+/** A YouTube video id out of whatever Tom pasted: a watch URL, a youtu.be link, a Shorts link, or the id itself. */
+export const youtubeId = (text: string): string => {
+  const t = text.trim();
+  const m = t.match(/(?:v=|youtu\.be\/|\/shorts\/|\/embed\/|\/live\/)([A-Za-z0-9_-]{11})/) ?? t.match(/^([A-Za-z0-9_-]{11})$/);
+  return m?.[1] ?? "";
+};
 
 export const newId = (): string => Math.random().toString(36).slice(2, 10);
 
@@ -422,4 +472,135 @@ export const beatStarts = (beats: Pick<Beat, "text">[]): number[] => {
     at += spokenSeconds(b.text);
     return t;
   });
+};
+
+// ── the write-up's sources (docs/design/desk-writeup.md) ──
+
+export type SourceLink = { title: string; url?: string };
+
+const URL_RE = /https?:\/\/[^\s<>()\]]+/i;
+const NOTES_HEADING = /^(sources?|references?|links|notes?)\b/i;
+
+/**
+ * The article's Sources: the author's own notes (a Sources section, quoted
+ * lines) as links, plus the sources of the research findings he accepted.
+ * Nothing is invented: a note that is a markdown link keeps its words, a bare
+ * URL is titled by its site, a note with no URL goes in as plain text. One
+ * entry per URL.
+ */
+export const sourcesList = (s: Pick<Script, "source" | "research">): SourceLink[] => {
+  const out: SourceLink[] = [];
+  const seen = new Set<string>();
+  const add = (x: SourceLink) => {
+    const key = x.url ? x.url.replace(/\/$/, "").toLowerCase() : `t:${x.title.toLowerCase()}`;
+    if (seen.has(key) || !x.title.trim()) return;
+    seen.add(key);
+    out.push({ title: x.title.trim(), ...(x.url ? { url: x.url } : {}) });
+  };
+  for (const line of sourceNotes(s.source)) {
+    const link = line.match(/\[([^\]\n]+)\]\((https?:[^)\s]+)\)/);
+    if (link) {
+      add({ title: link[1]!, url: link[2] });
+      continue;
+    }
+    const url = line.match(URL_RE)?.[0]?.replace(/[.,;:]+$/, "");
+    if (!url) {
+      add({ title: line.replace(/\*\*|__/g, "") });
+      continue;
+    }
+    const rest = line.replace(url, "").replace(/[\s:\-–,|.]+$/, "").replace(/^[\s:\-–,|]+/, "").replace(/\*\*|__/g, "").trim();
+    let title = rest;
+    if (!title) {
+      try {
+        const u = new URL(url);
+        const path = decodeURIComponent(u.pathname).replace(/\/$/, "").split("/").filter(Boolean).at(-1)?.replace(/[-_]+/g, " ").replace(/\.[a-z]+$/i, "");
+        title = path ? `${u.hostname.replace(/^www\./, "")}: ${path}` : u.hostname.replace(/^www\./, "");
+      } catch {
+        title = url;
+      }
+    }
+    add({ title, url });
+  }
+  for (const f of s.research?.findings ?? []) {
+    if (f.status !== "accepted" || f.stance === "refutes") continue;
+    const title = f.source.publisher && !f.source.title.toLowerCase().includes(f.source.publisher.toLowerCase()) ? `${f.source.title} (${f.source.publisher})` : f.source.title;
+    add({ title, url: f.source.url });
+  }
+  return out;
+};
+
+/** The Sources section as markdown, or "" with nothing to list. Plain links: these are the author's own citations, so no nofollow. */
+export const sourcesMarkdown = (list: SourceLink[]): string => (list.length ? ["## Sources", "", ...list.map((x) => (x.url ? `- [${x.title.replace(/[[\]]/g, "")}](${x.url})` : `- ${x.title}`))].join("\n") : "");
+
+/** The body with any Sources section taken off (the save puts the real one back on the end). */
+export const withoutSources = (body: string): string => {
+  const lines = body.split("\n");
+  const at = lines.findIndex((l) => /^##\s+/.test(l) && NOTES_HEADING.test(l.replace(/^##\s+/, "").trim()));
+  if (at < 0) return body.trim();
+  const end = lines.findIndex((l, i) => i > at && /^##\s+/.test(l));
+  return [...lines.slice(0, at), ...(end < 0 ? [] : lines.slice(end))].join("\n").replace(/\n{3,}/g, "\n\n").trim();
+};
+
+// ── the write-up's pictures (docs/design/desk-writeup.md) ──
+
+export type ArticlePicture = {
+  /** The heading it goes under, as written in the article. */
+  heading: string;
+  /** The line's index in the body. */
+  line: number;
+  beat: string;
+  /** The beat's chosen picture, under the game's public dir. */
+  src: string;
+  alt: string;
+};
+
+const headingKey = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * One picture per `##` heading in the article: the heading's chapter's first
+ * beat with a chosen picture; a heading that matches no chapter takes the
+ * unused one nearest its position. The alt text is the beat's scene line.
+ * No headings, no pictures (the page has the cover).
+ */
+export const articlePictures = (s: Pick<Script, "long">, body: string): ArticlePicture[] => {
+  const beats = s.long?.beats ?? [];
+  const lines = body.split("\n");
+  const headings = lines.flatMap((l, i) => {
+    const m = l.match(/^##\s+(.+?)\s*$/);
+    return m && !NOTES_HEADING.test(m[1]!) ? [{ text: m[1]!, line: i }] : [];
+  });
+  if (!headings.length || !beats.length) return [];
+  const pic = (b: Beat) => b.pictures?.find((p) => p.chosen)?.chosen;
+  // Alt text: the scene line's first sentence, whole words, under 160 characters.
+  const alt = (b: Beat) => {
+    const line = (b.scene ?? b.pictures?.[0]?.prompt ?? "").replace(/\s+/g, " ").trim();
+    const first = line.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? line;
+    return first.length <= 160 ? first : `${first.slice(0, 160).replace(/\s+\S*$/, "")}…`;
+  };
+  const used = new Set<string>();
+  const out: (ArticlePicture | undefined)[] = headings.map(() => undefined);
+  // Chapters first: the heading that is a chapter takes that chapter's picture.
+  const chapterStarts = beats.flatMap((b, i) => (b.chapter?.trim() ? [{ key: headingKey(b.chapter), at: i }] : []));
+  headings.forEach((h, hi) => {
+    const start = chapterStarts.find((c) => c.key === headingKey(h.text));
+    if (!start) return;
+    const end = chapterStarts.find((c) => c.at > start.at)?.at ?? beats.length;
+    const b = beats.slice(start.at, end).find((x) => pic(x) && !used.has(x.id));
+    if (!b) return;
+    used.add(b.id);
+    out[hi] = { heading: h.text, line: h.line, beat: b.id, src: pic(b)!, alt: alt(b) };
+  });
+  // The rest: the unused picture nearest the heading's place in the piece.
+  headings.forEach((h, hi) => {
+    if (out[hi]) return;
+    const want = ((hi + 0.5) / headings.length) * beats.length;
+    const b = beats
+      .map((x, i) => ({ x, d: Math.abs(i - want) }))
+      .filter(({ x }) => pic(x) && !used.has(x.id))
+      .sort((a, c) => a.d - c.d)[0]?.x;
+    if (!b) return;
+    used.add(b.id);
+    out[hi] = { heading: h.text, line: h.line, beat: b.id, src: pic(b)!, alt: alt(b) };
+  });
+  return out.flatMap((p) => (p ? [p] : []));
 };

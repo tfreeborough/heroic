@@ -198,6 +198,14 @@ export const gameApi = (game: string) => {
     /** Three more YouTube titles to test, to an instruction or none. */
     planTitles: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/titles/plan`, { instruction }).then((r) => j<Script>(r)),
     /** The top of the YouTube description and the tags, written again (to an instruction or none). */
+    /** The long cut as an article for the site's dev log (docs/design/desk-writeup.md). */
+    writeArticle: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/writeup`, { instruction }).then((r) => j<Script>(r)),
+    /** A glyph still drawn on the page (a beat's picture, or "cover" for the thumbnail) for the article: the server keeps it beside the script's pictures. */
+    siteStill: (id: string, key: string, png: Blob) => fetch(`${base}/scripts/${enc(id)}/writeup/still?key=${enc(key)}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: png }).then((r) => j<{ ok: true }>(r)),
+    /** When the YouTube video went live, for the post's date ("" if YouTube doesn't say). */
+    videoDate: (id: string, video: string) => fetch(`${base}/scripts/${enc(id)}/writeup/video?v=${enc(video)}`).then((r) => j<{ date: string }>(r)),
+    /** Write the article and its cover into the site for Tom to commit. */
+    saveArticle: (id: string) => post(`${base}/scripts/${enc(id)}/writeup/save`).then((r) => j<Script>(r)),
     writeYouTube: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/youtube`, { instruction }).then((r) => j<Script>(r)),
     /** Thumbnail pictures made in the background: every idea with none yet, or another try at `only`. */
     makeThumbnails: (id: string, only?: string[]) => post(`${base}/scripts/${enc(id)}/thumbnails/make`, { only }).then((r) => j<{ started: number }>(r)),

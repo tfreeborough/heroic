@@ -96,5 +96,7 @@ const config: GameConfig = {
   post: { draft, ai },
   // The matrix palette (green on near-black) for the glyph previews, as Beats defaults to (Tom, 10-11).
   script: { ai: scriptAi, palette: "matrix" },
+  // The dev log on free-the-borough.com: a script's Publish stage writes its article here.
+  site: { content: "../free-the-borough-site/src/content/log" },
 };
 export default config;
