@@ -4,7 +4,7 @@
     "slug": "blood-in-the-sand",
     "scheme": "bloodinthesand",
     "icon": "./assets/blood-in-the-sand-icon.png",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#141210",
