@@ -20,14 +20,14 @@ import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip,
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
 import { hasClaude } from "./lib/draft";
-import type { ScriptPatch } from "./lib/scripts";
+import { type ScriptPatch, longEdits } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, ownSiteStill, saveArticle, videoPublishDate, writeArticle, writePrompts, writeYouTube } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, ownSiteStill, saveArticle, videoPublishDate, writeArticle, writePrompts, writeYouTube, writeShortPost, draftHooks, findShorts, previewShort, renderShorts, shortRenderState, shortsState } from "./lib/scriptSteps";
 import { scoreState } from "./lib/score";
 import { decide, researchState, startResearch } from "./lib/researcher";
 import { docModified, listDocs, pullDoc, unlinkDoc } from "./lib/scriptDocs";
 import { hasImages } from "./lib/cards";
-import { type PostPatch, movePost, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
+import { type PostPatch, movePost, presentSchedule, pruneSchedule, queueBatches, redraftPost, reflow, removePost, setIgnored, updatePost, updateSettings } from "./lib/scheduleStore";
 import { type FootageSidecar, MEDIA_EXT, freshSidecar } from "./lib/sidecar";
 import { type VoiceOver, voiceId } from "@heroic/voiceover";
 import { backupTakes, deleteVoice, listVoices, openVoice, readVoice, resound, resoundTakes, saveTake, soundStrength, transcribeTake, trashTakes, voicePath, writeVoice } from "./lib/voice";
@@ -452,21 +452,22 @@ const server = Bun.serve({
 
     // ── the posting queue ──
     "/api/:game/schedule": {
-      GET: withGame((g) => json({ ...pruneSchedule(g), claude: hasClaude() && Boolean(g.post?.ai) })),
+      GET: withGame((g) => json({ ...presentSchedule(g, pruneSchedule(g)), claude: hasClaude() && Boolean(g.post?.ai), scripts: hasRewriter() && Boolean(g.script?.ai) })),
       /** Queue batches: each lands in the next free slot under the spacing rule. */
       POST: withGame(async (g, req) => {
         const body = (await req.json()) as { batches: string[]; from?: string };
-        return json(await queueBatches(g, body.batches ?? [], body.from));
+        const r = await queueBatches(g, body.batches ?? [], body.from);
+        return json({ ...r, schedule: presentSchedule(g, r.schedule) });
       }),
-      PUT: withGame(async (g, req) => json(updateSettings(g, (await req.json()) as { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] }))),
+      PUT: withGame(async (g, req) => json(presentSchedule(g, updateSettings(g, (await req.json()) as { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] })))),
     },
-    "/api/:game/schedule/reflow": { POST: withGame((g) => json(reflow(g))) },
+    "/api/:game/schedule/reflow": { POST: withGame((g) => json(presentSchedule(g, reflow(g)))) },
     /** Dragged to another day/slot; whatever was there swaps places with it. */
     "/api/:game/schedule/:id/move": {
       POST: withGame(async (g, req) => {
         try {
           const body = (await req.json()) as { day: string; slot: number };
-          return json(movePost(g, req.params.id!, body.day, body.slot));
+          return json(presentSchedule(g, movePost(g, req.params.id!, body.day, body.slot)));
         } catch (e) {
           return fail(e, 404);
         }
@@ -475,7 +476,7 @@ const server = Bun.serve({
     "/api/:game/schedule/:id/draft": {
       POST: withGame(async (g, req) => {
         try {
-          return json(await redraftPost(g, req.params.id!));
+          return json(presentSchedule(g, await redraftPost(g, req.params.id!)));
         } catch (e) {
           return fail(e);
         }
@@ -488,12 +489,12 @@ const server = Bun.serve({
     "/api/:game/schedule/:id": {
       PUT: withGame(async (g, req) => {
         try {
-          return json(updatePost(g, req.params.id!, (await req.json()) as PostPatch));
+          return json(presentSchedule(g, updatePost(g, req.params.id!, (await req.json()) as PostPatch)));
         } catch (e) {
           return fail(e, 404);
         }
       }),
-      DELETE: withGame((g, req) => json(removePost(g, req.params.id!))),
+      DELETE: withGame((g, req) => json(presentSchedule(g, removePost(g, req.params.id!)))),
     },
     // ── scripts (the Scripts tab) ──
     "/api/:game/scripts": {
@@ -506,8 +507,8 @@ const server = Bun.serve({
     "/api/:game/scripts/:id": {
       GET: withGame((g, req) => {
         const s = readScript(g, req.params.id!);
-        const seqId = s?.sequences?.at(-1)?.id;
-        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null, planning: planState(s.id) ?? null }) : json({ error: "no such script" }, 404);
+        const seqId = s ? longEdits(s).at(-1)?.id : undefined;
+        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null, planning: planState(s.id) ?? null, finding: shortsState(s.id) ?? null, rendering: shortRenderState(s.id) }) : json({ error: "no such script" }, 404);
       }),
       PUT: withGame(async (g, req) => {
         try {
@@ -767,6 +768,46 @@ const server = Bun.serve({
       POST: withGame((g, req) => {
         try {
           return json(organise(g, req.params.id!));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** The shorts inside the long video (docs/design/desk-shorts.md): one call in the background over the long cut as recorded (`?more=1`: runs not offered before). Answers with the state; the script's `finding` says how it's going. */
+    "/api/:game/scripts/:id/shorts/find": {
+      POST: withGame((g, req) => {
+        try {
+          return json(findShorts(g, req.params.id!, new URL(req.url).searchParams.get("more") === "1"));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** The kept shorts named (ids in the body) organised, scored and rendered, two at a time; the page asks after them on GET script's `rendering`. */
+    "/api/:game/scripts/:id/shorts/render": {
+      POST: withGame(async (g, req) => {
+        try {
+          const body = (await req.json()) as { shorts: string[] };
+          return json(renderShorts(g, req.params.id!, body.shorts ?? []));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Hook drafts for the kept shorts without any (`?all=1`: every kept short again). Answers with the script. */
+    "/api/:game/scripts/:id/hooks": { POST: withGame((g, req) => draftHooks(g, req.params.id!, new URL(req.url).searchParams.get("all") === "1").then(json, fail)) },
+    /** A short's audio as it would be organised (docs/design/desk-shorts.md): the take slices in order, and the long video's music to go under. Nothing written. */
+    /** A short's title, description and tags written (again) by Claude (desk-shorts.md § 5): `{ instruction? }`. Answers with the script. */
+    "/api/:game/scripts/:id/shorts/:short/post": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { instruction?: string };
+        return writeShortPost(g, req.params.id!, req.params.short!, String(body.instruction ?? "")).then(json, fail);
+      }),
+    },
+    "/api/:game/scripts/:id/shorts/:short/preview": {
+      GET: withGame((g, req) => {
+        try {
+          return json(previewShort(g, req.params.id!, req.params.short!));
         } catch (e) {
           return fail(e);
         }

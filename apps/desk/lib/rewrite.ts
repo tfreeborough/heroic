@@ -2,8 +2,9 @@
  * The Scripts tab's Claude calls: a pasted script → the long cut, as
  * beats, in Tom's voice; a re-paste → the cut adjusted to the change and
  * nothing else; one beat or the cut redone to an instruction; the picture
- * plan (docs/design/desk-ascii-scripts.md). Shorts are parked (decision 1
- * there): the calls that make them stay for later but nothing presses them. Same client and shape as draft.ts (the
+ * plan (docs/design/desk-ascii-scripts.md); the shorts found inside the
+ * long video (docs/design/desk-shorts.md). Writing shorts of their own is
+ * parked (decision 1 there): those calls stay but nothing presses them. Same client and shape as draft.ts (the
  * queue's words): structured output, the game's own voice from
  * desk.config, the key from ANTHROPIC_API_KEY in apps/desk/.env.
  *
@@ -12,7 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { type Beat, type BeatMood, type Cut, SCORE_MOODS, type Script, newId, picturesWanted, spokenSeconds, tokens } from "./scripts";
+import { type Beat, type BeatMood, type Cut, SCORE_MOODS, SHORT_MAX, SHORT_MIN, type Script, newId, picturesWanted, spokenSeconds, tokens, type ShortPost } from "./scripts";
 
 export const hasClaude = (): boolean => Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -248,6 +249,190 @@ export const anotherShort = async (v: ScriptVoice, samples: string[], source: st
   ].join("\n");
   const out = await ask(system(v, samples, true), user, ShortOut);
   return { id: newId(), kind: "short", title: clean(out.title), hook: clean(out.hook), why: clean(out.why), beats: toShortBeats(long.beats, out.beats) };
+};
+
+// ── finding the shorts in the long video (docs/design/desk-shorts.md § 1) ──
+//
+// Nothing is written here: a short is a run of the long cut's beats as
+// recorded, so the calls only pick runs and say why. Two calls: a finder
+// that's generous, and a judge that isn't (a finder approves its own
+// picks). The hooks come later (§ 2), with their own voice handling.
+
+const FoundShortOut = z.object({
+  beats: z.array(z.number()).min(1).describe("The long beats in the short, by number, in the order they're said: one run of consecutive beats, or two runs with one jump between them."),
+  join: z.string().nullable().describe("With two runs: why the jump reads as if it were written that way (what the last beat before it sets up, what the first after it answers). null for one run."),
+  carry: z.string().nullable().describe("When the short starts one beat after its natural opener because that opener leans on the long video: what the hook has to say for the first beat to land, as content in one plain sentence (the claim or question the dropped beat made), not a hook draft. null when the first beat stands with no help."),
+  title: z.string().describe("A working title for the short, under 60 characters, plain, no ALL CAPS, no hashtags."),
+  why: z.string().describe("One plain sentence: what makes this stand on its own, and (over a minute) what keeps someone watching to the end."),
+});
+const FindShortsOut = z.object({ shorts: z.array(FoundShortOut).describe("Every run worth judging, best first.") });
+
+const FIND_RULES = [
+  `You find the SHORTS inside a long video one person made about making their game: short vertical videos for TikTok, YouTube Shorts, Reels and X, cut straight out of the long recording. Nothing is rewritten and nothing is re-recorded. A short is made of beats of the long cut said exactly as they are: one run of consecutive beats, or two runs with a single jump, ${SHORT_MIN} to ${SHORT_MAX} seconds spoken by the timings given. Each short will open with a hook line of a few seconds, recorded separately later. The point of a short is that someone who has never heard of this person watches to the end and goes to the profile to see who they are.`,
+  "A run is worth offering when: it STANDS ALONE (a viewer who hasn't heard the rest follows every sentence, the first included: a sentence that gestures at something outside the run, a this, that or it, a 'whenever this comes up', sounds like the middle of a conversation even with a hook in front of it, so it can't open a short and can't be in one); it has a PAYOFF (ends on a point, a reveal or a punchline, never mid-argument); it has THE PERSON IN IT (an opinion, an admission, a mistake, a real number, something they tried; a run that only explains how something works is the weakest kind); and it's ONE thing. A jump is for one purpose only: a payoff separated from its setup by a digression. Both runs must read as one piece of speech; never jump to collect good lines.",
+  "When a run's natural opener leans like that, don't bin the run and don't keep the beat: START ONE BEAT LATER and say in carry what the hook has to tell the viewer for that first beat to land (the thing the dropped beat said), so a beat that begins with 'But that's like saying' or 'So' reads as the answer to the hook. Only when the next beat does read that way; otherwise the run isn't one.",
+  "Length is never the aim. A self-contained story of eighty seconds beats a thirty second fragment. A run that only reaches the window by taking in a beat that doesn't belong is out. Shorts may overlap by a beat, never share most of their beats. A beat marked NOT RECORDED can't be in a short. Offer everything worth judging, best first; a stricter judge reads them after you.",
+  "Titles and reasons are in the author's register: plain, first person where it fits, nothing that reads like marketing. A title is read by a stranger with no context, who takes every word in its everyday sense: it names the thing itself (the cut Steam takes of a sale, not 'the discount', which a reader takes as a sale price) and says what the short is about, never a shorthand that only makes sense once you've watched.",
+].join("\n\n");
+
+const JudgedOut = z.object({
+  n: z.number().describe("The candidate's number."),
+  score: z.number().describe("1 to 10: how sure you are a stranger watches to the end and taps the profile. 8 and up is a short worth posting; 5 to 7 is a maybe; under 5 is not."),
+  verdict: z.enum(["pass", "fail"]).describe("pass only at 7 and up with no fault below."),
+  problem: z.string().nullable().describe("A fail: the one thing that most stops it, in a plain sentence, quoting the line where it's a line. null for a pass."),
+  title: z.string().nullable().describe("A clearer title, when the candidate's could be taken two ways by a stranger (a word with an everyday meaning in this world, like a discount that reads as a sale price) or doesn't say what the short is about. Plain, under 60 characters, no ALL CAPS. null to keep the title as it is."),
+  check: z.string().nullable().describe("A pass that only works with its hook carrying something: what the hook has to say, as content, in one plain sentence (the candidate's own carry line, corrected if it's wrong). null when the first beat stands on its own."),
+});
+const JudgeOut = z.object({ judged: z.array(JudgedOut) });
+
+const JUDGE_RULES = [
+  "You judge candidate shorts cut from a long video one person made about making their game. You're not the one who picked them and you owe them nothing. Read each as a stranger scrolling who has never heard of this person and will never see the long video: you have the words exactly as they'll be heard, nothing else, except that a hook line of a few seconds, recorded later, will open each one. Where a candidate says what its hook will carry, judge its first beat as if a line saying that had just been said: an answer that begins 'But that's like saying' or 'So' can land then. A first sentence that gestures at something the hook didn't say (a this, that, it, a 'whenever this comes up') still sounds like the middle of a conversation, hook or not.",
+  "The bar is: would that stranger watch to the end and then tap the profile to see who this is. Fail a candidate for any one of these: any sentence that leans on something outside it that the hook won't have said (a this, that, it, these, a name or term the long video introduced earlier, an argument it's answering); no payoff (it ends mid-argument, or on a conclusion to something the viewer didn't hear); nobody in it (it explains how something works and the person never shows: no opinion, admission, number of their own, or thing they did); two things, not one; a jump between runs that doesn't read as one piece of speech; a beat that's there only to make the length. Score honestly across the whole set: most sets have a few sevens and eights and some fours.",
+  "Read each title too, as that stranger: every word in its everyday sense, nothing from the long video. When a title could be taken another way or doesn't say what the short is about, give a plain one that does.",
+  "Reasons are one plain sentence each, in everyday words.",
+].join("\n\n");
+
+type Found = z.infer<typeof FoundShortOut>;
+type Judged = z.infer<typeof JudgedOut>;
+export type ShortVerdict = Found & Omit<Judged, "n">;
+
+/** The author's past calls (desk-shorts.md: keeps and bins feed back), for both calls. */
+export type ShortTaste = { kept: string[]; binned: string[] };
+const tasteLines = (taste: ShortTaste): string[] =>
+  taste.kept.length || taste.binned.length
+    ? [
+        "THE AUTHOR'S OWN CALLS ON EARLIER SHORTS are the standard. Shorts they kept:",
+        ...(taste.kept.length ? taste.kept.map((t) => `- ${t}`) : ["- (none yet)"]),
+        "Shorts they binned:",
+        ...(taste.binned.length ? taste.binned.map((t) => `- ${t}`) : ["- (none yet)"]),
+        "",
+      ]
+    : [];
+
+/** The long cut's beats as recorded, with the shorts already offered, → candidate shorts, judged. */
+export const findShorts = async (
+  v: ScriptVoice,
+  long: Cut,
+  timed: { n: number; text: string; seconds?: number }[],
+  offered: { beats: number[]; title: string; state: string }[],
+  taste: ShortTaste,
+): Promise<ShortVerdict[]> => {
+  const total = timed.reduce((n, b) => n + (b.seconds ?? 0), 0);
+  const about = [`About the game and the person (for you, not for the script): ${v.about}`, "", "The voice, in rules:", v.rules, ""];
+  const cut = [`THE LONG CUT (title: ${long.title}; ${Math.round(total / 60)} minutes recorded), each beat with how long it runs as recorded:`, ...timed.map((b) => `${b.n}. [${b.seconds !== undefined ? `${Math.round(b.seconds)}s` : "NOT RECORDED"}] ${b.text}`), ""];
+  const user = [
+    ...cut,
+    ...tasteLines(taste),
+    ...(offered.length ? ["ALREADY OFFERED (never offer these again, nor a short that's mostly the same beats):", ...offered.map((o) => `beats ${o.beats.join(", ")}: ${o.title} (${o.state})`), ""] : []),
+    offered.length ? "Find the shorts worth judging that haven't been offered." : "Find the shorts worth judging.",
+  ].join("\n");
+  const found = await ask([...about, FIND_RULES].join("\n"), user, FindShortsOut);
+  const okRun = (ns: number[]) => {
+    if (!ns.length || ns.some((n) => !Number.isInteger(n) || n < 1 || n > timed.length || timed[n - 1]!.seconds === undefined)) return false;
+    if (new Set(ns).size !== ns.length) return false;
+    let jumps = 0;
+    for (let i = 1; i < ns.length; i++) if (ns[i] !== ns[i - 1]! + 1) jumps++;
+    return jumps <= 1;
+  };
+  const cands = found.shorts.filter((x) => okRun(x.beats)).map((x) => ({ ...x, title: clean(x.title), why: clean(x.why), join: x.join ? clean(x.join) : null, carry: x.carry ? clean(x.carry) : null }));
+  if (!cands.length) return [];
+  const judgeUser = [
+    "THE CANDIDATES, each exactly as it will be heard:",
+    ...cands.flatMap((c, i) => [`--- candidate ${i + 1}: "${c.title}" (${Math.round(c.beats.reduce((n, b) => n + (timed[b - 1]!.seconds ?? 0), 0))}s)${c.carry ? ` · the hook will carry: ${c.carry}` : ""} ---`, ...c.beats.map((n) => timed[n - 1]!.text), ""]),
+    ...tasteLines(taste),
+    "Judge every candidate.",
+  ].join("\n");
+  const { judged } = await ask([...about, JUDGE_RULES].join("\n"), judgeUser, JudgeOut);
+  const byN = new Map(judged.map((j) => [Math.round(j.n), j]));
+  return cands.flatMap((c, i) => {
+    const j = byN.get(i + 1);
+    if (!j) return [];
+    const score = Math.max(1, Math.min(10, Math.round(j.score)));
+    return [{ ...c, title: j.title ? clean(j.title) : c.title, score, verdict: j.verdict === "pass" && score >= 7 ? "pass" : "fail", problem: j.problem ? clean(j.problem) : null, check: j.check ? clean(j.check) : c.carry }];
+  });
+};
+
+// ── the hooks (docs/design/desk-shorts.md § 2, "The hook's voice") ──
+//
+// The most hype-prone line in the pipeline, so: the author's own words
+// first, the rewrite's full voice context, kinds not examples, banned
+// categories, a literal check by a second pass, and the hooks the author
+// chose before as the standard.
+
+const HookDraftOut = z.object({
+  text: z.string().describe("The hook: one sentence, under about ten words, as it would be said."),
+  from: z.number().nullable().describe("When it's a line the author already wrote, lifted word for word or trimmed: that long beat's number. null for new words."),
+});
+const HooksForOut = z.object({ n: z.number().describe("The short's number."), drafts: z.array(HookDraftOut).min(3).max(3) });
+const HooksOut = z.object({ shorts: z.array(HooksForOut) });
+
+const HOOK_RULES = [
+  "You write the HOOK for each short: the first thing said, a few seconds, recorded by the author on its own and on screen while it's said. Then the short's first beat follows. A viewer who has never heard of this person decides in the first three seconds whether to stay. They stay for a real person saying something real, in their own words, not for volume.",
+  "THE AUTHOR'S OWN WORDS FIRST. Before writing anything, look for a line the author already wrote that would open the short: often the payoff said flat as a claim, from the short itself or anywhere in the long cut. Lift it word for word, or trim it, and give its beat number. Write new words only when nothing fits, and build them from phrases the author uses. Of the three drafts, at least one is a lifted line when any line in the script could do it.",
+  "WHAT GRABS, IN THIS AUTHOR'S REGISTER: something specific (a real number, a real thing they did, a real mistake); an honest admission; an opinion stated plainly that some people would disagree with; the problem stated flat, with dry understatement rather than exaggeration. One sentence, under about ten words, said the way they talk.",
+  "WHEN A SHORT SAYS WHAT ITS HOOK HAS TO CARRY, the hook says that thing, in the author's words, so the short's first beat reads as the answer to it. Never repeat the short's own first sentence.",
+  "BANNED, as kinds: telling the viewer to watch, wait, stay or listen; superlatives and hype words the author doesn't use; promises about what they're about to see or won't believe; a cliffhanger made for its own sake; trend formats (POV, 'did you know', 'nobody talks about', 'here's why', 'let's talk about'); a question aimed at the viewer that nobody would really ask; anything a stranger could have said about any game; ALL CAPS; exclamation marks.",
+  "A STRANGER READS IT LITERALLY: every word in its everyday sense, nothing from the long video. It has to say what the short is about to someone with no context (name the thing itself, not a shorthand that only lands once you've watched).",
+].join("\n\n");
+
+const HookCheckOut = z.object({
+  n: z.number(),
+  k: z.number().describe("The draft's number within the short, 1 to 3."),
+  verdict: z.enum(["keep", "replace"]),
+  text: z.string().nullable().describe("The replacement when the verdict is replace, written to the same rules; null to keep."),
+});
+const HookChecksOut = z.object({ checks: z.array(HookCheckOut) });
+const HOOK_CHECK = [
+  "You check hook lines someone drafted for this author's shorts. For each draft, two questions. One: would it sound odd said out loud by the person in those scripts, to a mate? Anything with a sales voice, a shout, a format, a flourish they'd never use. Two: does a stranger, taking every word in its everyday sense and knowing nothing of the long video, get what the short is about from this line alone?",
+  "A line lifted from the author's own script gets the second question just the same: in the long video it had its context, here it has none, so a word whose everyday meaning differs from what the script meant by it (a price word, a trade word, a shorthand for the thing the video is about) fails the stranger even though the author said it. Replace it with the thing named plainly, keeping the author's shape of sentence.",
+  "Keep a draft that passes both. Replace one that fails either, with a line that passes, in the author's words (lifting a line of theirs where one fits). Change nothing that passes.",
+].join("\n\n");
+
+export type HookDraft = { text: string; source: string };
+
+/** The kept shorts → three hook drafts each, checked by a second pass. */
+export const draftHooks = async (
+  v: ScriptVoice,
+  samples: string[],
+  long: Cut,
+  shorts: { n: number; title: string; beats: string[]; carry?: string }[],
+  chosen: string[],
+): Promise<Map<number, HookDraft[]>> => {
+  const sys = [system(v, samples), "", HOOK_RULES].join("\n");
+  const user = [
+    `THE LONG CUT (title: ${long.title}), for lines to lift:`,
+    numbered(long, false),
+    "",
+    ...(chosen.length ? ["HOOKS THE AUTHOR CHOSE BEFORE, the standard (their picks, some their own rewrites):", ...chosen.map((h) => `- ${h}`), ""] : []),
+    "THE SHORTS, each exactly as it will be heard after its hook:",
+    ...shorts.flatMap((c) => [`--- short ${c.n}: "${c.title}"${c.carry ? ` · the hook has to carry: ${c.carry}` : ""} ---`, ...c.beats, ""]),
+    "Write three hooks for every short.",
+  ].join("\n");
+  const out = await ask(sys, user, HooksOut);
+  const label = (from: number | null) => (from !== null && Number.isInteger(from) && from >= 1 && from <= long.beats.length ? `your line, beat ${from}` : "new words");
+  const drafts = new Map<number, HookDraft[]>();
+  for (const x of out.shorts) {
+    const ds = x.drafts.map((d) => ({ text: clean(d.text), source: label(d.from) })).filter((d) => d.text);
+    if (ds.length) drafts.set(Math.round(x.n), ds);
+  }
+  if (!drafts.size) return drafts;
+  // The literal check, on the drafts as a stranger and as a mate.
+  const checkUser = [
+    "THE DRAFTS:",
+    ...[...drafts].flatMap(([n, ds]) => {
+      const c = shorts.find((x) => x.n === n);
+      return [`--- short ${n}: "${c?.title ?? ""}"${c?.carry ? ` · the hook has to carry: ${c.carry}` : ""} ---`, `(the short then opens: ${c?.beats[0]?.slice(0, 160) ?? ""})`, ...ds.map((d, k) => `${k + 1}. ${d.text}  [${d.source}]`), ""];
+    }),
+    "Check every draft.",
+  ].join("\n");
+  const { checks } = await ask([system(v, samples), "", HOOK_CHECK].join("\n"), checkUser, HookChecksOut, "low");
+  for (const ch of checks) {
+    const ds = drafts.get(Math.round(ch.n));
+    const k = Math.round(ch.k) - 1;
+    if (!ds || !ds[k] || ch.verdict !== "replace" || !ch.text?.trim()) continue;
+    ds[k] = { text: clean(ch.text), source: "new words (checked)" };
+  }
+  return drafts;
 };
 
 // ── the picture plan ──
@@ -614,6 +799,55 @@ export const writeYouTube = async (v: ScriptVoice, game: string, title: string, 
     length += cost;
   }
   return { description: clean(out.description).replace(/!/g, "."), tags: tags.join(", ") };
+};
+
+// ── a short's post copy (docs/design/desk-shorts.md § 5) ──
+
+const ShortPostOut = z.object({
+  title: z.string().describe("The title for YouTube Shorts: sentence case, under 70 characters, the words that matter first."),
+  description: z.string().describe("The description, the same on every platform: one or two plain sentences, no hashtags. Under 280 characters."),
+  tags: z.array(z.string()).describe("Eight to twelve tags for YouTube Studio, lower case, most specific first."),
+});
+
+const SHORT_POST_RULES = [
+  "You write the title, description and tags for a short vertical video (TikTok, YouTube Shorts, Instagram Reels, X) cut out of a longer video one person made about making their game. The short opens with a hook line the author says to camera; the rest is a run of the long video said exactly as recorded. The point of the short is that a stranger watches to the end and follows: the words frame what they're about to hear, they don't oversell it.",
+  "The title: for YouTube Shorts. Sentence case, under 70 characters, specific, the words that matter first. It can lean on the hook but never repeats it word for word. No ALL CAPS words, no exclamation marks, no em dashes, no emoji, no hashtags, no clickbait phrases, nothing in brackets.",
+  "The description is the same on every platform, so it has to fit X: under 280 characters. One or two plain sentences in the author's voice saying what this is, adding to the hook rather than restating it. No hashtags anywhere: the author doesn't use them. Promise only what the short delivers. Never start with 'In this video' or 'In this short'. No emoji.",
+  "Write it the way the author talks: first person singular, plain everyday words, British spelling. No em dashes, no exclamation marks, no ALL CAPS, no three-beat slogans, no coined aphorisms.",
+  "The tags: eight to twelve, lower case, no hashtags, most specific first. The short's own topic in the ways people search for it, then the wider subject, then the broad ones (game development, indie game dev, devlog). Leave the game's name out: it's added for you. No tag longer than four words.",
+].join("\n\n");
+
+/** Hashtags out of a description (Tom, 2026-10-26: the platforms don't care any more), and the gap they leave. */
+export const stripHashtags = (s: string) => s.replace(/(^|\s)#[\w-]+/g, "").replace(/\s+/g, " ").trim();
+
+/** A short's title, description and tags (to Tom's instruction, if any; `had` = what's there now). */
+export const writeShortPost = async (v: ScriptVoice, game: string, longTitle: string, short: { title: string; hook: string; why?: string; beats: string[] }, had: ShortPost | undefined, instruction: string): Promise<ShortPost> => {
+  const sys = [`About the game and the person: ${v.about}`, "", "How they talk:", v.rules, "", SHORT_POST_RULES].join("\n");
+  const user = [
+    `The long video it's cut from: "${longTitle}".`,
+    `The short's working title: "${short.title}".`,
+    `Its hook, said first: "${short.hook}".`,
+    ...(short.why ? [`Why it works as a short: ${short.why}`] : []),
+    "",
+    "What's said in it after the hook, beat by beat:",
+    ...short.beats.map((b, i) => `${i + 1}. ${b}`),
+    "",
+    ...(had ? [`What's there now, which the author wants replaced:\nTitle: ${had.title}\n${had.description}\nTags: ${had.tags}`, ""] : []),
+    ...(instruction.trim() ? [`The author says: ${instruction.trim()}`] : []),
+    "Write the title, the description and the tags.",
+  ].join("\n");
+  const out = await ask(sys, user, ShortPostOut, "medium");
+  const wanted = out.tags.map((x) => clean(x).toLowerCase().replace(/[#,<>"]/g, "").trim()).filter(Boolean);
+  wanted.splice(Math.max(0, wanted.length - 3), 0, game.toLowerCase());
+  const tags: string[] = [];
+  let length = 0;
+  for (const t of wanted) {
+    const cost = t.length + (t.includes(" ") ? 2 : 0) + (tags.length ? 1 : 0);
+    if (tags.includes(t) || length + cost > 500) continue;
+    tags.push(t);
+    length += cost;
+  }
+  return { title: clean(out.title).replace(/!/g, ".").slice(0, 100), description: stripHashtags(clean(out.description).replace(/!/g, ".")).slice(0, 280), tags: tags.join(", ") };
 };
 
 // ── titles to test (docs/design/desk-thumbnails.md) ──

@@ -2,7 +2,7 @@
  * The queue's words, written by Claude when a key is present: the variable
  * part of a post (the lead line, one sentence of context, a question for
  * the comments, a few title options) in the game's own voice. The fixed
- * part — the game line, the ask, the hashtags — stays code (the game's
+ * part — the game line, the ask — stays code (the game's
  * `post.ai.boilerplate`), so every post pitches the same thing the same way.
  *
  * Server only. The key comes from ANTHROPIC_API_KEY (apps/desk/.env, which
@@ -60,7 +60,7 @@ const system = (v: AiVoice): string =>
     "Lines written in that voice, so you can hear it:",
     ...v.examples.map((e) => `- ${e}`),
     "",
-    "Hard rules: first person singular, British spelling, everyday words, no em dashes, no ALL CAPS, no exclamation marks, no three-beat slogans, no emoji, no hashtags (they are added separately), never invent features or numbers that aren't in the input. Vary your angle between calls: outcome, unfair rule, a question, the maker talking.",
+    "Hard rules: first person singular, British spelling, everyday words, no em dashes, no ALL CAPS, no exclamation marks, no three-beat slogans, no emoji, no hashtags, never invent features or numbers that aren't in the input. Vary your angle between calls: outcome, unfair rule, a question, the maker talking.",
   ].join("\n");
 
 const user = (i: DraftInput): string =>

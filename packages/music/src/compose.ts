@@ -32,10 +32,12 @@ import type { Mood } from "./mood";
 
 export type Inst =
   | "epiano" | "piano" | "musicbox" | "celesta" | "kalimba" | "marimba" | "vibes" | "ocarina" | "flute" | "harp" | "guitar" | "pizz" | "pulse"
-  | "pad" | "choir" | "strings"
+  | "pad" | "choir" | "strings" | "chant"
   | "bass" | "sub" | "tri"
   | "kick" | "snare" | "hat" | "shaker" | "rim" | "chipkick" | "chipsnare" | "chiphat";
 export type Texture = "crackle" | "tape" | "rain" | "hiss" | "none";
+/** A sung syllable's vowel (the chant). */
+export type Vowel = "a" | "e" | "i" | "o" | "u";
 export type { Mode };
 
 export type Note = {
@@ -48,6 +50,10 @@ export type Note = {
   pan: number;
   /** Played backwards, ending at t + dur (the swell into the loop). */
   reverse?: boolean;
+  /** The chant's syllable (else one is picked by where the note falls). */
+  vowel?: Vowel;
+  /** The chant: a syllable (the lips open into the vowel) or a held note that swells in; unset, short notes are syllables. */
+  sung?: "syllable" | "hold";
 };
 
 /** When things happen in the video, in seconds (from Save.tsx's timeline). */
@@ -127,9 +133,9 @@ const MOODS: Record<Mood, MoodPreset> = {
 
 // ------------------------------------------------------------------ styles
 
-type Play = "strike" | "hold" | "pick" | "chiparp" | "oompah";
+type Play = "strike" | "hold" | "pick" | "chiparp" | "oompah" | "organum";
 type Bass = "soft" | "sub" | "tri" | "none";
-type Groove = "halftime" | "dnb" | "chip" | "brush" | "hand" | "march" | "four";
+type Groove = "halftime" | "dnb" | "chip" | "brush" | "hand" | "march" | "four" | "pulse";
 
 type Style = {
   moods: Mood[];
@@ -182,6 +188,9 @@ const STYLES = {
   toybox: { moods: ["playful", "tender", "curious", "cosy", "eerie"], bpm: [72, 92], chords: [["celesta", "strike"], ["musicbox", "strike"]], pad: [null, "pad"], tune: ["musicbox", "celesta", "kalimba"], density: [2, 4], arp: 0.8, arpInst: ["musicbox", "celesta"], arpRate: [2, 3], bass: ["none"], textures: ["none", "crackle"] },
   // Synthwave: a fast chip arpeggio over a pad, octave-bouncing bass, four on the floor.
   synthwave: { moods: ["driving", "night", "triumph", "tense"], bpm: [92, 108], chords: [["pulse", "chiparp"], ["pad", "hold"]], pad: ["pad", null], tune: ["epiano", "vibes", "pulse"], density: [3, 5], arp: 0.5, arpInst: ["celesta", "kalimba"], arpRate: [2], bass: ["tri"], drums: ["four"], textures: ["none", "hiss"], lowpass: 8000 },
+  // Chant (10-24): a small schola of monks. Parallel organum (open fifths sung under the chord roots, each chord a
+  // syllable), the tune sung low in Latin syllables, sometimes strings under, no beat, a cathedral's echo.
+  chant: { moods: ["eerie", "melancholy", "tense", "night", "wonder"], bpm: [52, 64], chords: [["chant", "organum"]], pad: [null, null, "strings"], tune: ["chant"], tuneUnit: 2, density: [2, 3], arp: 0, arpInst: [], arpRate: [], bass: ["none", "sub"], textures: ["none", "hiss"], rtScale: 1.6 },
 } satisfies Record<string, Style>;
 export type StyleName = keyof typeof STYLES;
 export const STYLE_NAMES = Object.keys(STYLES) as StyleName[];
@@ -196,10 +205,22 @@ const GROOVES: Record<Groove, { kick: number[]; snare: number[]; hat: number[]; 
   hand: { kick: [0, 8], snare: [], hat: [], rim: [4, 10, 12], shaker: true },
   march: { kick: [0, 8], snare: [4, 12], hat: [], ghost: [13, 15] },
   four: { kick: [0, 4, 8, 12], snare: [4, 12], hat: [2, 6, 10, 14] },
+  // The lightest kit there is (journey.ts): a kick on one and three, a shaker. No snare.
+  pulse: { kick: [0, 8], snare: [], hat: [], shaker: true },
 };
 
-/** How far above middle C the tune sits, per instrument. */
-const LIFT: Partial<Record<Inst, number>> = { musicbox: 12, celesta: 12, kalimba: 5, flute: 5, vibes: 0, piano: 0 };
+/** How far above middle C the tune sits, per instrument (the chant: tenors, around A3). */
+const LIFT: Partial<Record<Inst, number>> = { musicbox: 12, celesta: 12, kalimba: 5, flute: 5, vibes: 0, piano: 0, chant: -14 };
+
+/** The Latin a chant sings, as the vowel of each syllable (the chant style here; a chant chapter in journey.ts). */
+export const CHANT_TEXTS: { name: string; vowels: Vowel[] }[] = [
+  { name: "Kyrie", vowels: ["i", "i", "e", "e", "e", "i", "o"] },
+  { name: "Dies irae", vowels: ["i", "e", "i", "e", "i", "e", "i", "a"] },
+  { name: "Alleluia", vowels: ["a", "e", "u", "i", "a"] },
+  { name: "Sanctus", vowels: ["a", "u", "a", "u", "o", "i", "u"] },
+  { name: "Requiem", vowels: ["e", "i", "e", "e", "e", "a"] },
+  { name: "Gloria", vowels: ["o", "i", "a", "i", "e", "e", "i", "e", "o"] },
+];
 
 const NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const pc = (n: number) => ((n % 12) + 12) % 12;
@@ -334,6 +355,8 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName,
 
   const [chordInst, play] = pick(S.chords);
   const padInst = pick(S.pad);
+  /** What the chant sings (its own stream: nothing else moves for it). */
+  const text = CHANT_TEXTS[Math.floor(mulberry(seed * 23 + 11)() * CHANT_TEXTS.length)]!;
   const twice = rand() < 0.6;
   const bassType = pick(S.bass);
   spans.forEach((s, i) => {
@@ -379,6 +402,16 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName,
             s.v.forEach((n, j) => notes.push({ t: t + j * 0.008 + nudge(), dur: 0.6 * beat, midi: n, vel: (k === 1 ? 0.36 : 0.3) * (0.9 + 0.2 * rand()), inst: chordInst, pan: 0.15 }));
           }
         }
+        break;
+      }
+      case "organum": {
+        // Parallel organum: the chord's root sung low (basses, F2 up), its fifth and octave above, every chord a syllable of the text; the tune sits above the fifth.
+        const root = 41 + pc(s.bass - 41);
+        const vowel = text.vowels[i % text.vowels.length]!;
+        const up = isHome ? 1.25 : 1;
+        notes.push({ t: s.t0, dur: len, midi: root, vel: 0.5 * up, inst: chordInst, pan: -0.25, vowel, sung: "syllable" });
+        notes.push({ t: s.t0 + 0.04, dur: len, midi: root + 7, vel: 0.42 * up, inst: chordInst, pan: 0.25, vowel, sung: "syllable" });
+        notes.push({ t: s.t0 + 0.02, dur: len, midi: root + 12, vel: 0.3 * up, inst: chordInst, pan: 0, vowel, sung: "syllable" });
         break;
       }
       case "chiparp": {
@@ -517,8 +550,18 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName,
   // ------------------------------------------------- the swell into the loop
   const first = spans[0]!;
   const swell = Math.min(1.4, 2 * beat);
-  const swellInst: Inst = ["epiano", "piano", "guitar", "pulse", "harp", "pizz"].includes(chordInst) ? chordInst : "epiano";
+  const swellInst: Inst = ["epiano", "piano", "guitar", "pulse", "harp", "pizz"].includes(chordInst) ? chordInst : chordInst === "chant" ? "strings" : "epiano";
   for (const n of first.v) notes.push({ t: m.seconds - swell, dur: swell, midi: n + 12, vel: 0.4, inst: swellInst, pan: 0, reverse: true });
+
+  // The sung tune: a syllable of the text on each note, in order, and the answer ends on "a-men".
+  if (tuneInst === "chant") {
+    const sung = notes.filter((n) => n.inst === "chant" && !n.vowel);
+    sung.forEach((n, j) => {
+      n.vowel = text.vowels[j % text.vowels.length];
+      n.sung = "syllable";
+    });
+    if (sung.length >= 2) [sung[sung.length - 2]!.vowel, sung[sung.length - 1]!.vowel] = ["a", "e"];
+  }
 
   // --------------------------------------------------------------- curves
   const br = M.brightness;
@@ -542,7 +585,7 @@ export const compose = (seed: number, mood: Mood, m: Moments, force?: StyleName,
     `${Math.round(60 / beat)} bpm ${meter}/4`,
     spans.map((s) => chordName(s.chord, tonic)).join(" "),
     `${H.palette.join("/")}${H.bassMode === "root" ? "" : `, ${H.bassMode}`}${H.open ? ", open" : ""}`,
-    [`${chordInst} chords`, padInst && `${padInst} under`, `${tuneInst} tune`, arp && `${arpInst} arpeggio`, groove && `${groove} drums`].filter(Boolean).join(", "),
+    [chordInst === "chant" ? `organum on ${text.name}` : `${chordInst} chords`, padInst && `${padInst} under`, `${tuneInst} tune`, arp && `${arpInst} arpeggio`, groove && `${groove} drums`].filter(Boolean).join(", "),
     texture === "none" ? "clean" : texture,
   ].join(" · ");
 

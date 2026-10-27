@@ -11,7 +11,8 @@
     "typecheck": "bun run --filter '*' typecheck",
     "desk": "bun run --cwd apps/desk start",
     "site": "bun run --cwd apps/free-the-borough-site dev",
-    "sand": "bun run --cwd apps/sand-table start"
+    "sand": "bun run --cwd apps/sand-table start",
+    "score:audition": "bun apps/desk/cli.ts audition"
   },
   "devDependencies": {
     "@types/bun": "latest",

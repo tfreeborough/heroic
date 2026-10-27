@@ -319,3 +319,28 @@ originals stashed at `~/Documents/GitHub/heroic-audio-originals/music/`.
 - v1 retired 2026-09-04: calm/urgent twin per song with a `sandsStart`
   crossfade. The two-player crossfade code is in git history if a twin ever
   comes back.
+
+## Tried and parked (2026-10-25)
+
+**Shepard tone under the score — parked.** A Shepard–Risset glissando
+(ten voices an octave apart, bass-centred ~80 Hz, one octave every 30s, a
+second ladder a fifth up so handovers never coincide) was baked under
+Pharaoh, Legion, Taiko, Hellas and Chant in three timbres: pure sines, a
+synthesised horn through a fixed body, and a looped tagelharpa drone carved
+from the North track. The horn and the sampled drone both worked on their own
+and hid the cycle well, but under the songs the layer made the mix muddy at
+any level loud enough to register. The "reset" that's audible in a Shepard
+tone is the ear tracking one voice through the loudness bell, not a volume
+dip (measured flat to 0.1 dB) — timbre and interleaving reduce it, nothing
+removes it. Generator + renders live outside the repo; the recipe is in this
+session's notes if we want it back.
+
+**Per-round speed-up — liked, not built.** Step the score 5% faster per
+round with pitch held (100% → 120% at 2–2, so the pool's 100 BPM reads as
+120 by the deciding round). expo-audio's `setPlaybackRate(rate, 'high')`
+does this on both platforms with no new assets: iOS via
+AVAudioTimePitchAlgorithm, Android via ExoPlayer with pitch pinned. Apply the
+step while the score is ducked under the end plate so the join is masked;
+a chained next song inherits the current rate; songs run out ~20% sooner
+late in a match. Demo cut (ffmpeg atempo) sounded fine to Tom; the phone's
+stretcher will differ, so judge on device.

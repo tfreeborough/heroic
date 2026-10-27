@@ -241,12 +241,32 @@ const NewSave: React.FC<{ game: string; onMade: (d: Draft) => void }> = ({ game,
   );
 };
 
+/** A journal Claude drafted or retold, offered beside the box. It never touches the box until a button says so. */
+const JournalOffer: React.FC<{ text: string; current: string; onTake: (v: string) => void; onDismiss: () => void }> = ({ text, current, onTake, onDismiss }) => (
+  <div className="panel stack" style={{ gap: 8 }}>
+    <div style={{ whiteSpace: "pre-wrap" }}>{text}</div>
+    <div className="row">
+      <button className="ghost small" onClick={() => onTake(text)}>
+        {current.trim() ? "Replace mine with this" : "Use this"}
+      </button>
+      {current.trim() ? (
+        <button className="ghost small" onClick={() => onTake(`${current.trim()}\n\n${text}`)}>
+          Add it under mine
+        </button>
+      ) : null}
+      <button className="link small muted" onClick={onDismiss}>
+        Dismiss
+      </button>
+    </div>
+  </div>
+);
+
 const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }> = ({ game, draft, onChanged }) => {
   // The boxes are local and save as you type; the server copy catches up.
   const [f, setF] = useState(() => ({ prompt: draft.prompt, chosen: draft.chosen ?? "", memory: draft.memory, tagline: draft.tagline, journal: draft.journal ?? "", name: draft.name }));
   const [journalDraft, setJournalDraft] = useState("");
   const [words, setWords] = useState<Words | undefined>(draft.words);
-  const [busy, setBusy] = useState<"" | "more" | "words" | "journal" | "save" | "bin">("");
+  const [busy, setBusy] = useState<"" | "more" | "words" | "journal" | "retell" | "save" | "bin">("");
   const [err, setErr] = useState("");
   const [sure, setSure] = useState(false);
   const first = useRef(true);
@@ -276,6 +296,7 @@ const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }>
       }),
     );
   const draftJournal = () => run("journal", call<{ journal: string }>(game, "POST", "journal", { id: draft.id }).then((r) => setJournalDraft(r.journal)));
+  const retellJournal = () => run("retell", call<{ journal: string }>(game, "POST", "retell", { journal: f.journal }).then((r) => setJournalDraft(r.journal)));
   const name = f.name.trim() || slug(f.memory);
   const save = () =>
     run(
@@ -354,26 +375,12 @@ const DraftPage: React.FC<{ game: string; draft: Draft; onChanged: () => void }>
           <button className="ghost small" disabled={!f.chosen || busy !== ""} onClick={draftJournal}>
             {busy === "journal" ? "Writing…" : "Draft a journal entry"}
           </button>
-          <span className="small muted">To start from when you're stuck. It never touches your box.</span>
+          <button className="ghost small" disabled={!f.journal.trim() || busy !== ""} onClick={retellJournal} title="Retells what's in the box the way you write (voice.md + your own saves)">
+            {busy === "retell" ? "Retelling…" : "Retell in my voice"}
+          </button>
+          <span className="small muted">Drafts come already retold. Neither touches your box.</span>
         </div>
-        {journalDraft ? (
-          <div className="panel stack" style={{ gap: 8 }}>
-            <div style={{ whiteSpace: "pre-wrap" }}>{journalDraft}</div>
-            <div className="row">
-              <button className="ghost small" onClick={() => (set("journal")(journalDraft), setJournalDraft(""))}>
-                {f.journal.trim() ? "Replace mine with this" : "Use this"}
-              </button>
-              {f.journal.trim() ? (
-                <button className="ghost small" onClick={() => (set("journal")(`${f.journal.trim()}\n\n${journalDraft}`), setJournalDraft(""))}>
-                  Add it under mine
-                </button>
-              ) : null}
-              <button className="link small muted" onClick={() => setJournalDraft("")}>
-                Dismiss
-              </button>
-            </div>
-          </div>
-        ) : null}
+        {journalDraft ? <JournalOffer text={journalDraft} current={f.journal} onTake={(v) => (set("journal")(v), setJournalDraft(""))} onDismiss={() => setJournalDraft("")} /> : null}
       </div>
 
       <div className="row">
@@ -421,6 +428,8 @@ const MusicPanel: React.FC<{ game: string; save: Saved; onChanged: () => void }>
 const SavedPage: React.FC<{ game: string; save: Saved; onChanged: () => void }> = ({ game, save, onChanged }) => {
   const [f, setF] = useState(() => ({ memory: save.memory, tagline: save.tagline, journal: save.journal }));
   const [state, setState] = useState<"" | "saving" | "saved">("");
+  const [offer, setOffer] = useState("");
+  const [retelling, setRetelling] = useState(false);
   const [err, setErr] = useState("");
   const [sure, setSure] = useState(false);
   const first = useRef(true);
@@ -450,6 +459,14 @@ const SavedPage: React.FC<{ game: string; save: Saved; onChanged: () => void }> 
     void call(game, "POST", "saved-retire", { name: save.name })
       .then(() => (onChanged(), open(game)))
       .catch((e: Error) => setErr(e.message));
+  const retellJournal = () => {
+    setRetelling(true);
+    setErr("");
+    void call<{ journal: string }>(game, "POST", "retell", { journal: f.journal })
+      .then((r) => setOffer(r.journal))
+      .catch((e: Error) => setErr(e.message))
+      .finally(() => setRetelling(false));
+  };
   const made = save.slots.length > 0;
   return (
     <div className="stack" style={{ gap: 18 }}>
@@ -482,6 +499,13 @@ const SavedPage: React.FC<{ game: string; save: Saved; onChanged: () => void }> 
           <WordsBox label="Memory" hint="Revealed on screen when the save completes. Up to about three lines." long value={f.memory} onChange={set("memory")} />
           <WordsBox label="Tagline" hint={TAGLINE_HINT} max={TAGLINE_MAX} value={f.tagline} onChange={set("tagline")} />
           <WordsBox label="Journal" hint="The pinned comment." long={8} value={f.journal} onChange={set("journal")} />
+          <div className="row">
+            <button className="ghost small" disabled={!f.journal.trim() || retelling} onClick={retellJournal} title="Retells the journal the way you write (voice.md + your own saves). Offered, not applied.">
+              {retelling ? "Retelling…" : "Retell in my voice"}
+            </button>
+            <span className="small muted">For the older generated saves.</span>
+          </div>
+          {offer ? <JournalOffer text={offer} current={f.journal} onTake={(v) => (set("journal")(v), setOffer(""))} onDismiss={() => setOffer("")} /> : null}
         </div>
       </div>
       <MusicPanel key={save.name} game={game} save={save} onChanged={onChanged} />

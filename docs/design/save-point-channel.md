@@ -363,6 +363,20 @@ synthesised drums; instrument balance set by measuring levels
 7th; minor IV plain). `--variants N` = N seeds for one memory to choose
 from; `--style`/`--mood` force one. Samples: every style twice.
 
+**Chant (10-24, Tom: "fold these into the autosave project").** A
+sixteenth style, `chant`: a small schola of monks (`chant` in render.ts,
+five male singers with real vowel formants and a hum opening each
+syllable; born as a chapter in the Desk's long scores,
+desk-score-variety.md §10). Parallel organum under the chord roots (root,
+fifth, octave, each chord a syllable of a Latin text the seed draws:
+Kyrie, Dies irae, Alleluia, Sanctus, Requiem, Gloria), the tune sung low
+in the same syllables and its answer ending "a-men", sometimes strings
+under, a sub or nothing, no beat, the room ×1.6. Suits eerie, melancholy,
+tense, night and wonder; on Claude's menu by its sound. Adding a card to
+the style deck reshuffles the deck for slots not yet made (the ledger
+still keeps neighbours apart); the 18 baseline tunes compose and render
+byte-identical with their styles pinned.
+
 **Decided 10-10 (Tom):** the music seed is the SLOT number
 (`musicSeed(slot, take)`), not the picture seed: slots never repeat, so no
 two saves share a tune, and Reroll only changes the visuals; `take` 1, 2…

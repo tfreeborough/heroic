@@ -11,7 +11,7 @@ import { ResearchPanel } from "./Research";
 import { DocPicker } from "./DocPicker";
 import { type ResearchState, wovenSource } from "../lib/research";
 import { spokenText } from "../lib/doc";
-import { type Beat, type Cut, type DiffOp, type PlanState, beatText, cutDiff, cutText, isStale, newId, paragraphs, spokenSeconds } from "../lib/scripts";
+import { type Beat, type Cut, type DiffOp, type PlanState, type ScriptTake, type ShortPost, type ShortRender, type ShortsState, SHORT_MAX, SHORT_MIN, beatText, cutDiff, cutText, isStale, newId, hookBeats, longEdits, nudgeShort, paragraphs, shortBeats, shortLabel, shortSeconds, spokenSeconds, withHook } from "../lib/scripts";
 
 /**
  * The Scripts tab (docs/design/desk-scripts.md): the list down the left
@@ -159,6 +159,7 @@ const STAGES = [
   ["pictures", "Pictures"],
   ["record", "Record"],
   ["organise", "Organise"],
+  ["shorts", "Shorts"],
   ["publish", "Publish"],
   ["site", "Site"],
 ] as const;
@@ -189,6 +190,9 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   const [researching, setResearching] = useState<ResearchState | null>(null);
   // The picture plan running on the server, a batch of beats at a time (desk-ascii-scripts.md); the page polls and folds each batch in.
   const [planning, setPlanning] = useState<PlanState | null>(null);
+  // Find shorts running on the server (desk-shorts.md); the page polls and takes the shorts in when it lands.
+  const [finding, setFinding] = useState<ShortsState | null>(null);
+  const [rendering, setRendering] = useState<Record<string, ShortRender>>({});
   // The Doc picker (desk-docs.md), and whether the linked Doc has been edited in Drive since the last pull.
   const [picking, setPicking] = useState(false);
   const [docChanged, setDocChanged] = useState(false);
@@ -201,13 +205,15 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   useEffect(() => {
     void api
       .script(id)
-      .then(({ pending: p, score: sc, researching: rs, planning: pl, ...x }) => {
+      .then(({ pending: p, score: sc, researching: rs, planning: pl, finding: fd, rendering: rd, ...x }) => {
         saved.current = JSON.stringify(patchOf(x));
         setS(x);
         setPending(p);
         setScore(sc);
         setResearching(rs);
         setPlanning(pl);
+        setFinding(fd);
+        setRendering(rd ?? {});
         if (x.doc) {
           const pulled = x.doc.modified;
           void api
@@ -292,6 +298,52 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
     }, 2500);
     return () => clearInterval(t);
   }, [planning?.state, api, id]);
+
+  // The shorts land in one go: poll while the find runs, then take the server's shorts and beat timings into the page's copy.
+  useEffect(() => {
+    if (finding?.state !== "running") return;
+    const t = setInterval(() => {
+      void api
+        .script(id)
+        .then(({ finding: fd, ...x }) => {
+          setFinding(fd);
+          if (fd?.state === "running") return;
+          if (fd?.state === "failed") return setErr(`Finding the shorts didn't come back: ${fd.error}. Press Find the shorts again.`);
+          const secs = new Map((x.long?.beats ?? []).map((b) => [b.id, b.seconds] as const));
+          setS((cur) => {
+            if (!cur?.long) return cur;
+            const next = { ...cur, long: { ...cur.long, beats: cur.long.beats.map((b) => (secs.get(b.id) !== undefined ? { ...b, seconds: secs.get(b.id) } : b)) }, shorts: x.shorts };
+            saved.current = JSON.stringify(patchOf(next));
+            return next;
+          });
+          changed.current();
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => clearInterval(t);
+  }, [finding?.state, api, id]);
+
+  // Shorts rendering: ask after them every few seconds while any is on its way, and take the edits (with their render slugs) in as they land.
+  const renderingNow = Object.values(rendering).some((r) => r.state !== "done" && r.state !== "failed");
+  useEffect(() => {
+    if (!renderingNow) return;
+    const t = setInterval(() => {
+      void api
+        .script(id)
+        .then(({ rendering: rd, ...x }) => {
+          setRendering(rd ?? {});
+          setS((cur) => {
+            if (!cur) return cur;
+            const next = { ...cur, sequences: x.sequences, ...(cur.scoreSeed === undefined && x.scoreSeed !== undefined ? { scoreSeed: x.scoreSeed } : {}) };
+            saved.current = JSON.stringify(patchOf(next));
+            return next;
+          });
+          changed.current();
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => clearInterval(t);
+  }, [renderingNow, api, id]);
 
   // A score being made: ask after it every few seconds until it's in.
   const askScore = useCallback(() => void api.script(id).then((r) => setScore(r.score)).catch(() => {}), [api, id]);
@@ -401,7 +453,8 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
           ? s.long?.beats.some((b) => b.scene) ? "story planned" : "not planned"
           : `${pics.filter((p) => p.approved).length}/${pics.length} approved${pending.some((k) => !k.startsWith("thumb:")) ? " · making" : ""}`,
     record: beats.length ? `${beats.filter((b) => recorded.has(b.id)).length}/${beats.length} read` : "",
-    organise: s.sequences?.length ? `${s.sequences.length} edit${s.sequences.length === 1 ? "" : "s"}` : "not yet",
+    organise: longEdits(s).length ? `${longEdits(s).length} edit${longEdits(s).length === 1 ? "" : "s"}` : "not yet",
+    shorts: finding?.state === "running" ? "finding" : renderingNow ? "rendering" : s.shorts.some((c) => c.state) ? `${s.shorts.filter((c) => c.state === "kept").length} kept of ${s.shorts.filter((c) => c.state !== "binned").length}${s.sequences?.some((x) => x.short && x.render) ? ` · ${s.sequences.filter((x) => x.short && x.render).length} rendered` : ""}` : "not yet",
     publish: [s.titles?.length ? `${s.titles.length} title${s.titles.length === 1 ? "" : "s"}` : "", s.thumbnails?.some((t) => t.chosen) ? `${s.thumbnails.filter((t) => t.chosen).length} thumbnail${s.thumbnails.filter((t) => t.chosen).length === 1 ? "" : "s"}` : "", s.youtube ? "tags" : ""].filter(Boolean).join(" · ") || "not yet",
     site: s.writeup?.saved ? (s.writeup.saved.at < s.writeup.writtenAt ? "written again since saved" : `on the site as /log/${s.writeup.slug}/`) : s.writeup ? "written, not saved" : "not yet",
   };
@@ -652,10 +705,10 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
                 <div className="small muted">Open the edit, check it, then Done › to Make with the Beats template: the title builds out of glyphs, then each picture while you say its beat, your words along the foot, a card for each chapter, and the end card.</div>
               </div>
             ) : null}
-            {s.sequences?.length ? (
+            {longEdits(s).length ? (
               <div className="stack" style={{ gap: 4 }}>
-                <span className="small muted">Edits made so far, newest first:</span>
-                {[...s.sequences].reverse().map((x) => (
+                <span className="small muted">Edits made so far, newest first (the shorts' own edits sit on their cards under Shorts):</span>
+                {[...longEdits(s)].reverse().map((x) => (
                   <div key={x.id} className="row small" style={{ gap: 8 }}>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <button className="link small" onClick={() => go({ name: "edit", id: x.id })}>
@@ -690,7 +743,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
             ) : null}
           </div>
           <div className="stack" style={{ gap: 12, minWidth: 0 }}>
-            {s.sequences?.length ? (
+            {longEdits(s).length ? (
               <ScorePanel
                 api={api}
                 score={score}
@@ -704,13 +757,13 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
                 }
               />
             ) : null}
-            {s.sequences?.length ? (
+            {longEdits(s).length ? (
               <ScoreHistory
                 api={api}
                 id={id}
                 current={score?.state === "ready" ? score.file : undefined}
                 making={score?.state === "making"}
-                runs={new Map(s.sequences.map((x) => [x.id, x.run]))}
+                runs={new Map(longEdits(s).map((x) => [x.id, x.run]))}
                 busy={busy}
                 onChoose={(file) =>
                   void step("score-pick", async () => {
@@ -723,9 +776,60 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
             ) : (
               <div className="small muted">Organise once, then make the music for the edit here. The chapters for YouTube show up here too.</div>
             )}
-            {made?.find((m) => m.youtube) ? <YouTubeChapters text={made.find((m) => m.youtube)!.youtube} /> : !made && s.sequences?.at(-1)?.youtube ? <YouTubeChapters text={s.sequences.at(-1)!.youtube!} /> : null}
+            {made?.find((m) => m.youtube) ? <YouTubeChapters text={made.find((m) => m.youtube)!.youtube} /> : !made && longEdits(s).at(-1)?.youtube ? <YouTubeChapters text={longEdits(s).at(-1)!.youtube!} /> : null}
           </div>
         </div>
+      ) : null}
+
+      {/* ── Shorts: the runs of the long video that stand alone (desk-shorts.md) ── */}
+      {at === "shorts" && s.long ? (
+        <ShortsStage
+          api={api}
+          id={id}
+          s={s}
+          covers={covers}
+          onTakes={(takes) => patch({ takes })}
+          onReplace={(x) => {
+            saved.current = JSON.stringify(patchOf(x));
+            setS(x);
+          }}
+          onDraft={(all) => void step("hooks", () => api.draftHooks(id, all))}
+          onPost={(short, instruction) => void step(`post:${short}`, () => api.writeShortPost(id, short, instruction))}
+          rendering={rendering}
+          onRender={(shorts) => {
+            setErr("");
+            void api
+              .renderShorts(id, shorts)
+              .then((r) => {
+                if (r.left.length) setErr(r.left.map((l) => `${s.shorts.find((c) => c.id === l.short)?.title ?? "a short"}: ${l.reason}`).join(" · "));
+                return api.script(id).then(({ rendering: rd, ...x }) => {
+                  setRendering(rd ?? {});
+                  setS((cur) => {
+                    if (!cur) return cur;
+                    const next = { ...cur, sequences: x.sequences, scoreSeed: x.scoreSeed };
+                    saved.current = JSON.stringify(patchOf(next));
+                    return next;
+                  });
+                  changed.current();
+                });
+              })
+              .catch((e) => setErr(String((e as Error).message ?? e)));
+          }}
+          go={go}
+          claude={claude}
+          finding={finding}
+          busy={busy}
+          onFind={(more) => {
+            setErr("");
+            void api
+              .findShorts(id, more)
+              .then(setFinding)
+              .catch((e: Error) => setErr(e.message));
+          }}
+          onShorts={(shorts) => patch({ shorts })}
+          onOrganise={() => goStage("organise")}
+          onError={setErr}
+        />
       ) : null}
 
       {/* ── Publish: titles, the description and tags, thumbnails ── */}
@@ -737,7 +841,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
             </div>
             <div className="panel stack" style={{ gap: 8 }}>
               <h4 style={{ margin: 0 }}>Description and tags</h4>
-              <YouTubeStep youtube={s.youtube} chapters={s.sequences?.at(-1)?.youtube} claude={claude} busy={busy} onChange={(youtube) => patch({ youtube })} onWrite={(instruction) => void step("youtube", () => api.writeYouTube(id, instruction))} />
+              <YouTubeStep youtube={s.youtube} chapters={longEdits(s).at(-1)?.youtube} claude={claude} busy={busy} onChange={(youtube) => patch({ youtube })} onWrite={(instruction) => void step("youtube", () => api.writeYouTube(id, instruction))} />
             </div>
           </div>
           <div className="panel">
@@ -1180,3 +1284,454 @@ export const ScriptReading: React.FC<{ s: Script }> = ({ s }) =>
   );
 
 export const scriptLine = (s: ScriptSummary) => `${s.title}${s.done ? " ✓" : ""} · ${fmtDate(s.updatedAt)}`;
+
+/**
+ * The Shorts stage (docs/design/desk-shorts.md § 1): the runs of the long
+ * video Claude says stand alone, a card each with its beats, its length as
+ * recorded, why it works and the line a cold viewer would trip on. Tom keeps
+ * or bins each, widens or narrows it a beat at either end, asks for more.
+ * Binned ones fold away; a near miss shows its problem and can be kept
+ * anyway. Hooks, organising and rendering are the later stages' job.
+ */
+/** Decoded take audio, by URL, for the short previews (a take serves several shorts). */
+const decoded = new Map<string, Promise<AudioBuffer>>();
+const decode = (ctx: AudioContext, url: string): Promise<AudioBuffer> => {
+  let p = decoded.get(url);
+  if (!p) {
+    p = fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status} fetching ${url}`))))
+      .then((buf) => ctx.decodeAudioData(buf));
+    decoded.set(url, p);
+    p.catch(() => decoded.delete(url));
+  }
+  return p;
+};
+
+/**
+ * Hear a short before it's made (desk-shorts.md): its take slices played
+ * one after another as organise would lay them, the long video's music
+ * quiet underneath. Web Audio for the slices (sample-accurate joins), an
+ * audio element for the bed (a long file, streamed).
+ */
+const ShortPlayer: React.FC<{ api: GameApi; id: string; short: string; onError: (m: string) => void }> = ({ api, id, short, onError }) => {
+  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
+  const [t, setT] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+  const ctx = useRef<AudioContext | null>(null);
+  const playing = useRef<{ sources: AudioBufferSourceNode[]; bed: HTMLAudioElement | null; timer: number; tick: number } | null>(null);
+  const stop = useCallback(() => {
+    const p = playing.current;
+    if (!p) return;
+    for (const x of p.sources) {
+      try {
+        x.stop();
+      } catch {}
+    }
+    p.bed?.pause();
+    clearTimeout(p.timer);
+    clearInterval(p.tick);
+    playing.current = null;
+    setState("idle");
+    setT(0);
+  }, []);
+  useEffect(() => stop, [stop]);
+  const play = async () => {
+    if (playing.current) return stop();
+    setState("loading");
+    try {
+      const pv = await api.previewShort(id, short);
+      if (!pv.clips.length) throw new Error(pv.missing.length ? "none of its beats are recorded" : pv.conflicts ? "its beats are read in two takes: bin one on the Record stage" : "nothing to play");
+      const ac = (ctx.current ??= new AudioContext());
+      if (ac.state === "suspended") await ac.resume();
+      const files = [...new Set(pv.clips.map((c) => c.file))];
+      const buffers = new Map(await Promise.all(files.map(async (f) => [f, await decode(ac, api.publicUrl(f))] as const)));
+      const voice = ac.createGain();
+      voice.gain.value = 1;
+      voice.connect(ac.destination);
+      const t0 = ac.currentTime + 0.1;
+      const sources = pv.clips.map((c) => {
+        const src = ac.createBufferSource();
+        src.buffer = buffers.get(c.file)!;
+        src.connect(voice);
+        src.start(t0 + c.at, c.start, Math.max(0.01, c.end - c.start));
+        return src;
+      });
+      let bed: HTMLAudioElement | null = null;
+      if (pv.music) {
+        bed = new Audio(api.publicUrl(pv.music.path));
+        bed.volume = Math.min(0.5, Math.max(0.03, pv.music.level));
+        bed.currentTime = pv.music.from;
+        void bed.play().catch(() => {});
+      }
+      const started = Date.now();
+      playing.current = { sources, bed, timer: window.setTimeout(stop, (pv.seconds + 0.4) * 1000), tick: window.setInterval(() => setT((Date.now() - started) / 1000), 250) };
+      setSeconds(pv.seconds);
+      setState("playing");
+      if (pv.missing.length) onError(`${pv.missing.length} of its beats aren't recorded, so the preview skips them.`);
+    } catch (e) {
+      setState("idle");
+      onError(`preview: ${(e as Error).message}`);
+    }
+  };
+  return (
+    <button className={state === "playing" ? "small" : "ghost small"} disabled={state === "loading"} onClick={() => void play()} title="Hear it: the takes sliced as organise would lay them, the video's music quiet under.">
+      {state === "loading" ? "loading…" : state === "playing" ? `■ ${clock(t)} / ${clock(seconds)}` : "▶ hear it"}
+    </button>
+  );
+};
+
+/** Where a kept short's render stands: the score being written, queued, the render's progress bar, or the finished video's thumbnail with its edit to open. */
+const ShortRenderRow: React.FC<{ api: GameApi; r?: ShortRender; edit?: NonNullable<Script["sequences"]>[number]; go: (route: { name: "edit"; id: string } | { name: "renders" }) => void }> = ({ api, r, edit, go }) => {
+  const slug = r?.state === "done" ? r.slug : edit?.render;
+  const seq = r?.seq ?? edit?.id;
+  if (r && r.state !== "done") {
+    const word = r.state === "scoring" ? "writing its score…" : r.state === "queued" ? "queued behind the others…" : r.state === "bundling" ? "bundling…" : r.state === "rendering" ? `rendering ${Math.round(r.progress * 100)}%` : `✖ ${r.error ?? "the render failed"}`;
+    return (
+      <div className="row small" style={{ gap: 8, alignItems: "center" }}>
+        <span className={r.state === "failed" ? "warn" : "muted"} style={{ flex: "0 0 auto" }}>
+          {word}
+        </span>
+        {r.state === "rendering" || r.state === "bundling" ? (
+          <div className="bar" style={{ flex: 1, height: 4, background: "var(--line, #333)" }}>
+            <div style={{ width: `${Math.round(r.progress * 100)}%`, height: "100%", background: "var(--ok, #7c6)" }} />
+          </div>
+        ) : null}
+        {seq ? (
+          <button className="link small" onClick={() => go({ name: "edit", id: seq })}>
+            open the edit
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  if (!slug && !seq) return null;
+  return (
+    <div className="row small" style={{ gap: 10, alignItems: "center" }}>
+      {slug ? <img src={api.renderThumb(slug)} alt="" style={{ height: 72, borderRadius: 4, cursor: "pointer" }} title="Open Renders" onClick={() => go({ name: "renders" })} /> : null}
+      <span className="muted">{slug ? "rendered" : "organised, not rendered"}</span>
+      {slug ? (
+        <a className="link small" href={api.renderUrl(slug)} target="_blank" rel="noreferrer">
+          watch
+        </a>
+      ) : null}
+      {seq ? (
+        <button className="link small" title="The short's own edit: fix it by hand here, then render that from the editor. Render ticked writes it afresh." onClick={() => go({ name: "edit", id: seq })}>
+          open the edit
+        </button>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * A kept short's words for the platforms (desk-shorts.md § 5): the title
+ * (Shorts), one description for everywhere (X's 280), the tags for YouTube
+ * Studio. Claude writes them when Render ticked runs; here they can be
+ * written again to an instruction, changed by hand, and copied. The Queue
+ * shows these same words against the short's render.
+ */
+const ShortPostBox: React.FC<{ short: Cut; claude: boolean; busy: boolean; onChange: (post: ShortPost) => void; onWrite: (instruction: string) => void }> = ({ short, claude, busy, onChange, onWrite }) => {
+  const [open, setOpen] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [msg, setMsg] = useState("");
+  const post = short.post;
+  const copy = async (text: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setMsg(`copied the ${what}`);
+    } catch {
+      setMsg("couldn't copy (browser blocked the clipboard)");
+    }
+  };
+  const tagsLength = (post?.tags ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .reduce((n, x, i) => n + x.length + (x.includes(" ") ? 2 : 0) + (i ? 1 : 0), 0);
+  const change = (patch: Partial<ShortPost>) => onChange({ title: post?.title ?? short.title, description: post?.description ?? short.hook ?? "", tags: post?.tags ?? "", ...patch });
+  return (
+    <div className="stack" style={{ gap: 6, padding: "6px 0", borderTop: "1px solid var(--line)" }}>
+      <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button className="link small" onClick={() => setOpen((x) => !x)}>
+          {open ? "▾" : "▸"} The post
+        </button>
+        <span className="small muted" style={{ flex: 1 }}>
+          {post ? "title, description and tags for the platforms; the Queue shows these" : "no words yet: written when Render ticked runs, or write them now"}
+        </span>
+        {post ? (
+          <>
+            <button className="link small" onClick={() => void copy(post.title, "title")}>
+              copy title
+            </button>
+            <button className="link small" onClick={() => void copy(post.description, "description")}>
+              copy description
+            </button>
+            <button className="link small" onClick={() => void copy(post.tags, "tags")} title="Paste into YouTube Studio's tags box: the commas split them">
+              copy tags
+            </button>
+          </>
+        ) : null}
+        <button className="ghost small" disabled={!claude || busy} onClick={() => onWrite(instruction)} title="Claude writes the title, a description that fits every platform (under X's 280 characters, no hashtags) and the tags, from the hook and what's said">
+          {busy ? "writing…" : post ? "Write them again" : "Write the post"}
+        </button>
+        {msg ? <span className="small muted">{msg}</span> : null}
+      </div>
+      {open ? (
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <input type="text" value={instruction} placeholder="anything to tell Claude for the next write (optional)" onChange={(e) => setInstruction(e.target.value)} style={{ flex: 1 }} />
+          </div>
+          <label className="small muted">
+            Title (Shorts) · <span className={(post?.title ?? "").length > 100 ? "warn" : ""}>{(post?.title ?? "").length}/100</span>
+            <input type="text" value={post?.title ?? ""} placeholder={short.title} onChange={(e) => change({ title: e.target.value })} style={{ width: "100%" }} />
+          </label>
+          <label className="small muted">
+            Description (every platform) · <span className={(post?.description ?? "").length > 280 ? "warn" : ""}>{(post?.description ?? "").length}/280 for X</span>
+            <textarea rows={3} value={post?.description ?? ""} placeholder={short.hook ?? ""} onChange={(e) => change({ description: e.target.value })} style={{ width: "100%" }} />
+          </label>
+          <label className="small muted">
+            Tags (YouTube Studio) · <span className={tagsLength > 500 ? "warn" : ""}>{tagsLength}/500</span>
+            <textarea rows={2} value={post?.tags ?? ""} placeholder="game development, indie game dev, devlog" onChange={(e) => change({ tags: e.target.value })} style={{ width: "100%" }} />
+          </label>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const ShortsStage: React.FC<{
+  api: GameApi;
+  id: string;
+  s: Script;
+  claude: boolean;
+  finding: ShortsState | null;
+  busy: Busy;
+  covers: Map<string, Cover[]>;
+  onFind: (more: boolean) => void;
+  onShorts: (shorts: Cut[]) => void;
+  onOrganise: () => void;
+  onError: (m: string) => void;
+  onTakes: (takes: ScriptTake[]) => void;
+  onReplace: (s: Script) => void;
+  onDraft: (all: boolean) => void;
+  rendering: Record<string, ShortRender>;
+  onRender: (shorts: string[]) => void;
+  /** A short's title, description and tags written by Claude (desk-shorts.md § 5). */
+  onPost: (short: string, instruction: string) => void;
+  go: (route: { name: "edit"; id: string } | { name: "renders" }) => void;
+}> = ({ api, id, s, claude, finding, busy, covers, onFind, onShorts, onOrganise, onError, onTakes, onReplace, onDraft, rendering, onRender, onPost, go }) => {
+  const keptShorts = s.shorts.filter((c) => c.state === "kept");
+  const undrafted = keptShorts.some((c) => !c.hookDrafts?.length);
+  // Render ticked (desk-shorts.md § 4): every kept short is ticked unless Tom unticks it.
+  const [unticked, setUnticked] = useState<Set<string>>(new Set());
+  const onWay = (c: Cut) => rendering[c.id] && rendering[c.id]!.state !== "done" && rendering[c.id]!.state !== "failed";
+  const ticked = keptShorts.filter((c) => !unticked.has(c.id) && !onWay(c));
+  const going = keptShorts.filter(onWay).length;
+  const hooks = useMemo(() => hookBeats(s), [s.shorts]);
+  const [hookText, setHookText] = useState<Record<string, string>>({});
+  const [showBinned, setShowBinned] = useState(false);
+  const [showMisses, setShowMisses] = useState(false);
+  const running = finding?.state === "running";
+  const offered = s.shorts.filter((c) => c.state);
+  const binned = offered.filter((c) => c.state === "binned");
+  const misses = offered.filter((c) => c.state === "suggested" && c.problem);
+  const shown = offered.filter((c) => (c.state !== "binned" || showBinned) && !(c.state === "suggested" && c.problem && !showMisses));
+  const set = (c: Cut, f: (c: Cut) => Cut) => onShorts(s.shorts.map((x) => (x.id === c.id ? f(x) : x)));
+  const longBeats = s.long?.beats ?? [];
+  if (!longEdits(s).length)
+    return (
+      <div className="panel stack" style={{ gap: 8 }}>
+        <div className="small">The shorts are cut out of the long video as you recorded it, so it needs organising first.</div>
+        <div>
+          <button className="ghost small" onClick={onOrganise}>
+            ‹ Organise
+          </button>
+        </div>
+      </div>
+    );
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <div className="panel row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <button
+          disabled={!claude || running || Boolean(busy)}
+          title={`Claude finds the runs of beats (${SHORT_MIN}–${SHORT_MAX}s, one jump at most) that could stand alone, then a second, stricter pass judges each as a stranger scrolling. Only the ones that pass show; the rest fold away as near misses. Ones you haven't decided on are offered afresh; kept and binned ones stay, and they're the standard the next find is held to.`}
+          onClick={() => onFind(false)}
+        >
+          {running ? "finding the shorts…" : offered.length ? "Find the shorts again" : "Find the shorts"}
+        </button>
+        {offered.length ? (
+          <button className="ghost" disabled={!claude || running || Boolean(busy)} title="Shorts not offered before; everything already here stays." onClick={() => onFind(true)}>
+            Find more
+          </button>
+        ) : null}
+        <span className="small muted" style={{ flex: 1 }}>
+          {offered.length
+            ? `${offered.filter((c) => c.state === "kept").length} kept · ${offered.filter((c) => c.state === "suggested" && !c.problem).length} to decide · ${misses.length} near miss${misses.length === 1 ? "" : "es"} · ${binned.length} binned`
+            : "Each short is a run of beats said exactly as you recorded them. Keep the ones you'd post; the hooks come next."}
+        </span>
+        {misses.length ? (
+          <button className="link small" onClick={() => setShowMisses((x) => !x)}>
+            {showMisses ? "hide near misses" : `show near misses (${misses.length})`}
+          </button>
+        ) : null}
+        {binned.length ? (
+          <button className="link small" onClick={() => setShowBinned((x) => !x)}>
+            {showBinned ? "hide binned" : `show binned (${binned.length})`}
+          </button>
+        ) : null}
+        {keptShorts.length ? (
+          <button
+            className="ghost"
+            disabled={!claude || running || Boolean(busy)}
+            title="Three a kept short, in your voice: your own lines first (lifted from the script and labelled with their beat), new words only when nothing fits, checked by a second pass for anything you'd never say or a stranger wouldn't get. Hooks you've chosen before are the standard."
+            onClick={() => onDraft(!undrafted)}
+          >
+            {busy === "hooks" ? "drafting the hooks…" : undrafted ? "Draft the hooks" : "Draft the hooks again"}
+          </button>
+        ) : null}
+        {keptShorts.length ? (
+          <button
+            disabled={running || Boolean(busy) || (!ticked.length && !going)}
+            title="Each ticked short organised into its own edit (the long video's pictures under it, the hook in front), scored with a loop of the same piece, and rendered vertical, two at a time. One video serves TikTok, Shorts, Reels and X; they land under Renders."
+            onClick={() => onRender(ticked.map((c) => c.id))}
+          >
+            {going ? `rendering ${going}${ticked.length ? ` · render ${ticked.length} more` : ""}` : `Render ticked (${ticked.length})`}
+          </button>
+        ) : null}
+        {!claude ? <span className="small warn">needs ANTHROPIC_API_KEY and a script voice</span> : null}
+      </div>
+      {shown.map((c) => {
+        const ns = shortBeats(s, c);
+        const secs = shortSeconds(s, c);
+        const n = s.long?.beats.length ?? 0;
+        const kept = c.state === "kept";
+        const nudge = (end: "start" | "end", by: 1 | -1) => set(c, (x) => nudgeShort(s, x, end, by));
+        return (
+          <div key={c.id} className="panel stack" style={{ gap: 8, opacity: c.state === "binned" ? 0.55 : 1, borderColor: kept ? "var(--ok, #7c6)" : undefined }}>
+            <div className="row" style={{ gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+              {kept ? (
+                <input type="checkbox" checked={!unticked.has(c.id)} disabled={Boolean(onWay(c))} title="Ticked = Render ticked renders it" onChange={(e) => setUnticked((u) => { const n = new Set(u); e.target.checked ? n.delete(c.id) : n.add(c.id); return n; })} style={{ alignSelf: "center" }} />
+              ) : null}
+              <strong style={{ flex: 1, minWidth: 0 }}>{c.title || "untitled"}</strong>
+              <ShortPlayer api={api} id={id} short={c.id} onError={onError} />
+              {c.score ? (
+                <span className="small muted" title="The judge's score out of 10: how sure it is a stranger watches to the end and taps the profile.">
+                  {c.score}/10
+                </span>
+              ) : null}
+              <span className={`small ${secs < SHORT_MIN || secs > SHORT_MAX ? "warn" : "muted"}`} title="As recorded: the kept parts of the takes that read these beats.">
+                {ns.length ? `beats ${shortLabel(ns)}` : "no beats"} · {clock(secs)}
+              </span>
+              <span className="small muted">{c.state === "kept" ? "kept" : c.state === "binned" ? "binned" : c.problem ? "near miss" : "suggested"}</span>
+            </div>
+            {c.why ? <div className="small">{c.why}</div> : null}
+            {c.join ? <div className="small muted">The join: {c.join}</div> : null}
+            {c.problem ? <div className="small warn">What's wrong: {c.problem}</div> : null}
+            {c.check ? <div className="small warn">The hook has to say: {c.check}</div> : null}
+            {kept ? <ShortRenderRow api={api} r={rendering[c.id]} edit={s.sequences?.find((x) => x.short === c.id)} go={go} /> : null}
+            {kept
+              ? (() => {
+                  // The hook (desk-shorts.md § 2) sits where it's said: in front of the beats.
+                  const own = c.beats.find((b) => !b.from);
+                  const text = hookText[c.id] ?? c.hook ?? "";
+                  const commit = (t: string) => {
+                    setHookText((m) => ({ ...m, [c.id]: t }));
+                    if (t.trim() !== (c.hook ?? "").trim() || (t.trim() && !own)) set(c, (x) => withHook(x, t));
+                  };
+                  const read = own ? [...covers.values()].flat().some((cv) => cv.beat === own.id) : false;
+                  return (
+                    <div className="stack" style={{ gap: 6 }}>
+                      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                        <span className="small muted" style={{ flex: "0 0 2.2em", textAlign: "right" }}>
+                          hook
+                        </span>
+                        <input type="text" value={text} placeholder={c.hookDrafts?.length ? "pick a draft below, or write the hook as you'd say it" : "the hook, as you'd say it (or Draft the hooks above)"} onChange={(e) => setHookText((m) => ({ ...m, [c.id]: e.target.value }))} onBlur={(e) => commit(e.target.value)} onKeyDown={(e) => e.key === "Enter" && commit((e.target as HTMLInputElement).value)} style={{ flex: 1 }} />
+                        <span className="small muted" style={{ flex: "0 0 auto" }} title="Said first, a few seconds, on screen while you say it. Read it in the prompter at the bottom.">
+                          {own ? (read ? (own.changed ? "read (words changed since)" : "read ✓") : "to read") : "no hook"}
+                        </span>
+                      </div>
+                      {c.hookDrafts?.length ? (
+                        <div className="row" style={{ gap: 6, flexWrap: "wrap", paddingLeft: "2.7em" }}>
+                          {c.hookDrafts.map((d, k) => (
+                            <button key={k} className={`ghost small${d.text === c.hook ? " on" : ""}`} title={d.source} onClick={() => commit(d.text)}>
+                              {d.text} <span className="muted">· {d.source}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()
+              : null}
+            <div className="stack" style={{ gap: 4 }}>
+              {c.beats.filter((b) => b.from).map((b, i, bs) => {
+                const k = longBeats.findIndex((x) => x.id === b.from);
+                const prev = i ? bs[i - 1] : undefined;
+                const prevK = prev?.from ? longBeats.findIndex((x) => x.id === prev.from) : -1;
+                const jump = k >= 0 && prevK >= 0 && k !== prevK + 1;
+                return (
+                  <Fragment key={b.id}>
+                    {jump ? <div className="small muted" style={{ paddingLeft: "2.7em" }}>⤵ jump</div> : null}
+                    <div className="small" style={{ display: "flex", gap: 8 }}>
+                      <span className="muted" style={{ flex: "0 0 2.2em", textAlign: "right" }}>
+                        {k >= 0 ? k + 1 : "·"}
+                      </span>
+                      <span style={{ minWidth: 0 }}>{beatText(s, b)}</span>
+                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+            {kept ? <ShortPostBox short={c} claude={claude} busy={busy === `post:${c.id}`} onChange={(post) => set(c, (x) => ({ ...x, post }))} onWrite={(instruction) => onPost(c.id, instruction)} /> : null}
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              {c.state !== "binned" ? (
+                <>
+                  <button className={kept ? "ghost small" : "small"} disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: kept ? "suggested" : "kept" }))}>
+                    {kept ? "Unkeep" : c.problem ? "Keep anyway" : "Keep"}
+                  </button>
+                  <button className="ghost small danger" disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: "binned" }))}>
+                    Bin
+                  </button>
+                </>
+              ) : (
+                <button className="ghost small" disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: "suggested" }))}>
+                  Back from the bin
+                </button>
+              )}
+              <span style={{ flex: 1 }} />
+              {ns.length && c.state !== "binned" ? (
+                <span className="row small muted" style={{ gap: 4 }} title="Widen or narrow it by one beat at either end: the beats stay word for word with the long video, so your takes still read them.">
+                  start
+                  <button className="ghost small" disabled={ns[0]! <= 1 || ns.includes(ns[0]! - 1)} onClick={() => nudge("start", 1)}>
+                    ◂+
+                  </button>
+                  <button className="ghost small" disabled={ns.length < 2} onClick={() => nudge("start", -1)}>
+                    −▸
+                  </button>
+                  <span style={{ width: 8 }} />
+                  end
+                  <button className="ghost small" disabled={ns.length < 2} onClick={() => nudge("end", -1)}>
+                    ◂−
+                  </button>
+                  <button className="ghost small" disabled={ns[ns.length - 1]! >= n || ns.includes(ns[ns.length - 1]! + 1)} onClick={() => nudge("end", 1)}>
+                    +▸
+                  </button>
+                </span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+      {offered.length && !shown.length ? <div className="small muted">Nothing to show. Find more, or show the near misses or the binned ones.</div> : null}
+
+      {/* ── read the hooks (desk-shorts.md § 2): each kept short's hook is one beat; the matcher hears which take reads which ── */}
+      {hooks.length ? (
+        <div className="panel stack" style={{ gap: 6 }}>
+          <strong>Read the hooks</strong>
+          <div className="small muted">One take can read them all, one after another, like the script. Each then plays in front of its short.</div>
+          <Prompter api={api} s={s} id={id} covers={covers} only={hooks} onTakes={onTakes} onReplace={onReplace} onError={onError} />
+        </div>
+      ) : null}
+    </div>
+  );
+};

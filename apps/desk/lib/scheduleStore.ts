@@ -10,7 +10,9 @@ import { readSidecar } from "./footage";
 import { readSequence } from "./sequences";
 import { rendersDir } from "./render";
 import { type Batch, listBatches } from "./renders";
-import { DEFAULT_SETTINGS, type Post, type Schedule, type Settings, isDone, placeOne, today } from "./schedule";
+import { DEFAULT_SETTINGS, type Post, type PostSource, type Schedule, type Settings, isDone, placeOne, today } from "./schedule";
+import { sequenceWords } from "./scripts";
+import { listScripts, readScript } from "./scriptsStore";
 
 const path = (g: GameConfig) => join(rendersDir(g), "schedule.json");
 
@@ -56,12 +58,49 @@ const draftInput = (g: GameConfig, b: Batch): DraftInput => {
   return { template: b.template, hook, note: side?.note ?? (edit ? readSequence(g, edit)?.note : undefined) ?? "" };
 };
 
+// ── renders of a script's edits (desk-shorts.md § 5) ──
+
+/** The sequence a clip prop names (`sequences/<id>.json`), else nothing. */
+const sequenceOf = (clip: string): string | undefined => /^sequences\/(.+)\.json$/.exec(clip)?.[1];
+
+type ScriptWords = Pick<Post, "title" | "description" | "tags"> & { source: PostSource };
 /**
- * The words for a batch: the game's template draft, then — with a key and a
- * voice — Claude's, which wins unless the call fails.
+ * A render of one of a script's edits: the words the Scripts tab has for it
+ * now (a short's post copy, or the long video's title, description with
+ * chapters, and tags), read afresh every time so the Queue never lags the
+ * script. `scripts` lets one read serve the whole queue.
  */
-const wordsFor = async (g: GameConfig, b: Batch): Promise<Pick<Post, "title" | "description" | "titleOptions" | "draftedBy">> => {
+const scriptWords = (g: GameConfig, clip: string, scripts = listScripts(g)): ScriptWords | undefined => {
+  const seqId = sequenceOf(clip);
+  if (!seqId) return undefined;
+  for (const sum of scripts) {
+    const s = readScript(g, sum.id);
+    if (!s?.sequences?.some((x) => x.id === seqId)) continue;
+    const w = sequenceWords(s, seqId);
+    if (!w) return undefined;
+    return { title: w.title, description: w.description, tags: w.tags, source: { script: s.id, scriptTitle: s.title, cut: w.cut, ...(w.short ? { short: w.short } : {}), written: w.written } };
+  }
+  return undefined;
+};
+
+/** The schedule as the page sees it: script posts carry the script's words of this moment. Nothing here is written back. */
+export const presentSchedule = <S extends Schedule>(g: GameConfig, s: S): S => {
+  const scripts = listScripts(g);
+  return { ...s, posts: s.posts.map((p) => {
+    const w = scriptWords(g, p.clip, scripts);
+    return w ? { ...p, ...w, titleOptions: undefined, draftedBy: "script" as const } : p;
+  }) };
+};
+
+/**
+ * The words for a batch: a script's own for a render of one of its edits;
+ * else the game's template draft, then — with a key and a voice — Claude's,
+ * which wins unless the call fails.
+ */
+const wordsFor = async (g: GameConfig, b: Batch): Promise<Pick<Post, "title" | "description" | "tags" | "titleOptions" | "draftedBy">> => {
   const r = b.renders.find((x) => x.format === "vertical") ?? b.renders[0]!;
+  const script = scriptWords(g, clipOf(b));
+  if (script) return { title: script.title, description: script.description, tags: script.tags, draftedBy: "script" };
   const fallback = g.post ? g.post.draft(b.template, r.props) : { title: b.name, description: hookOf(b) };
   if (!g.post?.ai || !hasClaude()) return { ...fallback, draftedBy: "template" };
   try {
@@ -112,6 +151,7 @@ export const redraftPost = async (g: GameConfig, id: string): Promise<Schedule> 
   if (!p) throw new Error(`no post ${id}`);
   const b = listBatches(g).find((x) => x.id === p.batch);
   if (!b) throw new Error("its render is gone");
+  if (scriptWords(g, p.clip)) throw new Error("its words come from the script: change them on the Scripts tab");
   if (!g.post?.ai || !hasClaude()) throw new Error("no ANTHROPIC_API_KEY in apps/desk/.env");
   const ai = await draftWithClaude(g.post.ai, draftInput(g, b));
   Object.assign(p, ai, { draftedBy: "claude" });

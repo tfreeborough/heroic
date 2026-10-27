@@ -9,7 +9,7 @@
  * sounding when the start comes round.
  */
 import { mulberry } from "@heroic/ascii-build";
-import type { Inst, Note, Score } from "./compose";
+import type { Inst, Note, Score, Vowel } from "./compose";
 
 export const SR = 48000;
 const TAU = Math.PI * 2;
@@ -20,13 +20,13 @@ export type Stereo = { l: Float32Array; r: Float32Array };
 /** Extra seconds each instrument rings on after its note. */
 const RING: Record<Inst, number> = {
   epiano: 1.8, piano: 2.2, musicbox: 2.5, celesta: 2, kalimba: 1.6, marimba: 1, vibes: 2.5, ocarina: 0.15, flute: 0.15, harp: 2.2, guitar: 1.5, pizz: 0.6, pulse: 0.05,
-  pad: 1.6, choir: 1.4, strings: 1.4, bass: 0.35, sub: 0.4, tri: 0.05,
+  pad: 1.6, choir: 1.4, strings: 1.4, chant: 1.1, bass: 0.35, sub: 0.4, tri: 0.05,
   kick: 0.2, snare: 0.1, hat: 0, shaker: 0, rim: 0, chipkick: 0, chipsnare: 0, chiphat: 0,
 };
 /** Rough loudness balance between instruments (set by measuring stems: `--stems`). */
 const GAIN: Record<Inst, number> = {
   epiano: 1, piano: 1, musicbox: 1.6, celesta: 1.6, kalimba: 1.4, marimba: 1.2, vibes: 1.3, ocarina: 1.2, flute: 1.2, harp: 1, guitar: 3, pizz: 1.2, pulse: 1,
-  pad: 1, choir: 1, strings: 1, bass: 1, sub: 0.6, tri: 0.5,
+  pad: 1, choir: 1, strings: 1, chant: 0.8, bass: 1, sub: 0.6, tri: 0.5,
   kick: 1.4, snare: 4, hat: 5.5, shaker: 7, rim: 1, chipkick: 2.5, chipsnare: 4, chiphat: 5.5,
 };
 
@@ -90,6 +90,101 @@ const lowpass = (hz: number, c: number) => 1 / Math.sqrt(1 + (hz / c) ** 4);
 /** An "oh" vowel: the choir. */
 const vowel = (hz: number, c: number) =>
   (0.02 + 1 / (1 + ((hz - 500) / 100) ** 2) + 0.6 / (1 + ((hz - 850) / 120) ** 2) + 0.15 / (1 + ((hz - 2400) / 200) ** 2)) * lowpass(hz, c * 1.6);
+
+/** Male vowels, four formants each as [hz, amplitude, bandwidth]; the fourth is the singer's ring. `m` is the lips closed (a hum). */
+const FORMANTS: Record<Vowel | "m", number[][]> = {
+  a: [[650, 1, 80], [1080, 0.5, 90], [2650, 0.25, 120], [3200, 0.12, 150]],
+  e: [[400, 1, 70], [1700, 0.4, 90], [2600, 0.25, 120], [3200, 0.12, 150]],
+  i: [[290, 1, 60], [1870, 0.3, 90], [2800, 0.3, 120], [3300, 0.15, 150]],
+  o: [[400, 1, 70], [800, 0.5, 80], [2600, 0.15, 120], [3100, 0.08, 150]],
+  u: [[350, 1, 60], [600, 0.4, 80], [2700, 0.1, 120], [3100, 0.06, 150]],
+  m: [[250, 1, 60], [1000, 0.04, 100], [2000, 0.02, 150], [3000, 0.01, 200]],
+};
+const VOWEL_CYCLE: Vowel[] = ["o", "a", "e", "u", "i"];
+
+/**
+ * A small schola of men on one syllable: five singers a hair apart in
+ * pitch, each scooping up into the note and finding a slow vibrato late.
+ * A short note is a syllable (a closed-lips hum opening into the vowel);
+ * a long one swells in on the vowel. The harmonics are weighted by the
+ * vowel's formants and normalised, so every vowel at every pitch sits at
+ * one loudness.
+ */
+const chant = (out: Float32Array, n: Note, f: number, rand: () => number) => {
+  const V = FORMANTS[n.vowel ?? VOWEL_CYCLE[Math.floor(n.t * 7) % VOWEL_CYCLE.length]!];
+  const M = FORMANTS.m;
+  const syllable = n.sung ? n.sung === "syllable" : n.dur < 2.5;
+  const open = syllable ? 0.07 + 0.05 * rand() : 0;
+  const singers = 5;
+  const det: number[] = [];
+  const scoop: number[] = [];
+  const vibRate: number[] = [];
+  const vibPh: number[] = [];
+  const wanPh: number[] = [];
+  const ph: number[] = [];
+  for (let v = 0; v < singers; v++) {
+    det.push((rand() - 0.5) * 0.008);
+    scoop.push(0.012 + 0.02 * rand());
+    vibRate.push(4.3 + 1.2 * rand());
+    vibPh.push(rand() * TAU);
+    wanPh.push(rand() * TAU);
+    ph.push(rand() * TAU);
+  }
+  const swellPh = rand() * TAU;
+  const maxH = Math.max(1, Math.floor(5000 / f));
+  const amps = new Float32Array(maxH + 1);
+  let top = maxH;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / SR;
+    if (i % 256 === 0) {
+      // Lips opening: the hum's formants glide into the vowel's.
+      const k0 = syllable ? Math.max(0, Math.min(1, (t - open) / 0.1)) : 1;
+      const k = k0 * k0 * (3 - 2 * k0);
+      let sum = 0;
+      top = 1;
+      for (let h = 1; h <= maxH; h++) {
+        const hz = f * h;
+        let a = 0;
+        for (let q = 0; q < 4; q++) {
+          const F = M[q]![0]! + (V[q]![0]! - M[q]![0]!) * k;
+          const A = M[q]![1]! + (V[q]![1]! - M[q]![1]!) * k;
+          const W = M[q]![2]! + (V[q]![2]! - M[q]![2]!) * k;
+          a += A / (1 + ((hz - F) / W) ** 2);
+        }
+        a = (a + 0.015) * lowpass(hz, 4200) / h ** 0.7;
+        amps[h] = a;
+        sum += a * a;
+        if (a > 0.004) top = h;
+      }
+      const norm = 1 / Math.sqrt(sum || 1);
+      for (let h = 1; h <= maxH; h++) amps[h] = amps[h]! * norm;
+    }
+    let s = 0;
+    for (let d = 0; d < singers; d++) {
+      const vib = 0.0028 * Math.min(1, Math.max(0, (t - 0.35) / 0.5)) * Math.sin(TAU * vibRate[d]! * t + vibPh[d]!);
+      const wander = 0.0012 * Math.sin(TAU * 0.27 * t + wanPh[d]!);
+      const pitch = 1 + det[d]! - scoop[d]! * Math.exp(-t / 0.09) + vib + wander;
+      ph[d] = ph[d]! + (TAU * f * pitch) / SR;
+      const x = ph[d]!;
+      const s1 = Math.sin(x);
+      const c2 = 2 * Math.cos(x);
+      let a = 0;
+      let b = s1;
+      s += amps[1]! * s1;
+      for (let h = 2; h <= top; h++) {
+        const nx = c2 * b - a;
+        a = b;
+        b = nx;
+        s += amps[h]! * nx;
+      }
+    }
+    const lips = syllable ? (t < open ? 0.5 : 0.5 + 0.5 * Math.min(1, (t - open) / 0.08)) : 1;
+    const attack = Math.min(1, t / (syllable ? 0.03 : 0.55));
+    const rel = t < n.dur ? 1 : Math.exp(-(t - n.dur) * 5);
+    const breathe = 1 + 0.05 * Math.sin(TAU * 0.35 * t + swellPh);
+    out[i] = (s / singers) * lips * attack * rel * breathe * n.vel * 0.9;
+  }
+};
 
 /** One note as a mono buffer. */
 const voice = (n: Note, cutoff: (t: number) => number, rand: () => number): Float32Array => {
@@ -257,6 +352,9 @@ const voice = (n: Note, cutoff: (t: number) => number, rand: () => number): Floa
       break;
     case "choir":
       sustained(out, n, f, cutoff, rand, { attack: 0.6, rel: 2, vib: 0.003, maxHz: 4500, shape: vowel, gain: 0.3 });
+      break;
+    case "chant":
+      chant(out, n, f, rand);
       break;
     case "kick": {
       let ph = 0;

@@ -122,6 +122,8 @@ export type Beat = {
   pulled?: string[];
   /** A chapter starts at this beat: its name. */
   chapter?: string;
+  /** How long its kept recording runs, in seconds, as the last Find shorts measured it (unset = not recorded then). */
+  seconds?: number;
 };
 
 /** One video's worth: the long cut, or a short. */
@@ -133,8 +135,25 @@ export type Cut = {
   hook?: string;
   /** Claude's one line on why this works as a video. */
   why?: string;
+  /** A short (docs/design/desk-shorts.md): what its hook has to say for the first beat to land (the opener it replaces), if anything. */
+  check?: string;
+  /** A short Claude offered as a near miss: what's wrong with it. */
+  problem?: string;
+  /** A short made of two runs of the long cut: why the join reads as if it were written that way. */
+  join?: string;
+  /** The judge's score, 1–10: how sure it is a stranger watches to the end and taps the profile. */
+  score?: number;
+  /** A short: the hook lines Claude offered (desk-shorts.md § 2), each with where it came from ("your line, beat 12" or "new words"). */
+  hookDrafts?: { text: string; source: string }[];
+  /** A short: suggested (Claude's, not yet Tom's call), kept, or binned (hidden, but Find more knows not to offer it again). */
+  state?: "suggested" | "kept" | "binned";
+  /** A short (docs/design/desk-shorts.md § 5): its words for the platforms, written by Claude when it's rendered, Tom's to change. The Queue reads them from here. */
+  post?: ShortPost;
   beats: Beat[];
 };
+
+/** A short's post copy: the title (Shorts), one description for every platform (fits X's 280), and the tags for YouTube Studio's box. */
+export type ShortPost = { title: string; description: string; tags: string };
 
 /** A source the cuts were made from, kept: every rewrite or adjust snapshots the text it ran on. */
 export type SourceVersion = { at: string; text: string };
@@ -194,7 +213,19 @@ export type Script = {
   /** How many times organise has run (each run names its sequences by it). */
   runs?: number;
   /** The sequences organise wrote, newest last: the cut each is, which run, when. */
-  sequences?: { id: string; cut: string; run: number; at: string; missing: number; conflicts: number; youtube?: string }[];
+  sequences?: {
+    id: string;
+    cut: string;
+    run: number;
+    at: string;
+    missing: number;
+    conflicts: number;
+    youtube?: string;
+    /** A short's edit (desk-shorts.md § 3): the short it was organised from. Unset = the long video's. */
+    short?: string;
+    /** A short's render, once it's made: the library slug (its .mp4 and thumbnail under the renders dir). */
+    render?: string;
+  }[];
   /** Facts from real sources, pinned after Tom's sentences (docs/design/desk-research.md). The accepted ones are woven into what the rewrite reads. */
   research?: ScriptResearch;
   /** The long video's thumbnail ideas (docs/design/desk-thumbnails.md). */
@@ -222,6 +253,12 @@ export type ScriptSummary = Pick<Script, "id" | "title" | "done" | "createdAt" |
 
 /** The story (one call) or the prompts (a batch of beats a call) running on the server; the page polls. Or how the last run failed. `done`/`total` are beats. */
 export type PlanState = { state: "running"; stage: "story" | "prompts"; done: number; total: number; startedAt: string } | { state: "failed"; stage: "story" | "prompts"; error: string; done: number; total: number };
+/** How a script's Find shorts run is going (docs/design/desk-shorts.md): nothing once it's landed; the failure until the next press. */
+export type ShortsState = { state: "running"; startedAt: string } | { state: "failed"; error: string };
+
+/** A short is a run of consecutive long beats this long, spoken (docs/design/desk-shorts.md): good ones are found, not trimmed to a length. */
+export const SHORT_MIN = 20;
+export const SHORT_MAX = 90;
 
 export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "writeup" | "theme" | "look" | "cast">> & { done?: boolean };
 
@@ -279,7 +316,7 @@ export const summarise = (s: Script): ScriptSummary => ({
   updatedAt: s.updatedAt,
   hasSource: Boolean(s.source.trim()),
   hasCuts: Boolean(s.long),
-  shorts: s.shorts.length,
+  shorts: s.shorts.filter((c) => c.state && c.state !== "binned").length,
   stale: isStale(s),
 });
 
@@ -421,6 +458,86 @@ export const cutText = (s: Pick<Script, "long">, c: Cut): string => c.beats.map(
 
 /** Spoken length, roughly: 2.6 words a second. */
 export const spokenSeconds = (text: string): number => Math.round(tokens(text).length / 2.6);
+
+/** A long beat's seconds as recorded (the last Find shorts measured it), else a guess from its words. */
+export const beatSeconds = (b: Pick<Beat, "text" | "seconds">): number => b.seconds ?? spokenSeconds(b.text);
+
+/** How long a short runs: its excerpt beats' recorded seconds (a hook beat of its own is guessed from its words). */
+export const shortSeconds = (s: Pick<Script, "long">, c: Pick<Cut, "beats">): number => {
+  const long = new Map((s.long?.beats ?? []).map((b) => [b.id, b] as const));
+  return Math.round(c.beats.reduce((n, b) => n + beatSeconds(b.from ? (long.get(b.from) ?? b) : b), 0));
+};
+
+/** The short's excerpt as long beat numbers (1-based) in the short's order; nothing when it has no excerpt beats. */
+export const shortBeats = (s: Pick<Script, "long">, c: Pick<Cut, "beats">): number[] => {
+  const ids = (s.long?.beats ?? []).map((b) => b.id);
+  return c.beats.flatMap((b) => (b.from ? [ids.indexOf(b.from) + 1] : [])).filter((n) => n > 0);
+};
+
+/** "5–7 + 12": the runs of long beats a short is made of. */
+export const shortLabel = (ns: number[]): string => {
+  const runs: number[][] = [];
+  for (const n of ns) {
+    const r = runs.at(-1);
+    if (r && n === r[r.length - 1]! + 1) r.push(n);
+    else runs.push([n]);
+  }
+  return runs.map((r) => (r.length > 1 ? `${r[0]}–${r[r.length - 1]}` : `${r[0]}`)).join(" + ");
+};
+
+/** A short made of these long beats (1-based numbers, in this order), word for word: each beat carries the long beat's id in `from`. */
+export const excerpt = (s: Pick<Script, "long">, ns: number[]): Beat[] => {
+  const long = s.long?.beats ?? [];
+  return ns.flatMap((n) => {
+    const b = long[n - 1];
+    return b ? [{ id: newId(), text: b.text, from: b.id }] : [];
+  });
+};
+
+/**
+ * The short's excerpt widened or narrowed by one long beat at either end
+ * (docs/design/desk-shorts.md, "nudge"): the long beat before its first
+ * (or after its last) comes in, or the first (or last) goes. Beats stay word
+ * for word with the long cut, so a kept take still reads them, and a beat
+ * that stays keeps its id. Nothing changes when the nudge would run off the
+ * long cut, repeat a beat, or leave none.
+ */
+export const nudgeShort = (s: Pick<Script, "long">, c: Cut, end: "start" | "end", by: 1 | -1): Cut => {
+  const ns = shortBeats(s, c);
+  const n = s.long?.beats.length ?? 0;
+  if (!ns.length || !n) return c;
+  let next: number[];
+  if (by === 1) {
+    const add = end === "start" ? ns[0]! - 1 : ns[ns.length - 1]! + 1;
+    if (add < 1 || add > n || ns.includes(add)) return c;
+    next = end === "start" ? [add, ...ns] : [...ns, add];
+  } else {
+    if (ns.length < 2) return c;
+    next = end === "start" ? ns.slice(1) : ns.slice(0, -1);
+  }
+  // The short's own beats (a hook) stay in front; a long beat still in the excerpt keeps its short beat (same id).
+  const own = c.beats.filter((b) => !b.from);
+  const had = new Map(c.beats.flatMap((b) => (b.from ? [[b.from, b] as const] : [])));
+  return { ...c, beats: [...own, ...excerpt(s, next).map((b) => had.get(b.from!) ?? b)] };
+};
+
+/** The kept shorts' hook beats (a short's own beats, in front of its excerpt), for the prompter's Hooks list. */
+export const hookBeats = (s: Pick<Script, "shorts">): { cut: Cut; beat: Beat }[] => s.shorts.filter((c) => c.state === "kept").flatMap((cut) => cut.beats.filter((b) => !b.from).map((beat) => ({ cut, beat })));
+
+/**
+ * The short with this hook: `hook` (the line on screen) and a hook beat of
+ * its own in front of the excerpt (what the prompter reads). A hook beat
+ * already there keeps its id with the new words (marked changed, so its
+ * take wants checking); an empty hook takes the beat away.
+ */
+export const withHook = (c: Cut, text: string): Cut => {
+  const hook = text.replace(/\s+/g, " ").trim();
+  const own = c.beats.find((b) => !b.from);
+  const rest = c.beats.filter((b) => b.from);
+  if (!hook) return { ...c, hook: undefined, beats: rest };
+  if (own?.text === hook) return { ...c, hook };
+  return { ...c, hook, beats: [own ? { ...own, text: hook, changed: true } : { id: newId(), text: hook }, ...rest] };
+};
 
 /** The beats that are planned, recorded and organised: the long cut's (shorts are parked, desk-ascii-scripts.md decision 1). */
 export const plannedBeats = (s: Pick<Script, "long" | "shorts">): { cut: Cut; beat: Beat }[] => (s.long ? s.long.beats.map((beat) => ({ cut: s.long!, beat })) : []);
@@ -604,3 +721,54 @@ export const articlePictures = (s: Pick<Script, "long">, body: string): ArticleP
   });
   return out.flatMap((p) => (p ? [p] : []));
 };
+
+/** The long video's edits only: a short's edit sits on its own card on the Shorts stage. */
+export const longEdits = (s: Pick<Script, "sequences">) => (s.sequences ?? []).filter((x) => !x.short);
+
+/**
+ * The words the Queue shows for a render of one of the script's edits
+ * (desk-shorts.md § 5): a short's post copy (its title and hook until
+ * Claude has written it), or the long video's title, YouTube description
+ * with the chapters under it, and tags. `written` = Claude's words are in.
+ */
+export type SequenceWords = { cut: "long" | "short"; short?: string; title: string; description: string; tags: string; written: boolean };
+export const sequenceWords = (s: Pick<Script, "long" | "shorts" | "sequences" | "youtube">, seqId: string): SequenceWords | undefined => {
+  const seq = (s.sequences ?? []).find((x) => x.id === seqId);
+  if (!seq) return undefined;
+  if (seq.short) {
+    const c = s.shorts.find((x) => x.id === seq.short);
+    if (!c) return undefined;
+    const p = c.post;
+    return { cut: "short", short: c.id, title: p?.title || c.title, description: p?.description || c.hook || "", tags: p?.tags ?? "", written: Boolean(p) };
+  }
+  const description = [s.youtube?.description.trim(), seq.youtube?.trim()].filter(Boolean).join("\n\n");
+  return { cut: "long", title: s.long?.title ?? "", description, tags: s.youtube?.tags ?? "", written: Boolean(s.youtube) };
+};
+
+/**
+ * A short as its render organises it (desk-shorts.md § 3): each excerpt beat
+ * carries its long beat's picture, mood, pulled words and story line (the
+ * words are the long beat's already), no chapters; the hook beat shows the
+ * first excerpt beat's picture (one build, bursting in under the hook) and
+ * sits under its mood. Ids and `from` stay, so the takes still read it.
+ */
+export const renderableShort = (s: Pick<Script, "long">, c: Cut): Cut => {
+  const long = new Map((s.long?.beats ?? []).map((b) => [b.id, b]));
+  const first = c.beats.find((b) => b.from);
+  const of = (b: Beat): Beat | undefined => (b.from ? long.get(b.from) : undefined);
+  const lead = first ? of(first) : undefined;
+  return {
+    ...c,
+    beats: c.beats.map((b): Beat => {
+      const { chapter: _c, ...rest } = b;
+      const src = of(b) ?? (b.from ? undefined : lead);
+      if (!src) return rest;
+      const { id: _id, text: _t, from: _f, changed: _ch, chapter: _chap, card: _card, ...carry } = src;
+      // The hook beat borrows the picture and mood, not the words to pull (they're the first beat's to say).
+      return b.from ? { ...carry, ...rest } : { ...carry, pulled: undefined, ...rest };
+    }),
+  };
+};
+
+/** Where a short's render stands (this Desk run), by short id: the score being written, then the render job's own states. */
+export type ShortRender = { state: "scoring" | "queued" | "bundling" | "rendering" | "done" | "failed"; progress: number; error?: string; seq?: string; slug?: string };

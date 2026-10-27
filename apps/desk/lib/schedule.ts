@@ -9,12 +9,15 @@
  * imports it too. The file store is scheduleStore.ts.
  */
 
-export type Platform = "tiktok" | "shorts" | "reels";
-/** Where a vertical goes, and which of them take a title as well as a description. */
-export const PLATFORMS: { id: Platform; label: string; title: boolean }[] = [
+export type Platform = "tiktok" | "shorts" | "reels" | "x";
+/** Where a vertical goes, and which of them take a title as well as a description. `since`: the day the platform
+ * joined the queue; a post that was already up everywhere else before that day doesn't need its tick to count as
+ * done (X joined 2026-10-26). Anything ticked from that day on needs every platform. */
+export const PLATFORMS: { id: Platform; label: string; title: boolean; since?: string }[] = [
   { id: "tiktok", label: "TikTok", title: false },
   { id: "shorts", label: "Shorts", title: true },
   { id: "reels", label: "Reels", title: false },
+  { id: "x", label: "X", title: false, since: "2026-10-26" },
 ];
 
 export type Post = {
@@ -35,15 +38,22 @@ export type Post = {
   /** The words for the platforms: the title where one exists (Shorts), the description everywhere. */
   title: string;
   description: string;
+  /** The tags for YouTube Studio's box (a comma list), where the video has any. */
+  tags?: string;
   /** Other titles Claude offered, to pick from in the Queue. */
   titleOptions?: string[];
-  draftedBy?: "template" | "claude";
+  draftedBy?: "template" | "claude" | "script";
+  /** A render of a script's edit (desk-shorts.md § 5): where its words come from. Not stored: the server works it out on every read, so the Queue always shows what the Scripts tab has now. */
+  source?: PostSource;
   /** ISO timestamp per platform once it's up. */
   posted: Partial<Record<Platform, string>>;
   /** Marked done by hand (not every platform gets every video). */
   doneAt?: string;
   createdAt: string;
 };
+
+/** The script an edit's render came from, and which of its cuts. `written` = Claude's words are in (a short's post copy; the long video's description and tags). */
+export type PostSource = { script: string; scriptTitle: string; cut: "long" | "short"; short?: string; written: boolean };
 
 export type Settings = {
   slotsPerDay: number;
@@ -73,7 +83,12 @@ export const dayDiff = (a: string, b: string): number => {
   return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
 };
 
-export const isDone = (p: Post): boolean => Boolean(p.doneAt) || PLATFORMS.every((pl) => Boolean(p.posted[pl.id]));
+export const isDone = (p: Post): boolean => {
+  if (p.doneAt) return true;
+  const older = PLATFORMS.filter((pl) => !pl.since);
+  const finishedBefore = (day: string) => older.every((pl) => Boolean(p.posted[pl.id]) && p.posted[pl.id]!.slice(0, 10) < day);
+  return PLATFORMS.filter((pl) => !pl.since || !finishedBefore(pl.since)).every((pl) => Boolean(p.posted[pl.id]));
+};
 
 // ── placing ──
 /**

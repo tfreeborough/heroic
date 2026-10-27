@@ -11,8 +11,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COLD_OPEN, END_CARD } from "@heroic/ascii-build";
-import type { JourneyPlan, Mood } from "@heroic/music";
+import { COLD_OPEN, END_CARD, LOOP_TAIL } from "@heroic/ascii-build";
+import { JOURNEY_VERSION, type JourneyPlan, type Mood } from "@heroic/music";
 import { type Sequence, audioPieces, placedWords, sequenceSeconds } from "@heroic/voiceover";
 import type { GameConfig } from "../game";
 import { exec } from "./exec";
@@ -39,8 +39,9 @@ const fnv = (s: string) => {
  * The plan for an edit, in VIDEO seconds (the Beats template's: the title's
  * cold open first, the end card after). A beat with no mood plays as focus.
  */
-export const planFor = (seq: Sequence, s: Pick<Script, "long">): JourneyPlan => {
-  const open = COLD_OPEN;
+export const planFor = (seq: Sequence, s: Pick<Script, "long">, opts: { loop?: boolean } = {}): JourneyPlan => {
+  // A short (desk-shorts.md § 3): no title, no end card, and the piece loops back into its own start.
+  const open = opts.loop ? 0 : COLD_OPEN;
   const body = sequenceSeconds(seq);
   const beats = new Map((s.long?.beats ?? []).map((b) => [b.id, b]));
   const cards = [...(seq.overlay?.cards ?? [])].sort((a, b) => a.at - b.at);
@@ -62,6 +63,7 @@ export const planFor = (seq: Sequence, s: Pick<Script, "long">): JourneyPlan => 
   const accents = cards.flatMap((c) =>
     c.kind === "build" ? (c.pulled ?? []).flatMap((p) => words.find((w) => w.start >= c.at && w.start < c.at + c.seconds && bare(w.text) === bare(p))?.start ?? []).map((t) => open + t) : [],
   );
+  if (opts.loop) return { seconds: Math.round((body + LOOP_TAIL) * 1000) / 1000, bodyStart: 0, sections: runs.map((r) => r.sec), breaks, accents, loop: true };
   return {
     seconds: Math.round((open + body + END_CARD) * 1000) / 1000,
     bodyStart: open,
@@ -72,8 +74,8 @@ export const planFor = (seq: Sequence, s: Pick<Script, "long">): JourneyPlan => 
   };
 };
 
-/** The file a plan and seed make, under the game's music folder. */
-export const scoreFile = (seqId: string, seed: number, plan: JourneyPlan) => `${DIR}/score-${seqId.replace(/[^a-zA-Z0-9_-]/g, "")}-s${seed}-${fnv(JSON.stringify(plan))}.wav`;
+/** The file a plan and seed make, under the game's music folder (and the composer's version: a newer composer makes the piece again). */
+export const scoreFile = (seqId: string, seed: number, plan: JourneyPlan) => `${DIR}/score-${seqId.replace(/[^a-zA-Z0-9_-]/g, "")}-s${seed}-${fnv(JSON.stringify({ plan, v: JOURNEY_VERSION }))}.wav`;
 
 const trim = (g: GameConfig) => {
   const dir = join(publicDir(g), "music", DIR);
@@ -137,10 +139,10 @@ export const scoreState = (g: GameConfig, seqId: string): ScoreState | undefined
  * promise is for whoever wants to wait), then set as the edit's music bed
  * unless Tom has put a song of his own on it.
  */
-export const makeScore = (g: GameConfig, s: Pick<Script, "long">, seqId: string, seed: number): Promise<ScoreState> => {
+export const makeScore = (g: GameConfig, s: Pick<Script, "long">, seqId: string, seed: number, opts: { loop?: boolean } = {}): Promise<ScoreState> => {
   const seq = readSequence(g, seqId);
   if (!seq) return Promise.resolve({ seq: seqId, file: "", seed, state: "failed", error: "that edit isn't there any more" });
-  const plan = planFor(seq, s);
+  const plan = planFor(seq, s, opts);
   if (!plan.sections.length) return Promise.resolve({ seq: seqId, file: "", seed, state: "failed", error: "the edit has no pictures to score" });
   const file = scoreFile(seqId, seed, plan);
   const out = join(publicDir(g), "music", file);

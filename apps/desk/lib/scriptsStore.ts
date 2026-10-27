@@ -103,6 +103,7 @@ const cleanBeat = (b: Partial<Beat>): Beat | undefined => {
     ...(mood ? { mood } : {}),
     ...(pulled.length ? { pulled } : {}),
     ...(chapter ? { chapter } : {}),
+    ...(typeof b.seconds === "number" && b.seconds > 0 ? { seconds: num(b.seconds, 0, 1e5, 0) } : {}),
   };
 };
 const cleanCut = (c: Partial<Cut>, kind: Cut["kind"]): Cut | undefined => {
@@ -112,7 +113,22 @@ const cleanCut = (c: Partial<Cut>, kind: Cut["kind"]): Cut | undefined => {
     const x = cleanBeat(b as Partial<Beat>);
     return x && (x.text || x.from) ? [x] : [];
   });
-  return { id, kind, title: String(c.title ?? "").trim(), ...(c.hook ? { hook: String(c.hook).trim() } : {}), ...(c.why ? { why: String(c.why).trim() } : {}), beats };
+  const state = c.state === "kept" || c.state === "binned" || c.state === "suggested" ? c.state : undefined;
+  return {
+    id,
+    kind,
+    title: String(c.title ?? "").trim(),
+    ...(c.hook ? { hook: String(c.hook).trim() } : {}),
+    ...(c.why ? { why: String(c.why).trim() } : {}),
+    ...(c.check ? { check: String(c.check).trim().slice(0, 300) } : {}),
+    ...(c.problem ? { problem: String(c.problem).trim().slice(0, 300) } : {}),
+    ...(c.join ? { join: String(c.join).trim().slice(0, 300) } : {}),
+    ...(typeof c.score === "number" ? { score: num(c.score, 0, 10, 0) } : {}),
+    ...(Array.isArray(c.hookDrafts) && c.hookDrafts.length ? { hookDrafts: c.hookDrafts.slice(0, 6).flatMap((d) => (d?.text ? [{ text: String(d.text).trim().slice(0, 200), source: String(d.source ?? "").trim().slice(0, 60) }] : [])) } : {}),
+    ...(state ? { state } : {}),
+    ...(c.post && typeof c.post === "object" ? { post: { title: String(c.post.title ?? "").trim().slice(0, 100), description: String(c.post.description ?? "").trim().slice(0, 1000), tags: String(c.post.tags ?? "").trim().slice(0, 500) } } : {}),
+    beats,
+  };
 };
 
 const cleanTake = (t: Partial<ScriptTake>): ScriptTake | undefined => {

@@ -242,35 +242,67 @@
     },
     {
       "id": "h00v",
-      "text": "Tip: The ghost wants its ring back. Just give it the ring."
+      "text": "Tip: The ghost wants its ring back. Just give it the ring.",
+      "used": {
+        "at": 1792880972711,
+        "in": "slot-16-seasons"
+      }
     },
     {
       "id": "h00w",
-      "text": "Tip: The top floor is always where they keep the good stuff."
+      "text": "Tip: The top floor is always where they keep the good stuff.",
+      "used": {
+        "at": 1792880972710,
+        "in": "slot-16-seasons"
+      }
     },
     {
       "id": "h00x",
-      "text": "Tip: If it's too quiet, it's a trap. Or it's just quiet."
+      "text": "Tip: If it's too quiet, it's a trap. Or it's just quiet.",
+      "used": {
+        "at": 1792882650516,
+        "in": "slot-17-constellations"
+      }
     },
     {
       "id": "h00y",
-      "text": "Hint: Some of these hints are true."
+      "text": "Hint: Some of these hints are true.",
+      "used": {
+        "at": 1792882650515,
+        "in": "slot-17-constellations"
+      }
     },
     {
       "id": "h00z",
-      "text": "Hint: The tips are different every time. Most of them, anyway."
+      "text": "Hint: The tips are different every time. Most of them, anyway.",
+      "used": {
+        "at": 1793054286367,
+        "in": "slot-18-art"
+      }
     },
     {
       "id": "h010",
-      "text": "Tip: Turning it off and on again still works."
+      "text": "Tip: Turning it off and on again still works.",
+      "used": {
+        "at": 1793054286366,
+        "in": "slot-18-art"
+      }
     },
     {
       "id": "h011",
-      "text": "Tip: Look up once in a while."
+      "text": "Tip: Look up once in a while.",
+      "used": {
+        "at": 1793055555022,
+        "in": "slot-19-the-prince"
+      }
     },
     {
       "id": "h012",
-      "text": "Tip: You'll get it next time. That's what next time is for."
+      "text": "Tip: You'll get it next time. That's what next time is for.",
+      "used": {
+        "at": 1793055555021,
+        "in": "slot-19-the-prince"
+      }
     },
     {
       "id": "h013",

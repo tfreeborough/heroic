@@ -134,6 +134,42 @@
       "music": "harp",
       "batch": "slot-15-the-creature",
       "renderedAt": "2026-10-22T22:35:46.599Z"
+    },
+    {
+      "slot": 16,
+      "seconds": 16,
+      "playtimeFrom": 240,
+      "egg": "",
+      "music": "felt",
+      "batch": "slot-16-seasons",
+      "renderedAt": "2026-10-24T22:29:32.767Z"
+    },
+    {
+      "slot": 17,
+      "seconds": 16,
+      "playtimeFrom": 256,
+      "egg": "",
+      "music": "ambient",
+      "batch": "slot-17-constellations",
+      "renderedAt": "2026-10-24T22:57:30.518Z"
+    },
+    {
+      "slot": 18,
+      "seconds": 16,
+      "playtimeFrom": 272,
+      "egg": "",
+      "music": "vibes",
+      "batch": "slot-18-art",
+      "renderedAt": "2026-10-26T22:38:06.373Z"
+    },
+    {
+      "slot": 19,
+      "seconds": 16,
+      "playtimeFrom": 288,
+      "egg": "",
+      "music": "waltz",
+      "batch": "slot-19-the-prince",
+      "renderedAt": "2026-10-26T22:59:15.045Z"
     }
   ]
 }

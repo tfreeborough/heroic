@@ -59,6 +59,8 @@ const BORROWED: Record<string, { root: number; quality: Quality }> = {
   "V/1": { root: 9, quality: "dom" },
   "V/4": { root: 2, quality: "dom" },
   "V/5": { root: 4, quality: "dom" },
+  // The chromatic mediant: a major chord a major third up, from nowhere (journey.ts, eerie and wonder). Never walked to; swapped in.
+  III: { root: 4, quality: "maj" },
 };
 const isBorrowed = (node: string) => node in BORROWED;
 
@@ -161,15 +163,19 @@ const weighted = <T>(rand: Rand, items: [T, number][]): T => {
   return items[items.length - 1]![0];
 };
 
-export const harmony = (rand: Rand, mode: Mode, mood: Mood) => {
+/** A piece's own lean on top of the mood's (journey.ts): how far it reaches for borrowed chords, how many colours it keeps. */
+export type HarmonyBias = { borrow?: number; paletteSize?: number };
+
+export const harmony = (rand: Rand, mode: Mode, mood: Mood, bias: HarmonyBias = {}) => {
   const scale = SCALES[mode];
   const semis = (d: number) => 12 * Math.floor(d / 7) + scale[((d % 7) + 7) % 7]!;
-  const F = FLAVOUR[mood];
+  const F = { ...FLAVOUR[mood], borrow: FLAVOUR[mood].borrow * (bias.borrow ?? 1) };
 
   // The track's choices.
   const palette: Colour[] = [];
   const pool = Object.entries(F.palette) as [Colour, number][];
-  const size = 2 + Math.floor(rand() * 2);
+  const drawnSize = 2 + Math.floor(rand() * 2);
+  const size = Math.min(pool.length, bias.paletteSize ?? drawnSize);
   while (palette.length < size) {
     const c = weighted(rand, pool);
     if (!palette.includes(c)) palette.push(c);

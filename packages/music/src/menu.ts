@@ -38,4 +38,5 @@ export const STYLE_NOTES: Record<StyleName, string> = {
   vibes: "swung late-night jazz trio: vibraphone or electric piano, brushes, rim clicks",
   toybox: "celesta and music box with a wind-up arpeggio, sweet or a bit haunted",
   synthwave: "80s synthwave: fast square-wave arpeggio over pads, bouncing bass, four-on-the-floor kick, neon",
+  chant: "Gregorian chant: a small choir of monks singing Latin syllables low and slow over open fifths, no beat, a cathedral's echo; solemn, ancient, or dryly ironic",
 };

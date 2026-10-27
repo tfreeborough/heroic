@@ -35,7 +35,10 @@ const srcUrl = (src: string) => (/^(\/|https?:|blob:|data:)/.test(src) ? src : s
 // ── builds ──
 
 /** A picture to build: where it is, its look seed, its stretch of the video (seconds), and any pulled words (seconds from its start). */
-export type BuildShow = { id: string; src: string; seed: number; at: number; seconds: number; pulls?: { word: string; at: number }[] };
+export type BuildShow = { id: string; src: string; seed: number; at: number; seconds: number; pulls?: { word: string; at: number }[]; /** A fast start: much of the picture lands in the first moments (a short's opening frame, under its hook). */ burst?: boolean };
+
+/** The burst: this share of the glyphs set off in the first this-many seconds (Autosave's first-second hook, quicker). */
+export const BURST = { share: 0.45, seconds: 0.6 } as const;
 
 /** Seconds a build keeps falling away after its card ends (the next one is arriving meanwhile). */
 export const BUILD_TAIL = 1;
@@ -175,15 +178,16 @@ const BuildCanvas: React.FC<{
   hidden?: boolean;
   arrival?: Arrival;
   order?: Order;
+  burst?: { share: number; seconds: number };
   pulls?: { word: string; at: number }[];
-}> = ({ ink, seed, look, box, timing, t, palette, family, glow = 0, ambient = false, hidden = false, arrival, order, pulls }) => {
+}> = ({ ink, seed, look, box, timing, t, palette, family, glow = 0, ambient = false, hidden = false, arrival, order, burst, pulls }) => {
   const { width, height } = useVideoConfig();
   const build = useMemo<Build | null>(() => {
     if (!ink) return null;
     const shuffled = lookFromSeed(seed);
-    return planBuild({ ink, look, box, frame: { w: width, h: height }, start: timing.start, end: timing.end, seed, arrival: arrival ?? shuffled.arrival, order: order ?? shuffled.order, exit: timing.exit });
+    return planBuild({ ink, look, box, frame: { w: width, h: height }, start: timing.start, end: timing.end, seed, arrival: arrival ?? shuffled.arrival, order: order ?? shuffled.order, exit: timing.exit, ...(burst ? { burst } : {}) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ink, look, box.x, box.y, box.w, box.h, width, height, seed, timing.start, timing.end, timing.exit?.start, timing.exit?.end, arrival, order]);
+  }, [ink, look, box.x, box.y, box.w, box.h, width, height, seed, timing.start, timing.end, timing.exit?.start, timing.exit?.end, arrival, order, burst?.share, burst?.seconds]);
   const pullPlans = useMemo(() => (build && pulls?.length ? pulls.map((p, i) => planPull(build, p.word, p.at, family, look, seed + i * 101, { w: width, h: height })) : []), [build, pulls, family, look, seed, width, height]);
   const canvas = useRef<HTMLCanvasElement>(null);
   const cache = useRef<BuildCache>(newCache());
@@ -203,9 +207,10 @@ const OneBuild: React.FC<{ card: BuildShow; palette: Palette; family: string; lo
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const ink = usePictureInk(card.src, family);
-  const timing = useMemo(() => buildTiming(card.seconds), [card.seconds]);
+  // A burst starts straight away: glyphs are already landing on the first frame.
+  const timing = useMemo(() => (card.burst ? { ...buildTiming(card.seconds), start: 0.05 } : buildTiming(card.seconds)), [card.seconds, card.burst]);
   const t = frame / fps;
-  return <BuildCanvas ink={ink} seed={card.seed} look={look} box={box} timing={timing} t={t} palette={palette} family={family} glow={glow} ambient hidden={hiddenAt?.(card.at + t) ?? false} pulls={card.pulls} />;
+  return <BuildCanvas ink={ink} seed={card.seed} look={look} box={box} timing={timing} t={t} palette={palette} family={family} glow={glow} ambient hidden={hiddenAt?.(card.at + t) ?? false} pulls={card.pulls} burst={card.burst ? BURST : undefined} />;
 };
 
 /**

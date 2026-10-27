@@ -3,7 +3,8 @@ import type { Binned } from "../lib/footage";
 import type { ImportJob } from "../lib/imports";
 import type { Job } from "../lib/render";
 import type { Batch, Render } from "../lib/renders";
-import type { PlanState, Script, ScriptPatch, ScriptSummary } from "../lib/scripts";
+import type { PlanState, Script, ScriptPatch, ScriptSummary, ShortRender, ShortsState } from "../lib/scripts";
+import type { RenderShortsResult, ShortPreview } from "../lib/scriptSteps";
 import type { ResearchState, ScriptResearch } from "../lib/research";
 import type { DocEntry } from "../lib/doc";
 /** A script's newest edit's score (lib/score.ts). */
@@ -145,7 +146,7 @@ export const gameApi = (game: string) => {
     renderUrl: (slug: string) => `/g/${enc(game)}/renders/${enc(slug)}.mp4`,
 
     /** `claude` = the server has a key and the game a voice, so drafting is on. */
-    schedule: () => fetch(`${base}/schedule`).then((r) => j<Schedule & { claude: boolean }>(r)),
+    schedule: () => fetch(`${base}/schedule`).then((r) => j<Schedule & { claude: boolean; scripts: boolean }>(r)),
     redraft: (id: string) => post(`${base}/schedule/${enc(id)}/draft`).then((r) => j<Schedule>(r)),
     queue: (batches: string[]) => post(`${base}/schedule`, { batches }).then((r) => j<{ schedule: Schedule; placed: Post[]; skipped: string[] }>(r)),
     scheduleSettings: (patch: { slotsPerDay?: number; minGapDays?: number; slotLabels?: string[] }) =>
@@ -160,7 +161,7 @@ export const gameApi = (game: string) => {
     /** The Scripts tab. `claude` = the server has a key and the game a script voice, so the rewrite steps are on. */
     scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean; palette: "matrix" | "sand" }>(r)),
     /** `pending`: beats whose sketch is being made right now. */
-    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null; researching: ResearchState | null; planning: PlanState | null }>(r)),
+    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null; researching: ResearchState | null; planning: PlanState | null; finding: ShortsState | null; rendering: Record<string, ShortRender> }>(r)),
     /** The Google Docs in the game's scripts folder (docs/design/desk-docs.md). */
     docs: (fresh = false) => fetch(`${base}/docs${fresh ? "?fresh=1" : ""}`).then((r) => j<{ docs: DocEntry[] }>(r)),
     /** Pull a Doc into a script (`doc` links it; without, the latest of the one it's linked to). */
@@ -207,6 +208,8 @@ export const gameApi = (game: string) => {
     /** Write the article and its cover into the site for Tom to commit. */
     saveArticle: (id: string) => post(`${base}/scripts/${enc(id)}/writeup/save`).then((r) => j<Script>(r)),
     writeYouTube: (id: string, instruction = "") => post(`${base}/scripts/${enc(id)}/youtube`, { instruction }).then((r) => j<Script>(r)),
+    /** A short's title, description and tags written (again) by Claude, to an instruction or none (desk-shorts.md § 5). */
+    writeShortPost: (id: string, short: string, instruction = "") => post(`${base}/scripts/${enc(id)}/shorts/${enc(short)}/post`, { instruction }).then((r) => j<Script>(r)),
     /** Thumbnail pictures made in the background: every idea with none yet, or another try at `only`. */
     makeThumbnails: (id: string, only?: string[]) => post(`${base}/scripts/${enc(id)}/thumbnails/make`, { only }).then((r) => j<{ started: number }>(r)),
     /** Tom's own image as a thumbnail picture (no idea = a new idea of its own). */
@@ -224,6 +227,13 @@ export const gameApi = (game: string) => {
     adjustScript: (id: string) => post(`${base}/scripts/${enc(id)}/adjust`).then((r) => j<Script>(r)),
     redoBeat: (id: string, cut: string, beat: string, instruction: string) => post(`${base}/scripts/${enc(id)}/redo`, { cut, beat, instruction }).then((r) => j<Script>(r)),
     redoCut: (id: string, cut: string, instruction: string) => post(`${base}/scripts/${enc(id)}/redo`, { cut, instruction }).then((r) => j<Script>(r)),
+    /** The shorts inside the long video (docs/design/desk-shorts.md), found in the background; `more` = runs not offered before. The script's `finding` says how it's going. */
+    findShorts: (id: string, more = false) => post(`${base}/scripts/${enc(id)}/shorts/find${more ? "?more=1" : ""}`).then((r) => j<ShortsState>(r)),
+    renderShorts: (id: string, shorts: string[]) => post(`${base}/scripts/${enc(id)}/shorts/render`, { shorts }).then((r) => j<RenderShortsResult>(r)),
+    /** Hook drafts for the kept shorts without any; `all` = every kept short again. */
+    draftHooks: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/hooks${all ? "?all=1" : ""}`).then((r) => j<Script>(r)),
+    /** A short's audio as organise would lay it, with the long video's music to go under (desk-shorts.md). */
+    previewShort: (id: string, short: string) => fetch(`${base}/scripts/${enc(id)}/shorts/${enc(short)}/preview`).then((r) => j<ShortPreview>(r)),
     anotherShort: (id: string, instruction: string) => post(`${base}/scripts/${enc(id)}/short`, { instruction }).then((r) => j<Script>(r)),
     unqueue: (id: string) => fetch(`${base}/schedule/${enc(id)}`, { method: "DELETE" }).then((r) => j<Schedule>(r)),
   };

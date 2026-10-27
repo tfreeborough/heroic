@@ -29,8 +29,8 @@ export const coversOf = (s: Pick<Script, "takes" | "long" | "shorts">): Map<stri
 /** What's playing: a stretch of a take, through its kept parts. */
 type Playing = { file: string; start: number; end: number };
 
-export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: Map<string, Cover[]>; onTakes: (takes: ScriptTake[]) => void; onReplace: (s: Script) => void; onError: (e: string) => void }> = ({ api, s, id, covers, onTakes, onReplace, onError }) => {
-  const beats = useMemo(() => plannedBeats(s), [s.long, s.shorts]);
+export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: Map<string, Cover[]>; onTakes: (takes: ScriptTake[]) => void; onReplace: (s: Script) => void; onError: (e: string) => void; /** What to read instead of the long cut (the shorts' hooks, desk-shorts.md). */ only?: { cut: Cut; beat: Beat }[] }> = ({ api, s, id, covers, onTakes, onReplace, onError, only }) => {
+  const beats = useMemo(() => only ?? plannedBeats(s), [s.long, s.shorts, only]);
   const covered = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const [file, cs] of covers) for (const c of cs) m.set(c.beat, [...(m.get(c.beat) ?? []), file]);
@@ -359,7 +359,7 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: M
   const done = beats.filter((b) => covered.has(b.beat.id)).length;
   const recording = rec.state === "on" || rec.state === "count";
   const openTake = open ? s.takes.find((t) => t.file === open) : undefined;
-  if (!beats.length) return <div className="small muted">Rewrite the script first: the prompter reads from the beats.</div>;
+  if (!beats.length) return <div className="small muted">{only ? "Nothing to read yet: pick a hook for a kept short first." : "Rewrite the script first: the prompter reads from the beats."}</div>;
   const beatsOf = (t: ScriptTake) => {
     const cs = covers.get(t.file) ?? [];
     return cs.length ? `beat${cs.length === 1 ? "" : "s"} ${cs.map((c) => numberOf(c.beat)).join(", ")}` : t.transcribed ? "no beat heard" : "listening…";

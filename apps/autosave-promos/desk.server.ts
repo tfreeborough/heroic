@@ -142,12 +142,12 @@ const VOICE = [
   "no hashtags, no ALL CAPS, no slogans or three-beat lists, nothing that sounds like an advert.",
 ].join(" ");
 
-const ask = async <T extends z.ZodTypeAny>(system: string, content: Anthropic.MessageParam["content"], out: T): Promise<z.infer<T>> => {
+const ask = async <T extends z.ZodTypeAny>(system: string, content: Anthropic.MessageParam["content"], out: T, effort: "low" | "medium" = "low"): Promise<z.infer<T>> => {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("no ANTHROPIC_API_KEY in apps/desk/.env");
   const res = await new Anthropic().messages.parse({
     model: MODEL,
     max_tokens: 4096,
-    output_config: { effort: "low", format: zodOutputFormat(out) },
+    output_config: { effort, format: zodOutputFormat(out) },
     system,
     messages: [{ role: "user", content }],
   });
@@ -301,6 +301,49 @@ const writeJournal = async (d: Draft, picture: string): Promise<string> => {
   return out.journal.replace(/—/g, ", ").trim();
 };
 
+// ── retelling in Tom's voice: a second pass over anything Claude drafted ──
+
+/** The saves Tom wrote himself (slots 5 to 16). Add a name when you've written one; never a drafted or retold one. */
+const OWN_SAVES = ["daytona", "first-flight", "judicium", "going-for-goal", "herding", "rain", "obliteration", "expedition", "snow-day", "strangers-kindness", "the-creature", "seasons"];
+
+const RetellOut = z.object({
+  journal: z.string().describe("The retold journal: plain text, paragraphs separated by a blank line, no headings, no preamble."),
+});
+
+/** Tom's own journals, in full, for the retell step to copy the rhythm of. */
+const ownJournals = (): string[] =>
+  OWN_SAVES.flatMap((name) => {
+    const f = join(SAVES, `${name}.json`);
+    if (!existsSync(f)) return [];
+    const side = JSON.parse(readFileSync(f, "utf8")) as SaveSidecar;
+    return side.journal?.trim() ? [`### ${name}\n${side.journal.trim()}`] : [];
+  });
+
+/** Retell a journal so it reads as Tom's: same facts and order, his sentences and his kind of ending. voice.md says how. */
+const retell = async (journal: string): Promise<string> => {
+  const sheet = readFileSync(join(import.meta.dir, "voice.md"), "utf8");
+  const out = await ask(
+    [
+      ABOUT,
+      "",
+      "You retell one journal entry (the text behind TikTok's 'more' button) so it reads as if Tom wrote it himself.",
+      "The guide below says how he writes and what gives a draft away, and his own journals follow in full: match their rhythm, not their subjects.",
+      "Keep every fact, name, number and the order of events. Change the sentences, the hedging, the fillers and the ending. Roughly the same length.",
+      "Never mention ASCII, pixels, drawings or the video.",
+      "",
+      sheet.trim(),
+      "",
+      "## Tom's own journals, in full",
+      "",
+      ...ownJournals(),
+    ].join("\n"),
+    [{ type: "text", text: `Retell this as Tom:\n\n${journal.trim()}` }],
+    RetellOut,
+    "medium",
+  );
+  return out.journal.replace(/—/g, ", ").trim();
+};
+
 const writeAscii = (name: string, base64: string) => {
   mkdirSync(ASCII, { recursive: true });
   writeFileSync(join(ASCII, `${name}.png`), Buffer.from(base64.replace(/^data:image\/png;base64,/, ""), "base64"));
@@ -420,12 +463,19 @@ export const routes: GameRoutes = {
     return Response.json(change(id, (x) => (x.words = words)));
   },
 
-  /** A journal entry to start from (the page shows it beside Tom's own). */
+  /** A journal entry to start from (the page shows it beside Tom's own): drafted, then retold in his voice. */
   "POST journal": async (req) => {
     const { id } = await body<{ id: string }>(req);
     const d = read(id);
     if (!d?.chosen) return Response.json({ error: "pick a picture first" }, { status: 400 });
-    return Response.json({ journal: await writeJournal(d, d.chosen) });
+    return Response.json({ journal: await retell(await writeJournal(d, d.chosen)) });
+  },
+
+  /** Any journal text (a draft, an old generated save) retold in Tom's voice. Never writes anything; the page offers the result. */
+  "POST retell": async (req) => {
+    const { journal } = await body<{ journal: string }>(req);
+    if (!journal?.trim()) return Response.json({ error: "nothing to retell" }, { status: 400 });
+    return Response.json({ journal: await retell(journal) });
   },
 
   /** Saves with no glyph copy yet (made before 10-10). */

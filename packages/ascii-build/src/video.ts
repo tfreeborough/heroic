@@ -10,6 +10,8 @@ export const COLD_OPEN = 4.5;
 export const CHAPTER_CARD = 3.5;
 /** Seconds the end card runs: the reel (6s), the mosaic, the channel name and sign-off (by ~11s), then a hold for YouTube's end-screen elements. */
 export const END_CARD = 20;
+/** A short's loop (desk-shorts.md § 4): seconds after the last word for the last picture to rain away and the hook to drop back in, before the replay. The score is written to this length too, so its loop point is the video's. Equals the build tail. */
+export const LOOP_TAIL = 1;
 
 const clock = (s: number) => {
   const t = Math.max(0, Math.round(s));

@@ -73,7 +73,7 @@ export type Job = {
   slug: string;
   template: string;
   format: string;
-  /** "bundling" | "rendering" | "done" | "failed" */
+  /** "queued" | "bundling" | "rendering" | "done" | "failed" */
   state: string;
   progress: number;
   error?: string;
@@ -87,16 +87,35 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "video";
 
-/** Kick off a render; returns the job to poll. */
-export const startRender = (g: GameConfig, req: { template: string; props: Record<string, unknown>; format: string; name: string; batch: string }): Job => {
+/**
+ * Renders run two at a time (desk-shorts.md § 4): six Remotion renders at
+ * once on one machine thrash. The rest wait as "queued", in the order asked.
+ */
+const AT_ONCE = 2;
+const waiting: (() => Promise<void>)[] = [];
+let running = 0;
+const pump = () => {
+  while (running < AT_ONCE && waiting.length) {
+    const next = waiting.shift()!;
+    running++;
+    void next().finally(() => {
+      running--;
+      pump();
+    });
+  }
+};
+
+/** Kick off a render (queued behind any already running); returns the job to poll. `onDone` hears when its file is written. */
+export const startRender = (g: GameConfig, req: { template: string; props: Record<string, unknown>; format: string; name: string; batch: string; onDone?: (m: RenderManifest) => void; onFail?: (error: string) => void }): Job => {
   const dir = rendersDir(g);
   const base = slugify(`${req.name}-${req.format}`);
   let slug = base;
-  for (let i = 2; existsSync(join(dir, `${slug}.mp4`)); i++) slug = `${base}-${i}`;
-  const job: Job = { id: crypto.randomUUID(), game: g.id, slug, template: req.template, format: req.format, state: "bundling", progress: 0, startedAt: Date.now() };
+  for (let i = 2; existsSync(join(dir, `${slug}.mp4`)) || [...jobs.values()].some((j) => j.game === g.id && j.slug === slug && j.state !== "failed"); i++) slug = `${base}-${i}`;
+  const job: Job = { id: crypto.randomUUID(), game: g.id, slug, template: req.template, format: req.format, state: "queued", progress: 0, startedAt: Date.now() };
   jobs.set(job.id, job);
-  void (async () => {
+  waiting.push(async () => {
     try {
+      job.state = "bundling";
       const serveUrl = await getBundle(g, (p) => (job.progress = p * 0.2));
       job.state = "rendering";
       const inputProps = { ...req.props, format: req.format };
@@ -127,11 +146,14 @@ export const startRender = (g: GameConfig, req: { template: string; props: Recor
       await thumbnail(out, Math.min(1.5, manifest.seconds * 0.2)); // early in the body: footage + banner, never the outro
       job.progress = 1;
       job.state = "done";
+      req.onDone?.(manifest);
     } catch (e) {
       job.state = "failed";
       job.error = (e as Error).message;
+      req.onFail?.(job.error);
     }
-  })();
+  });
+  pump();
   return job;
 };
 

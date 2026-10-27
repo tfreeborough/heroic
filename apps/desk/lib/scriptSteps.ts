@@ -12,12 +12,14 @@ import { PICTURE_STYLE, THUMB_STYLE, cardsDir, hasImages, makePicture, saveOwnPi
 import * as ai from "./rewrite";
 import { matchScript } from "./match";
 import { organiseCut } from "./organise";
-import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, slugify, articlePictures, sourcesList, sourcesMarkdown, withoutSources, youtubeId, type PlanState } from "./scripts";
+import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, slugify, articlePictures, sourcesList, sourcesMarkdown, withoutSources, youtubeId, type PlanState, type ShortsState, type ShortRender, beatText, excerpt, longEdits, renderableShort, shortBeats, shortLabel } from "./scripts";
+import { type Job, startRender } from "./render";
+import { sequenceSeconds } from "@heroic/voiceover";
 import { exec } from "./exec";
-import { readScript, saveScript, voiceSamples } from "./scriptsStore";
+import { listScripts, readScript, saveScript, voiceSamples } from "./scriptsStore";
 import { docHeadings } from "./doc";
-import { type ScoreListing, listScores, makeScore, useScore } from "./score";
-import { readSequence, seqSlug, trashSequence, writeSequence } from "./sequences";
+import { SCORE_LEVEL, type ScoreListing, listScores, makeScore, scoreState, useScore } from "./score";
+import { readSequence, seqSlug, sequencePath, trashSequence, writeSequence } from "./sequences";
 
 export const hasClaude = ai.hasClaude;
 
@@ -82,9 +84,154 @@ export const anotherShort = async (g: GameConfig, id: string, instruction: strin
   return saveScript(g, { ...s, shorts: [...s.shorts, c] });
 };
 
+// ── the shorts inside the long video (docs/design/desk-shorts.md § 1) ──
+
+const finds = new Map<string, ShortsState>();
+export const shortsState = (id: string): ShortsState | undefined => finds.get(id);
+
+/** What Tom kept and binned across every script (desk-shorts.md: his calls are the standard), each as its title and beats' first words. */
+const shortTaste = (g: GameConfig): ai.ShortTaste => {
+  const taste: ai.ShortTaste = { kept: [], binned: [] };
+  for (const sum of listScripts(g)) {
+    const s = readScript(g, sum.id);
+    if (!s?.long) continue;
+    for (const c of s.shorts) {
+      if (c.state !== "kept" && c.state !== "binned") continue;
+      const line = `${c.title} (${s.title}): "${c.beats.map((b) => beatText(s, b)).join(" ").split(/\s+/).slice(0, 25).join(" ")}…"`;
+      taste[c.state].push(line);
+    }
+  }
+  return { kept: taste.kept.slice(-30), binned: taste.binned.slice(-30) };
+};
+
+/**
+ * Find shorts: the long cut's beats timed from the kept takes (the same
+ * slicing organise does, nothing written), then two Claude calls in the
+ * background: a generous finder and a strict judge (rewrite.ts). Passes
+ * land as suggested shorts ranked by score (beats word for word with the
+ * long cut, `from` on each); fails land as near misses with their
+ * problem, folded away on the page. `more`: shorts not offered before,
+ * with everything already offered (kept, binned, suggested) left alone;
+ * without it, the suggestions not yet decided on are replaced.
+ */
+export const findShorts = (g: GameConfig, id: string, more = false): ShortsState => {
+  const { s, v } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  if (!longEdits(s).length) throw new Error("organise the long video first: the shorts are cut from it as recorded");
+  const cur = finds.get(id);
+  if (cur?.state === "running") return cur;
+  const state: ShortsState = { state: "running", startedAt: new Date().toISOString() };
+  finds.set(id, state);
+  void (async () => {
+    const covers = new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
+    const { laid } = organiseCut(s, s.long!, covers, { id: "timing", name: "timing" });
+    const secs = new Map(laid.map((l) => [l.beat, l.seconds]));
+    const timed = s.long!.beats.map((b, i) => ({ n: i + 1, text: b.text, seconds: secs.get(b.id) }));
+    const old = more ? s.shorts : s.shorts.filter((c) => c.state && c.state !== "suggested");
+    const offered = old.flatMap((c) => {
+      const beats = shortBeats(s, c);
+      return beats.length ? [{ beats, title: c.title, state: c.state ?? "suggested" }] : [];
+    });
+    const verdicts = await ai.findShorts(v, s.long!, timed, offered, shortTaste(g));
+    const now = readScript(g, id);
+    if (!now?.long) throw new Error("the script went away");
+    // The timings onto the long beats (Tom's words on them stay his), so the page can measure a nudge.
+    const long: Cut = { ...now.long, beats: now.long.beats.map((b) => ({ ...b, seconds: secs.get(b.id) })) };
+    const at = { long };
+    const seen = new Set(old.map((c) => shortLabel(shortBeats(s, c))));
+    const fresh: Cut[] = [...verdicts]
+      .sort((a, b) => (a.verdict === b.verdict ? b.score - a.score : a.verdict === "pass" ? -1 : 1))
+      .map(
+        (x): Cut => ({
+          id: newId(),
+          kind: "short",
+          title: x.title,
+          why: x.why,
+          score: x.score,
+          ...(x.join ? { join: x.join } : {}),
+          ...(x.verdict === "pass" && x.check ? { check: x.check } : {}),
+          ...(x.verdict === "fail" ? { problem: x.problem ?? "didn't pass the judge" } : {}),
+          state: "suggested",
+          beats: excerpt(at, x.beats),
+        }),
+      )
+      .filter((c) => c.beats.length && !seen.has(shortLabel(shortBeats(at, c))));
+    const keep = more ? now.shorts : now.shorts.filter((c) => c.state && c.state !== "suggested");
+    saveScript(g, { ...now, long, shorts: [...keep, ...fresh] });
+  })().then(
+    () => finds.delete(id),
+    (e: Error) => {
+      console.warn(`⚠ shorts ${id}: ${e.message}`);
+      finds.set(id, { state: "failed", error: e.message });
+    },
+  );
+  return state;
+};
+
+/** Hooks Tom chose before, across every script: the standard for the next drafts (his picks and his own rewrites, never Claude's unchosen ones). */
+const hookTaste = (g: GameConfig): string[] => {
+  const out: string[] = [];
+  for (const sum of listScripts(g)) {
+    const s = readScript(g, sum.id);
+    for (const c of s?.shorts ?? []) if (c.state === "kept" && c.hook?.trim()) out.push(c.hook.trim());
+  }
+  return out.slice(-40);
+};
+
+/**
+ * Hook drafts for the kept shorts that have none (`all`: every kept
+ * short again): three a short, in Tom's voice, checked by a second pass
+ * (rewrite.ts). Saved as `hookDrafts`; choosing one is the page's
+ * (withHook). A short with a hook already keeps it.
+ */
+export const draftHooks = async (g: GameConfig, id: string, all = false): Promise<Script> => {
+  const { s, v, samples } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  const want = s.shorts.filter((c) => c.state === "kept" && (all || !c.hookDrafts?.length));
+  if (!want.length) throw new Error(s.shorts.some((c) => c.state === "kept") ? "every kept short has its drafts; Draft again writes them afresh" : "keep a short first");
+  const shorts = want.map((c, i) => ({ n: i + 1, title: c.title, beats: c.beats.filter((b) => b.from).map((b) => beatText(s, b)), ...(c.check ? { carry: c.check } : {}) }));
+  const drafts = await ai.draftHooks(v, samples, s.long, shorts, hookTaste(g));
+  const now = readScript(g, id);
+  if (!now) throw new Error("the script went away");
+  const byId = new Map(want.map((c, i) => [c.id, drafts.get(i + 1)] as const));
+  return saveScript(g, { ...now, shorts: now.shorts.map((c) => (byId.get(c.id)?.length ? { ...c, hookDrafts: byId.get(c.id) } : c)) });
+};
+
+export type ShortPreview = {
+  /** The take slices in order: the take's file, the seconds of it, and where it sits in the preview. */
+  clips: { file: string; start: number; end: number; at: number }[];
+  seconds: number;
+  /** The long video's bed to go under, quiet: a public path, where to start it, its level in the edit. */
+  music?: { path: string; from: number; level: number };
+  missing: string[];
+  conflicts: number;
+};
+
+/**
+ * A short heard before it's made: its beats sliced from the takes exactly
+ * as organise would lay them (the same matcher and slicer, nothing
+ * written), with the long video's music to play under. The newest long
+ * edit's song if it has one, else its score if one is ready.
+ */
+export const previewShort = (g: GameConfig, id: string, shortId: string): ShortPreview => {
+  const s = readScript(g, id);
+  if (!s?.long) throw new Error(`no script ${id}`);
+  const c = s.shorts.find((x) => x.id === shortId);
+  if (!c) throw new Error("that short isn't in the script any more");
+  const covers = new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
+  const { seq, missing, conflicts } = organiseCut(s, c, covers, { id: "preview", name: "preview" });
+  const clips = (seq.audio[0]?.clips ?? []).map((x) => ({ file: s.takes[x.take]!.file, start: x.start, end: x.end, at: x.at }));
+  const seconds = clips.reduce((n, x) => Math.max(n, x.at + (x.end - x.start)), 0);
+  const lastId = longEdits(s).at(-1)?.id;
+  const bed = lastId ? readSequence(g, lastId)?.music : undefined;
+  const score = lastId ? scoreState(g, lastId) : undefined;
+  const music = bed?.song ? { path: `music/${bed.song}`, from: bed.from, level: bed.level } : score?.state === "ready" ? { path: `music/${score.file}`, from: 0, level: SCORE_LEVEL } : undefined;
+  return { clips, seconds, ...(music ? { music } : {}), missing, conflicts: conflicts.length };
+};
+
 // ── the pictures (docs/design/desk-ascii-scripts.md) ──
 
-const withBeat = (s: Script, beatId: string, f: (b: Beat) => Beat): Script => {
+const withBeat =(s: Script, beatId: string, f: (b: Beat) => Beat): Script => {
   const map = (c: Cut): Cut => ({ ...c, beats: c.beats.map((b) => (b.id === beatId ? f(b) : b)) });
   return { ...s, long: s.long ? map(s.long) : undefined, shorts: s.shorts.map(map) };
 };
@@ -386,7 +533,7 @@ export const organise = (g: GameConfig, id: string): OrganiseResult => {
   const now = new Date().toISOString();
   const made: OrganiseResult["made"] = [];
   const entries: NonNullable<Script["sequences"]> = [];
-  const lastId = s.sequences?.at(-1)?.id;
+  const lastId = longEdits(s).at(-1)?.id;
   const music = lastId ? readSequence(g, lastId)?.music : undefined;
   // The long cut only: shorts are parked (desk-ascii-scripts.md decision 1).
   [s.long].forEach((cut) => {
@@ -430,7 +577,7 @@ export const scriptScores = (g: GameConfig, id: string): ScoreListing[] => {
 export const chooseScore = (g: GameConfig, id: string, file: string): Script => {
   const s = readScript(g, id);
   if (!s) throw new Error(`no script ${id}`);
-  const seqId = s.sequences?.at(-1)?.id;
+  const seqId = longEdits(s).at(-1)?.id;
   if (!seqId) throw new Error("organise the script first");
   const st = useScore(g, seqId, file);
   return st.seed && st.seed !== s.scoreSeed ? saveScript(g, { ...s, scoreSeed: st.seed }) : s;
@@ -444,12 +591,132 @@ export const chooseScore = (g: GameConfig, id: string, file: string): Script => 
 export const remakeScore = (g: GameConfig, id: string, another: boolean): Script => {
   const s = readScript(g, id);
   if (!s) throw new Error(`no script ${id}`);
-  const seqId = s.sequences?.at(-1)?.id;
+  const seqId = longEdits(s).at(-1)?.id;
   if (!seqId) throw new Error("organise the script first: the score is written for an edit's timings");
   const seed = another || !s.scoreSeed ? 1 + Math.floor(Math.random() * 99999) : s.scoreSeed;
   const next = seed === s.scoreSeed ? s : saveScript(g, { ...s, scoreSeed: seed });
   void makeScore(g, next, seqId, seed);
   return next;
+};
+
+// ── render the shorts (docs/design/desk-shorts.md § 3–4) ──
+
+type ShortRun = Omit<ShortRender, "state" | "progress" | "error" | "slug"> & { state: ShortRender["state"]; error?: string; job?: Job; slug?: string };
+/** By script id, then short id: what each short's render is up to (this Desk run). */
+const shortRuns = new Map<string, Map<string, ShortRun>>();
+const asRender = (r: ShortRun): ShortRender =>
+  r.job ? { state: r.job.state as ShortRender["state"], progress: r.job.progress, ...(r.job.error ? { error: r.job.error } : {}), seq: r.seq, slug: r.job.slug } : { state: r.state, progress: 0, ...(r.error ? { error: r.error } : {}), seq: r.seq, ...(r.slug ? { slug: r.slug } : {}) };
+export const shortRenderState = (id: string): Record<string, ShortRender> => Object.fromEntries([...(shortRuns.get(id) ?? [])].map(([k, r]) => [k, asRender(r)]));
+
+export type RenderShortsResult = { started: string[]; left: { short: string; reason: string }[] };
+
+/** Seconds the hook's words stay up: as long as they're said, a touch after, three at most. */
+const hookUp = (spoken: number) => Math.min(3, Math.max(1, spoken + 0.3));
+
+/**
+ * The kept shorts asked for, each organised afresh into its own edit (the
+ * long beats' pictures and moods looked through, the hook in front, one
+ * build under the hook and the first beat), scored as a loop, and rendered
+ * vertical by the Beats template's short mode: one batch a short, two
+ * renders at a time. Answers at once; the page asks after them. A short
+ * with no hook, or a beat not recorded or read twice, is left out and said
+ * so, never rendered with a hole.
+ */
+export const renderShorts = (g: GameConfig, id: string, shortIds: string[]): RenderShortsResult => {
+  const s = readScript(g, id);
+  if (!s?.long) throw new Error(`no script ${id}`);
+  if (!longEdits(s).length) throw new Error("organise the long video first");
+  const covers = new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
+  const run = s.runs ?? 1;
+  const base = seqSlug(s.title);
+  const now = new Date().toISOString();
+  const runs = shortRuns.get(id) ?? new Map<string, ShortRun>();
+  shortRuns.set(id, runs);
+  // One seed for the whole video: every short's score is recognisably the same piece.
+  const seed = s.scoreSeed ?? 1 + Math.floor(Math.random() * 99999);
+  const started: string[] = [];
+  const left: RenderShortsResult["left"] = [];
+  const todo: { c: Cut; n: number; cut: Cut; seqId: string; hookFor: number; seconds: number }[] = [];
+  let next: Script = seed === s.scoreSeed ? s : { ...s, scoreSeed: seed };
+  for (const shortId of shortIds) {
+    const c = s.shorts.find((x) => x.id === shortId);
+    if (!c || c.state !== "kept") {
+      left.push({ short: shortId, reason: "not a kept short" });
+      continue;
+    }
+    const going = runs.get(c.id);
+    if (going && !["done", "failed"].includes(asRender(going).state)) {
+      left.push({ short: c.id, reason: "already on its way" });
+      continue;
+    }
+    const own = c.beats.find((b) => !b.from);
+    if (!c.hook?.trim() || !own) {
+      left.push({ short: c.id, reason: "no hook yet: pick or write one, then read it" });
+      continue;
+    }
+    const n = s.shorts.indexOf(c) + 1;
+    const seqId = `${base}-short-${n}-r${run}`;
+    const cut = renderableShort(s, c);
+    const { seq, missing, conflicts, laid } = organiseCut(s, cut, covers, { id: seqId, name: `${s.title} · short ${n}: ${c.title} (run ${run})` });
+    if (missing.length || conflicts.length) {
+      const what = missing.includes(own.id) ? "the hook isn't recorded yet" : missing.length ? `${missing.length} beat${missing.length === 1 ? "" : "s"} not recorded` : `${conflicts.length} beat${conflicts.length === 1 ? "" : "s"} read in two takes`;
+      left.push({ short: c.id, reason: what });
+      continue;
+    }
+    // Written fresh each time (never merged into an edited one); the score lands on it next.
+    writeSequence(g, seq);
+    next = { ...next, sequences: [...(next.sequences ?? []).filter((x) => x.id !== seqId), { id: seqId, cut: c.id, run, at: now, missing: 0, conflicts: 0, short: c.id }] };
+    runs.set(c.id, { state: "scoring", seq: seqId });
+    todo.push({ c, n, cut, seqId, hookFor: hookUp(laid.find((l) => l.beat === own.id)?.seconds ?? 2), seconds: sequenceSeconds(seq) });
+    started.push(c.id);
+  }
+  if (next !== s) saveScript(g, next);
+  // Their words for the platforms (desk-shorts.md § 5), written while they render; the Queue reads them off the script.
+  if (ai.hasClaude() && g.script?.ai) void writeMissingShortPosts(g, id, started);
+  const mark = (seqId: string, slug: string) => {
+    const cur = readScript(g, id);
+    if (cur) saveScript(g, { ...cur, sequences: (cur.sequences ?? []).map((x) => (x.id === seqId ? { ...x, render: slug } : x)) });
+  };
+  void (async () => {
+    for (const x of todo) {
+      const sc = await makeScore(g, { long: x.cut }, x.seqId, seed, { loop: true });
+      if (sc.state !== "ready") {
+        runs.set(x.c.id, { state: "failed", seq: x.seqId, error: `the score didn't make: ${sc.error ?? "no reason given"}` });
+        continue;
+      }
+      const props = { clip: sequencePath(g, x.seqId), title: "", durationSeconds: x.seconds, startFrom: 0, opening: "none", ending: "loop", hook: x.c.hook!.trim(), hookFor: x.hookFor, palette: "matrix", captions: "terminal" };
+      const job = startRender(g, { template: "Beats", props, format: "vertical", name: `${base}-short-${x.n}`, batch: crypto.randomUUID(), onDone: (m) => mark(x.seqId, m.slug) });
+      runs.set(x.c.id, { state: "queued", seq: x.seqId, job });
+    }
+  })();
+  return { started, left };
+};
+
+// ── a short's post copy (docs/design/desk-shorts.md § 5) ──
+
+/** A short's title, description and tags, written by Claude (to Tom's instruction, if any). Re-reads the script before saving so a render landing meanwhile isn't lost. */
+export const writeShortPost = async (g: GameConfig, id: string, shortId: string, instruction = ""): Promise<Script> => {
+  const { s, v } = need(g, id);
+  const c = s.shorts.find((x) => x.id === shortId);
+  if (!c) throw new Error(`no short ${shortId}`);
+  if (!s.long) throw new Error("rewrite the script first");
+  const beats = c.beats.filter((b) => b.from).map((b) => beatText(s, b));
+  const post = await ai.writeShortPost(v, g.name, s.long.title, { title: c.title, hook: c.hook?.trim() ?? "", why: c.why, beats }, c.post, instruction);
+  const cur = readScript(g, id) ?? s;
+  return saveScript(g, { ...cur, shorts: cur.shorts.map((x) => (x.id === shortId ? { ...x, post } : x)) });
+};
+
+/** Words for every one of these shorts that has none yet, one call after another in the background. A failure is logged, not thrown: the Queue falls back to the title and hook. */
+const writeMissingShortPosts = async (g: GameConfig, id: string, shortIds: string[]) => {
+  for (const shortId of shortIds) {
+    const c = readScript(g, id)?.shorts.find((x) => x.id === shortId);
+    if (!c || c.post) continue;
+    try {
+      await writeShortPost(g, id, shortId);
+    } catch (e) {
+      console.warn(`⚠ post copy for short ${shortId} of ${id}: ${(e as Error).message}`);
+    }
+  }
 };
 
 // ── the write-up (docs/design/desk-writeup.md) ──

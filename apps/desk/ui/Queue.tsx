@@ -16,7 +16,7 @@ const fmtDay = (day: string) => {
  * the platforms; you do, through their own schedulers, and tick it here.
  */
 export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api }) => {
-  const [s, setS] = useState<(Schedule & { claude?: boolean }) | null>(null);
+  const [s, setS] = useState<(Schedule & { claude?: boolean; scripts?: boolean }) | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // post id being redrafted
   const [open, setOpen] = useState<string | null>(null); // post id being edited
   const [playing, setPlaying] = useState<Post | null>(null); // open in the preview modal
@@ -49,7 +49,20 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
   if (!s) return <div className="muted">loading…</div>;
 
   const save = (next: Promise<Schedule>) =>
-    next.then((n) => setS((cur) => ({ ...n, claude: cur?.claude }))).catch((e: Error) => setMsg(`✖ ${e.message}`));
+    next.then((n) => setS((cur) => ({ ...n, claude: cur?.claude, scripts: cur?.scripts }))).catch((e: Error) => setMsg(`✖ ${e.message}`));
+  /** A short's words written on its script (desk-shorts.md § 5); the queue then re-reads them. */
+  const writePost = async (p: Post) => {
+    if (!p.source?.short) return;
+    setBusy(p.id);
+    setMsg("asking Claude…");
+    try {
+      await api.writeShortPost(p.source.script, p.source.short);
+      await save(api.schedule()).then(() => setMsg("written: the words are on the script too"));
+    } catch (e) {
+      setMsg(`✖ ${(e as Error).message}`);
+    }
+    setBusy(null);
+  };
   const redraft = async (p: Post) => {
     setBusy(p.id);
     setMsg("asking Claude…");
@@ -152,6 +165,16 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
             <button className="small link" onClick={() => void copy(p.title, "title")}>
               copy title
             </button>
+            {p.tags ? (
+              <button className="small link" onClick={() => void copy(p.tags!, "tags")} title="Paste into YouTube Studio's tags box: the commas split them">
+                copy tags
+              </button>
+            ) : null}
+            {p.source ? (
+              <button className="small link" onClick={() => go({ name: "scripts", id: p.source!.script, stage: p.source!.cut === "short" ? "shorts" : "publish" })} title={`The words come from the script "${p.source.scriptTitle}": change them there`}>
+                {p.source.cut === "short" ? "short" : "long video"} · {p.source.written ? "words from the script" : p.source.cut === "short" ? "words not written yet" : "no description yet"}
+              </button>
+            ) : null}
           </span>
         </div>
         <div className="ticks">
@@ -165,7 +188,63 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
             {p.doneAt ? "✔ Done" : "Done"}
           </button>
         </div>
-        {editing ? (
+        {editing && p.source ? (
+          <div className="qedit">
+            <div className="field wide">
+              <span className="small muted">
+                {p.source.cut === "short" ? "A short cut from" : "The long video of"} the script <strong>{p.source.scriptTitle}</strong>. Its words live there, so the Queue always shows the latest.{" "}
+                <button className="small link" onClick={() => go({ name: "scripts", id: p.source!.script, stage: p.source!.cut === "short" ? "shorts" : "publish" })}>
+                  {p.source.cut === "short" ? "open the Shorts stage" : "open the Publish stage"}
+                </button>
+                {p.source.cut === "short" && s.scripts ? (
+                  <>
+                    {" · "}
+                    <button className="small link" disabled={busy === p.id} onClick={() => void writePost(p)}>
+                      {busy === p.id ? "asking Claude…" : p.source.written ? "write the words again" : "write the words with Claude"}
+                    </button>
+                  </>
+                ) : null}
+                {p.source.cut === "long" && !p.source.written ? " Write the description and tags on its Publish stage." : null}
+              </span>
+            </div>
+            <div className="field">
+              <label>Title (Shorts)</label>
+              <input type="text" value={p.title} readOnly />
+              <span className={`count${p.title.length > 100 ? " over" : ""}`}>{p.title.length}/100</span>
+            </div>
+            <div className="row" style={{ alignItems: "flex-end" }}>
+              <div className="field">
+                <label>Day</label>
+                <input type="date" value={p.day} onChange={(e) => e.target.value && patch(p, { day: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Slot</label>
+                <select value={p.slot} onChange={(e) => patch(p, { slot: Number(e.target.value) })}>
+                  {Array.from({ length: s.slotsPerDay }, (_, i) => (
+                    <option key={i} value={i}>
+                      {s.slotLabels[i] ?? `slot ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button className="small danger" onClick={() => remove(p)}>
+                Remove from queue
+              </button>
+            </div>
+            <div className="field wide">
+              <label>Description (every platform)</label>
+              <textarea value={p.description} readOnly />
+              <span className={`count${p.source.cut === "short" && p.description.length > 280 ? " over" : ""}`}>
+                {p.description.length} characters{p.source.cut === "short" ? " · X takes 280" : " · the top lines with the chapters under them"}
+              </span>
+            </div>
+            <div className="field wide">
+              <label>Tags (YouTube Studio)</label>
+              <textarea value={p.tags ?? ""} readOnly style={{ minHeight: 60 }} />
+              <span className="count">{p.tags ? `${p.tags.length}/500 · ` : "none yet · "}the commas split them</span>
+            </div>
+          </div>
+        ) : editing ? (
           <div className="qedit">
             <div className="field">
               <label>Title (Shorts)</label>
@@ -214,7 +293,7 @@ export const Queue: React.FC<{ game: GameInfo; api: GameApi }> = ({ game, api })
             <div className="field wide">
               <label>Description (every platform)</label>
               <textarea value={p.description} onChange={(e) => setS({ ...s, posts: s.posts.map((x) => (x.id === p.id ? { ...x, description: e.target.value } : x)) })} onBlur={(e) => patch(p, { description: e.target.value })} />
-              <span className="count">{p.description.length} characters · the same words everywhere, so the platforms stay consistent</span>
+              <span className={`count${p.description.length > 280 ? " over" : ""}`}>{p.description.length} characters · the same words everywhere, so the platforms stay consistent · X takes 280</span>
             </div>
           </div>
         ) : null}

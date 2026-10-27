@@ -30,6 +30,8 @@ export type Organised = {
   conflicts: { beat: string; takes: string[] }[];
   /** Where each chapter starts, in edit seconds (the first beat's, if it opens one, at 0). */
   chapters: { name: string; at: number }[];
+  /** Each beat that went in: where it starts in the edit and how long its kept speech runs (Find shorts measures by this). */
+  laid: { beat: string; at: number; seconds: number }[];
 };
 
 /** A little of the take before the first word, so a slice doesn't start on a consonant… */
@@ -109,6 +111,7 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
   const audio: AudioClip[] = [];
   const cards: Card[] = [];
   const markers: { id: string; at: number }[] = [];
+  const placed: Organised["laid"] = [];
   const beatId = (b: Beat) => b.from ?? b.id;
   // Where each beat is read: every (take, cover) that reads it.
   const reads = (b: Beat) => s.takes.flatMap((t, i) => (covers.get(t.file) ?? []).filter((c) => c.beat === beatId(b)).map((c) => ({ take: i, file: t.file, cover: c })));
@@ -158,9 +161,17 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
       laid += p.end - p.start;
     }
     markers.push({ id: newId(), at });
+    placed.push({ beat: b.id, at, seconds: r3(seconds) });
     // The beat's pictures, as glyph builds.
     const pics = (b.pictures ?? []).filter((p) => p.chosen);
     if (pics.length) {
+      // The same picture again, straight after (a short's hook beat and its first beat): one build, not two.
+      if (pics.length === 1 && lastCard?.kind === "build" && lastCard.src === pics[0]!.chosen && Math.abs(lastCard.at + lastCard.seconds + s.gap - at) < 0.05) {
+        lastCard.seconds = r3(at + seconds - lastCard.at);
+        if (b.pulled?.length) lastCard.pulled = [...(lastCard.pulled ?? []), ...b.pulled];
+        cursor = at + seconds + s.gap;
+        return;
+      }
       if (lastCard && lastCard.kind !== "broll" && lastCard.kind !== "chapter") lastCard.seconds = r3(at - lastCard.at);
       const split = pics.length > 1 ? r3(at + intoSlice(pieces, start + splitPoint(tk.words, start, end))) : at + seconds;
       pics.slice(0, 2).forEach((p, k) => {
@@ -186,5 +197,5 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
   seq.audio = [{ id: "a1", clips: audio }];
   if (cards.length) seq.overlay = { id: "o1", cards: cards.filter((c) => c.seconds >= 0.3) };
   if (markers.length) seq.markers = markers;
-  return { seq, missing, conflicts, chapters };
+  return { seq, missing, conflicts, chapters, laid: placed };
 };

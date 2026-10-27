@@ -16,7 +16,6 @@ const GAME = "Blood in the Sand";
 const ABOUT = "Blood in the Sand is a small gladiator arena game I've been making on my own. Nothing is aimed, everything is a telegraph, and you get one life a round. Free on iOS and Android.";
 const STORES = "iPhone: https://apple.co/4gY0KDK\nAndroid: https://play.google.com/store/apps/details?id=com.heroic.blood_in_the_sand";
 const ASK = "Come and fight me: discord.gg/8FHgBmaSnT";
-const TAGS = "#indiegame #mobilegame #pixelart #pvp #gamedev";
 const clip = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`);
 const title = (lead: string) => {
   const t = `${lead} | ${GAME}`;
@@ -29,11 +28,11 @@ const draft = (template: string, props: Record<string, unknown>) => {
     const item = list.find((x) => x.id === str("id"));
     const name = item?.name ?? str("id");
     const line = item?.tagline ? `${item.tagline}\n\n` : "";
-    return { title: title(`The ${name}`), description: `${line}The ${name}, as it plays in ${GAME}.\n\n${ABOUT}\n\n${STORES}\n\n${ASK}\n\n${TAGS}` };
+    return { title: title(`The ${name}`), description: `${line}The ${name}, as it plays in ${GAME}.\n\n${ABOUT}\n\n${STORES}\n\n${ASK}` };
   }
   // The match and hook clips: the hook is the lead; the title (a label) is a fallback.
   const lead = str("hook") || str("line") || str("title") || GAME;
-  return { title: title(lead), description: `${lead}\n\nReal gameplay, recorded in a match.\n\n${ABOUT}\n\n${STORES}\n\n${ASK}\n\n${TAGS}` };
+  return { title: title(lead), description: `${lead}\n\nReal gameplay, recorded in a match.\n\n${ABOUT}\n\n${STORES}\n\n${ASK}` };
 };
 
 /** The same voice, for Claude to write the variable part of a post (needs
@@ -52,7 +51,7 @@ const ai: NonNullable<GameConfig["post"]>["ai"] = {
     "Come and fight me.",
     "Better with a mate.",
   ],
-  boilerplate: `${ABOUT}\n\n${STORES}\n\n${ASK}\n\n${TAGS}`,
+  boilerplate: `${ABOUT}\n\n${STORES}\n\n${ASK}`,
   titleSuffix: GAME,
 };
 
