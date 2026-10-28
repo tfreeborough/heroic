@@ -593,39 +593,90 @@ export const beatStarts = (beats: Pick<Beat, "text">[]): number[] => {
 
 // ── the write-up's sources (docs/design/desk-writeup.md) ──
 
-export type SourceLink = { title: string; url?: string };
+/** Every source is a link: a note without one is never listed. */
+export type SourceLink = { title: string; url: string };
 
-const URL_RE = /https?:\/\/[^\s<>()\]]+/i;
 const NOTES_HEADING = /^(sources?|references?|links|notes?)\b/i;
 
 /**
+ * The URL starting at `from`: up to whitespace, a quote mark or an unmatched
+ * `)`, so a Wikipedia-style `Name_(thing)` keeps its brackets. Trailing
+ * sentence punctuation is left off.
+ */
+const takeUrl = (line: string, from: number): string => {
+  let depth = 0;
+  let i = from;
+  for (; i < line.length; i++) {
+    const c = line[i]!;
+    if (/[\s<>"\]]/.test(c)) break;
+    if (c === "(") depth++;
+    else if (c === ")") {
+      if (depth === 0) break;
+      depth--;
+    }
+  }
+  return line.slice(from, i).replace(/[.,;:!?]+$/, "");
+};
+
+/**
+ * A pasted URL fixed up, or undefined when it isn't a web address at all.
+ * Copying a link out of a page sometimes doubles it up
+ * (`site.com/page/49/!https:/site.com/the-article/`): the address after the
+ * `!` is the real one. (Only after a `!`: archive and redirect links carry a
+ * second address on purpose.)
+ */
+const cleanUrl = (raw: string): string | undefined => {
+  const inner = raw.match(/\/!(https?:)\/{1,2}(?=[^/])/i);
+  const url = inner ? `${inner[1]}//${raw.slice(inner.index! + inner[0].length)}` : raw;
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol) || !u.hostname.includes(".")) return undefined;
+    return u.href;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Google's backslash escapes (`\$300`) and bold/underline marks off a title. */
+const plainTitle = (t: string): string => t.replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/\*\*|__/g, "").trim();
+
+/** The first markdown link in a line, brackets in the URL and all. */
+const mdLink = (line: string): { title: string; url: string } | undefined => {
+  const m = /\[([^\]\n]+)\]\((?=https?:)/i.exec(line);
+  if (!m) return undefined;
+  return { title: m[1]!, url: takeUrl(line, m.index + m[0].length) };
+};
+
+/**
  * The article's Sources: the author's own notes (a Sources section, quoted
- * lines) as links, plus the sources of the research findings he accepted.
- * Nothing is invented: a note that is a markdown link keeps its words, a bare
- * URL is titled by its site, a note with no URL goes in as plain text. One
- * entry per URL.
+ * lines) that carry a link, plus the sources of the research findings he
+ * accepted. Nothing is invented: a markdown link keeps its words, a bare URL
+ * is titled by its site. A note with no working URL isn't a source (quoted
+ * lines are also on-screen lists and asides), so it's left out. One entry per
+ * URL.
  */
 export const sourcesList = (s: Pick<Script, "source" | "research">): SourceLink[] => {
   const out: SourceLink[] = [];
   const seen = new Set<string>();
-  const add = (x: SourceLink) => {
-    const key = x.url ? x.url.replace(/\/$/, "").toLowerCase() : `t:${x.title.toLowerCase()}`;
-    if (seen.has(key) || !x.title.trim()) return;
+  const add = (x: { title: string; url: string }) => {
+    const url = cleanUrl(x.url);
+    const title = plainTitle(x.title);
+    if (!url || !title) return;
+    const key = url.replace(/\/$/, "").toLowerCase();
+    if (seen.has(key)) return;
     seen.add(key);
-    out.push({ title: x.title.trim(), ...(x.url ? { url: x.url } : {}) });
+    out.push({ title, url });
   };
   for (const line of sourceNotes(s.source)) {
-    const link = line.match(/\[([^\]\n]+)\]\((https?:[^)\s]+)\)/);
+    const link = mdLink(line);
     if (link) {
-      add({ title: link[1]!, url: link[2] });
+      add(link);
       continue;
     }
-    const url = line.match(URL_RE)?.[0]?.replace(/[.,;:]+$/, "");
-    if (!url) {
-      add({ title: line.replace(/\*\*|__/g, "") });
-      continue;
-    }
-    const rest = line.replace(url, "").replace(/[\s:\-–,|.]+$/, "").replace(/^[\s:\-–,|]+/, "").replace(/\*\*|__/g, "").trim();
+    const at = line.search(/https?:\/\//i);
+    if (at < 0) continue;
+    const url = takeUrl(line, at);
+    const rest = line.replace(url, "").replace(/[\s:\-–,|.]+$/, "").replace(/^[\s:\-–,|]+/, "").trim();
     let title = rest;
     if (!title) {
       try {
@@ -646,8 +697,8 @@ export const sourcesList = (s: Pick<Script, "source" | "research">): SourceLink[
   return out;
 };
 
-/** The Sources section as markdown, or "" with nothing to list. Plain links: these are the author's own citations, so no nofollow. */
-export const sourcesMarkdown = (list: SourceLink[]): string => (list.length ? ["## Sources", "", ...list.map((x) => (x.url ? `- [${x.title.replace(/[[\]]/g, "")}](${x.url})` : `- ${x.title}`))].join("\n") : "");
+/** The Sources section as markdown, or "" with nothing to list. Plain links: these are the author's own citations, so no nofollow. Brackets in a URL are percent-encoded so no markdown reader cuts the link short. */
+export const sourcesMarkdown = (list: SourceLink[]): string => (list.length ? ["## Sources", "", ...list.map((x) => `- [${x.title.replace(/[[\]]/g, "")}](${x.url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`)].join("\n") : "");
 
 /** The body with any Sources section taken off (the save puts the real one back on the end). */
 export const withoutSources = (body: string): string => {

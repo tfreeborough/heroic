@@ -199,22 +199,18 @@ Am I saying AI in game development is all sunshine and rainbows? Absolutely not.
 
 ## Sources
 
-- Are old school practical effects still used in filmmaking?
-- Did studios get better at when and where they used CGI?
-- Add more manpower and break the complexity into smaller chunks
-- Use technology to make the task more manageable
 - [How many games were released in 2025? (How To Market A Game)](https://howtomarketagame.com/2026/01/08/how-many-games-were-released-in-2025/)
 - [Over 18,000 games released on Steam in 2025, but half have fewer than 10 reviews (MP1st, via SteamDB)](https://mp1st.com/news/18k-games-released-steam-2025-half-have-10-reviews)
-- [Over 18,000 games have come to Steam in 2025 (KitGuru)](https://www.kitguru.net/page/49/!https:/www.kitguru.net/gaming/matthew-wilson/over-18000-games-have-come-to-steam-in-2025/)
+- [Over 18,000 games have come to Steam in 2025 (KitGuru)](https://www.kitguru.net/gaming/matthew-wilson/over-18000-games-have-come-to-steam-in-2025/)
 - [Steam games disclosing generative AI use 'are up 800%' this year (VGC, via Totally Human)](https://www.videogameschronicle.com/news/steam-games-disclosing-generative-ai-use-are-up-800-this-year/)
 - [Valve opens the floodgates to allow more AI-based games on Steam (MP1st)](https://mp1st.com/news/valve-opens-the-floodgates-to-allow-more-ai-based-games-on-steam)
 - ["We see ourselves as the one and only true alternative to Steam" (PCGamesInsider)](https://www.pcgamesinsider.biz/interviews-and-opinion/67293/we-see-ourselves-as-the-one-and-only-true-alternative-to-steam/)
 - [GOG now using AI generated images on their store (GamingOnLinux)](https://gamingonlinux.com/2026/01/gog-now-using-ai-generated-images-on-their-store)
 - [What do you mean, no CGI? (VFX Voice)](https://vfxvoice.com/what-do-you-mean-no-cgi/)
-- [RollerCoaster Tycoon (Wikipedia)](https://en.wikipedia.org/wiki/RollerCoaster_Tycoon_(video_game)
+- [RollerCoaster Tycoon (Wikipedia)](https://en.wikipedia.org/wiki/RollerCoaster_Tycoon_%28video_game%29)
 - [The code of Chris Sawyer (PCGamesN)](https://pcgamesn.com/rollercoaster-tycoon/code-chris-sawyer)
 - [Big-budget game development is not sustainable (Aftermath)](https://aftermath.site/big-budget-game-development-is-not-sustainable/)
-- [Report: AAA games now cost \$300+ million (Dark Horizons)](https://www.darkhorizons.com/?p=190830)
+- [Report: AAA games now cost $300+ million (Dark Horizons)](https://www.darkhorizons.com/?p=190830)
 - [Stardew Valley creator almost canceled the game (GameRant via OpenCritic)](https://opencritic.com/news/34419/stardew-valley-creator-almost-canceled-the-game)
 - [Stack Overflow Developer Survey 2025: AI](https://survey.stackoverflow.co/2025/ai)
 - [Report finds that 94% of studios use AI (VGC, Vivrato VAIA Report)](https://www.videogameschronicle.com/news/report-finds-that-94-of-studios-use-ai-but-more-than-half-say-it-isnt-deeply-embedded-into-production/)

@@ -62,7 +62,7 @@ export const sourceNotes = (md: string): string[] => {
 
 /**
  * Google's markdown, tidied: images and their base64 tails gone, the
- * backslash escapes undone (Docs escapes every . - ! it thinks might be
+ * backslash escapes undone (Docs escapes every . - ! $ it thinks might be
  * markdown), no more than one blank line in a row, no trailing spaces.
  */
 export const cleanDocMarkdown = (md: string): string =>
@@ -71,7 +71,8 @@ export const cleanDocMarkdown = (md: string): string =>
     // Reference-style images: the use and the definition (a data: URL that can run to megabytes).
     .replace(/^\[[^\]\n]+\]:\s*<?data:[^\n]*$/gm, "")
     .replace(/!\[[^\]\n]*\](\[[^\]\n]*\]|\([^)\n]*\))/g, "")
-    .replace(/\\([\\`*_{}[\]()#+\-.!|>~<])/g, "$1")
+    // Any escaped ASCII punctuation (CommonMark's set): Docs escapes more than you'd think, \$300 included.
+    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
     // Older Docs mark a section with a line that's all bold rather than a heading style: short, and not a sentence
     // that ends in a stop (a bold line that's said for emphasis does). A question counts, titles often are.
     .replace(/^[ \t]*\*\*([^*\n]+?)\*\*[ \t]*$/gm, (line, t: string) => (t.trim().split(/\s+/).length <= 12 && !/[.!…]$/.test(t.trim()) ? `## ${t.trim()}` : line))

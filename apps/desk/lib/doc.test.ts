@@ -10,7 +10,7 @@ They wait for a server that trusts them\\.
 
 ## Client broadcast
 
-In **client broadcast** every player tells everyone else what happened \\- and nobody checks\\.
+In **client broadcast** every player tells everyone else what happened \\- and nobody checks\\. A cheat costs \\$30\\.
 
 ![][image1]
 
@@ -24,7 +24,7 @@ describe("cleanDocMarkdown", () => {
   const md = cleanDocMarkdown(EXPORT);
   test("undoes the escapes and drops images and their data", () => {
     expect(md).toContain("Most cheats aren't clever. They're *patient*.");
-    expect(md).toContain("what happened - and nobody checks.");
+    expect(md).toContain("what happened - and nobody checks. A cheat costs $30.");
     expect(md).not.toContain("image1");
     expect(md).not.toContain("base64");
   });
