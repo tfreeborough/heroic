@@ -541,3 +541,114 @@ export const setPlayerNote = async (db: Db, playerId: string, note: string): Pro
   const clean = note.trim().slice(0, 2000);
   await db.execute({ sql: `UPDATE players SET note = ? WHERE id = ?`, args: [clean || null, playerId] });
 };
+
+// ── tidying out old test accounts ──────────────────────────────────────────
+
+export interface StalePlayerRow extends PlayerTableRow {
+  feedback: number;
+  /** Why HQ leaves this one unticked: it looks like a real person. */
+  protectedBy: ("paid" | "linked" | "feedback")[];
+}
+
+/**
+ * "Nothing since the cutoff" as one SQL condition over `p`: not seen, no
+ * daily-seen row, no logged or ranked seat, no ledger movement. Shared by
+ * the read and the delete so the delete can't outrun the rule the list
+ * was built from.
+ */
+const STALE_WHERE = `p.id NOT LIKE ? AND p.created_at < ?
+  AND (p.last_seen_at IS NULL OR p.last_seen_at < ?)
+  AND NOT EXISTS (SELECT 1 FROM player_days d WHERE d.player_id = p.id AND d.day >= ?)
+  AND NOT EXISTS (SELECT 1 FROM match_players mp JOIN match_log m ON m.id = mp.match_id WHERE mp.player_id = p.id AND m.created_at >= ?)
+  AND NOT EXISTS (SELECT 1 FROM ranked_match_players rp JOIN ranked_matches rm ON rm.id = rp.match_id WHERE rp.subject_id = p.id AND rm.created_at >= ?)
+  AND NOT EXISTS (SELECT 1 FROM glory_ledger g WHERE g.player_id = p.id AND g.created_at >= ?)
+  AND NOT EXISTS (SELECT 1 FROM signet_ledger s WHERE s.player_id = p.id AND s.created_at >= ?)`;
+
+const staleArgs = (cutoffS: number): (string | number)[] => {
+  const day = new Date(cutoffS * 1000).toISOString().slice(0, 10);
+  return [BOT_PREFIX, cutoffS, cutoffS, day, cutoffS, cutoffS, cutoffS, cutoffS];
+};
+
+/** Players registered before the cutoff who've done nothing since: the
+ * test-device leftovers, plus any real early player who never came back. */
+export const stalePlayers = async (db: Db, cutoffS: number): Promise<StalePlayerRow[]> => {
+  const r = await db.execute({
+    sql: `SELECT p.id, p.name, p.created_at, p.last_seen_at, p.clerk_user_id,
+            (SELECT COUNT(*) FROM match_players mp WHERE mp.player_id = p.id)
+              + (SELECT COUNT(*) FROM ranked_match_players rp WHERE rp.subject_id = p.id
+                   AND NOT EXISTS (SELECT 1 FROM match_players mp2 WHERE mp2.match_id = rp.match_id AND mp2.player_id = p.id)) AS matches,
+            (SELECT MAX(rating) FROM ranked_ratings rr WHERE rr.subject_id = p.id) AS rating,
+            (SELECT COALESCE(SUM(amount), 0) FROM glory_ledger g WHERE g.player_id = p.id) AS glory,
+            (SELECT COALESCE(SUM(amount), 0) FROM signet_ledger s WHERE s.player_id = p.id) AS signets,
+            (SELECT COUNT(*) FROM signet_ledger s WHERE s.player_id = p.id AND s.source LIKE 'iap:%') AS purchases,
+            (SELECT COUNT(*) FROM achievement_unlocks a WHERE a.player_id = p.id) AS deeds,
+            (SELECT COUNT(*) FROM feedback f WHERE f.player_id = p.id) AS feedback
+          FROM players p
+          WHERE ${STALE_WHERE}
+          ORDER BY p.created_at`,
+    args: staleArgs(cutoffS),
+  });
+  return r.rows.map((row) => {
+    const linked = row["clerk_user_id"] !== null && row["clerk_user_id"] !== undefined;
+    const purchases = num(row["purchases"]);
+    const feedback = num(row["feedback"]);
+    const protectedBy: StalePlayerRow["protectedBy"] = [];
+    if (purchases > 0) protectedBy.push("paid");
+    if (linked) protectedBy.push("linked");
+    if (feedback > 0) protectedBy.push("feedback");
+    return {
+      id: str(row["id"]),
+      name: opt(row["name"]),
+      createdAt: num(row["created_at"]),
+      lastSeenAt: optNum(row["last_seen_at"]),
+      linked,
+      matches: num(row["matches"]),
+      rating: optNum(row["rating"]),
+      glory: num(row["glory"]),
+      signets: num(row["signets"]),
+      purchases,
+      deeds: num(row["deeds"]),
+      feedback,
+      protectedBy,
+    };
+  });
+};
+
+/**
+ * Permanently delete the given players and everything that is only theirs
+ * (wallets, deeds, rating, tokens, owned items, feedback, seen days).
+ * Re-checks the stale rule inside the delete, so an id that has been active
+ * since the list was drawn, or a bot, is silently kept. Match history stays:
+ * those rows are other players' history too. Returns how many went.
+ */
+export const deleteStalePlayers = async (db: Db, ids: readonly string[], cutoffS: number): Promise<number> => {
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (unique.length === 0) return 0;
+  const doomed = await db.execute({
+    sql: `SELECT p.id FROM players p WHERE p.id IN (${unique.map(() => "?").join(",")}) AND ${STALE_WHERE}`,
+    args: [...unique, ...staleArgs(cutoffS)],
+  });
+  const keep = doomed.rows.map((row) => str(row["id"]));
+  if (keep.length === 0) return 0;
+  const inList = `(${keep.map(() => "?").join(",")})`;
+  // Every table with a foreign key into players, read off the live schema —
+  // older databases still carry tables the code no longer creates (the
+  // pre-rename writ_ledger), and one missed reference fails the whole batch.
+  const referencing = await db.execute(
+    `SELECT m.name AS tbl, f."from" AS col FROM sqlite_master m, pragma_foreign_key_list(m.name) f
+      WHERE m.type = 'table' AND f."table" = 'players'`,
+  );
+  const owned = new Map<string, string>(referencing.rows.map((row) => [str(row["tbl"]), str(row["col"])]));
+  // Plus the player-keyed tables that never declared the reference.
+  for (const t of ["achievement_counters", "achievement_progress_marks", "player_days"]) owned.set(t, "player_id");
+  await db.batch(
+    [
+      ...[...owned].map(([t, col]) => ({ sql: `DELETE FROM "${t}" WHERE "${col}" IN ${inList}`, args: keep })),
+      { sql: `DELETE FROM skirmish_companions WHERE player_id IN ${inList} OR other_id IN ${inList}`, args: [...keep, ...keep] },
+      { sql: `DELETE FROM ranked_ratings WHERE subject_id IN ${inList}`, args: keep },
+      { sql: `DELETE FROM players WHERE id IN ${inList}`, args: keep },
+    ],
+    "write",
+  );
+  return keep.length;
+};

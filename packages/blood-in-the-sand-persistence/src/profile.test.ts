@@ -22,6 +22,8 @@ import {
   playerWallet,
   playersTable,
   setPlayerNote,
+  stalePlayers,
+  deleteStalePlayers,
 } from "./profile";
 import { funnel, playerDaysSince, pulseByDay, quietPaidPlayers, retentionCohorts, rttSummary, dayKey } from "./stats";
 import { mintCodes, redeemCode } from "./codes";
@@ -318,5 +320,53 @@ describe("health", () => {
     const quiet = await quietPaidPlayers(db, 7, NOW);
     expect(quiet.map((q) => q.id)).toEqual([a]);
     expect(await rttSummary(db, 7, NOW)).toEqual({ samples: 2, p50: 120, p90: 120 });
+  });
+});
+
+describe("tidying old test accounts", () => {
+  const CUTOFF = NOW - 20 * DAY;
+  const at = async (sql: string, args: (string | number)[]) => db.execute({ sql, args });
+
+  test("lists only players quiet since the cutoff, flags the real-looking ones, and deletes just their own rows", async () => {
+    const { a: old, b: active } = await two();
+    const lateMatch = (await registerPlayer(db)).playerId;
+    const paid = (await registerPlayer(db)).playerId;
+    const fresh = (await registerPlayer(db)).playerId;
+    for (const id of [old, active, lateMatch, paid]) await at("UPDATE players SET created_at = ? WHERE id = ?", [NOW - 40 * DAY, id]);
+    await at("UPDATE players SET created_at = ? WHERE id = ?", [NOW - DAY, fresh]);
+    await at("UPDATE players SET last_seen_at = ? WHERE id = ?", [NOW - 30 * DAY, old]);
+    await at("UPDATE players SET last_seen_at = ? WHERE id = ?", [NOW - DAY, active]);
+    // old played active long ago and earned some Glory; lateMatch was never "seen" but played after the cutoff.
+    await recordMatchLog(db, { matchId: "early", mode: "skirmish", teamSize: 1, teamCount: 2, humans: 2, bots: 0, rounds: 1, players: [{ playerId: old, team: 1, won: true }, { playerId: active, team: 2, won: false }] });
+    await recordMatchLog(db, { matchId: "late", mode: "skirmish", teamSize: 1, teamCount: 2, humans: 1, bots: 1, rounds: 1, players: [{ playerId: lateMatch, team: 1, won: true }] });
+    await at("UPDATE match_log SET created_at = ? WHERE id = 'early'", [NOW - 35 * DAY]);
+    await at("UPDATE match_log SET created_at = ? WHERE id = 'late'", [NOW - DAY]);
+    await recordGlory(db, { playerId: old, amount: 50, source: "match:early", idempotencyKey: "g-old" });
+    await recordGlory(db, { playerId: active, amount: 20, source: "match:early", idempotencyKey: "g-active" });
+    await creditIapSignets(db, { playerId: paid, signets: 3, platform: "apple", transactionId: "t1", productId: "signet_pack_3" });
+    await at("UPDATE glory_ledger SET created_at = ?", [NOW - 35 * DAY]);
+    await at("UPDATE signet_ledger SET created_at = ?", [NOW - 35 * DAY]);
+    await at("INSERT INTO skirmish_companions (player_id, other_id, with_count, against_count) VALUES (?, ?, 0, 1), (?, ?, 0, 1)", [old, active, active, old]);
+
+    const stale = await stalePlayers(db, CUTOFF);
+    expect(stale.map((r) => r.id).sort()).toEqual([old, paid].sort());
+    expect(stale.find((r) => r.id === old)).toMatchObject({ matches: 1, glory: 50, protectedBy: [] });
+    expect(stale.find((r) => r.id === paid)!.protectedBy).toEqual(["paid"]);
+
+    // A table from an older schema that still points at players.
+    await at("CREATE TABLE writ_ledger (id INTEGER PRIMARY KEY, player_id TEXT NOT NULL REFERENCES players(id), amount INTEGER NOT NULL)", []);
+    await at("INSERT INTO writ_ledger (player_id, amount) VALUES (?, 1)", [old]);
+
+    // active and lateMatch ride along in the POST but the delete re-checks the rule.
+    expect(await deleteStalePlayers(db, [old, active, lateMatch], CUTOFF)).toBe(1);
+    expect(await playerCard(db, old)).toBeNull();
+    expect((await at("SELECT COUNT(*) AS n FROM glory_ledger WHERE player_id = ?", [old])).rows[0]!["n"]).toBe(0);
+    expect((await at("SELECT COUNT(*) AS n FROM skirmish_companions", [])).rows[0]!["n"]).toBe(0);
+    expect((await at("SELECT COUNT(*) AS n FROM writ_ledger", [])).rows[0]!["n"]).toBe(0);
+    // Match history stays for the other side.
+    expect((await at("SELECT COUNT(*) AS n FROM match_players WHERE match_id = 'early'", [])).rows[0]!["n"]).toBe(2);
+    expect(await playerCard(db, active)).not.toBeNull();
+    expect((await at("SELECT COUNT(*) AS n FROM glory_ledger WHERE player_id = ?", [active])).rows[0]!["n"]).toBe(1);
+    expect(await deleteStalePlayers(db, [], CUTOFF)).toBe(0);
   });
 });

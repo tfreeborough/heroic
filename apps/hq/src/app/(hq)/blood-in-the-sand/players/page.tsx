@@ -142,7 +142,8 @@ export default async function Players({ searchParams }: { searchParams: Promise<
       </div>
       <p className="hint">
         {rows.length === 200 ? "Showing the first 200 — narrow it down with a search or a filter. " : ""}
-        Matches counts every online match on record (the log plus older ranked history). Rating is the best bracket.
+        Matches counts every online match on record (the log plus older ranked history). Rating is the best bracket.{" "}
+        <Link href="/blood-in-the-sand/players/tidy">Tidy up old test accounts</Link>
       </p>
 
       <h2>New players a day · 60 days</h2>

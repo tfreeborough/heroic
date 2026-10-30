@@ -191,6 +191,8 @@ export {
   activityFeed,
   hqGrant,
   setPlayerNote,
+  stalePlayers,
+  deleteStalePlayers,
   PLAYER_SORTS,
   PLAYER_FILTERS,
   ACTIVITY_KINDS,
@@ -205,4 +207,5 @@ export {
   type ActivityRow,
   type ActivityKind,
   type HqGrantInput,
+  type StalePlayerRow,
 } from "./profile";
