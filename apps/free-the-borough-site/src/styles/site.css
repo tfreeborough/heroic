@@ -385,7 +385,6 @@ footer a:hover { color: var(--gold); }
 
 @media (max-width: 860px) {
   .hero-grid { grid-template-columns: 1fr; }
-  .log-grid { grid-template-columns: 1fr; }
   .hero-art { display: none; }
   .shots { --per: 3; }
 }
@@ -426,6 +425,10 @@ footer a:hover { color: var(--gold); }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
   margin-top: 8px;
+}
+/* After the base rule, or the two columns win the cascade on phones. */
+@media (max-width: 860px) {
+  .log-grid { grid-template-columns: 1fr; }
 }
 .log-card {
   display: flex;
