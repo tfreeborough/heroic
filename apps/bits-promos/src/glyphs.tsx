@@ -26,5 +26,7 @@ export const buildShows = (seq: Playable | null, words: PlacedWord[], startFrom:
       const w = words.find((x) => x.start + startFrom >= c.at && x.start + startFrom < c.at + c.seconds && bare(x.text) === bare(want));
       return w ? [{ word: w.text.replace(/[^\p{L}\p{N}'’-]/gu, ""), at: w.start + startFrom - c.at }] : [];
     });
-    return [{ id: c.id, src: c.src, seed: c.seed ?? 1, at: c.at, seconds: c.seconds, ...(pulls.length ? { pulls } : {}) }];
+    // A Desk picture's depth map sits beside it (apps/desk/lib/depth.ts); one that isn't there just loads as none.
+    const depth = c.src.startsWith("cards/") ? c.src.replace(/\.(png|jpe?g|webp)$/i, ".depth.png") : undefined;
+    return [{ id: c.id, src: c.src, ...(depth ? { depth } : {}), seed: c.seed ?? 1, at: c.at, seconds: c.seconds, ...(pulls.length ? { pulls } : {}) }];
   });

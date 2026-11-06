@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sourcesList, sourcesMarkdown } from "./scripts";
+import { sourcesForYouTube, sourcesList, sourcesMarkdown } from "./scripts";
 
 // Shaped like the "Is This Slop?" Doc (10-27): quoted on-screen lists inside chapters, a Sources section of
 // quoted markdown links, one with brackets in its URL, one doubled up when it was copied, one with a Docs escape.
@@ -56,5 +56,16 @@ describe("sourcesList", () => {
   test("every markdown line is a well-formed link", () => {
     const lines = sourcesMarkdown(list).split("\n").slice(2);
     for (const l of lines) expect(l).toMatch(/^- \[[^\]]+\]\(https?:\/\/[^\s()]+\)$/);
+  });
+});
+
+describe("sourcesForYouTube", () => {
+  test("plain text, a title and its link a line, under a Sources line; nothing when there's nothing", () => {
+    const text = sourcesForYouTube([
+      { title: "RollerCoaster Tycoon (Wikipedia)", url: "https://en.wikipedia.org/wiki/RollerCoaster_Tycoon_(video_game)" },
+      { title: "A <b>bold</b> claim", url: "https://example.com/a" },
+    ]);
+    expect(text).toBe("Sources\nRollerCoaster Tycoon (Wikipedia): https://en.wikipedia.org/wiki/RollerCoaster_Tycoon_(video_game)\nA bbold/b claim: https://example.com/a");
+    expect(sourcesForYouTube([])).toBe("");
   });
 });

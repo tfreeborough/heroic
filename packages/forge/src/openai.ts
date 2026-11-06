@@ -64,3 +64,38 @@ export const generateImage = async (
   if (!b64) throw new Error("OpenAI returned no image payload");
   return Buffer.from(b64, "base64");
 };
+
+const EDIT_ENDPOINT = "https://api.openai.com/v1/images/edits";
+
+/**
+ * One PNG drawn with reference pictures (2026-11-05, the Desk's cast
+ * references): the same request shape as a generation plus the images,
+ * which the prompt refers to ("reference 1 is …"). gpt-image-2.5-flare
+ * rejects `input_fidelity`, so it's never sent. Input images count against
+ * the org's per-minute input-image limit (20/min on 11-05): callers retry 429s.
+ */
+export const editImage = async (
+  apiKey: string,
+  prompt: string,
+  refs: { name: string; png: Uint8Array }[],
+  size: ImageSize = "1536x1024",
+  model: string = DEFAULT_IMAGE_MODEL,
+): Promise<Buffer> => {
+  const form = new FormData();
+  form.append("model", model);
+  form.append("prompt", prompt);
+  form.append("n", "1");
+  form.append("size", size);
+  form.append("quality", "medium");
+  form.append("output_format", "png");
+  for (const r of refs) form.append("image[]", new Blob([new Uint8Array(r.png)], { type: "image/png" }), r.name);
+  const res = await fetch(EDIT_ENDPOINT, { method: "POST", headers: { authorization: `Bearer ${apiKey}` }, body: form, signal: AbortSignal.timeout(240_000) });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`OpenAI images ${res.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { data?: { b64_json?: string }[] };
+  const b64 = data.data?.[0]?.b64_json;
+  if (!b64) throw new Error("OpenAI returned no image payload");
+  return Buffer.from(b64, "base64");
+};

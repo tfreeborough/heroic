@@ -10,7 +10,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GameConfig } from "../game";
-import { type Beat, type BeatCard, type BeatMood, type BeatPicture, type Cut, SCORE_MOODS, type ScoreMood, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, isoDate, slugify, summarise, youtubeId } from "./scripts";
+import { type Beat, type BeatCard, type BeatMood, type BeatPicture, type Cut, PICTURE_STYLES, SCORE_MOODS, type ScoreMood, DEFAULT_GAP, type Script, type ScriptPatch, type ScriptSummary, type ScriptTake, cutsOf, emptyScript, isoDate, slugify, summarise, youtubeId } from "./scripts";
 import { rendersDir } from "./render";
 import { forRewrite } from "./doc";
 
@@ -78,6 +78,8 @@ const cleanPicture = (p: Partial<BeatPicture>): BeatPicture => {
     ...(p.check ? { check: true } : {}),
     ...(p.error ? { error: String(p.error).slice(0, 200) } : {}),
     look: Math.round(num(p.look, 1, 1e6, 1)),
+    ...(Array.isArray(p.cast) ? { cast: p.cast.map((n) => String(n).slice(0, 80)).slice(0, 8) } : {}),
+    ...(typeof p.castFor === "string" ? { castFor: p.castFor.slice(0, 1200) } : {}),
   };
 };
 const cleanMood = (m: Partial<BeatMood> | undefined): BeatMood | undefined =>
@@ -92,6 +94,12 @@ const cleanBeat = (b: Partial<Beat>): Beat | undefined => {
   const pulled = Array.isArray(b.pulled) ? b.pulled.map((w) => String(w).trim().slice(0, 40)).filter(Boolean).slice(0, 4) : [];
   const chapter = String(b.chapter ?? "").trim().slice(0, 80);
   const scene = String(b.scene ?? "").trim().slice(0, 400);
+  // desk-shorts.md § 6: a long beat's sentences as recorded, and a short beat's part of them. Every page save comes through here, so a field missing below is a field lost.
+  const sentences = Array.isArray(b.sentences) ? b.sentences.slice(0, 80).flatMap((x) => (x && String(x.text ?? "").trim() ? [{ text: String(x.text).trim().slice(0, 1000), seconds: num(x.seconds, 0, 1e5, 0) }] : [])) : [];
+  const part =
+    b.part && typeof b.part === "object" && String(b.part.said ?? "").trim()
+      ? { first: Math.round(num(b.part.first, 1, 80, 1)), last: Math.round(num(b.part.last, 1, 80, 1)), said: String(b.part.said).trim().slice(0, 4000) }
+      : undefined;
   return {
     id,
     text,
@@ -104,6 +112,8 @@ const cleanBeat = (b: Partial<Beat>): Beat | undefined => {
     ...(pulled.length ? { pulled } : {}),
     ...(chapter ? { chapter } : {}),
     ...(typeof b.seconds === "number" && b.seconds > 0 ? { seconds: num(b.seconds, 0, 1e5, 0) } : {}),
+    ...(sentences.length ? { sentences } : {}),
+    ...(part ? { part } : {}),
   };
 };
 const cleanCut = (c: Partial<Cut>, kind: Cut["kind"]): Cut | undefined => {
@@ -126,6 +136,8 @@ const cleanCut = (c: Partial<Cut>, kind: Cut["kind"]): Cut | undefined => {
     ...(typeof c.score === "number" ? { score: num(c.score, 0, 10, 0) } : {}),
     ...(Array.isArray(c.hookDrafts) && c.hookDrafts.length ? { hookDrafts: c.hookDrafts.slice(0, 6).flatMap((d) => (d?.text ? [{ text: String(d.text).trim().slice(0, 200), source: String(d.source ?? "").trim().slice(0, 60) }] : [])) } : {}),
     ...(state ? { state } : {}),
+    ...(c.binReason?.trim() ? { binReason: String(c.binReason).trim().slice(0, 300) } : {}),
+    ...(c.reshapedFrom ? { reshapedFrom: String(c.reshapedFrom) } : {}),
     ...(c.post && typeof c.post === "object" ? { post: { title: String(c.post.title ?? "").trim().slice(0, 100), description: String(c.post.description ?? "").trim().slice(0, 1000), tags: String(c.post.tags ?? "").trim().slice(0, 500) } } : {}),
     beats,
   };
@@ -141,6 +153,15 @@ const cleanTake = (t: Partial<ScriptTake>): ScriptTake | undefined => {
         .filter((k) => k.end - k.start > 0.02)
         .sort((a, b) => a.start - b.start)
     : undefined;
+  const spans =
+    t.spans && typeof t.spans === "object"
+      ? Object.fromEntries(
+          Object.entries(t.spans as Record<string, { start?: unknown; end?: unknown }>)
+            .slice(0, 80)
+            .map(([b, k]) => [String(b), { start: num(k?.start, 0, seconds || 1e6, 0), end: num(k?.end, 0, seconds || 1e6, 0) }] as const)
+            .filter(([, k]) => k.end - k.start > 0.05),
+        )
+      : undefined;
   return {
     file,
     seconds,
@@ -149,6 +170,7 @@ const cleanTake = (t: Partial<ScriptTake>): ScriptTake | undefined => {
     ...(t.transcribed ? { transcribed: true } : {}),
     ...(keep?.length ? { keep } : {}),
     ...(Array.isArray(t.assign) && t.assign.length ? { assign: t.assign.map(String).slice(0, 40) } : {}),
+    ...(spans && Object.keys(spans).length ? { spans } : {}),
   };
 };
 
@@ -203,6 +225,8 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
     const cast = (Array.isArray(patch.cast) ? patch.cast : []).flatMap((c) => (c?.name?.trim() && c.look?.trim() ? [{ name: String(c.name).trim(), look: String(c.look).trim() }] : []));
     s.cast = cast.length ? cast : undefined;
   }
+  // Any style the Desk knows (PICTURE_STYLES): a hand-kept list here dropped conté silently (11-05).
+  if (patch.pictureStyle && patch.pictureStyle in PICTURE_STYLES) s.pictureStyle = patch.pictureStyle;
   if (patch.titles !== undefined) s.titles = (Array.isArray(patch.titles) ? patch.titles : []).flatMap((t) => (t?.id ? [{ id: String(t.id), text: String(t.text ?? "").slice(0, 100), ...(t.why ? { why: String(t.why) } : {}) }] : []));
   if (patch.writeup !== undefined) {
     // The words are the page's to change; where it was saved is the server's.
@@ -211,6 +235,7 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
       ? {
           title: String(w.title ?? "").slice(0, 120),
           description: String(w.description ?? "").slice(0, 300),
+          ...(String(w.summary ?? "").trim() ? { summary: String(w.summary).slice(0, 600) } : {}),
           slug: slugify(String(w.slug ?? "")),
           body: String(w.body ?? "").slice(0, 60000),
           ...(youtubeId(String(w.youtube ?? "")) ? { youtube: youtubeId(String(w.youtube ?? "")) } : {}),
@@ -262,9 +287,9 @@ export const updateScript = (g: GameConfig, id: string, patch: ScriptPatch): Scr
       const c = cleanTake(t);
       const was = c && mine.get(c.file);
       if (!c || !was) return [];
-      // Kept regions and the beats it's assigned to are the page's to change (an assign the page cleared goes).
-      const { assign: _a, ...rest } = was;
-      return [{ ...rest, words: c.words.length ? c.words : was.words, ...(c.keep ? { keep: c.keep } : {}), ...(c.assign ? { assign: c.assign } : {}) }];
+      // Kept regions, the beats it's assigned to and where its beats were dragged are the page's to change (one the page cleared goes: Reset really resets).
+      const { assign: _a, keep: _k, spans: _s, ...rest } = was;
+      return [{ ...rest, words: c.words.length ? c.words : was.words, ...(c.keep ? { keep: c.keep } : {}), ...(c.assign ? { assign: c.assign } : {}), ...(c.spans ? { spans: c.spans } : {}) }];
     });
     // A take the page didn't send is not deleted this way (that's the DELETE route): it stays.
     for (const t of s.takes.length < mine.size ? [...mine.values()].filter((t) => !s.takes.some((x) => x.file === t.file)) : []) s.takes.push(t);

@@ -18,10 +18,32 @@ export type Look = {
   edge: Edge;
   /** How far in from the border the edge treatment reaches, 0..0.5 of the picture. */
   edgeZone: number;
+  /** A contrast curve set from the picture's own brightness range before the
+   * grid is sampled, so a photo's mid-greys split into lit subject and empty
+   * dark (ink.ts punchInk). Off when unset. */
+  punch?: Strength;
+  /** Characters on a clear edge follow its direction (- | / \) the way
+   * hand-made ASCII art does; flat areas keep the ramp (plan.ts). Off when unset. */
+  outline?: Strength;
 };
+export type Strength = "on" | "strong";
 
 /** Tom's look, 2026-10-09: bold tonal source, light = glyphs, 120 columns, dither. */
 export const LOCKED_LOOK: Look = { cols: 120, gain: 1.1, gamma: 1, pool: 0, levels: 6, edge: "dither", edgeZone: 0.12 };
+
+/**
+ * The long-form Beats video's pictures: 360 columns (280 until 11-06, when
+ * Tom saw the moving cameras read much better finer at full screen), the glow under the
+ * glyphs, no punch, no outline. On 11-05 the test sheet picked 240 columns,
+ * strong punch and outline and no glow, but real renders of film stills
+ * came out dim and thin, and Tom went back to this look (setting A in the
+ * look lab) for its detail: people watch full screen. Punch and outline
+ * stay as options (Beats props). Typed words never take them (remotion.tsx textLook).
+ */
+export const BEATS_LOOK: Look = { ...LOCKED_LOOK, cols: 360 };
+export const BEATS_GLOW = 0.22;
+/** The camera move on each Beats picture (remotion.tsx cameraMove): it scales at most this much, so a picture that holds for seconds keeps moving. */
+export const BEATS_MOTION = 0.125; // 0.1 until 11-06: Tom wanted a tad more once the moves ran the whole card
 
 export type RGB = readonly [number, number, number];
 export type Palette = { bg: string; ink: RGB; trail: RGB; head: string };

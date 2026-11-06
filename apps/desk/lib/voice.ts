@@ -176,8 +176,12 @@ export const saveTake = async (g: GameConfig, id: string, bytes: Uint8Array, opt
   ensure(g);
   const stem = voiceId(id);
   const ext = (opts.ext ?? "wav").replace(/[^a-z0-9]/gi, "").toLowerCase() || "wav";
+  // A number is never used twice, binned takes included: a new take named like a deleted one plays the old one's
+  // audio (same URL, so the player, the browser's cache and the waveform all keep the old sound) and would
+  // overwrite it in .trash when it's binned in turn.
+  const taken = [...readdirSync(takesDir(g)), ...(existsSync(trashDir(g)) ? readdirSync(trashDir(g)) : [])];
   let n = 1;
-  while (readdirSync(takesDir(g)).some((f) => f.startsWith(`${stem}-${n}.`))) n++;
+  while (taken.some((f) => f.startsWith(`${stem}-${n}.`))) n++;
   const raw = join(takesDir(g), `${stem}-${n}.raw.${ext}`);
   const sound: Sound = { tidy: opts.tidy ?? true, denoise: strength(opts.denoise) };
   const out = soundOf(g, `${stem}-${n}`, sound);

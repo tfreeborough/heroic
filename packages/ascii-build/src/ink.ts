@@ -5,7 +5,7 @@
  * Works on raw RGBA so it runs anywhere (browser, Remotion, bun tests);
  * `inkFromImage` is the canvas convenience for pages.
  */
-import { type Look, clamp, edgeCell, edgeRamp, lerp, smooth } from "./look";
+import { type Look, type Strength, clamp, edgeCell, edgeRamp, lerp, smooth } from "./look";
 
 export type Tone = "light" | "dark";
 
@@ -63,6 +63,112 @@ export const inkFromRGBA = (rgba: Uint8ClampedArray | Uint8Array, w: number, h: 
   return { data, w, h };
 };
 
+/**
+ * Punch: a contrast curve on the ink, set from the picture's own brightness
+ * range (a fixed curve wiped out dark photos, 11-05). What's drawn below the
+ * 30th percentile (45th when strong) goes to nothing, the 97th and up is full
+ * ink, a gentle lift between. A woodcut barely changes; a soft photo's grey
+ * wash drops away and its lit subject stands out.
+ */
+export const punchInk = (ink: Ink, strength: Strength): Ink => {
+  const drawn = Array.from(ink.data).filter((v) => v > 0.02).sort((a, b) => a - b);
+  if (!drawn.length) return ink;
+  const q = (f: number) => drawn[Math.min(drawn.length - 1, Math.floor(drawn.length * f))]!;
+  const lo = q(strength === "strong" ? 0.45 : 0.3), hi = Math.max(lo + 0.05, q(0.97));
+  const data = new Float32Array(ink.data.length);
+  for (let p = 0; p < data.length; p++) data[p] = Math.pow(clamp((ink.data[p]! - lo) / (hi - lo), 0, 1), 0.8);
+  return { data, w: ink.w, h: ink.h };
+};
+
+/** An image's plain brightness at `width`, 0..1 a pixel, no paper cut away (a depth map: near = bright). */
+export const lumaFromImage = (img: CanvasImageSource & { width: number; height: number }, width = 512): Ink => {
+  const w = width, h = Math.round((width * img.height) / img.width);
+  const c = new OffscreenCanvas(w, h);
+  const g = c.getContext("2d", { willReadFrequently: true })!;
+  g.drawImage(img, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data;
+  const data = new Float32Array(w * h);
+  for (let p = 0; p < w * h; p++) data[p] = (0.299 * px[p * 4]! + 0.587 * px[p * 4 + 1]! + 0.114 * px[p * 4 + 2]!) / 255;
+  return { data, w, h };
+};
+
+/**
+ * The picture split by depth into layers, back to front (the parallax
+ * layers). The cuts are a three-way Otsu over the depth histogram weighted
+ * by the picture's ink, so they fall between the lit things, not wherever
+ * the raw depth divides (a near table took the whole front layer, with the
+ * inventor left in the back with the wall, 11-05). Each layer's mask is
+ * softened a little. The back layer's holes (behind the nearer layers) are
+ * filled from around them (a normalised blur), so a layer sliding aside
+ * shows more room, not a cut-out.
+ */
+export const layersByDepth = (ink: Ink, depth: Ink): { ink: Ink; mask: Ink }[] => {
+  const { w, h } = ink;
+  const n = w * h;
+  const d = new Float32Array(n);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = depth.data[Math.min(depth.h - 1, Math.floor((y * depth.h) / h)) * depth.w + Math.min(depth.w - 1, Math.floor((x * depth.w) / w))]!;
+  const B = 64;
+  const hist = new Float64Array(B), sum = new Float64Array(B);
+  for (let p = 0; p < n; p++) { const i = Math.min(B - 1, Math.floor(d[p]! * B)), wgt = ink.data[p]! + 0.03; hist[i]! += wgt; sum[i]! += i * wgt; }
+  // Prefix sums, then the pair of cuts with the most between-class variance.
+  const W = new Float64Array(B + 1), M = new Float64Array(B + 1);
+  for (let i = 0; i < B; i++) { W[i + 1] = W[i]! + hist[i]!; M[i + 1] = M[i]! + sum[i]!; }
+  const cls = (a: number, b: number) => { const wt = W[b]! - W[a]!; return wt > 0 ? ((M[b]! - M[a]!) ** 2) / wt : 0; };
+  // Cuts only in the histogram's valleys (between things, never through one: a person's depth spans a range,
+  // and an unrestricted cut sliced the inventor in two, 11-05), the pair with the most between-class variance.
+  const smooth3 = Array.from(hist, (_, i) => (hist[Math.max(0, i - 1)]! + hist[i]! + hist[Math.min(B - 1, i + 1)]!) / 3);
+  const valleys = [];
+  for (let i = 2; i < B - 1; i++) if (smooth3[i]! <= smooth3[i - 1]! && smooth3[i]! <= smooth3[i + 1]!) valleys.push(i);
+  const cands = valleys.length >= 2 ? valleys : Array.from({ length: B - 2 }, (_, i) => i + 1);
+  let best = -1, c1 = B / 3, c2 = (2 * B) / 3;
+  for (const i of cands) for (const j of cands) {
+    if (j <= i) continue;
+    const v = cls(0, i) + cls(i, j) + cls(j, B);
+    if (v > best) { best = v; c1 = i; c2 = j; }
+  }
+  const cuts = [c1 / B, c2 / B];
+  const which = new Uint8Array(n);
+  for (let p = 0; p < n; p++) which[p] = d[p]! < cuts[0]! ? 0 : d[p]! < cuts[1]! ? 1 : 2;
+  return [0, 1, 2].map((L) => {
+    const hard = new Float32Array(n);
+    for (let p = 0; p < n; p++) hard[p] = which[p] === L ? 1 : 0;
+    const mask = blurMap(hard, w, h, 2);
+    const data = new Float32Array(n);
+    if (L === 0) {
+      // The back: itself, with the holes the nearer layers leave filled from around them.
+      const keep = new Float32Array(n), kept = new Float32Array(n);
+      for (let p = 0; p < n; p++) { keep[p] = hard[p]!; kept[p] = ink.data[p]! * hard[p]!; }
+      const r = Math.round(w / 24);
+      const num = blurMap(kept, w, h, r), den = blurMap(keep, w, h, r);
+      for (let p = 0; p < n; p++) data[p] = hard[p] ? ink.data[p]! : den[p]! > 0.02 ? (num[p]! / den[p]!) * 0.8 : 0;
+      return { ink: { data, w, h }, mask: { data: new Float32Array(n).fill(1), w, h } };
+    }
+    for (let p = 0; p < n; p++) data[p] = ink.data[p]! * clamp(mask[p]! * 1.5 - 0.25, 0, 1);
+    return { ink: { data, w, h }, mask: { data: mask, w, h } };
+  });
+};
+
+/** A box blur of a 0..1 map, radius `r` px (twice, so it's soft). */
+const blurMap = (src: Float32Array, w: number, h: number, r: number): Float32Array => {
+  const pass = (a: Float32Array, horiz: boolean) => {
+    const out = new Float32Array(a.length);
+    for (let j = 0; j < (horiz ? h : w); j++) {
+      let sum = 0;
+      const at = (i: number) => (horiz ? j * w + i : i * w + j);
+      const n = horiz ? w : h;
+      for (let i = -r; i <= r; i++) sum += a[at(clamp(i, 0, n - 1))]!;
+      for (let i = 0; i < n; i++) {
+        out[at(i)] = sum / (2 * r + 1);
+        sum += a[at(Math.min(n - 1, i + r + 1))]! - a[at(Math.max(0, i - r))]!;
+      }
+    }
+    return out;
+  };
+  let a = src;
+  for (let k = 0; k < 2; k++) a = pass(pass(a, true), false);
+  return a;
+};
+
 /** Draw an image at `width` (height follows its aspect) and read its ink. */
 export const inkFromImage = (img: CanvasImageSource & { width: number; height: number }, tone: Tone, width = 512, shadow: Shadow = "dim"): Ink => {
   const w = width, h = Math.round((width * img.height) / img.width);
@@ -74,7 +180,8 @@ export const inkFromImage = (img: CanvasImageSource & { width: number; height: n
 
 /** Greyscale → `look.levels` steps: one 0..1 value per cell (0 = empty),
  * straight edges already thinned. */
-export const sampleGrid = (ink: Ink, cols: number, rows: number, look: Look): Float32Array => {
+/** `tone`, when given, gets each cell's brightness before it's stepped to the look's levels (the moving cameras shade by it, 11-06). */
+export const sampleGrid = (ink: Ink, cols: number, rows: number, look: Look, tone?: Float32Array): Float32Array => {
   const out = new Float32Array(cols * rows);
   const cw = ink.w / cols, ch = ink.h / rows;
   for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
@@ -90,6 +197,7 @@ export const sampleGrid = (ink: Ink, cols: number, rows: number, look: Look): Fl
     const v = Math.pow(clamp(look.gain * lerp(sum / n, max, look.pool), 0, 1), look.gamma);
     const q = Math.round(v * (look.levels - 1)) / (look.levels - 1);
     out[gy * cols + gx] = q > 0 ? edgeCell(gx, gy, cols, rows, q, look) : 0;
+    if (tone) tone[gy * cols + gx] = q > 0 ? edgeCell(gx, gy, cols, rows, v, look) : 0;
   }
   return out;
 };

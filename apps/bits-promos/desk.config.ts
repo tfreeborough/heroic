@@ -63,7 +63,7 @@ const scriptAi: NonNullable<GameConfig["script"]>["ai"] = {
     "It reads like the maker talking to one person across a desk, plainly, in his own words. He writes well already: the edit is light. Keep his phrasing, his order and every point; fix only what reads badly aloud (a sentence that runs on, a word nobody says, a point made twice). Honest about what's in the game and what isn't, a little dry humour, everyday words, no marketing-speak, no hype. No ALL CAPS, no exclamation marks, no three-beat slogans, no coined aphorisms, no symmetrical clauses, no em dashes. Short sentences. Spoken English, not written: contractions, And or But at the start of a sentence, the odd aside.",
   // No example lines: the voice is Tom's own scripts, fed in full by the Desk. Invented lines pulled the rewrite towards a generic register.
   examples: [],
-  // The pictures are the Desk's chiaroscuro film stills (apps/desk/lib/cards.ts PICTURE_STYLE), built out of glyphs.
+  // The pictures are the Desk's conté drawings (apps/desk/lib/cards.ts CONTE_STYLE; film stills or WOODCUT_STYLE per script), built out of glyphs.
 };
 
 const config: GameConfig = {
@@ -78,7 +78,8 @@ const config: GameConfig = {
   voiceDir: "public/voice",
   // Names Whisper should spell the way the game does.
   voice: { vocabulary: [GAME, ...roster.weapons.map((w) => w.name), ...roster.abilities.map((a) => a.name)] },
-  bundleWatch: ["../../packages/voiceover/src"],
+  // Packages the videos import: a change in one rebundles the next render (ascii-build added 11-06, the camera moves live there).
+  bundleWatch: ["../../packages/voiceover/src", "../../packages/ascii-build/src"],
   prepare: [["bun", "scripts/sync-assets.ts"]],
   fps: FPS,
   formats: FORMATS,

@@ -476,6 +476,7 @@ footer a:hover { color: var(--gold); }
 .log-card p { margin: 0; font-size: 15px; line-height: 1.55; }
 .post-cover { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(232,200,122,0.3); box-shadow: 0 24px 60px rgba(0,0,0,0.6); margin: 0 0 32px; }
 .post-video { margin: 0 0 32px; }
+.post-summary { font-size: 18px; margin-bottom: 30px; }
 .post img { max-width: 100%; height: auto; border-radius: 10px; }
 .post blockquote { margin: 0 0 14px; padding-left: 16px; border-left: 2px solid var(--gold); color: var(--body); }
 .post-foot { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); }

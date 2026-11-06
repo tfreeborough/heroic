@@ -4,6 +4,7 @@ import { logPosts } from "../../lib/log";
 import Base from "../../layouts/Base.astro";
 import YouTube from "../../components/YouTube.astro";
 import { Image } from "astro:assets";
+import { SITE, ORG, AUTHOR, AUTHOR_NAME } from "../../lib/studio";
 
 export async function getStaticPaths() {
   const posts = await logPosts();
@@ -12,9 +13,8 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
-const { title, description, date, updated, youtube, cover } = post.data;
+const { title, description, summary, date, updated, youtube, cover } = post.data;
 
-const SITE = "https://free-the-borough.com";
 const url = `${SITE}/log/${post.id}/`;
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
@@ -24,18 +24,31 @@ const jsonLd: object[] = [
     "@type": "Article",
     headline: title,
     description,
+    ...(summary ? { abstract: summary } : {}),
     datePublished: date.toISOString(),
     dateModified: (updated ?? date).toISOString(),
     mainEntityOfPage: url,
     ...(cover ? { image: `${SITE}${cover.src}` } : {}),
-    author: { "@type": "Person", name: "Tom", url: `${SITE}/` },
-    publisher: { "@type": "Organization", name: "Free the Borough", url: `${SITE}/`, logo: { "@type": "ImageObject", url: `${SITE}/img/bits/icon.png` } },
+    inLanguage: "en-GB",
+    author: AUTHOR,
+    publisher: ORG,
+    ...(youtube ? { video: { "@id": `${url}#video` } } : {}),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Free the Borough", item: `${SITE}/` },
+      { "@type": "ListItem", position: 2, name: "Dev log", item: `${SITE}/log/` },
+      { "@type": "ListItem", position: 3, name: title, item: url },
+    ],
   },
 ];
 if (youtube) {
   jsonLd.push({
     "@context": "https://schema.org",
     "@type": "VideoObject",
+    "@id": `${url}#video`,
     name: title,
     description,
     uploadDate: date.toISOString(),
@@ -50,10 +63,12 @@ if (youtube) {
     <article class="wrap post">
       <h1>{title}</h1>
       <p class="updated">
+        By <a href="/about/" rel="author">{AUTHOR_NAME}</a>{" · "}
         <time datetime={date.toISOString()}>{fmt(date)}</time>
         {updated && <span> · Updated {fmt(updated)}</span>}
         {youtube && <span> · <a href={`https://www.youtube.com/watch?v=${youtube}`} target="_blank" rel="noopener">Watch on YouTube</a></span>}
       </p>
+      {summary && <p class="lede post-summary">{summary}</p>}
       {youtube ? (
         <div class="post-video">
           <YouTube id={youtube} title={title} poster={cover ? { src: cover.src, width: cover.width, height: cover.height, alt: title } : undefined} eager />

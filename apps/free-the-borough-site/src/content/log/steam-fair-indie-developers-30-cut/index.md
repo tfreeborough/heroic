@@ -1,6 +1,7 @@
 ---
 title: "Is Steam fair to indie developers? Valve's 30% cut compared"
 description: "How Steam's 30% cut and revenue tiers compare with Apple, Google, Epic, itch.io, GOG and Bandcamp, and why small developers can't just sell elsewhere."
+summary: "Not really. Steam is a fantastic platform, but Valve takes 30% from everyone and saves its discounts (25% after $10 million, 20% after $50 million) for games that are already huge. Apple and Google charge small developers 15%, and Epic takes nothing on a game's first $1 million a year, but Steam handles an estimated three quarters of PC game sales, so selling elsewhere isn't a real option."
 date: 2026-10-23
 youtube: "fo6BA9KWmvQ"
 cover: ./cover.jpg

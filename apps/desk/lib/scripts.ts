@@ -40,6 +40,52 @@ export type BeatCard = {
  * every try at it, the one chosen, and its LOOK SEED (how its glyphs
  * arrive and fill in: same seed, same build). A long beat has two.
  */
+/**
+ * How a script's pictures are made (cards.ts): "conte" (11-05, Tom's pick off
+ * the painter round: Spilliaert's subjects and placement, drawn as Seurat's
+ * conté crayon), "film" (black-and-white film stills) or "woodcut" (the old
+ * chiaroscuro print). Conté and film use cast reference pictures in their own medium.
+ */
+export type PictureStyle = "conte" | "film" | "woodcut";
+export const PICTURE_STYLES: Record<PictureStyle, string> = { conte: "conté drawing (Spilliaert × Seurat)", film: "film stills", woodcut: "woodcut (old)" };
+/** A cast member's reference picture: made for one look in one style (an older one without a style was a film still). */
+export type CastRef = { look: string; style?: PictureStyle; candidates: string[]; chosen?: string; error?: string };
+
+/** The script's picture style: set, or woodcut for a script that already has pictures from before film stills (so a remake never mixes the two), else conté. */
+export const pictureStyleOf = (s: Pick<Script, "pictureStyle" | "long">): PictureStyle =>
+  s.pictureStyle ?? (s.long?.beats.some((b) => b.pictures?.some((p) => p.candidates.length)) ? "woodcut" : "conte");
+
+/** Whether a style draws with the cast's reference pictures. */
+export const usesCastRefs = (style: PictureStyle) => style !== "woodcut";
+
+/** A cast member's reference picture, if it's still for their look as it stands and in the script's style. */
+export const castRefOf = (s: Pick<Script, "castRefs" | "pictureStyle" | "long">, c: { name: string; look: string }): string | undefined => {
+  const r = s.castRefs?.[c.name];
+  return r && r.look.trim() === c.look.trim() && (r.style ?? "film") === pictureStyleOf(s) ? r.chosen : undefined;
+};
+
+const STOP = new Set("with that this from into over under their them they then than when where what which while about above below after before behind beside between each every only some such very just more most other same like and the for are was were its his her one two side early later small large long".split(" "));
+const lookWords = (t: string) => t.toLowerCase().replace(/[^a-z\s-]/g, " ").split(/[\s-]+/).filter((w) => w.length >= 3 && !STOP.has(w));
+
+/**
+ * Who's in a picture: the prompt writer's list while the prompt is the one
+ * it was listed for; otherwise (an edited or older prompt) every cast member
+ * whose look is mostly written out in it (prompts write a cast member's look
+ * out word for word), dropping one whose matched words all sit inside a
+ * better match's (the plain box inside the deluxe box's description).
+ */
+export const castIn = (p: Pick<BeatPicture, "prompt" | "cast" | "castFor">, cast: { name: string; look: string }[]): string[] => {
+  if (p.cast && p.castFor?.trim() === p.prompt.trim()) return p.cast.filter((n) => cast.some((c) => c.name === n));
+  const have = new Set(lookWords(p.prompt));
+  const found = cast.flatMap((c) => {
+    const want = [...new Set(lookWords(c.look))];
+    const hit = want.filter((w) => have.has(w));
+    const cover = hit.length / Math.max(1, want.length);
+    return cover >= 0.7 ? [{ name: c.name, cover, hit: new Set(hit) }] : [];
+  });
+  return found.filter((x) => !found.some((y) => y !== x && y.cover > x.cover && [...x.hit].every((w) => y.hit.has(w)))).map((x) => x.name);
+};
+
 export type BeatPicture = {
   /** What the picture is of (the game's style is added when it's made). */
   prompt: string;
@@ -55,6 +101,9 @@ export type BeatPicture = {
   error?: string;
   /** The look seed. */
   look: number;
+  /** Cast members in this picture (by name), as the prompt writer listed them for `castFor`; their reference pictures go to the image model with it. A prompt changed since (Tom's edit) falls back to matching cast looks in its words (castIn). */
+  cast?: string[];
+  castFor?: string;
 };
 
 /**
@@ -124,7 +173,16 @@ export type Beat = {
   chapter?: string;
   /** How long its kept recording runs, in seconds, as the last Find shorts measured it (unset = not recorded then). */
   seconds?: number;
+  /** A long beat: its sentences as recorded (the kept take's words, riffs included), each with its seconds, as the last Find shorts or Reshape measured them (desk-shorts.md § 6). */
+  sentences?: BeatSentence[];
+  /** A short's excerpt beat that keeps only some of its long beat's sentences (desk-shorts.md § 6): sentences `first..last` (1-based, as recorded) and the words they had, which organise finds again in the take. No part = the whole beat. */
+  part?: BeatPart;
 };
+
+/** One sentence of a long beat as recorded. */
+export type BeatSentence = { text: string; seconds: number };
+/** The sentences of its long beat a short's beat keeps. */
+export type BeatPart = { first: number; last: number; said: string };
 
 /** One video's worth: the long cut, or a short. */
 export type Cut = {
@@ -139,8 +197,12 @@ export type Cut = {
   check?: string;
   /** A short Claude offered as a near miss: what's wrong with it. */
   problem?: string;
-  /** A short made of two runs of the long cut: why the join reads as if it were written that way. */
+  /** A short made of more than one piece of the long cut: why each seam reads as one piece of speech, the meaning kept. */
   join?: string;
+  /** A binned short: why, in Tom's words (desk-shorts.md § 6); the finder and Reshape read it. */
+  binReason?: string;
+  /** A short made by Reshape: the short it was reshaped from. */
+  reshapedFrom?: string;
   /** The judge's score, 1–10: how sure it is a stranger watches to the end and taps the profile. */
   score?: number;
   /** A short: the hook lines Claude offered (desk-shorts.md § 2), each with where it came from ("your line, beat 12" or "new words"). */
@@ -162,9 +224,11 @@ export type SourceVersion = { at: string; text: string };
  * A recording of Tom reading the script, with its words and the parts of it
  * he's kept (no `keep` = all of it). `assign`: the beats Tom says it reads
  * (ids, in order), for when the matcher didn't hear them: it then reads
- * those and only those.
+ * those and only those. `spans`: where Tom dragged a beat to in this take
+ * (beat id → take seconds), over what the matcher found; organise slices
+ * exactly there.
  */
-export type ScriptTake = Take & { keep?: { start: number; end: number }[]; assign?: string[] };
+export type ScriptTake = Take & { keep?: { start: number; end: number }[]; assign?: string[]; spans?: Record<string, { start: number; end: number }> };
 
 /**
  * The long video written up as an article for the studio site's dev log
@@ -177,6 +241,8 @@ export type Writeup = {
   title: string;
   /** One or two sentences: the listing, the meta description, the social card. */
   description: string;
+  /** The answer-first opening shown above the video: two or three sentences answering the title's question, for answer engines (ChatGPT search, Perplexity, AI Overviews) to quote. */
+  summary?: string;
   /** The URL: /log/<slug>/. */
   slug: string;
   /** Markdown: paragraphs, ## headings, lists. No title line. */
@@ -242,6 +308,12 @@ export type Script = {
   look?: string;
   /** The world's recurring characters, places and objects, each with one fixed look that's written out in every prompt they're in. */
   cast?: { name: string; look: string }[];
+  /** A reference picture per cast member, by name (film style only): passed to the image model with every picture they're in, so they look the same all video. Valid while `look` matches the cast member's look; a changed look gets a fresh one. Server-owned: page saves never send it. */
+  castRefs?: Record<string, CastRef>;
+  /** How this script's pictures are made (cards.ts): "film" (black-and-white film stills with cast references, 11-05) or "woodcut" (the old chiaroscuro print). Unset: woodcut if any picture was made before film existed, else film. */
+  pictureStyle?: PictureStyle;
+  /** Looks thrown away by New look & cast (newest last, a few kept): the next plan is told to go somewhere else. Server-owned. */
+  triedLooks?: string[];
   /** ISO timestamp once the video's made. */
   done?: string;
   createdAt: string;
@@ -254,13 +326,13 @@ export type ScriptSummary = Pick<Script, "id" | "title" | "done" | "createdAt" |
 /** The story (one call) or the prompts (a batch of beats a call) running on the server; the page polls. Or how the last run failed. `done`/`total` are beats. */
 export type PlanState = { state: "running"; stage: "story" | "prompts"; done: number; total: number; startedAt: string } | { state: "failed"; stage: "story" | "prompts"; error: string; done: number; total: number };
 /** How a script's Find shorts run is going (docs/design/desk-shorts.md): nothing once it's landed; the failure until the next press. */
-export type ShortsState = { state: "running"; startedAt: string } | { state: "failed"; error: string };
+export type ShortsState = { state: "running"; startedAt: string; /** A Reshape of this short (desk-shorts.md § 6), not a whole find. */ short?: string } | { state: "failed"; error: string; short?: string };
 
-/** A short is a run of consecutive long beats this long, spoken (docs/design/desk-shorts.md): good ones are found, not trimmed to a length. */
+/** A short runs this long, spoken (docs/design/desk-shorts.md): good ones are found, not trimmed to a length. */
 export const SHORT_MIN = 20;
 export const SHORT_MAX = 90;
 
-export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "writeup" | "theme" | "look" | "cast">> & { done?: boolean };
+export type ScriptPatch = Partial<Pick<Script, "title" | "source" | "long" | "shorts" | "gap" | "takes" | "thumbnails" | "titles" | "youtube" | "writeup" | "theme" | "look" | "cast" | "pictureStyle">> & { done?: boolean };
 
 export const DEFAULT_GAP = 0.3;
 
@@ -462,13 +534,20 @@ export const spokenSeconds = (text: string): number => Math.round(tokens(text).l
 /** A long beat's seconds as recorded (the last Find shorts measured it), else a guess from its words. */
 export const beatSeconds = (b: Pick<Beat, "text" | "seconds">): number => b.seconds ?? spokenSeconds(b.text);
 
-/** How long a short runs: its excerpt beats' recorded seconds (a hook beat of its own is guessed from its words). */
+/** How long a short runs: its excerpt beats' recorded seconds, a part only its sentences' (a hook beat of its own is guessed from its words). */
 export const shortSeconds = (s: Pick<Script, "long">, c: Pick<Cut, "beats">): number => {
   const long = new Map((s.long?.beats ?? []).map((b) => [b.id, b] as const));
-  return Math.round(c.beats.reduce((n, b) => n + beatSeconds(b.from ? (long.get(b.from) ?? b) : b), 0));
+  return Math.round(
+    c.beats.reduce((n, b) => {
+      if (!b.from) return n + beatSeconds(b);
+      const lb = long.get(b.from) ?? b;
+      if (!b.part) return n + beatSeconds(lb);
+      return n + sentencesOf(lb).slice(b.part.first - 1, b.part.last).reduce((m, x) => m + x.seconds, 0);
+    }, 0),
+  );
 };
 
-/** The short's excerpt as long beat numbers (1-based) in the short's order; nothing when it has no excerpt beats. */
+/** The short's excerpt as long beat numbers (1-based) in the short's order (a beat cut into two pieces shows twice); nothing when it has no excerpt beats. */
 export const shortBeats = (s: Pick<Script, "long">, c: Pick<Cut, "beats">): number[] => {
   const ids = (s.long?.beats ?? []).map((b) => b.id);
   return c.beats.flatMap((b) => (b.from ? [ids.indexOf(b.from) + 1] : [])).filter((n) => n > 0);
@@ -494,31 +573,166 @@ export const excerpt = (s: Pick<Script, "long">, ns: number[]): Beat[] => {
   });
 };
 
+// ── a short by sentence (desk-shorts.md § 6) ──
+
+/** At most this many pieces in a short: more sounds stitched together. */
+export const SHORT_PIECES = 4;
+
+/** A sentence of the long cut: its long beat's number and the sentence's within it, both 1-based. */
+export type SentenceRef = { n: number; k: number };
+
+/** A long beat's sentences as recorded; a beat never measured counts as one sentence, its own words. */
+export const sentencesOf = (b: Pick<Beat, "text" | "seconds" | "sentences">): BeatSentence[] => (b.sentences?.length ? b.sentences : [{ text: b.text, seconds: beatSeconds(b) }]);
+
+/** The words a short's beat says: its part's as recorded, else its long beat's. */
+export const pieceText = (s: Pick<Script, "long">, b: Beat): string => b.part?.said || beatText(s, b);
+
+const sameRef = (a: SentenceRef | undefined, b: SentenceRef | undefined) => Boolean(a && b && a.n === b.n && a.k === b.k);
+/** The sentence said straight after this one in the long cut. */
+const nextRef = (long: Beat[], r: SentenceRef): SentenceRef | undefined => (r.k < sentencesOf(long[r.n - 1]!).length ? { n: r.n, k: r.k + 1 } : r.n < long.length ? { n: r.n + 1, k: 1 } : undefined);
+/** The sentence said straight before it. */
+const prevRef = (long: Beat[], r: SentenceRef): SentenceRef | undefined => (r.k > 1 ? { n: r.n, k: r.k - 1 } : r.n > 1 ? { n: r.n - 1, k: sentencesOf(long[r.n - 2]!).length } : undefined);
+
+/** The short's excerpt as sentences of the long cut, in the order it says them. */
+export const refsOf = (s: Pick<Script, "long">, c: Pick<Cut, "beats">): SentenceRef[] => {
+  const long = s.long?.beats ?? [];
+  const index = new Map(long.map((b, i) => [b.id, i] as const));
+  return c.beats.flatMap((b) => {
+    const i = b.from ? index.get(b.from) : undefined;
+    if (i === undefined) return [];
+    const count = sentencesOf(long[i]!).length;
+    const first = b.part ? Math.max(1, Math.min(count, b.part.first)) : 1;
+    const last = b.part ? Math.max(first, Math.min(count, b.part.last)) : count;
+    return Array.from({ length: last - first + 1 }, (_, j) => ({ n: i + 1, k: first + j }));
+  });
+};
+
+/** The short's pieces: runs of sentences said one straight after another in the long cut. */
+export const piecesOf = (s: Pick<Script, "long">, refs: SentenceRef[]): SentenceRef[][] => {
+  const long = s.long?.beats ?? [];
+  const out: SentenceRef[][] = [];
+  for (const r of refs) {
+    const p = out.at(-1);
+    if (p && sameRef(nextRef(long, p.at(-1)!), r)) p.push(r);
+    else out.push([r]);
+  }
+  return out;
+};
+
+/** "12.3–14.2 + 9.6", or "5–7 + 12" where a piece is whole beats. */
+export const refsLabel = (s: Pick<Script, "long">, refs: SentenceRef[]): string => {
+  const long = s.long?.beats ?? [];
+  const at = (r: SentenceRef) => `${r.n}.${r.k}`;
+  return piecesOf(s, refs)
+    .map((p) => {
+      const a = p[0]!;
+      const z = p.at(-1)!;
+      if (a.k === 1 && z.k === sentencesOf(long[z.n - 1]!).length) return a.n === z.n ? `${a.n}` : `${a.n}–${z.n}`;
+      return sameRef(a, z) ? at(a) : `${at(a)}–${at(z)}`;
+    })
+    .join(" + ");
+};
+
+/** A short's excerpt as its label. */
+export const shortRefsLabel = (s: Pick<Script, "long">, c: Pick<Cut, "beats">): string => refsLabel(s, refsOf(s, c));
+
+/** "12.3" a sentence; a bare "12" is the beat's first sentence (as a start) or its last (as an end). */
+const parseRef = (s: Pick<Script, "long">, text: string, as: "start" | "end"): SentenceRef | undefined => {
+  const long = s.long?.beats ?? [];
+  const m = text.trim().match(/^(\d+)(?:\.(\d+))?$/);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  const b = long[n - 1];
+  if (!b) return undefined;
+  const count = sentencesOf(b).length;
+  const k = m[2] !== undefined ? Number(m[2]) : as === "start" ? 1 : count;
+  return k >= 1 && k <= count ? { n, k } : undefined;
+};
+
+/** Pieces given as "from"–"to" sentence numbers → the sentences in the order said; undefined when one doesn't read (a number off the cut, an end before its start). */
+export const refsOfPieces = (s: Pick<Script, "long">, pieces: { from: string; to: string }[]): SentenceRef[] | undefined => {
+  const long = s.long?.beats ?? [];
+  const out: SentenceRef[] = [];
+  for (const p of pieces) {
+    const a = parseRef(s, p.from, "start");
+    const z = parseRef(s, p.to, "end");
+    if (!a || !z || z.n < a.n || (z.n === a.n && z.k < a.k)) return undefined;
+    for (let r: SentenceRef | undefined = a; r; r = sameRef(r, z) ? undefined : nextRef(long, r)) out.push(r);
+  }
+  return out;
+};
+
 /**
- * The short's excerpt widened or narrowed by one long beat at either end
- * (docs/design/desk-shorts.md, "nudge"): the long beat before its first
- * (or after its last) comes in, or the first (or last) goes. Beats stay word
- * for word with the long cut, so a kept take still reads them, and a beat
- * that stays keeps its id. Nothing changes when the nudge would run off the
- * long cut, repeat a beat, or leave none.
+ * Sentences → a short's excerpt beats: one beat per run of sentences of the
+ * same long beat said in order, whole (no part) when it's all of them. A
+ * beat that was already that piece (or, failing that, of that long beat)
+ * keeps its id.
+ */
+export const beatsFromRefs = (s: Pick<Script, "long">, refs: SentenceRef[], had: Beat[] = []): Beat[] => {
+  const long = s.long?.beats ?? [];
+  const groups: SentenceRef[][] = [];
+  for (const r of refs) {
+    const g = groups.at(-1);
+    if (g && g.at(-1)!.n === r.n && r.k === g.at(-1)!.k + 1) g.push(r);
+    else groups.push([r]);
+  }
+  const used = new Set<string>();
+  return groups.flatMap((g) => {
+    const lb = long[g[0]!.n - 1];
+    if (!lb) return [];
+    const sents = sentencesOf(lb);
+    const first = g[0]!.k;
+    const last = g.at(-1)!.k;
+    const part: BeatPart | undefined = first === 1 && last === sents.length ? undefined : { first, last, said: sents.slice(first - 1, last).map((x) => x.text).join(" ") };
+    const free = had.filter((b) => b.from === lb.id && !used.has(b.id));
+    const was = free.find((b) => (b.part?.first ?? 1) === first && (b.part?.last ?? sents.length) === last) ?? free[0];
+    const { part: _p, ...base } = was ?? { id: newId(), text: lb.text, from: lb.id };
+    used.add(base.id);
+    return [{ ...base, text: lb.text, ...(part ? { part } : {}) }];
+  });
+};
+
+/** The short with these sentences as its excerpt; its own beats (a hook) stay in front. */
+export const withRefs = (s: Pick<Script, "long">, c: Cut, refs: SentenceRef[]): Cut => ({ ...c, beats: [...c.beats.filter((b) => !b.from), ...beatsFromRefs(s, refs, c.beats.filter((b) => b.from))] });
+
+/**
+ * The short widened or narrowed by one sentence at either end
+ * (desk-shorts.md § 6; a beat never measured is one sentence, so on an old
+ * script that's still a beat): the sentence before its first (or after its
+ * last) comes in, or the first (or last) goes. Nothing changes when the
+ * nudge would run off the long cut, repeat a sentence, or leave none.
  */
 export const nudgeShort = (s: Pick<Script, "long">, c: Cut, end: "start" | "end", by: 1 | -1): Cut => {
-  const ns = shortBeats(s, c);
-  const n = s.long?.beats.length ?? 0;
-  if (!ns.length || !n) return c;
-  let next: number[];
+  const long = s.long?.beats ?? [];
+  const refs = refsOf(s, c);
+  if (!refs.length || !long.length) return c;
+  let next: SentenceRef[];
   if (by === 1) {
-    const add = end === "start" ? ns[0]! - 1 : ns[ns.length - 1]! + 1;
-    if (add < 1 || add > n || ns.includes(add)) return c;
-    next = end === "start" ? [add, ...ns] : [...ns, add];
+    const add = end === "start" ? prevRef(long, refs[0]!) : nextRef(long, refs.at(-1)!);
+    if (!add || refs.some((r) => sameRef(r, add))) return c;
+    next = end === "start" ? [add, ...refs] : [...refs, add];
   } else {
-    if (ns.length < 2) return c;
-    next = end === "start" ? ns.slice(1) : ns.slice(0, -1);
+    if (refs.length < 2) return c;
+    next = end === "start" ? refs.slice(1) : refs.slice(0, -1);
   }
-  // The short's own beats (a hook) stay in front; a long beat still in the excerpt keeps its short beat (same id).
-  const own = c.beats.filter((b) => !b.from);
-  const had = new Map(c.beats.flatMap((b) => (b.from ? [[b.from, b] as const] : [])));
-  return { ...c, beats: [...own, ...excerpt(s, next).map((b) => had.get(b.from!) ?? b)] };
+  return withRefs(s, c, next);
+};
+
+/** A sentence of one of the short's beats dropped, or brought back beside its neighbours in that beat. The last sentence never goes. */
+export const toggleSentence = (s: Pick<Script, "long">, c: Cut, r: SentenceRef): Cut => {
+  const refs = refsOf(s, c);
+  const at = refs.findIndex((x) => sameRef(x, r));
+  if (at >= 0) return refs.length > 1 ? withRefs(s, c, refs.filter((_, i) => i !== at)) : c;
+  let before = -1;
+  let after = -1;
+  refs.forEach((x, i) => {
+    if (x.n !== r.n) return;
+    if (x.k < r.k && (before < 0 || x.k > refs[before]!.k)) before = i;
+    if (x.k > r.k && (after < 0 || x.k < refs[after]!.k)) after = i;
+  });
+  const pos = before >= 0 ? before + 1 : after;
+  if (pos < 0) return c;
+  return withRefs(s, c, [...refs.slice(0, pos), r, ...refs.slice(pos)]);
 };
 
 /** The kept shorts' hook beats (a short's own beats, in front of its excerpt), for the prompter's Hooks list. */
@@ -700,6 +914,13 @@ export const sourcesList = (s: Pick<Script, "source" | "research">): SourceLink[
 /** The Sources section as markdown, or "" with nothing to list. Plain links: these are the author's own citations, so no nofollow. Brackets in a URL are percent-encoded so no markdown reader cuts the link short. */
 export const sourcesMarkdown = (list: SourceLink[]): string => (list.length ? ["## Sources", "", ...list.map((x) => `- [${x.title.replace(/[[\]]/g, "")}](${x.url.replace(/\(/g, "%28").replace(/\)/g, "%29")})`)].join("\n") : "");
 
+/**
+ * The Sources section as YouTube's description wants it: plain text (it
+ * shows no markdown, and refuses < and >), one "title: link" a line, under a
+ * "Sources" line. YouTube makes the bare URLs clickable. "" with nothing to list.
+ */
+export const sourcesForYouTube = (list: SourceLink[]): string => (list.length ? ["Sources", ...list.map((x) => `${x.title.replace(/[<>]/g, "").trim()}: ${x.url}`)].join("\n") : "");
+
 /** The body with any Sources section taken off (the save puts the real one back on the end). */
 export const withoutSources = (body: string): string => {
   const lines = body.split("\n");
@@ -780,10 +1001,10 @@ export const longEdits = (s: Pick<Script, "sequences">) => (s.sequences ?? []).f
  * The words the Queue shows for a render of one of the script's edits
  * (desk-shorts.md § 5): a short's post copy (its title and hook until
  * Claude has written it), or the long video's title, YouTube description
- * with the chapters under it, and tags. `written` = Claude's words are in.
+ * with the chapters and then the sources under it, and tags. `written` = Claude's words are in.
  */
 export type SequenceWords = { cut: "long" | "short"; short?: string; title: string; description: string; tags: string; written: boolean };
-export const sequenceWords = (s: Pick<Script, "long" | "shorts" | "sequences" | "youtube">, seqId: string): SequenceWords | undefined => {
+export const sequenceWords = (s: Pick<Script, "long" | "shorts" | "sequences" | "youtube" | "source" | "research">, seqId: string): SequenceWords | undefined => {
   const seq = (s.sequences ?? []).find((x) => x.id === seqId);
   if (!seq) return undefined;
   if (seq.short) {
@@ -792,7 +1013,7 @@ export const sequenceWords = (s: Pick<Script, "long" | "shorts" | "sequences" | 
     const p = c.post;
     return { cut: "short", short: c.id, title: p?.title || c.title, description: p?.description || c.hook || "", tags: p?.tags ?? "", written: Boolean(p) };
   }
-  const description = [s.youtube?.description.trim(), seq.youtube?.trim()].filter(Boolean).join("\n\n");
+  const description = [s.youtube?.description.trim(), seq.youtube?.trim(), sourcesForYouTube(sourcesList(s))].filter(Boolean).join("\n\n");
   return { cut: "long", title: s.long?.title ?? "", description, tags: s.youtube?.tags ?? "", written: Boolean(s.youtube) };
 };
 
@@ -814,9 +1035,11 @@ export const renderableShort = (s: Pick<Script, "long">, c: Cut): Cut => {
       const { chapter: _c, ...rest } = b;
       const src = of(b) ?? (b.from ? undefined : lead);
       if (!src) return rest;
-      const { id: _id, text: _t, from: _f, changed: _ch, chapter: _chap, card: _card, ...carry } = src;
-      // The hook beat borrows the picture and mood, not the words to pull (they're the first beat's to say).
-      return b.from ? { ...carry, ...rest } : { ...carry, pulled: undefined, ...rest };
+      const { id: _id, text: _t, from: _f, changed: _ch, chapter: _chap, card: _card, sentences: _se, part: _pa, ...carry } = src;
+      // The hook beat borrows the picture and mood, not the words to pull (they're the first beat's to say); a part pulls only words it says.
+      if (!b.from) return { ...carry, pulled: undefined, ...rest };
+      const said = b.part?.said.toLowerCase();
+      return { ...carry, ...rest, ...(said && carry.pulled ? { pulled: carry.pulled.filter((w) => said.includes(w.toLowerCase())) } : {}) };
     }),
   };
 };

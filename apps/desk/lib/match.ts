@@ -21,8 +21,8 @@ export type Span = { start: number; end: number };
 /** A beat as the matcher sees it. */
 export type BeatWords = { id: string; text: string };
 
-/** One beat a take reads: where in the take it starts and ends, and how much of it was heard (0–1). */
-export type Cover = { beat: string; start: number; end: number; score: number };
+/** One beat a take reads: where in the take it starts and ends, and how much of it was heard (0–1). `set`: Tom dragged it there (organise slices exactly there). */
+export type Cover = { beat: string; start: number; end: number; score: number; set?: boolean };
 
 /** The share of a beat's words that must be heard, in order, for it to count as read. */
 export const COVER_THRESHOLD = 0.7;
@@ -179,18 +179,37 @@ export const matchTake = (take: Pick<Take, "words"> & { keep?: Span[] }, beats: 
  * order (a short's own opening followed by a long beat reads in the
  * short's order, not the long cut's), the covers merged by beat with the
  * best score kept. A short's shared beat counts as the long beat.
+ *
+ * Then the take's kept speech is shared out whole: what's said before the
+ * first beat it reads (an ad-lib way in, "Now, I've said it a lot, but…")
+ * belongs to that beat, and what's said after the last to the last. The
+ * matcher only knows the script's words, so on its own it started the
+ * beat at the first one it was sure of. Last, any beat Tom dragged to
+ * somewhere in this take (`spans`) sits exactly there.
  */
-export const matchScript = (take: Pick<Take, "words" | "seconds"> & { keep?: Span[]; assign?: string[] }, s: Pick<Script, "long" | "shorts">, threshold = COVER_THRESHOLD): Cover[] => {
-  if (take.assign?.length) return assignedCovers(take, s);
-  const best = new Map<string, Cover>();
-  for (const cut of cutsOf(s)) {
-    const beats = cut.beats.map((b) => ({ id: b.from ?? b.id, text: beatText(s, b) }));
-    for (const c of matchTake(take, beats, threshold)) {
-      const was = best.get(c.beat);
-      if (!was || c.score > was.score) best.set(c.beat, c);
+export const matchScript = (take: Pick<Take, "words" | "seconds"> & { keep?: Span[]; assign?: string[]; spans?: Record<string, Span> }, s: Pick<Script, "long" | "shorts">, threshold = COVER_THRESHOLD): Cover[] => {
+  let covers: Cover[];
+  if (take.assign?.length) covers = assignedCovers(take, s);
+  else {
+    const best = new Map<string, Cover>();
+    for (const cut of cutsOf(s)) {
+      const beats = cut.beats.map((b) => ({ id: b.from ?? b.id, text: beatText(s, b) }));
+      for (const c of matchTake(take, beats, threshold)) {
+        const was = best.get(c.beat);
+        if (!was || c.score > was.score) best.set(c.beat, c);
+      }
+    }
+    covers = [...best.values()].sort((a, b) => a.start - b.start);
+    const words = keptWords(take).filter((w) => !w.hidden);
+    if (covers.length && words.length) {
+      covers[0] = { ...covers[0]!, start: Math.min(covers[0]!.start, words[0]!.start) };
+      const z = covers.length - 1;
+      covers[z] = { ...covers[z]!, end: Math.max(covers[z]!.end, words.at(-1)!.end) };
     }
   }
-  return [...best.values()].sort((a, b) => a.start - b.start);
+  const spans = take.spans;
+  if (!spans) return covers;
+  return covers.map((c) => (spans[c.beat] ? { ...c, start: spans[c.beat]!.start, end: spans[c.beat]!.end, set: true } : c)).sort((a, b) => a.start - b.start);
 };
 
 /**
@@ -225,16 +244,20 @@ export const assignedCovers = (take: Pick<Take, "words" | "seconds"> & { keep?: 
   return beats.map((b, i) => ({ beat: b.id, start: starts[i]!, end: i + 1 < beats.length ? starts[i + 1]! : to, score: found.get(b.id)?.score ?? 0 }));
 };
 
-/** A pause longer than this inside a take is shortened by the auto trim… */
-export const LONG_PAUSE = 0.7;
+/**
+ * A pause longer than this inside a take is shortened by the auto trim
+ * (0.7 took out pauses Tom meant, and a word Whisper didn't hear sits in
+ * a "pause" too)…
+ */
+export const LONG_PAUSE = 1.2;
 /**
  * …to this much after the word before it (a word's end is where it stops
  * being loud: the "t" of "it" is a silence then a little burst up to 0.25s
- * later, and 0.2 cut it off)…
+ * later, and 0.2 cut it off; Whisper's ends run early too)…
  */
-export const KEEP_AFTER = 0.3;
-/** …and this much before the word after. */
-export const KEEP_BEFORE = 0.15;
+export const KEEP_AFTER = 0.45;
+/** …and this much before the word after (Whisper's starts run late: 0.15 clipped first words). */
+export const KEEP_BEFORE = 0.35;
 
 /**
  * The tidy-up a take gets without Tom touching it: the silence off both

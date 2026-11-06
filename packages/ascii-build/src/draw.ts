@@ -5,7 +5,7 @@
  */
 import { glowAlpha } from "./ink";
 import { type Palette, clamp, hash, lerp, rgba } from "./look";
-import { type Build, LEAVE_FALL, NOISE } from "./plan";
+import { type Build, type Cell, LEAVE_FALL, NOISE } from "./plan";
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -30,13 +30,24 @@ export type DrawOptions = {
   /** When the glow starts fading up (usually when the build finishes). */
   glowFrom?: number;
   cache?: BuildCache;
+  /**
+   * A moving camera's picture this frame (11-06): the build still flies its
+   * glyphs in, but where a glyph has landed (`at`: each grid cell's landing
+   * time) the cell shows this build's glyph, so the scene moves while it
+   * assembles. Same grid as the build. The glow comes from it too.
+   */
+  landed?: { build: Build; at: Float32Array };
 };
 
 export const FLASH = 0.35;
+/** Seconds the glow takes to fade out, finishing as the exit starts. */
+export const GLOW_OUT = 0.6;
 const DEFAULT_FAMILY = '"JetBrains Mono", ui-monospace, monospace';
 const easeOut = (k: number) => 1 - Math.pow(1 - k, 3);
 const easeOutBack = (k: number) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
 const rest = (v: number) => 0.25 + 0.75 * v;
+/** A glyph's resting brightness: by its level, or (a smoothTone build) by its unstepped brightness, fading right out near the dimmest level so cells at the threshold don't blink on and off. */
+const shade = (c: Cell): number => (c.tone === undefined ? rest(c.v) : rest(c.tone) * clamp((c.tone - 0.08) / 0.12, 0, 1));
 
 export const drawBuild = (ctx: Ctx, b: Build, t: number, o: DrawOptions) => {
   const pal = o.palette;
@@ -61,10 +72,17 @@ export const drawBuild = (ctx: Ctx, b: Build, t: number, o: DrawOptions) => {
     }
   }
 
-  drawGlow(ctx, b, t, o, cache);
+  drawGlow(ctx, o.landed?.build ?? b, t, o, o.landed ? undefined : cache);
 
   // Landed glyphs: baked while building, drawn one by one once they start leaving.
-  if (!exiting && cache) {
+  if (!exiting && o.landed) {
+    const { build: live, at } = o.landed;
+    for (const c of live.cells) {
+      if (at[c.gy * live.cols + c.gx]! + FLASH > t) continue;
+      ctx.fillStyle = rgba(pal.ink, shade(c));
+      ctx.fillText(c.ch, c.x, c.y);
+    }
+  } else if (!exiting && cache) {
     cache.baked ??= new OffscreenCanvas(b.frame.w, b.frame.h);
     const g = cache.baked.getContext("2d")!;
     if (t < cache.bakedTo) { g.clearRect(0, 0, b.frame.w, b.frame.h); cache.bakedIdx = 0; }
@@ -72,7 +90,7 @@ export const drawBuild = (ctx: Ctx, b: Build, t: number, o: DrawOptions) => {
     g.textBaseline = "top";
     while (cache.bakedIdx < b.byLand.length && b.byLand[cache.bakedIdx]!.land + FLASH <= t) {
       const c = b.byLand[cache.bakedIdx++]!;
-      g.fillStyle = rgba(pal.ink, rest(c.v));
+      g.fillStyle = rgba(pal.ink, shade(c));
       g.fillText(c.ch, c.x, c.y);
     }
     cache.bakedTo = t;
@@ -81,7 +99,7 @@ export const drawBuild = (ctx: Ctx, b: Build, t: number, o: DrawOptions) => {
     for (const c of b.byLand) {
       if (c.land + FLASH > t) break;
       if (t >= c.leave) continue;
-      ctx.fillStyle = rgba(pal.ink, rest(c.v));
+      ctx.fillStyle = rgba(pal.ink, shade(c));
       ctx.fillText(c.ch, c.x, c.y);
     }
   }
@@ -91,8 +109,8 @@ export const drawBuild = (ctx: Ctx, b: Build, t: number, o: DrawOptions) => {
     if (t < c.release || t >= c.land + FLASH) continue;
     if (t >= c.land) {
       const k = (t - c.land) / FLASH;
-      ctx.fillStyle = b.arrival === "fade" ? rgba(pal.ink, rest(c.v))
-        : k < 0.3 ? pal.head : rgba(pal.ink, lerp(1, rest(c.v), (k - 0.3) / 0.7)); // impact: white-hot, cooling
+      ctx.fillStyle = b.arrival === "fade" ? rgba(pal.ink, shade(c))
+        : k < 0.3 ? pal.head : rgba(pal.ink, lerp(1, shade(c), (k - 0.3) / 0.7)); // impact: white-hot, cooling
       ctx.fillText(c.ch, c.x, c.y);
       continue;
     }
@@ -124,7 +142,7 @@ export const drawBuild = (ctx: Ctx, b: Build, t: number, o: DrawOptions) => {
         ctx.fillText(noise(c.seed), c.x, c.y);
         break;
       case "fade":
-        ctx.fillStyle = rgba(pal.ink, rest(c.v) * easeOut(k));
+        ctx.fillStyle = rgba(pal.ink, shade(c) * easeOut(k));
         ctx.fillText(c.ch, c.x, c.y);
         break;
       default: { // pop
@@ -151,7 +169,7 @@ const drawLeaving = (ctx: Ctx, b: Build, c: Build["cells"][number], t: number, p
     ctx.fillStyle = rgba(pal.trail, 0.45 * a * (1 - j / 5));
     ctx.fillText(noise(c.seed * 17 + j), c.x, y - j * b.ch);
   }
-  ctx.fillStyle = rgba(pal.ink, a * (k < 0.15 ? 1 : rest(c.v)));
+  ctx.fillStyle = rgba(pal.ink, a * (k < 0.15 ? 1 : shade(c)));
   ctx.fillText(k < 0.3 ? c.ch : noise(c.seed), c.x, y);
 };
 
@@ -160,7 +178,8 @@ const drawGlow = (ctx: Ctx, b: Build, t: number, o: DrawOptions, cache: BuildCac
   const strength = o.glow ?? 0;
   const from = o.glowFrom ?? Infinity;
   if (strength <= 0 || t < from) return;
-  const out = b.exit ? 1 - clamp((t - b.exit.start) / 0.8, 0, 1) : 1;
+  // Gone before the first glyph leaves: a glow outlasting its glyphs left a ghost of the picture (11-05).
+  const out = b.exit ? 1 - clamp((t - (b.exit.start - GLOW_OUT)) / GLOW_OUT, 0, 1) : 1;
   const a = strength * clamp((t - from) / 1.4, 0, 1) * out;
   if (a <= 0) return;
   const key = rgba(o.palette.ink, 1);

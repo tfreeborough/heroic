@@ -7,11 +7,11 @@
  * prompt, my own, reroll the look; the beat's mood for the score, its
  * pulled word, a chapter starting there.
  */
-import { ARRIVALS, LOCKED_LOOK, ORDERS, PALETTES, drawBuild, inkFromImage, lookFromSeed, newCache, planBuild } from "@heroic/ascii-build";
+import { ARRIVALS, BEATS_GLOW, BEATS_LOOK, ORDERS, PALETTES, drawBuild, inkFromImage, lookFromSeed, newCache, planBuild } from "@heroic/ascii-build";
 import { loadFont } from "@remotion/google-fonts/JetBrainsMono";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { GameApi, Script } from "./api";
-import { type Beat, type BeatMood, type BeatPicture, CHAPTER_GAP, type PlanState, SCORE_MOODS, type ScoreMood, allowedChapters, beatStarts, newLook, picturesWanted, spokenSeconds } from "../lib/scripts";
+import { type Beat, type BeatMood, type BeatPicture, CHAPTER_GAP, PICTURE_STYLES, type PictureStyle, type PlanState, castRefOf, pictureStyleOf, usesCastRefs, SCORE_MOODS, type ScoreMood, allowedChapters, beatStarts, newLook, picturesWanted, spokenSeconds } from "../lib/scripts";
 
 const { fontFamily } = loadFont("normal", { weights: ["700"], subsets: ["latin"] });
 const FAMILY = `"${fontFamily}", ui-monospace, monospace`;
@@ -31,9 +31,9 @@ const BUILD = { start: 0.1, end: 2.6 };
 const EXIT = { start: 4.4, end: 5.6 };
 const STILL = 4;
 
-/** The Beats video's frame and its default glyph columns (apps/bits-promos/src/Beats.tsx `cols`): the preview shows exactly the detail the video will. */
+/** The Beats video's frame and its default look (BEATS_LOOK and BEATS_GLOW): the preview shows exactly the detail the video will. */
 const FRAME = { w: 1920, h: 1080 };
-export const VIDEO_COLS = 280;
+export const VIDEO_COLS = BEATS_LOOK.cols;
 
 /** One canvas for every still: each picture is drawn at full frame size once, then kept as an image. */
 let frameCanvas: HTMLCanvasElement | null = null;
@@ -50,11 +50,11 @@ export const glyphStill = async (url: string, look: number, palette: Palette): P
   const ctx = frameCanvas.getContext("2d")!;
   const ink = inkFromImage(img, "light", 512, "auto");
   const { arrival, order } = lookFromSeed(look);
-  const build = planBuild({ ink, look: { ...LOCKED_LOOK, cols: VIDEO_COLS }, box: { x: 0, y: 0, ...FRAME }, frame: FRAME, start: BUILD.start, end: BUILD.end, seed: look, arrival, order, exit: EXIT });
+  const build = planBuild({ ink, look: BEATS_LOOK, box: { x: 0, y: 0, ...FRAME }, frame: FRAME, start: BUILD.start, end: BUILD.end, seed: look, arrival, order, exit: EXIT });
   const pal = PALETTES[palette];
   ctx.fillStyle = pal.bg;
   ctx.fillRect(0, 0, FRAME.w, FRAME.h);
-  drawBuild(ctx, build, STILL, { palette: pal, family: FAMILY, ambient: true, glow: 0.25, glowFrom: BUILD.end + 0.3, cache: newCache() });
+  drawBuild(ctx, build, STILL, { palette: pal, family: FAMILY, ambient: true, glow: BEATS_GLOW, glowFrom: BUILD.end + 0.3, cache: newCache() });
   // toBlob copies the canvas as it is right now, so the shared canvas is free for the next picture straight away.
   return new Promise<Blob>((ok, no) => frameCanvas!.toBlob((blob) => (blob ? ok(blob) : no(new Error("the still didn't draw"))), "image/png"));
 };
@@ -125,6 +125,80 @@ const WorldLook: React.FC<{ s: Script; onWorld: (w: Pick<Script, "theme" | "look
   );
 };
 
+/**
+ * The cast's reference pictures (film style, docs/design/desk-ascii-scripts.md
+ * § Film stills): one per cast member, passed to the image model with every
+ * picture they're in so they're the same person all video. Made in the
+ * background once the story's planned; again for a fresh try, the dots pick
+ * an older one. A changed look shows "new look" until its own is made.
+ */
+const CastStrip: React.FC<{ s: Script; api: GameApi; images: boolean; making: string[]; onMake: (only?: string[]) => void; onChoose: (name: string, src: string) => void }> = ({ s, api, images, making, onMake, onChoose }) => {
+  const cast = s.cast ?? [];
+  if (!cast.length) return null;
+  const missing = cast.filter((c) => !castRefOf(s, c) && !making.includes(c.name));
+  const [sure, setSure] = useState(false);
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="row small muted" style={{ gap: 8 }}>
+        <span title="Each picture gets the reference pictures of the cast members in it, so they look the same from shot to shot. A new try only changes pictures made after it.">cast pictures</span>
+        {missing.length ? (
+          <button className="ghost small" disabled={!images} onClick={() => onMake()} title="A reference picture for every cast member without one for their look as it stands. Pictures made before then wait for them anyway.">
+            Make {missing.length}
+          </button>
+        ) : null}
+        {sure ? (
+          <span className="row" style={{ gap: 6 }}>
+            Redo all {cast.length}?
+            <button className="ghost small" onClick={() => (setSure(false), onMake(cast.map((c) => c.name)))}>
+              yes
+            </button>
+            <button className="link small" onClick={() => setSure(false)}>
+              no
+            </button>
+          </span>
+        ) : (
+          <button className="link small" disabled={!images || making.length > 0} onClick={() => setSure(true)} title="A fresh try at every cast member's picture (the old ones stay to pick from with the dots). Pictures made after use the new ones.">
+            Redo all
+          </button>
+        )}
+      </div>
+      <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {cast.map((c) => {
+          const r = s.castRefs?.[c.name];
+          const current = castRefOf(s, c);
+          const shown = current ?? r?.chosen;
+          const busy = making.includes(c.name);
+          return (
+            <figure key={c.name} style={{ margin: 0, width: 112 }} title={c.look}>
+              <div style={{ width: 112, height: 112, borderRadius: 4, background: "#000", overflow: "hidden", opacity: current || busy ? 1 : 0.45, display: "grid", placeItems: "center" }}>
+                {shown ? <img src={api.publicUrl(shown)} alt={c.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span className="small muted">{busy ? "making…" : "none yet"}</span>}
+              </div>
+              <figcaption className="small" style={{ marginTop: 3 }}>
+                {c.name}
+                {busy && shown ? <span className="muted"> · making…</span> : null}
+                {!busy && r?.chosen && !current ? <span className="warn"> · needs a new one</span> : null}
+                {r?.error && !busy ? <span className="warn" title={r.error}> · failed</span> : null}
+              </figcaption>
+              <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                <button className="link small" disabled={!images || busy} onClick={() => onMake([c.name])}>
+                  again
+                </button>
+                {current && r && r.candidates.length > 1
+                  ? r.candidates.map((src, i) => (
+                      <button key={src} className="link small" style={{ fontWeight: src === r.chosen ? 700 : 400 }} onClick={() => src !== r.chosen && onChoose(c.name, src)} title={`try ${i + 1}`}>
+                        {src === r.chosen ? "●" : "○"}
+                      </button>
+                    ))
+                  : null}
+              </div>
+            </figure>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export const PicturesStep: React.FC<{
   s: Script;
   api: GameApi;
@@ -136,13 +210,20 @@ export const PicturesStep: React.FC<{
   /** The story or the prompts running on the server, or how the last run failed. */
   planning: PlanState | null;
   onBeat: BeatEdit;
-  onStory: () => void;
+  /** `fresh`: keep only the world line; a new look and cast in this script's style. */
+  onStory: (fresh?: boolean) => void;
   onPrompts: (all: boolean) => void;
   onWorld: (w: Pick<Script, "theme" | "look" | "cast">) => void;
   onMake: (only?: { beat: string; k: number }[]) => void;
   onOwn: (beat: string, k: number, file: File) => void;
   onNewPrompt: (beat: string, k: number, instruction: string) => void;
-}> = ({ s, api, claude, images, palette, busy, pending, planning, onBeat, onStory, onPrompts, onWorld, onMake, onOwn, onNewPrompt }) => {
+  /** Cast reference pictures being made (names). */
+  castMaking: string[];
+  onCastRefs: (only?: string[]) => void;
+  onChooseCastRef: (name: string, src: string) => void;
+  onPictureStyle: (style: PictureStyle) => void;
+}> = ({ s, api, claude, images, palette, busy, pending, planning, onBeat, onStory, onPrompts, onWorld, onMake, onOwn, onNewPrompt, castMaking, onCastRefs, onChooseCastRef, onPictureStyle }) => {
+  const style = pictureStyleOf(s);
   const beats = s.long?.beats ?? [];
   // The story first (a scene line a beat), then the prompts from it, then the pictures.
   const storied = beats.some((b) => b.scene?.trim());
@@ -152,6 +233,7 @@ export const PicturesStep: React.FC<{
   const pics = beats.flatMap((b) => b.pictures ?? []);
   const toMake = beats.reduce((n, b) => n + (b.pictures ?? []).filter((p, k) => p.prompt.trim() && !p.candidates.length && !pending.includes(`${b.id}:${k}`)).length, 0);
   const unapproved = pics.filter((p) => p.chosen && !p.approved).length;
+  const approved = pics.filter((p) => p.approved).length;
   // Remake all: another try at every made picture not yet approved (an approved one is a keep). The old tries stay to pick from.
   const toRemake = beats.flatMap((b) => (b.pictures ?? []).flatMap((p, k) => (p.prompt.trim() && p.candidates.length && !p.approved && !pending.includes(`${b.id}:${k}`) ? [{ beat: b.id, k }] : [])));
   const [confirmRemake, setConfirmRemake] = useState(false);
@@ -190,9 +272,19 @@ export const PicturesStep: React.FC<{
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-        <button onClick={onStory} disabled={!claude || Boolean(busy) || planRunning} title={storied ? "The story again, in the world above: a new scene line for every beat, the moods, the pulled words and the chapters. Prompts and pictures already written stay until you write them again." : "One call over the whole script: Claude picks the video's world and cast, the chapters, and writes one line per beat saying what its picture shows, so you can read the story before any prompt is written."}>
+        <button onClick={() => onStory()} disabled={!claude || Boolean(busy) || planRunning} title={storied ? "The story again, in the world above: a new scene line for every beat, the moods, the pulled words and the chapters. Prompts and pictures already written stay until you write them again." : "One call over the whole script: Claude picks the video's world and cast, the chapters, and writes one line per beat saying what its picture shows, so you can read the story before any prompt is written."}>
           {planRunning && planning.stage === "story" ? "planning the story…" : storied ? "Plan the story again" : "Plan the story"}
         </button>
+        {s.theme?.trim() ? (
+          <button
+            className="ghost"
+            onClick={() => onStory(true)}
+            disabled={!claude || Boolean(busy) || planRunning}
+            title={`Keeps your world line, throws away the look and cast, and writes new ones for it in the style below (${PICTURE_STYLES[style]}), with the story lines to match. Prompts and pictures already made stay until you write and make them again.`}
+          >
+            New look &amp; cast
+          </button>
+        ) : null}
         {storied ? (
           <button onClick={() => onPrompts(planned && !toWrite)} disabled={!claude || Boolean(busy) || planRunning} title={planned && !toWrite ? "Every prompt written again from the story as it stands now. Pictures already made are kept, and marked to check where their prompt changed." : "Each beat's scene line told as a full picture prompt (two for a long beat), a batch of beats at a time, each landing here as it's done."}>
             {planRunning && planning.stage === "prompts" ? `writing prompts ${planning.done}/${planning.total}…` : planned && !toWrite ? "Write the prompts again" : `Write the prompts${planned ? ` (${toWrite} left)` : ""}`}
@@ -225,6 +317,11 @@ export const PicturesStep: React.FC<{
             Approve all {unapproved}
           </button>
         ) : null}
+        {approved ? (
+          <button className="ghost small" title="Takes the tick off every picture, so Remake all makes them all again (the pictures stay until then)." onClick={() => beats.forEach((b) => b.pictures?.some((p) => p.approved) && onBeat(b.id, (x) => ({ ...x, pictures: x.pictures?.map((p) => (p.approved ? { ...p, approved: false } : p)) })))}>
+            Unapprove all {approved}
+          </button>
+        ) : null}
         <span className="small muted">
           {pics.filter((p) => p.approved).length}/{pics.length} approved{pending.length ? ` · ${pending.length} making` : ""}
         </span>
@@ -236,6 +333,17 @@ export const PicturesStep: React.FC<{
         <input type="text" value={s.theme ?? ""} onChange={(e) => onWorld({ theme: e.target.value, look: undefined, cast: undefined })} placeholder={planned ? "Empty: Plan again and Claude picks a new one" : "Empty: Claude picks one from the script. Or write your own (a submarine crew, a lighthouse winter…)"} style={{ flex: 1 }} />
       </div>
       {s.theme?.trim() ? <WorldLook s={s} onWorld={onWorld} /> : null}
+      <div className="row small muted" style={{ gap: 8 }} title="How this script's pictures are made. Conté drawing (the default): Spilliaert's lonely figures and empty dark spaces, drawn as Seurat's conté crayon. Film stills: black-and-white frames from a real-feeling film. Both keep the cast the same with reference pictures drawn in their own style. A script with woodcut pictures from before stays woodcut so a remake never mixes them. Switching only changes pictures made from now on: Remake all to redo the rest.">
+        <span>style</span>
+        <select value={style} onChange={(e) => onPictureStyle(e.target.value as PictureStyle)}>
+          {(Object.keys(PICTURE_STYLES) as PictureStyle[]).map((k) => (
+            <option key={k} value={k}>
+              {PICTURE_STYLES[k]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {usesCastRefs(style) && s.theme?.trim() ? <CastStrip s={s} api={api} images={images} making={castMaking} onMake={onCastRefs} onChoose={onChooseCastRef} /> : null}
       {storied ? (
         <div className="small muted">
           {chapters.length

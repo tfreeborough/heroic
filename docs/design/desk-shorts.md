@@ -1,6 +1,6 @@
 # Desk shorts: cutting the long video into shorts
 
-Status: DESIGNED 2026-10-23, questions settled the same day. Stages 1 (the stage + Find shorts), 2 (hooks) and 3–4 (a short's own edit + loop score + Beats short mode + Render ticked through a server render queue) BUILT 2026-10-23; stage 5 copy BUILT 2026-10-26 (a short's post copy on the script, the Queue reads every script render's words live, tags everywhere); X tick added 2026-10-26 (posts queued before it don't need it to count as done); the related-video reminder not yet.
+Status: DESIGNED 2026-10-23, questions settled the same day. Stages 1 (the stage + Find shorts), 2 (hooks) and 3–4 (a short's own edit + loop score + Beats short mode + Render ticked through a server render queue) BUILT 2026-10-23; stage 5 copy BUILT 2026-10-26 (a short's post copy on the script, the Queue reads every script render's words live, tags everywhere); X tick added 2026-10-26 (posts queued before it don't need it to count as done); the related-video reminder not yet. § 6 (cutting by sentence, reorder, Reshape, bin reasons) DESIGNED, settled and BUILT 2026-11-02 (all 4 stages; Tom's look owed).
 
 ## Why (Tom, 2026-10-23)
 
@@ -430,6 +430,11 @@ of a video would make shorts.
   beat's picture and mood (no pulled words). `organiseCut` then makes
   ONE build when the same picture follows itself straight after (the
   hook and the first beat), carrying the pulled words over.
+- A short's sound (Tom, 11-06): Render ticked turns on Light noise
+  cleanup for the takes the short plays (`cleanShortVoice`, the same
+  files as the editor's Light button) and sets the score at
+  `SHORT_SCORE_LEVEL`, 8% against the long video's 10%. Hear it plays
+  the music at the short's level but the takes as recorded.
 - `planFor(seq, s, { loop })` / `makeScore(…, { loop })` in
   `lib/score.ts`: no cold open, no end card, `loop: true`.
   `@heroic/music` journey: `JourneyPlan.loop` = no fade in or out, the
@@ -476,6 +481,141 @@ of a video would make shorts.
   stage hint says "rendering" and counts rendered.
 - Not yet: picture size on a real vertical frame (§ 4's "worth a look"),
   the quiet channel name in the last second, and stage 5.
+
+## 6. Cutting by sentence, and reshaping (Tom, 2026-11-02)
+
+> "At the moment we try to stitch together whole beats, but I'm wondering
+> if it would be possible to take partial cuts from beats and re-arrange
+> them … one short I had to bin was because at the end of the beat it
+> said 'And that's what we're going to do with our game' but the rest of
+> it was pretty solid."
+
+> "If I bin a short but then try and re-generate more, it seems to skip
+> previously made ones, maybe a way to try and re-shape one of the ideas
+> would be good."
+
+On the copycats video that meant 11 binned and 1 kept: a single bad line
+sank a whole short, and binning a short told the finder never to offer
+that material again ("ALREADY OFFERED … never offer these again").
+
+### Decided (Tom, 2026-11-02)
+
+1. **The sentence is the unit, not the beat.** The finder reads what was
+   actually said: each long beat's slice of its take as organise lays it,
+   riffs included and trims respected, split into sentences at Whisper's
+   punctuation and numbered `12.3`, each with its seconds. A sentence is
+   the smallest piece, so a cut always falls at a sentence end, where
+   there's usually a breath, never mid-phrase.
+2. **Skip and reorder freely, meaning kept.** A short is a list of
+   **pieces** (runs of sentences, which may cross beat boundaries), in any
+   order. Sentences and beats can be skipped to make the point better.
+   The rule is that the author still means what he meant at each point
+   in the long video, and never says something he didn't.
+3. **At most 4 pieces.** More starts to sound stitched together. Each
+   seam is explained (`Cut.join`).
+4. **Reshape lands a new card next to the old one.** The old one keeps
+   its state (a binned one stays binned), so the record of keeps and bins
+   stays accurate.
+5. **A bin can carry a reason.** It's optional, one line, and goes to
+   the finder (as taste and on the offered list) and to Reshape.
+
+### Data
+
+- A long beat gains `sentences` (text + seconds as recorded), measured
+  whenever a find or reshape runs, the way `seconds` already is.
+- A short's excerpt beat gains `part`: `{ first, last, said }`, which is
+  sentences `first..last` (1-based) of its long beat, plus the
+  transcript words they had. No `part` = the whole beat, so older shorts
+  are unchanged. Two pieces from one long beat are two excerpt beats
+  with the same `from`.
+- Organise finds a part by its `said` words in the beat's current slice
+  (by its sentence numbers first, then by searching the beat's sentences),
+  so a re-trim doesn't lose it. If the words aren't there any more (a
+  re-recorded beat said differently), the beat is reported as missing,
+  the same as an unread beat.
+- A part is cut at the sentence's words with organise's own breath margins
+  (`between`). A long beat with two pictures shows the one whose half the
+  piece mostly sits in. Pulled words outside the part are dropped.
+- **Fix that came with it:** an excerpt beat's slice ends where the
+  *next long beat* starts in that take, never where the short's next beat
+  starts. Before, a jump forward inside one take (5 then 9) carried 6–8
+  along with 5.
+- `Cut.binReason` (Tom's words when he bins) and `Cut.reshapedFrom` (the
+  short it came from).
+
+### The calls
+
+- **Finder:** the transcript by beat and sentence, the rules of § 1
+  applied at sentence level (stands alone, payoff, the person in it, one
+  thing, the carry rule now able to start one *sentence* later), plus
+  cutting: drop lines that lean on the rest of the long video or end on
+  plans the viewer hasn't heard; skip or reorder to make the point, the
+  meaning kept; up to 4 pieces; a seam must sound like one piece of
+  speech.
+- **Judge:** reads each candidate exactly as heard, with the seams marked
+  and where each piece came from, and the transcript to check against.
+  New fault: a cut or reorder that changes what he meant, or makes him
+  say something he didn't.
+- **Offered list:** kept and suggested shorts are never offered again in
+  mostly the same sentences. Binned ones are listed with their reason, as
+  material that can come back only in a shape that fixes the reason.
+- **Reshape** (one short, optional note from Tom): the finder's rules
+  over the whole transcript, told what the short was, its problem or
+  bin reason, and Tom's note; it keeps the idea and fixes what was
+  wrong. The same judge scores it. It runs in the background on the
+  find's slot (one at a time per script).
+
+### The card
+
+- Each piece's beat shows **all** its sentences, with the dropped ones
+  greyed out. Clicking a sentence drops it or brings it back.
+- Seams are marked between pieces (⤵ a skip forward, ⤴ back).
+- The beat label reads like `12.3–14.2 + 9.6` (whole beats still read
+  `5–7`).
+- Nudge widens or narrows by a sentence at either end, not a beat.
+- **Bin** asks "why?" (optional). **Reshape** takes an optional note.
+  A reshaped card says what it was reshaped from.
+
+### Build stages
+
+1. Data + organise: `sentences`, `part`, the slicing, the jump fix, tests.
+2. Finder + judge on sentences.
+3. The card: sentence toggles, seams, sentence nudge, label.
+4. Bin reason + Reshape.
+
+### § 6 as built (2026-11-02)
+
+- `lib/organise.ts`: `sentencesIn` (a slice → sentences with breath-shared
+  cut points and kept seconds), `findPart` (numbers first, then the words,
+  then the closest run at 0.8 overlap), `measureLong` (beats' seconds +
+  sentences from the long organise), `remapParts` (parts renumbered
+  after a re-measure). `organiseCut`: a `from` beat's slice ends at the
+  next *long* beat (the jump fix), a part lays only its sentences, a
+  two-picture beat's part shows the half it sits in. `laid` carries the
+  take slice.
+- `lib/scripts.ts`: `Beat.sentences`, `Beat.part`, `Cut.binReason`,
+  `Cut.reshapedFrom`, `ShortsState.short`; `SentenceRef`, `refsOf`,
+  `piecesOf`, `refsLabel`/`shortRefsLabel`, `refsOfPieces` ("12.3",
+  bare "12" = whole), `beatsFromRefs` (ids kept), `withRefs`,
+  `toggleSentence`, sentence-level `nudgeShort`, `pieceText`,
+  `SHORT_PIECES` = 4; `renderableShort` filters a part's pulled words.
+- `lib/rewrite.ts`: finder + judge on the transcript by sentence (pieces
+  as from/to numbers, validated: recorded, no repeats, ≤ 4 pieces), the
+  judge sees seams marked and the whole transcript; binned shorts listed
+  apart with their reason; `reshapeShort` (one short, judged the same).
+- `lib/scriptSteps.ts`: `measured`/`withMeasures`/`offeredOf`/`shortCut`;
+  `reshapeShort` on the find's background slot (`POST
+  scripts/:id/shorts/:short/reshape { note }`); hooks and post copy read
+  `pieceText`.
+- Page: rows of sentences with dropped ones greyed (click toggles), ⤵/⤴
+  seam marks, sentence labels, Bin asks why, Reshape… takes a note, a
+  reshape always shows (never folded as a near miss) with "Reshaped from".
+  Unsaved page edits are flushed before a find or reshape starts.
+- Live on a copy of the copycats script: the binned map-makers short
+  (77s, ending "That's exactly what we want to do with our games")
+  reshaped to `12–15 + 17.2–18.2`, 75s, judge 7: the Ordnance Survey
+  beat dropped, the line moved to follow Agloe, then the "how" from beat
+  18. Preview sliced beat 17's take to that one sentence (7.56–10.84s).
 
 ## Settled (Tom, 2026-10-23)
 

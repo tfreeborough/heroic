@@ -1,0 +1,11944 @@
+{
+ "id": "defence-against-the-dark-arts-how-to-protect-your-indie-game-from-ai-copycats-short-6-r2",
+ "name": "Defence against the dark arts, how to protect your Indie Game from AI Copycats · short 6: Hiding fake details in your ga",
+ "idea": "940ea78d-0a91-4b4a-98e7-5c8ee4ac1572",
+ "title": "Hiding fake details in your game to catch copycats",
+ "video": [
+  {
+   "id": "v1",
+   "clips": []
+  }
+ ],
+ "audio": [
+  {
+   "id": "a1",
+   "clips": [
+    {
+     "id": "9y832fbl",
+     "take": 52,
+     "start": 0.32,
+     "end": 3.525,
+     "at": 0
+    },
+    {
+     "id": "szxbovqb",
+     "take": 17,
+     "start": 3.339,
+     "end": 18.315,
+     "at": 3.505
+    },
+    {
+     "id": "geghu44s",
+     "take": 18,
+     "start": 0.19,
+     "end": 13.305,
+     "at": 18.781
+    },
+    {
+     "id": "4o1u1254",
+     "take": 19,
+     "start": 0.34,
+     "end": 14.845,
+     "at": 32.196
+    }
+   ]
+  }
+ ],
+ "takes": [
+  {
+   "file": "voice/takes/script-940ea78d-1.wav",
+   "seconds": 10.016,
+   "recordedAt": "2026-10-30T23:06:41.623Z",
+   "words": [
+    {
+     "text": "It's",
+     "start": 0.86,
+     "end": 1.09
+    },
+    {
+     "text": "no",
+     "start": 1.09,
+     "end": 1.243
+    },
+    {
+     "text": "secret",
+     "start": 1.243,
+     "end": 1.599
+    },
+    {
+     "text": "that",
+     "start": 1.599,
+     "end": 1.816
+    },
+    {
+     "text": "PC",
+     "start": 1.816,
+     "end": 1.969
+    },
+    {
+     "text": "and",
+     "start": 1.969,
+     "end": 2.158
+    },
+    {
+     "text": "mobile",
+     "start": 2.158,
+     "end": 2.519
+    },
+    {
+     "text": "game",
+     "start": 2.519,
+     "end": 2.735
+    },
+    {
+     "text": "stores",
+     "start": 2.735,
+     "end": 3.105
+    },
+    {
+     "text": "are",
+     "start": 3.105,
+     "end": 3.285
+    },
+    {
+     "text": "filling",
+     "start": 3.285,
+     "end": 3.709
+    },
+    {
+     "text": "up",
+     "start": 3.709,
+     "end": 3.862
+    },
+    {
+     "text": "with",
+     "start": 3.862,
+     "end": 4.024
+    },
+    {
+     "text": "a",
+     "start": 4.024,
+     "end": 4.096
+    },
+    {
+     "text": "lot",
+     "start": 4.096,
+     "end": 4.286
+    },
+    {
+     "text": "of",
+     "start": 4.286,
+     "end": 4.412
+    },
+    {
+     "text": "aptly",
+     "start": 4.412,
+     "end": 4.719
+    },
+    {
+     "text": "named",
+     "start": 4.719,
+     "end": 5.034
+    },
+    {
+     "text": "slotware,",
+     "start": 5.034,
+     "end": 5.575
+    },
+    {
+     "text": "but",
+     "start": 6.19,
+     "end": 6.535
+    },
+    {
+     "text": "have",
+     "start": 6.535,
+     "end": 6.724
+    },
+    {
+     "text": "you",
+     "start": 6.724,
+     "end": 6.847
+    },
+    {
+     "text": "also",
+     "start": 6.847,
+     "end": 7.102
+    },
+    {
+     "text": "noticed",
+     "start": 7.102,
+     "end": 7.547
+    },
+    {
+     "text": "the",
+     "start": 7.547,
+     "end": 7.755
+    },
+    {
+     "text": "recent",
+     "start": 7.755,
+     "end": 8.085
+    },
+    {
+     "text": "rise",
+     "start": 8.085,
+     "end": 8.35
+    },
+    {
+     "text": "in",
+     "start": 8.35,
+     "end": 8.511
+    },
+    {
+     "text": "copycat",
+     "start": 8.511,
+     "end": 8.974
+    },
+    {
+     "text": "games?",
+     "start": 8.974,
+     "end": 9.305
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-2.wav",
+   "seconds": 12.587,
+   "recordedAt": "2026-10-30T23:07:45.147Z",
+   "words": [
+    {
+     "text": "That's",
+     "start": 0.64,
+     "end": 0.994
+    },
+    {
+     "text": "when",
+     "start": 0.994,
+     "end": 1.145
+    },
+    {
+     "text": "one",
+     "start": 1.145,
+     "end": 1.362
+    },
+    {
+     "text": "unscrupulous",
+     "start": 1.362,
+     "end": 2.088
+    },
+    {
+     "text": "developer",
+     "start": 2.088,
+     "end": 2.645
+    },
+    {
+     "text": "downloads",
+     "start": 2.7,
+     "end": 3.248
+    },
+    {
+     "text": "a",
+     "start": 3.248,
+     "end": 3.351
+    },
+    {
+     "text": "copy",
+     "start": 3.351,
+     "end": 3.574
+    },
+    {
+     "text": "of",
+     "start": 3.574,
+     "end": 3.704
+    },
+    {
+     "text": "a",
+     "start": 3.704,
+     "end": 3.792
+    },
+    {
+     "text": "new",
+     "start": 3.792,
+     "end": 3.978
+    },
+    {
+     "text": "or",
+     "start": 3.978,
+     "end": 4.127
+    },
+    {
+     "text": "upcoming",
+     "start": 4.127,
+     "end": 4.62
+    },
+    {
+     "text": "title,",
+     "start": 4.62,
+     "end": 4.945
+    },
+    {
+     "text": "clones",
+     "start": 5.1,
+     "end": 5.516
+    },
+    {
+     "text": "it",
+     "start": 5.516,
+     "end": 5.638
+    },
+    {
+     "text": "with",
+     "start": 5.638,
+     "end": 5.892
+    },
+    {
+     "text": "AI,",
+     "start": 5.892,
+     "end": 6.065
+    },
+    {
+     "text": "swaps",
+     "start": 6.35,
+     "end": 6.667
+    },
+    {
+     "text": "out",
+     "start": 6.667,
+     "end": 6.812
+    },
+    {
+     "text": "a",
+     "start": 6.812,
+     "end": 6.912
+    },
+    {
+     "text": "few",
+     "start": 6.912,
+     "end": 7.066
+    },
+    {
+     "text": "bits",
+     "start": 7.066,
+     "end": 7.319
+    },
+    {
+     "text": "here",
+     "start": 7.319,
+     "end": 7.474
+    },
+    {
+     "text": "and",
+     "start": 7.474,
+     "end": 7.618
+    },
+    {
+     "text": "there,",
+     "start": 7.618,
+     "end": 7.845
+    },
+    {
+     "text": "or",
+     "start": 7.94,
+     "end": 8.147
+    },
+    {
+     "text": "makes",
+     "start": 8.147,
+     "end": 8.454
+    },
+    {
+     "text": "no",
+     "start": 8.454,
+     "end": 8.608
+    },
+    {
+     "text": "changes",
+     "start": 8.608,
+     "end": 9.059
+    },
+    {
+     "text": "at",
+     "start": 9.059,
+     "end": 9.223
+    },
+    {
+     "text": "all,",
+     "start": 9.223,
+     "end": 9.415
+    },
+    {
+     "text": "and",
+     "start": 9.85,
+     "end": 10.07
+    },
+    {
+     "text": "publishes",
+     "start": 10.07,
+     "end": 10.567
+    },
+    {
+     "text": "it",
+     "start": 10.567,
+     "end": 10.691
+    },
+    {
+     "text": "on",
+     "start": 10.691,
+     "end": 10.825
+    },
+    {
+     "text": "the",
+     "start": 10.825,
+     "end": 10.978
+    },
+    {
+     "text": "same",
+     "start": 10.978,
+     "end": 11.226
+    },
+    {
+     "text": "store",
+     "start": 11.226,
+     "end": 11.551
+    },
+    {
+     "text": "as",
+     "start": 11.551,
+     "end": 11.714
+    },
+    {
+     "text": "you.",
+     "start": 11.714,
+     "end": 11.905
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-3.wav",
+   "seconds": 15.531,
+   "recordedAt": "2026-10-30T23:08:21.386Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.51,
+     "end": 0.69
+    },
+    {
+     "text": "you",
+     "start": 0.69,
+     "end": 0.875
+    },
+    {
+     "text": "may",
+     "start": 0.875,
+     "end": 1.046
+    },
+    {
+     "text": "be",
+     "start": 1.046,
+     "end": 1.175
+    },
+    {
+     "text": "thinking,",
+     "start": 1.22,
+     "end": 1.65
+    },
+    {
+     "text": "wow,",
+     "start": 1.65,
+     "end": 1.807
+    },
+    {
+     "text": "you'd",
+     "start": 1.807,
+     "end": 2.061
+    },
+    {
+     "text": "have",
+     "start": 2.061,
+     "end": 2.277
+    },
+    {
+     "text": "to",
+     "start": 2.277,
+     "end": 2.384
+    },
+    {
+     "text": "be",
+     "start": 2.384,
+     "end": 2.502
+    },
+    {
+     "text": "really",
+     "start": 2.502,
+     "end": 2.824
+    },
+    {
+     "text": "unlucky",
+     "start": 2.824,
+     "end": 3.196
+    },
+    {
+     "text": "for",
+     "start": 3.196,
+     "end": 3.421
+    },
+    {
+     "text": "that",
+     "start": 3.421,
+     "end": 3.588
+    },
+    {
+     "text": "to",
+     "start": 3.588,
+     "end": 3.705
+    },
+    {
+     "text": "happen",
+     "start": 3.75,
+     "end": 4.037
+    },
+    {
+     "text": "to",
+     "start": 4.037,
+     "end": 4.184
+    },
+    {
+     "text": "you.",
+     "start": 4.184,
+     "end": 4.358
+    },
+    {
+     "text": "Well,",
+     "start": 4.358,
+     "end": 4.575
+    },
+    {
+     "text": "it",
+     "start": 5.03,
+     "end": 5.191
+    },
+    {
+     "text": "isn't",
+     "start": 5.191,
+     "end": 5.459
+    },
+    {
+     "text": "just",
+     "start": 5.459,
+     "end": 5.625
+    },
+    {
+     "text": "a",
+     "start": 5.625,
+     "end": 5.726
+    },
+    {
+     "text": "handful",
+     "start": 5.726,
+     "end": 6.132
+    },
+    {
+     "text": "of",
+     "start": 6.132,
+     "end": 6.288
+    },
+    {
+     "text": "unlucky",
+     "start": 6.288,
+     "end": 6.694
+    },
+    {
+     "text": "developers.",
+     "start": 6.694,
+     "end": 7.275
+    },
+    {
+     "text": "Nearly",
+     "start": 7.8,
+     "end": 8.685
+    },
+    {
+     "text": "23,000",
+     "start": 8.76,
+     "end": 9.23
+    },
+    {
+     "text": "games",
+     "start": 9.23,
+     "end": 9.398
+    },
+    {
+     "text": "have",
+     "start": 9.398,
+     "end": 9.532
+    },
+    {
+     "text": "been",
+     "start": 9.532,
+     "end": 9.666
+    },
+    {
+     "text": "released",
+     "start": 9.666,
+     "end": 9.935
+    },
+    {
+     "text": "on",
+     "start": 9.98,
+     "end": 10.129
+    },
+    {
+     "text": "Steam",
+     "start": 10.129,
+     "end": 10.399
+    },
+    {
+     "text": "this",
+     "start": 10.399,
+     "end": 10.642
+    },
+    {
+     "text": "year",
+     "start": 10.642,
+     "end": 10.847
+    },
+    {
+     "text": "alone,",
+     "start": 10.847,
+     "end": 11.145
+    },
+    {
+     "text": "and",
+     "start": 11.45,
+     "end": 11.663
+    },
+    {
+     "text": "Valve",
+     "start": 11.663,
+     "end": 11.94
+    },
+    {
+     "text": "have",
+     "start": 11.94,
+     "end": 12.069
+    },
+    {
+     "text": "now",
+     "start": 12.069,
+     "end": 12.282
+    },
+    {
+     "text": "openly",
+     "start": 12.282,
+     "end": 12.661
+    },
+    {
+     "text": "admitted",
+     "start": 12.661,
+     "end": 13.105
+    },
+    {
+     "text": "that",
+     "start": 13.22,
+     "end": 13.5
+    },
+    {
+     "text": "Steam",
+     "start": 13.5,
+     "end": 13.829
+    },
+    {
+     "text": "has",
+     "start": 13.829,
+     "end": 14.052
+    },
+    {
+     "text": "a",
+     "start": 14.052,
+     "end": 14.158
+    },
+    {
+     "text": "cloning",
+     "start": 14.158,
+     "end": 14.458
+    },
+    {
+     "text": "problem.",
+     "start": 14.458,
+     "end": 14.825
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-4.wav",
+   "seconds": 16.091,
+   "recordedAt": "2026-10-30T23:09:20.252Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.61,
+     "end": 0.791
+    },
+    {
+     "text": "at",
+     "start": 0.791,
+     "end": 0.904
+    },
+    {
+     "text": "least",
+     "start": 0.904,
+     "end": 1.051
+    },
+    {
+     "text": "one",
+     "start": 1.051,
+     "end": 1.25
+    },
+    {
+     "text": "developer",
+     "start": 1.25,
+     "end": 1.759
+    },
+    {
+     "text": "has",
+     "start": 1.759,
+     "end": 1.958
+    },
+    {
+     "text": "reported",
+     "start": 1.958,
+     "end": 2.408
+    },
+    {
+     "text": "to",
+     "start": 2.408,
+     "end": 2.555
+    },
+    {
+     "text": "be",
+     "start": 2.555,
+     "end": 2.676
+    },
+    {
+     "text": "the",
+     "start": 2.676,
+     "end": 2.84
+    },
+    {
+     "text": "victim",
+     "start": 2.84,
+     "end": 3.177
+    },
+    {
+     "text": "of",
+     "start": 3.177,
+     "end": 3.324
+    },
+    {
+     "text": "extortion,",
+     "start": 3.324,
+     "end": 3.825
+    },
+    {
+     "text": "told",
+     "start": 4.32,
+     "end": 4.571
+    },
+    {
+     "text": "to",
+     "start": 4.571,
+     "end": 4.675
+    },
+    {
+     "text": "pay",
+     "start": 4.72,
+     "end": 4.921
+    },
+    {
+     "text": "up",
+     "start": 4.921,
+     "end": 5.077
+    },
+    {
+     "text": "or",
+     "start": 5.077,
+     "end": 5.232
+    },
+    {
+     "text": "have",
+     "start": 5.232,
+     "end": 5.434
+    },
+    {
+     "text": "their",
+     "start": 5.434,
+     "end": 5.735
+    },
+    {
+     "text": "game",
+     "start": 5.735,
+     "end": 5.937
+    },
+    {
+     "text": "cloned",
+     "start": 5.937,
+     "end": 6.284
+    },
+    {
+     "text": "with",
+     "start": 6.284,
+     "end": 6.412
+    },
+    {
+     "text": "AI",
+     "start": 6.412,
+     "end": 6.568
+    },
+    {
+     "text": "and",
+     "start": 6.568,
+     "end": 6.769
+    },
+    {
+     "text": "released",
+     "start": 6.769,
+     "end": 7.245
+    },
+    {
+     "text": "first.",
+     "start": 7.3,
+     "end": 7.735
+    },
+    {
+     "text": "And",
+     "start": 8.34,
+     "end": 8.582
+    },
+    {
+     "text": "Valve's",
+     "start": 8.582,
+     "end": 9.003
+    },
+    {
+     "text": "view,",
+     "start": 9.003,
+     "end": 9.255
+    },
+    {
+     "text": "from",
+     "start": 9.34,
+     "end": 9.554
+    },
+    {
+     "text": "a",
+     "start": 9.554,
+     "end": 9.645
+    },
+    {
+     "text": "developer",
+     "start": 9.645,
+     "end": 10.073
+    },
+    {
+     "text": "conference",
+     "start": 10.073,
+     "end": 10.543
+    },
+    {
+     "text": "in",
+     "start": 10.543,
+     "end": 10.683
+    },
+    {
+     "text": "South",
+     "start": 10.683,
+     "end": 10.921
+    },
+    {
+     "text": "Korea,",
+     "start": 10.921,
+     "end": 11.185
+    },
+    {
+     "text": "is",
+     "start": 11.34,
+     "end": 11.502
+    },
+    {
+     "text": "that",
+     "start": 11.502,
+     "end": 11.721
+    },
+    {
+     "text": "the",
+     "start": 11.721,
+     "end": 11.874
+    },
+    {
+     "text": "solution",
+     "start": 11.874,
+     "end": 12.236
+    },
+    {
+     "text": "is",
+     "start": 12.236,
+     "end": 12.465
+    },
+    {
+     "text": "in",
+     "start": 12.465,
+     "end": 12.594
+    },
+    {
+     "text": "the",
+     "start": 12.594,
+     "end": 12.737
+    },
+    {
+     "text": "hands",
+     "start": 12.737,
+     "end": 13.014
+    },
+    {
+     "text": "of",
+     "start": 13.014,
+     "end": 13.128
+    },
+    {
+     "text": "the",
+     "start": 13.128,
+     "end": 13.243
+    },
+    {
+     "text": "individual",
+     "start": 13.243,
+     "end": 13.786
+    },
+    {
+     "text": "developers",
+     "start": 13.786,
+     "end": 14.349
+    },
+    {
+     "text": "and",
+     "start": 14.349,
+     "end": 14.568
+    },
+    {
+     "text": "not",
+     "start": 14.568,
+     "end": 14.759
+    },
+    {
+     "text": "Valve",
+     "start": 14.759,
+     "end": 15.064
+    },
+    {
+     "text": "itself.",
+     "start": 15.064,
+     "end": 15.455
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-5.wav",
+   "seconds": 14.149,
+   "recordedAt": "2026-10-30T23:13:18.671Z",
+   "words": [
+    {
+     "text": "But",
+     "start": 0.76,
+     "end": 0.947
+    },
+    {
+     "text": "what",
+     "start": 0.947,
+     "end": 1.185
+    },
+    {
+     "text": "if",
+     "start": 1.185,
+     "end": 1.304
+    },
+    {
+     "text": "you",
+     "start": 1.304,
+     "end": 1.406
+    },
+    {
+     "text": "could",
+     "start": 1.406,
+     "end": 1.627
+    },
+    {
+     "text": "fight",
+     "start": 1.627,
+     "end": 1.857
+    },
+    {
+     "text": "back?",
+     "start": 1.857,
+     "end": 2.095
+    },
+    {
+     "text": "I'm",
+     "start": 2.67,
+     "end": 2.827
+    },
+    {
+     "text": "an",
+     "start": 2.827,
+     "end": 2.984
+    },
+    {
+     "text": "indie",
+     "start": 2.984,
+     "end": 3.133
+    },
+    {
+     "text": "game",
+     "start": 3.133,
+     "end": 3.401
+    },
+    {
+     "text": "developer",
+     "start": 3.401,
+     "end": 3.928
+    },
+    {
+     "text": "myself,",
+     "start": 3.928,
+     "end": 4.335
+    },
+    {
+     "text": "and",
+     "start": 4.55,
+     "end": 4.753
+    },
+    {
+     "text": "I",
+     "start": 4.753,
+     "end": 4.88
+    },
+    {
+     "text": "have",
+     "start": 4.88,
+     "end": 5.153
+    },
+    {
+     "text": "over",
+     "start": 5.153,
+     "end": 5.398
+    },
+    {
+     "text": "a",
+     "start": 5.398,
+     "end": 5.492
+    },
+    {
+     "text": "decade",
+     "start": 5.492,
+     "end": 5.878
+    },
+    {
+     "text": "of",
+     "start": 5.878,
+     "end": 6.038
+    },
+    {
+     "text": "experience",
+     "start": 6.038,
+     "end": 6.481
+    },
+    {
+     "text": "in",
+     "start": 6.481,
+     "end": 6.641
+    },
+    {
+     "text": "the",
+     "start": 6.641,
+     "end": 6.754
+    },
+    {
+     "text": "software",
+     "start": 6.754,
+     "end": 7.103
+    },
+    {
+     "text": "industry,",
+     "start": 7.103,
+     "end": 7.555
+    },
+    {
+     "text": "and",
+     "start": 8.04,
+     "end": 8.263
+    },
+    {
+     "text": "there",
+     "start": 8.263,
+     "end": 8.544
+    },
+    {
+     "text": "are",
+     "start": 8.544,
+     "end": 8.68
+    },
+    {
+     "text": "some",
+     "start": 8.68,
+     "end": 8.922
+    },
+    {
+     "text": "things",
+     "start": 8.922,
+     "end": 9.271
+    },
+    {
+     "text": "in",
+     "start": 9.271,
+     "end": 9.407
+    },
+    {
+     "text": "this",
+     "start": 9.407,
+     "end": 9.65
+    },
+    {
+     "text": "list",
+     "start": 9.65,
+     "end": 9.892
+    },
+    {
+     "text": "you",
+     "start": 9.892,
+     "end": 10.067
+    },
+    {
+     "text": "can",
+     "start": 10.067,
+     "end": 10.28
+    },
+    {
+     "text": "do",
+     "start": 10.28,
+     "end": 10.445
+    },
+    {
+     "text": "now",
+     "start": 10.445,
+     "end": 10.668
+    },
+    {
+     "text": "to",
+     "start": 10.668,
+     "end": 10.833
+    },
+    {
+     "text": "help",
+     "start": 10.833,
+     "end": 11.075
+    },
+    {
+     "text": "protect",
+     "start": 11.075,
+     "end": 11.473
+    },
+    {
+     "text": "yourself",
+     "start": 11.473,
+     "end": 11.919
+    },
+    {
+     "text": "against",
+     "start": 11.919,
+     "end": 12.374
+    },
+    {
+     "text": "AI",
+     "start": 12.374,
+     "end": 12.539
+    },
+    {
+     "text": "copycat",
+     "start": 12.539,
+     "end": 12.995
+    },
+    {
+     "text": "developers.",
+     "start": 13.06,
+     "end": 13.335
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-6.wav",
+   "seconds": 8.779,
+   "recordedAt": "2026-10-30T23:13:46.500Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.58,
+     "end": 0.786
+    },
+    {
+     "text": "fair",
+     "start": 0.786,
+     "end": 0.998
+    },
+    {
+     "text": "warning,",
+     "start": 0.998,
+     "end": 1.371
+    },
+    {
+     "text": "some",
+     "start": 1.371,
+     "end": 1.617
+    },
+    {
+     "text": "of",
+     "start": 1.617,
+     "end": 1.725
+    },
+    {
+     "text": "this",
+     "start": 1.725,
+     "end": 1.971
+    },
+    {
+     "text": "advice",
+     "start": 1.971,
+     "end": 2.344
+    },
+    {
+     "text": "is",
+     "start": 2.344,
+     "end": 2.511
+    },
+    {
+     "text": "the",
+     "start": 2.511,
+     "end": 2.659
+    },
+    {
+     "text": "complete",
+     "start": 2.659,
+     "end": 3.091
+    },
+    {
+     "text": "opposite",
+     "start": 3.091,
+     "end": 3.563
+    },
+    {
+     "text": "of",
+     "start": 3.563,
+     "end": 3.73
+    },
+    {
+     "text": "the",
+     "start": 3.73,
+     "end": 3.917
+    },
+    {
+     "text": "popular",
+     "start": 3.917,
+     "end": 4.359
+    },
+    {
+     "text": "convention",
+     "start": 4.359,
+     "end": 4.998
+    },
+    {
+     "text": "you",
+     "start": 4.998,
+     "end": 5.224
+    },
+    {
+     "text": "may",
+     "start": 5.224,
+     "end": 5.381
+    },
+    {
+     "text": "have",
+     "start": 5.381,
+     "end": 5.548
+    },
+    {
+     "text": "already",
+     "start": 5.548,
+     "end": 5.833
+    },
+    {
+     "text": "been",
+     "start": 5.833,
+     "end": 6
+    },
+    {
+     "text": "told.",
+     "start": 6,
+     "end": 6.285
+    },
+    {
+     "text": "So",
+     "start": 6.79,
+     "end": 6.923
+    },
+    {
+     "text": "let's",
+     "start": 6.923,
+     "end": 7.15
+    },
+    {
+     "text": "get",
+     "start": 7.15,
+     "end": 7.33
+    },
+    {
+     "text": "into",
+     "start": 7.33,
+     "end": 7.557
+    },
+    {
+     "text": "it.",
+     "start": 7.557,
+     "end": 7.745
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-7.wav",
+   "seconds": 15.856,
+   "recordedAt": "2026-10-30T23:14:19.927Z",
+   "words": [
+    {
+     "text": "I",
+     "start": 0.86,
+     "end": 0.936
+    },
+    {
+     "text": "want",
+     "start": 0.936,
+     "end": 1.167
+    },
+    {
+     "text": "you",
+     "start": 1.167,
+     "end": 1.345
+    },
+    {
+     "text": "to",
+     "start": 1.345,
+     "end": 1.487
+    },
+    {
+     "text": "think",
+     "start": 1.487,
+     "end": 1.736
+    },
+    {
+     "text": "of",
+     "start": 1.736,
+     "end": 1.861
+    },
+    {
+     "text": "yourself",
+     "start": 1.861,
+     "end": 2.324
+    },
+    {
+     "text": "as",
+     "start": 2.324,
+     "end": 2.475
+    },
+    {
+     "text": "Kevin",
+     "start": 2.475,
+     "end": 2.768
+    },
+    {
+     "text": "McAllister",
+     "start": 2.768,
+     "end": 3.347
+    },
+    {
+     "text": "from",
+     "start": 3.347,
+     "end": 3.533
+    },
+    {
+     "text": "Home",
+     "start": 3.533,
+     "end": 3.72
+    },
+    {
+     "text": "Alone.",
+     "start": 3.72,
+     "end": 4.005
+    },
+    {
+     "text": "You're",
+     "start": 4.47,
+     "end": 4.816
+    },
+    {
+     "text": "by",
+     "start": 4.816,
+     "end": 4.972
+    },
+    {
+     "text": "yourself",
+     "start": 4.972,
+     "end": 5.336
+    },
+    {
+     "text": "over",
+     "start": 5.336,
+     "end": 5.567
+    },
+    {
+     "text": "Christmas",
+     "start": 5.567,
+     "end": 6.091
+    },
+    {
+     "text": "with",
+     "start": 6.091,
+     "end": 6.34
+    },
+    {
+     "text": "a",
+     "start": 6.34,
+     "end": 6.429
+    },
+    {
+     "text": "whole",
+     "start": 6.429,
+     "end": 6.651
+    },
+    {
+     "text": "house",
+     "start": 6.651,
+     "end": 6.962
+    },
+    {
+     "text": "full",
+     "start": 6.962,
+     "end": 7.14
+    },
+    {
+     "text": "of",
+     "start": 7.14,
+     "end": 7.246
+    },
+    {
+     "text": "presents,",
+     "start": 7.246,
+     "end": 7.575
+    },
+    {
+     "text": "but",
+     "start": 8.12,
+     "end": 8.311
+    },
+    {
+     "text": "two",
+     "start": 8.311,
+     "end": 8.494
+    },
+    {
+     "text": "mean-spirited",
+     "start": 8.494,
+     "end": 9.135
+    },
+    {
+     "text": "robbers",
+     "start": 9.135,
+     "end": 9.451
+    },
+    {
+     "text": "want",
+     "start": 9.451,
+     "end": 9.659
+    },
+    {
+     "text": "to",
+     "start": 9.659,
+     "end": 9.775
+    },
+    {
+     "text": "take",
+     "start": 9.775,
+     "end": 9.958
+    },
+    {
+     "text": "them",
+     "start": 9.958,
+     "end": 10.166
+    },
+    {
+     "text": "all",
+     "start": 10.166,
+     "end": 10.324
+    },
+    {
+     "text": "away.",
+     "start": 10.324,
+     "end": 10.565
+    },
+    {
+     "text": "So",
+     "start": 11.06,
+     "end": 11.217
+    },
+    {
+     "text": "what",
+     "start": 11.217,
+     "end": 11.435
+    },
+    {
+     "text": "do",
+     "start": 11.435,
+     "end": 11.555
+    },
+    {
+     "text": "you",
+     "start": 11.555,
+     "end": 11.768
+    },
+    {
+     "text": "do?",
+     "start": 11.768,
+     "end": 11.925
+    },
+    {
+     "text": "Well,",
+     "start": 12.48,
+     "end": 12.815
+    },
+    {
+     "text": "like",
+     "start": 12.96,
+     "end": 13.232
+    },
+    {
+     "text": "the",
+     "start": 13.232,
+     "end": 13.363
+    },
+    {
+     "text": "film,",
+     "start": 13.363,
+     "end": 13.635
+    },
+    {
+     "text": "you",
+     "start": 13.82,
+     "end": 14.018
+    },
+    {
+     "text": "lay",
+     "start": 14.018,
+     "end": 14.245
+    },
+    {
+     "text": "traps,",
+     "start": 14.245,
+     "end": 14.601
+    },
+    {
+     "text": "of",
+     "start": 14.601,
+     "end": 14.769
+    },
+    {
+     "text": "course.",
+     "start": 14.769,
+     "end": 15.065
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-8.wav",
+   "seconds": 11.141,
+   "recordedAt": "2026-10-30T23:14:52.209Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.59,
+     "end": 0.915
+    },
+    {
+     "text": "anti-piracy",
+     "start": 1.43,
+     "end": 2.182
+    },
+    {
+     "text": "measures",
+     "start": 2.182,
+     "end": 2.576
+    },
+    {
+     "text": "aren't",
+     "start": 2.576,
+     "end": 3.039
+    },
+    {
+     "text": "new,",
+     "start": 3.039,
+     "end": 3.305
+    },
+    {
+     "text": "and",
+     "start": 3.41,
+     "end": 3.579
+    },
+    {
+     "text": "there",
+     "start": 3.579,
+     "end": 3.859
+    },
+    {
+     "text": "are",
+     "start": 3.859,
+     "end": 4.036
+    },
+    {
+     "text": "well-documented",
+     "start": 4.036,
+     "end": 4.79
+    },
+    {
+     "text": "games",
+     "start": 4.79,
+     "end": 5.086
+    },
+    {
+     "text": "from",
+     "start": 5.086,
+     "end": 5.323
+    },
+    {
+     "text": "the",
+     "start": 5.323,
+     "end": 5.509
+    },
+    {
+     "text": "past",
+     "start": 5.509,
+     "end": 5.679
+    },
+    {
+     "text": "couple",
+     "start": 5.679,
+     "end": 5.89
+    },
+    {
+     "text": "of",
+     "start": 5.89,
+     "end": 5.992
+    },
+    {
+     "text": "decades",
+     "start": 5.992,
+     "end": 6.28
+    },
+    {
+     "text": "that",
+     "start": 6.28,
+     "end": 6.525
+    },
+    {
+     "text": "have",
+     "start": 6.525,
+     "end": 6.745
+    },
+    {
+     "text": "taken",
+     "start": 6.745,
+     "end": 7.024
+    },
+    {
+     "text": "rather",
+     "start": 7.024,
+     "end": 7.329
+    },
+    {
+     "text": "humorous",
+     "start": 7.329,
+     "end": 7.778
+    },
+    {
+     "text": "approaches",
+     "start": 7.778,
+     "end": 8.32
+    },
+    {
+     "text": "to",
+     "start": 8.32,
+     "end": 8.464
+    },
+    {
+     "text": "dealing",
+     "start": 8.464,
+     "end": 8.853
+    },
+    {
+     "text": "with",
+     "start": 8.853,
+     "end": 9.048
+    },
+    {
+     "text": "people",
+     "start": 9.048,
+     "end": 9.369
+    },
+    {
+     "text": "pirating",
+     "start": 9.369,
+     "end": 9.818
+    },
+    {
+     "text": "their",
+     "start": 9.818,
+     "end": 9.97
+    },
+    {
+     "text": "games.",
+     "start": 9.97,
+     "end": 10.275
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-9.wav",
+   "seconds": 11.077,
+   "recordedAt": "2026-10-30T23:15:10.156Z",
+   "words": [
+    {
+     "text": "In",
+     "start": 0.53,
+     "end": 0.713
+    },
+    {
+     "text": "Game",
+     "start": 0.713,
+     "end": 1.055
+    },
+    {
+     "text": "Dev",
+     "start": 1.055,
+     "end": 1.379
+    },
+    {
+     "text": "Tycoon,",
+     "start": 1.379,
+     "end": 1.88
+    },
+    {
+     "text": "for",
+     "start": 1.88,
+     "end": 2.039
+    },
+    {
+     "text": "example,",
+     "start": 2.039,
+     "end": 2.515
+    },
+    {
+     "text": "using",
+     "start": 2.56,
+     "end": 2.835
+    },
+    {
+     "text": "a",
+     "start": 2.835,
+     "end": 2.935
+    },
+    {
+     "text": "pirated",
+     "start": 2.935,
+     "end": 3.333
+    },
+    {
+     "text": "copy",
+     "start": 3.333,
+     "end": 3.598
+    },
+    {
+     "text": "of",
+     "start": 3.598,
+     "end": 3.712
+    },
+    {
+     "text": "the",
+     "start": 3.712,
+     "end": 3.892
+    },
+    {
+     "text": "game",
+     "start": 3.892,
+     "end": 4.101
+    },
+    {
+     "text": "would",
+     "start": 4.101,
+     "end": 4.385
+    },
+    {
+     "text": "make",
+     "start": 4.385,
+     "end": 4.632
+    },
+    {
+     "text": "it",
+     "start": 4.632,
+     "end": 4.755
+    },
+    {
+     "text": "so",
+     "start": 4.755,
+     "end": 4.907
+    },
+    {
+     "text": "that",
+     "start": 4.907,
+     "end": 5.087
+    },
+    {
+     "text": "your",
+     "start": 5.087,
+     "end": 5.362
+    },
+    {
+     "text": "own",
+     "start": 5.362,
+     "end": 5.58
+    },
+    {
+     "text": "in-game",
+     "start": 5.58,
+     "end": 5.969
+    },
+    {
+     "text": "titles",
+     "start": 5.969,
+     "end": 6.386
+    },
+    {
+     "text": "got",
+     "start": 6.386,
+     "end": 6.604
+    },
+    {
+     "text": "pirated",
+     "start": 6.604,
+     "end": 7.059
+    },
+    {
+     "text": "so",
+     "start": 7.059,
+     "end": 7.22
+    },
+    {
+     "text": "much,",
+     "start": 7.22,
+     "end": 7.495
+    },
+    {
+     "text": "you'd",
+     "start": 7.75,
+     "end": 8.028
+    },
+    {
+     "text": "eventually",
+     "start": 8.028,
+     "end": 8.46
+    },
+    {
+     "text": "stop",
+     "start": 8.46,
+     "end": 8.738
+    },
+    {
+     "text": "making",
+     "start": 8.738,
+     "end": 9.026
+    },
+    {
+     "text": "any",
+     "start": 9.026,
+     "end": 9.247
+    },
+    {
+     "text": "money",
+     "start": 9.247,
+     "end": 9.496
+    },
+    {
+     "text": "whatsoever.",
+     "start": 9.496,
+     "end": 9.995
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-10.wav",
+   "seconds": 17.061,
+   "recordedAt": "2026-10-30T23:15:33.829Z",
+   "words": [
+    {
+     "text": "Even",
+     "start": 0.68,
+     "end": 0.94
+    },
+    {
+     "text": "better,",
+     "start": 0.94,
+     "end": 1.309
+    },
+    {
+     "text": "the",
+     "start": 1.309,
+     "end": 1.501
+    },
+    {
+     "text": "developers",
+     "start": 1.501,
+     "end": 2.094
+    },
+    {
+     "text": "uploaded",
+     "start": 2.094,
+     "end": 2.586
+    },
+    {
+     "text": "that",
+     "start": 2.586,
+     "end": 2.842
+    },
+    {
+     "text": "cracked",
+     "start": 2.842,
+     "end": 3.27
+    },
+    {
+     "text": "version",
+     "start": 3.27,
+     "end": 3.699
+    },
+    {
+     "text": "to",
+     "start": 3.699,
+     "end": 3.854
+    },
+    {
+     "text": "torrent",
+     "start": 3.854,
+     "end": 4.283
+    },
+    {
+     "text": "sites",
+     "start": 4.283,
+     "end": 4.602
+    },
+    {
+     "text": "themselves.",
+     "start": 4.602,
+     "end": 5.195
+    },
+    {
+     "text": "Greenheart",
+     "start": 5.64,
+     "end": 5.995
+    },
+    {
+     "text": "Games",
+     "start": 5.995,
+     "end": 6.29
+    },
+    {
+     "text": "said",
+     "start": 6.29,
+     "end": 6.507
+    },
+    {
+     "text": "they",
+     "start": 6.507,
+     "end": 6.714
+    },
+    {
+     "text": "put",
+     "start": 6.714,
+     "end": 6.872
+    },
+    {
+     "text": "it",
+     "start": 6.872,
+     "end": 6.96
+    },
+    {
+     "text": "out",
+     "start": 6.96,
+     "end": 7.118
+    },
+    {
+     "text": "minutes",
+     "start": 7.118,
+     "end": 7.473
+    },
+    {
+     "text": "after",
+     "start": 7.473,
+     "end": 7.768
+    },
+    {
+     "text": "opening",
+     "start": 7.768,
+     "end": 8.103
+    },
+    {
+     "text": "their",
+     "start": 8.103,
+     "end": 8.35
+    },
+    {
+     "text": "store,",
+     "start": 8.35,
+     "end": 8.665
+    },
+    {
+     "text": "and",
+     "start": 9,
+     "end": 9.205
+    },
+    {
+     "text": "after",
+     "start": 9.205,
+     "end": 9.445
+    },
+    {
+     "text": "its",
+     "start": 9.445,
+     "end": 9.587
+    },
+    {
+     "text": "first",
+     "start": 9.587,
+     "end": 9.899
+    },
+    {
+     "text": "day",
+     "start": 9.899,
+     "end": 10.103
+    },
+    {
+     "text": "on",
+     "start": 10.103,
+     "end": 10.254
+    },
+    {
+     "text": "sale,",
+     "start": 10.254,
+     "end": 10.557
+    },
+    {
+     "text": "only",
+     "start": 10.557,
+     "end": 10.815
+    },
+    {
+     "text": "214",
+     "start": 10.86,
+     "end": 11.846
+    },
+    {
+     "text": "out",
+     "start": 11.846,
+     "end": 12.158
+    },
+    {
+     "text": "of",
+     "start": 12.158,
+     "end": 12.378
+    },
+    {
+     "text": "over",
+     "start": 12.378,
+     "end": 12.625
+    },
+    {
+     "text": "3,300",
+     "start": 13.16,
+     "end": 14.115
+    },
+    {
+     "text": "players",
+     "start": 14.18,
+     "end": 14.595
+    },
+    {
+     "text": "had",
+     "start": 14.88,
+     "end": 14.995
+    },
+    {
+     "text": "actually",
+     "start": 15.04,
+     "end": 15.465
+    },
+    {
+     "text": "paid",
+     "start": 15.52,
+     "end": 15.754
+    },
+    {
+     "text": "for",
+     "start": 15.754,
+     "end": 15.94
+    },
+    {
+     "text": "the",
+     "start": 15.94,
+     "end": 16.125
+    },
+    {
+     "text": "game.",
+     "start": 16.125,
+     "end": 16.335
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-11.wav",
+   "seconds": 12.688,
+   "recordedAt": "2026-10-30T23:15:53.863Z",
+   "words": [
+    {
+     "text": "But",
+     "start": 0.65,
+     "end": 0.845
+    },
+    {
+     "text": "obviously",
+     "start": 0.845,
+     "end": 1.227
+    },
+    {
+     "text": "we",
+     "start": 1.227,
+     "end": 1.389
+    },
+    {
+     "text": "can't",
+     "start": 1.389,
+     "end": 1.666
+    },
+    {
+     "text": "do",
+     "start": 1.666,
+     "end": 1.78
+    },
+    {
+     "text": "something",
+     "start": 1.78,
+     "end": 2.314
+    },
+    {
+     "text": "like",
+     "start": 2.314,
+     "end": 2.553
+    },
+    {
+     "text": "that,",
+     "start": 2.553,
+     "end": 2.8
+    },
+    {
+     "text": "we're",
+     "start": 2.8,
+     "end": 3.01
+    },
+    {
+     "text": "not",
+     "start": 3.01,
+     "end": 3.153
+    },
+    {
+     "text": "here",
+     "start": 3.153,
+     "end": 3.363
+    },
+    {
+     "text": "to",
+     "start": 3.363,
+     "end": 3.516
+    },
+    {
+     "text": "set",
+     "start": 3.516,
+     "end": 3.687
+    },
+    {
+     "text": "a",
+     "start": 3.687,
+     "end": 3.783
+    },
+    {
+     "text": "trap",
+     "start": 3.783,
+     "end": 4.021
+    },
+    {
+     "text": "for",
+     "start": 4.021,
+     "end": 4.193
+    },
+    {
+     "text": "the",
+     "start": 4.193,
+     "end": 4.412
+    },
+    {
+     "text": "player",
+     "start": 4.412,
+     "end": 4.765
+    },
+    {
+     "text": "but",
+     "start": 4.86,
+     "end": 5.066
+    },
+    {
+     "text": "for",
+     "start": 5.066,
+     "end": 5.236
+    },
+    {
+     "text": "the",
+     "start": 5.236,
+     "end": 5.406
+    },
+    {
+     "text": "copycat",
+     "start": 5.406,
+     "end": 5.827
+    },
+    {
+     "text": "themselves,",
+     "start": 5.827,
+     "end": 6.355
+    },
+    {
+     "text": "and",
+     "start": 6.91,
+     "end": 7.078
+    },
+    {
+     "text": "for",
+     "start": 7.078,
+     "end": 7.18
+    },
+    {
+     "text": "this",
+     "start": 7.18,
+     "end": 7.369
+    },
+    {
+     "text": "we",
+     "start": 7.369,
+     "end": 7.486
+    },
+    {
+     "text": "can",
+     "start": 7.486,
+     "end": 7.653
+    },
+    {
+     "text": "borrow",
+     "start": 7.653,
+     "end": 7.952
+    },
+    {
+     "text": "a",
+     "start": 7.952,
+     "end": 8.032
+    },
+    {
+     "text": "technique",
+     "start": 8.032,
+     "end": 8.462
+    },
+    {
+     "text": "that",
+     "start": 8.462,
+     "end": 8.674
+    },
+    {
+     "text": "goes",
+     "start": 8.674,
+     "end": 8.885
+    },
+    {
+     "text": "back",
+     "start": 8.93,
+     "end": 9.184
+    },
+    {
+     "text": "almost",
+     "start": 9.184,
+     "end": 9.57
+    },
+    {
+     "text": "a",
+     "start": 9.57,
+     "end": 9.673
+    },
+    {
+     "text": "century",
+     "start": 9.673,
+     "end": 10.115
+    },
+    {
+     "text": "to",
+     "start": 10.16,
+     "end": 10.32
+    },
+    {
+     "text": "the",
+     "start": 10.32,
+     "end": 10.489
+    },
+    {
+     "text": "mapmaking",
+     "start": 10.489,
+     "end": 10.997
+    },
+    {
+     "text": "industry.",
+     "start": 10.997,
+     "end": 11.495
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-12.wav",
+   "seconds": 14.821,
+   "recordedAt": "2026-10-30T23:16:15.851Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.76,
+     "end": 1.095
+    },
+    {
+     "text": "accurate",
+     "start": 1.39,
+     "end": 1.975
+    },
+    {
+     "text": "mapping",
+     "start": 2.02,
+     "end": 2.381
+    },
+    {
+     "text": "has",
+     "start": 2.381,
+     "end": 2.558
+    },
+    {
+     "text": "always",
+     "start": 2.558,
+     "end": 2.873
+    },
+    {
+     "text": "been",
+     "start": 2.873,
+     "end": 3.088
+    },
+    {
+     "text": "a",
+     "start": 3.088,
+     "end": 3.176
+    },
+    {
+     "text": "difficult",
+     "start": 3.176,
+     "end": 3.63
+    },
+    {
+     "text": "and",
+     "start": 3.63,
+     "end": 3.768
+    },
+    {
+     "text": "long",
+     "start": 3.768,
+     "end": 3.991
+    },
+    {
+     "text": "process,",
+     "start": 3.991,
+     "end": 4.375
+    },
+    {
+     "text": "so",
+     "start": 4.74,
+     "end": 4.91
+    },
+    {
+     "text": "it",
+     "start": 4.91,
+     "end": 5.055
+    },
+    {
+     "text": "was",
+     "start": 5.055,
+     "end": 5.285
+    },
+    {
+     "text": "no",
+     "start": 5.285,
+     "end": 5.455
+    },
+    {
+     "text": "surprise",
+     "start": 5.5,
+     "end": 5.848
+    },
+    {
+     "text": "that",
+     "start": 5.848,
+     "end": 5.981
+    },
+    {
+     "text": "when",
+     "start": 5.981,
+     "end": 6.097
+    },
+    {
+     "text": "mapmakers",
+     "start": 6.097,
+     "end": 6.545
+    },
+    {
+     "text": "published",
+     "start": 6.59,
+     "end": 7.021
+    },
+    {
+     "text": "their",
+     "start": 7.021,
+     "end": 7.261
+    },
+    {
+     "text": "work,",
+     "start": 7.261,
+     "end": 7.551
+    },
+    {
+     "text": "it",
+     "start": 7.551,
+     "end": 7.652
+    },
+    {
+     "text": "was",
+     "start": 7.652,
+     "end": 7.822
+    },
+    {
+     "text": "often",
+     "start": 7.822,
+     "end": 8.122
+    },
+    {
+     "text": "copied",
+     "start": 8.122,
+     "end": 8.533
+    },
+    {
+     "text": "unofficially",
+     "start": 8.533,
+     "end": 9.214
+    },
+    {
+     "text": "by",
+     "start": 9.214,
+     "end": 9.384
+    },
+    {
+     "text": "other",
+     "start": 9.384,
+     "end": 9.664
+    },
+    {
+     "text": "printers,",
+     "start": 9.664,
+     "end": 10.095
+    },
+    {
+     "text": "hoping",
+     "start": 10.5,
+     "end": 10.803
+    },
+    {
+     "text": "to",
+     "start": 10.803,
+     "end": 10.964
+    },
+    {
+     "text": "skip",
+     "start": 10.964,
+     "end": 11.257
+    },
+    {
+     "text": "all",
+     "start": 11.257,
+     "end": 11.475
+    },
+    {
+     "text": "the",
+     "start": 11.475,
+     "end": 11.598
+    },
+    {
+     "text": "hard",
+     "start": 11.598,
+     "end": 11.873
+    },
+    {
+     "text": "work",
+     "start": 11.873,
+     "end": 12.147
+    },
+    {
+     "text": "and",
+     "start": 12.147,
+     "end": 12.365
+    },
+    {
+     "text": "profit",
+     "start": 12.41,
+     "end": 12.766
+    },
+    {
+     "text": "from",
+     "start": 12.766,
+     "end": 12.991
+    },
+    {
+     "text": "printing",
+     "start": 12.991,
+     "end": 13.451
+    },
+    {
+     "text": "it",
+     "start": 13.451,
+     "end": 13.598
+    },
+    {
+     "text": "in",
+     "start": 13.598,
+     "end": 13.728
+    },
+    {
+     "text": "the",
+     "start": 13.728,
+     "end": 13.815
+    },
+    {
+     "text": "books.",
+     "start": 13.86,
+     "end": 14.035
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-13.wav",
+   "seconds": 17.115,
+   "recordedAt": "2026-10-30T23:16:39.976Z",
+   "words": [
+    {
+     "text": "So,",
+     "start": 0.57,
+     "end": 1.065
+    },
+    {
+     "text": "as",
+     "start": 1.11,
+     "end": 1.407
+    },
+    {
+     "text": "an",
+     "start": 1.407,
+     "end": 1.715
+    },
+    {
+     "text": "anti-piracy",
+     "start": 1.76,
+     "end": 2.325
+    },
+    {
+     "text": "measure,",
+     "start": 2.325,
+     "end": 2.683
+    },
+    {
+     "text": "mapmakers",
+     "start": 2.683,
+     "end": 3.133
+    },
+    {
+     "text": "started",
+     "start": 3.133,
+     "end": 3.492
+    },
+    {
+     "text": "to",
+     "start": 3.492,
+     "end": 3.614
+    },
+    {
+     "text": "add",
+     "start": 3.614,
+     "end": 3.774
+    },
+    {
+     "text": "what",
+     "start": 3.774,
+     "end": 3.988
+    },
+    {
+     "text": "are",
+     "start": 3.988,
+     "end": 4.148
+    },
+    {
+     "text": "known",
+     "start": 4.148,
+     "end": 4.415
+    },
+    {
+     "text": "as",
+     "start": 4.415,
+     "end": 4.545
+    },
+    {
+     "text": "'trap",
+     "start": 4.545,
+     "end": 4.766
+    },
+    {
+     "text": "streets'.",
+     "start": 4.766,
+     "end": 5.125
+    },
+    {
+     "text": "These",
+     "start": 5.85,
+     "end": 6.146
+    },
+    {
+     "text": "are",
+     "start": 6.146,
+     "end": 6.315
+    },
+    {
+     "text": "fictitious",
+     "start": 6.37,
+     "end": 6.891
+    },
+    {
+     "text": "roads",
+     "start": 6.891,
+     "end": 7.182
+    },
+    {
+     "text": "and",
+     "start": 7.182,
+     "end": 7.335
+    },
+    {
+     "text": "locations",
+     "start": 7.335,
+     "end": 7.814
+    },
+    {
+     "text": "that",
+     "start": 7.814,
+     "end": 8.036
+    },
+    {
+     "text": "don't",
+     "start": 8.036,
+     "end": 8.284
+    },
+    {
+     "text": "exist",
+     "start": 8.284,
+     "end": 8.548
+    },
+    {
+     "text": "in",
+     "start": 8.548,
+     "end": 8.694
+    },
+    {
+     "text": "real",
+     "start": 8.694,
+     "end": 8.907
+    },
+    {
+     "text": "life.",
+     "start": 8.907,
+     "end": 9.155
+    },
+    {
+     "text": "The",
+     "start": 9.71,
+     "end": 9.933
+    },
+    {
+     "text": "original",
+     "start": 9.933,
+     "end": 10.299
+    },
+    {
+     "text": "mapper",
+     "start": 10.299,
+     "end": 10.592
+    },
+    {
+     "text": "knew",
+     "start": 10.592,
+     "end": 10.761
+    },
+    {
+     "text": "which",
+     "start": 10.761,
+     "end": 10.995
+    },
+    {
+     "text": "places",
+     "start": 11.04,
+     "end": 11.432
+    },
+    {
+     "text": "were",
+     "start": 11.432,
+     "end": 11.643
+    },
+    {
+     "text": "fake,",
+     "start": 11.643,
+     "end": 11.921
+    },
+    {
+     "text": "so",
+     "start": 11.921,
+     "end": 12.045
+    },
+    {
+     "text": "anybody",
+     "start": 12.045,
+     "end": 12.495
+    },
+    {
+     "text": "caught",
+     "start": 12.495,
+     "end": 12.878
+    },
+    {
+     "text": "with",
+     "start": 12.878,
+     "end": 13.136
+    },
+    {
+     "text": "that",
+     "start": 13.136,
+     "end": 13.395
+    },
+    {
+     "text": "same",
+     "start": 13.395,
+     "end": 13.653
+    },
+    {
+     "text": "place",
+     "start": 13.653,
+     "end": 13.978
+    },
+    {
+     "text": "on",
+     "start": 13.978,
+     "end": 14.141
+    },
+    {
+     "text": "their",
+     "start": 14.141,
+     "end": 14.395
+    },
+    {
+     "text": "map",
+     "start": 14.395,
+     "end": 14.615
+    },
+    {
+     "text": "must",
+     "start": 14.92,
+     "end": 15.189
+    },
+    {
+     "text": "have",
+     "start": 15.189,
+     "end": 15.431
+    },
+    {
+     "text": "copied",
+     "start": 15.431,
+     "end": 15.802
+    },
+    {
+     "text": "the",
+     "start": 15.802,
+     "end": 15.969
+    },
+    {
+     "text": "original.",
+     "start": 15.969,
+     "end": 16.285
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-14.wav",
+   "seconds": 15.776,
+   "recordedAt": "2026-10-30T23:17:28.623Z",
+   "words": [
+    {
+     "text": "Perhaps",
+     "start": 0.55,
+     "end": 0.996
+    },
+    {
+     "text": "the",
+     "start": 0.996,
+     "end": 1.232
+    },
+    {
+     "text": "most",
+     "start": 1.232,
+     "end": 1.509
+    },
+    {
+     "text": "famous",
+     "start": 1.509,
+     "end": 1.93
+    },
+    {
+     "text": "example",
+     "start": 1.93,
+     "end": 2.412
+    },
+    {
+     "text": "of",
+     "start": 2.412,
+     "end": 2.586
+    },
+    {
+     "text": "this",
+     "start": 2.586,
+     "end": 2.863
+    },
+    {
+     "text": "is",
+     "start": 2.863,
+     "end": 3.038
+    },
+    {
+     "text": "Aglo,",
+     "start": 3.038,
+     "end": 3.335
+    },
+    {
+     "text": "a",
+     "start": 3.83,
+     "end": 3.934
+    },
+    {
+     "text": "town",
+     "start": 3.934,
+     "end": 4.16
+    },
+    {
+     "text": "that",
+     "start": 4.16,
+     "end": 4.377
+    },
+    {
+     "text": "started",
+     "start": 4.377,
+     "end": 4.717
+    },
+    {
+     "text": "appearing",
+     "start": 4.717,
+     "end": 5.264
+    },
+    {
+     "text": "on",
+     "start": 5.264,
+     "end": 5.415
+    },
+    {
+     "text": "maps",
+     "start": 5.415,
+     "end": 5.688
+    },
+    {
+     "text": "of",
+     "start": 5.688,
+     "end": 5.849
+    },
+    {
+     "text": "New",
+     "start": 5.849,
+     "end": 6.037
+    },
+    {
+     "text": "York",
+     "start": 6.037,
+     "end": 6.245
+    },
+    {
+     "text": "State",
+     "start": 6.245,
+     "end": 6.537
+    },
+    {
+     "text": "nearly",
+     "start": 6.537,
+     "end": 6.914
+    },
+    {
+     "text": "100",
+     "start": 6.914,
+     "end": 7.197
+    },
+    {
+     "text": "years",
+     "start": 7.197,
+     "end": 7.518
+    },
+    {
+     "text": "ago.",
+     "start": 7.518,
+     "end": 7.735
+    },
+    {
+     "text": "It",
+     "start": 8.25,
+     "end": 8.453
+    },
+    {
+     "text": "didn't",
+     "start": 8.453,
+     "end": 8.787
+    },
+    {
+     "text": "exist,",
+     "start": 8.787,
+     "end": 9.205
+    },
+    {
+     "text": "the",
+     "start": 9.41,
+     "end": 9.59
+    },
+    {
+     "text": "general",
+     "start": 9.59,
+     "end": 9.949
+    },
+    {
+     "text": "drafting",
+     "start": 9.949,
+     "end": 10.27
+    },
+    {
+     "text": "company",
+     "start": 10.27,
+     "end": 10.686
+    },
+    {
+     "text": "made",
+     "start": 10.686,
+     "end": 10.932
+    },
+    {
+     "text": "it",
+     "start": 10.932,
+     "end": 11.045
+    },
+    {
+     "text": "up,",
+     "start": 11.55,
+     "end": 11.7
+    },
+    {
+     "text": "and",
+     "start": 11.7,
+     "end": 11.904
+    },
+    {
+     "text": "named",
+     "start": 11.904,
+     "end": 12.133
+    },
+    {
+     "text": "it",
+     "start": 12.133,
+     "end": 12.284
+    },
+    {
+     "text": "using",
+     "start": 12.284,
+     "end": 12.513
+    },
+    {
+     "text": "a",
+     "start": 12.513,
+     "end": 12.611
+    },
+    {
+     "text": "jumble",
+     "start": 12.611,
+     "end": 12.937
+    },
+    {
+     "text": "of",
+     "start": 12.937,
+     "end": 13.061
+    },
+    {
+     "text": "initials",
+     "start": 13.061,
+     "end": 13.521
+    },
+    {
+     "text": "of",
+     "start": 13.521,
+     "end": 13.627
+    },
+    {
+     "text": "its",
+     "start": 13.627,
+     "end": 13.795
+    },
+    {
+     "text": "director",
+     "start": 13.795,
+     "end": 14.219
+    },
+    {
+     "text": "and",
+     "start": 14.219,
+     "end": 14.422
+    },
+    {
+     "text": "his",
+     "start": 14.422,
+     "end": 14.599
+    },
+    {
+     "text": "assistant.",
+     "start": 14.599,
+     "end": 15.085
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-15.wav",
+   "seconds": 8.512,
+   "recordedAt": "2026-10-30T23:17:43.936Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.45,
+     "end": 0.598
+    },
+    {
+     "text": "would",
+     "start": 0.598,
+     "end": 0.782
+    },
+    {
+     "text": "you",
+     "start": 0.782,
+     "end": 0.912
+    },
+    {
+     "text": "believe",
+     "start": 0.912,
+     "end": 1.222
+    },
+    {
+     "text": "it,",
+     "start": 1.222,
+     "end": 1.345
+    },
+    {
+     "text": "sure",
+     "start": 1.42,
+     "end": 1.731
+    },
+    {
+     "text": "enough,",
+     "start": 1.731,
+     "end": 2.305
+    },
+    {
+     "text": "a",
+     "start": 2.36,
+     "end": 2.401
+    },
+    {
+     "text": "few",
+     "start": 2.401,
+     "end": 2.587
+    },
+    {
+     "text": "years",
+     "start": 2.587,
+     "end": 2.835
+    },
+    {
+     "text": "later,",
+     "start": 2.835,
+     "end": 3.196
+    },
+    {
+     "text": "Aglo",
+     "start": 3.196,
+     "end": 3.444
+    },
+    {
+     "text": "turned",
+     "start": 3.444,
+     "end": 3.826
+    },
+    {
+     "text": "up",
+     "start": 3.826,
+     "end": 4.002
+    },
+    {
+     "text": "on",
+     "start": 4.002,
+     "end": 4.126
+    },
+    {
+     "text": "a",
+     "start": 4.126,
+     "end": 4.209
+    },
+    {
+     "text": "map",
+     "start": 4.209,
+     "end": 4.446
+    },
+    {
+     "text": "made",
+     "start": 4.446,
+     "end": 4.715
+    },
+    {
+     "text": "by",
+     "start": 4.715,
+     "end": 4.885
+    },
+    {
+     "text": "one",
+     "start": 4.885,
+     "end": 5.071
+    },
+    {
+     "text": "of",
+     "start": 5.071,
+     "end": 5.195
+    },
+    {
+     "text": "their",
+     "start": 5.195,
+     "end": 5.515
+    },
+    {
+     "text": "biggest",
+     "start": 5.515,
+     "end": 5.959
+    },
+    {
+     "text": "competitors,",
+     "start": 5.959,
+     "end": 6.661
+    },
+    {
+     "text": "Rand",
+     "start": 6.661,
+     "end": 6.93
+    },
+    {
+     "text": "McNally.",
+     "start": 6.93,
+     "end": 7.415
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-16.wav",
+   "seconds": 13.072,
+   "recordedAt": "2026-10-30T23:18:19.253Z",
+   "words": [
+    {
+     "text": "Closer",
+     "start": 0.81,
+     "end": 1.283
+    },
+    {
+     "text": "to",
+     "start": 1.283,
+     "end": 1.452
+    },
+    {
+     "text": "home",
+     "start": 1.452,
+     "end": 1.757
+    },
+    {
+     "text": "in",
+     "start": 1.757,
+     "end": 1.935
+    },
+    {
+     "text": "the",
+     "start": 1.935,
+     "end": 2.156
+    },
+    {
+     "text": "UK,",
+     "start": 2.156,
+     "end": 2.335
+    },
+    {
+     "text": "in",
+     "start": 2.67,
+     "end": 2.866
+    },
+    {
+     "text": "2001",
+     "start": 2.866,
+     "end": 3.603
+    },
+    {
+     "text": "the",
+     "start": 3.603,
+     "end": 3.867
+    },
+    {
+     "text": "AA",
+     "start": 3.867,
+     "end": 4.063
+    },
+    {
+     "text": "agreed",
+     "start": 4.063,
+     "end": 4.535
+    },
+    {
+     "text": "to",
+     "start": 4.58,
+     "end": 4.726
+    },
+    {
+     "text": "pay",
+     "start": 4.726,
+     "end": 4.937
+    },
+    {
+     "text": "Ordnance",
+     "start": 4.937,
+     "end": 5.421
+    },
+    {
+     "text": "Survey",
+     "start": 5.421,
+     "end": 5.805
+    },
+    {
+     "text": "£20",
+     "start": 5.88,
+     "end": 6.459
+    },
+    {
+     "text": "million",
+     "start": 6.459,
+     "end": 6.912
+    },
+    {
+     "text": "after",
+     "start": 6.912,
+     "end": 7.25
+    },
+    {
+     "text": "it",
+     "start": 7.25,
+     "end": 7.394
+    },
+    {
+     "text": "was",
+     "start": 7.394,
+     "end": 7.587
+    },
+    {
+     "text": "found",
+     "start": 7.587,
+     "end": 7.896
+    },
+    {
+     "text": "to",
+     "start": 7.896,
+     "end": 8.031
+    },
+    {
+     "text": "have",
+     "start": 8.031,
+     "end": 8.301
+    },
+    {
+     "text": "used",
+     "start": 8.301,
+     "end": 8.513
+    },
+    {
+     "text": "OS",
+     "start": 8.513,
+     "end": 8.677
+    },
+    {
+     "text": "Maps",
+     "start": 8.677,
+     "end": 8.957
+    },
+    {
+     "text": "as",
+     "start": 8.957,
+     "end": 9.121
+    },
+    {
+     "text": "a",
+     "start": 9.121,
+     "end": 9.217
+    },
+    {
+     "text": "source",
+     "start": 9.217,
+     "end": 9.612
+    },
+    {
+     "text": "for",
+     "start": 9.612,
+     "end": 9.815
+    },
+    {
+     "text": "over",
+     "start": 9.815,
+     "end": 10.085
+    },
+    {
+     "text": "500",
+     "start": 10.16,
+     "end": 10.865
+    },
+    {
+     "text": "of",
+     "start": 11.1,
+     "end": 11.279
+    },
+    {
+     "text": "its",
+     "start": 11.279,
+     "end": 11.416
+    },
+    {
+     "text": "own",
+     "start": 11.416,
+     "end": 11.643
+    },
+    {
+     "text": "publications.",
+     "start": 11.643,
+     "end": 12.455
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-17.wav",
+   "seconds": 11.488,
+   "recordedAt": "2026-10-30T23:18:55.739Z",
+   "words": [
+    {
+     "text": "Ordnance",
+     "start": 0.67,
+     "end": 1.118
+    },
+    {
+     "text": "Survey",
+     "start": 1.118,
+     "end": 1.428
+    },
+    {
+     "text": "said",
+     "start": 1.428,
+     "end": 1.693
+    },
+    {
+     "text": "it",
+     "start": 1.693,
+     "end": 1.794
+    },
+    {
+     "text": "could",
+     "start": 1.794,
+     "end": 2.059
+    },
+    {
+     "text": "prove",
+     "start": 2.059,
+     "end": 2.324
+    },
+    {
+     "text": "it",
+     "start": 2.324,
+     "end": 2.415
+    },
+    {
+     "text": "through",
+     "start": 2.415,
+     "end": 2.753
+    },
+    {
+     "text": "little",
+     "start": 2.753,
+     "end": 3.073
+    },
+    {
+     "text": "hidden",
+     "start": 3.073,
+     "end": 3.393
+    },
+    {
+     "text": "fingerprints",
+     "start": 3.393,
+     "end": 4.023
+    },
+    {
+     "text": "in",
+     "start": 4.023,
+     "end": 4.179
+    },
+    {
+     "text": "its",
+     "start": 4.179,
+     "end": 4.389
+    },
+    {
+     "text": "maps",
+     "start": 4.389,
+     "end": 4.654
+    },
+    {
+     "text": "that",
+     "start": 4.654,
+     "end": 4.809
+    },
+    {
+     "text": "weren't",
+     "start": 4.809,
+     "end": 5.028
+    },
+    {
+     "text": "obvious",
+     "start": 5.028,
+     "end": 5.357
+    },
+    {
+     "text": "to",
+     "start": 5.357,
+     "end": 5.512
+    },
+    {
+     "text": "either",
+     "start": 5.512,
+     "end": 5.759
+    },
+    {
+     "text": "the",
+     "start": 5.759,
+     "end": 5.905
+    },
+    {
+     "text": "reader",
+     "start": 5.905,
+     "end": 6.189
+    },
+    {
+     "text": "or",
+     "start": 6.189,
+     "end": 6.344
+    },
+    {
+     "text": "the",
+     "start": 6.344,
+     "end": 6.454
+    },
+    {
+     "text": "person",
+     "start": 6.454,
+     "end": 6.737
+    },
+    {
+     "text": "copying",
+     "start": 6.737,
+     "end": 7.066
+    },
+    {
+     "text": "them.",
+     "start": 7.066,
+     "end": 7.285
+    },
+    {
+     "text": "That's",
+     "start": 7.78,
+     "end": 8.124
+    },
+    {
+     "text": "exactly",
+     "start": 8.124,
+     "end": 8.537
+    },
+    {
+     "text": "what",
+     "start": 8.537,
+     "end": 8.812
+    },
+    {
+     "text": "we",
+     "start": 8.812,
+     "end": 8.979
+    },
+    {
+     "text": "want",
+     "start": 8.979,
+     "end": 9.255
+    },
+    {
+     "text": "to",
+     "start": 9.255,
+     "end": 9.392
+    },
+    {
+     "text": "do",
+     "start": 9.392,
+     "end": 9.559
+    },
+    {
+     "text": "with",
+     "start": 9.559,
+     "end": 9.835
+    },
+    {
+     "text": "our",
+     "start": 9.835,
+     "end": 10.041
+    },
+    {
+     "text": "games.",
+     "start": 10.041,
+     "end": 10.385
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-18.wav",
+   "seconds": 18.741,
+   "recordedAt": "2026-10-30T23:19:24.065Z",
+   "words": [
+    {
+     "text": "The",
+     "start": 0.65,
+     "end": 0.828
+    },
+    {
+     "text": "way",
+     "start": 0.828,
+     "end": 0.985
+    },
+    {
+     "text": "you",
+     "start": 0.985,
+     "end": 1.141
+    },
+    {
+     "text": "use",
+     "start": 1.141,
+     "end": 1.341
+    },
+    {
+     "text": "this",
+     "start": 1.341,
+     "end": 1.559
+    },
+    {
+     "text": "technique",
+     "start": 1.559,
+     "end": 2.029
+    },
+    {
+     "text": "in",
+     "start": 2.029,
+     "end": 2.177
+    },
+    {
+     "text": "your",
+     "start": 2.177,
+     "end": 2.377
+    },
+    {
+     "text": "game",
+     "start": 2.377,
+     "end": 2.551
+    },
+    {
+     "text": "is",
+     "start": 2.551,
+     "end": 2.698
+    },
+    {
+     "text": "similar.",
+     "start": 2.698,
+     "end": 3.055
+    },
+    {
+     "text": "You",
+     "start": 3.56,
+     "end": 3.747
+    },
+    {
+     "text": "leave",
+     "start": 3.747,
+     "end": 4.004
+    },
+    {
+     "text": "traps",
+     "start": 4.004,
+     "end": 4.322
+    },
+    {
+     "text": "that",
+     "start": 4.322,
+     "end": 4.481
+    },
+    {
+     "text": "don't",
+     "start": 4.481,
+     "end": 4.706
+    },
+    {
+     "text": "serve",
+     "start": 4.706,
+     "end": 4.968
+    },
+    {
+     "text": "much",
+     "start": 4.968,
+     "end": 5.183
+    },
+    {
+     "text": "of",
+     "start": 5.183,
+     "end": 5.295
+    },
+    {
+     "text": "a",
+     "start": 5.34,
+     "end": 5.41
+    },
+    {
+     "text": "purpose",
+     "start": 5.41,
+     "end": 5.752
+    },
+    {
+     "text": "other",
+     "start": 5.752,
+     "end": 5.981
+    },
+    {
+     "text": "than",
+     "start": 5.981,
+     "end": 6.112
+    },
+    {
+     "text": "to",
+     "start": 6.112,
+     "end": 6.235
+    },
+    {
+     "text": "point",
+     "start": 6.28,
+     "end": 6.543
+    },
+    {
+     "text": "back",
+     "start": 6.543,
+     "end": 6.712
+    },
+    {
+     "text": "to",
+     "start": 6.712,
+     "end": 6.862
+    },
+    {
+     "text": "your",
+     "start": 6.862,
+     "end": 7.049
+    },
+    {
+     "text": "own",
+     "start": 7.049,
+     "end": 7.256
+    },
+    {
+     "text": "authentic",
+     "start": 7.256,
+     "end": 7.753
+    },
+    {
+     "text": "work,",
+     "start": 7.753,
+     "end": 8.025
+    },
+    {
+     "text": "maybe",
+     "start": 8.54,
+     "end": 8.899
+    },
+    {
+     "text": "specific",
+     "start": 8.899,
+     "end": 9.443
+    },
+    {
+     "text": "markings",
+     "start": 9.443,
+     "end": 9.987
+    },
+    {
+     "text": "on",
+     "start": 9.987,
+     "end": 10.162
+    },
+    {
+     "text": "some",
+     "start": 10.162,
+     "end": 10.347
+    },
+    {
+     "text": "of",
+     "start": 10.347,
+     "end": 10.449
+    },
+    {
+     "text": "the",
+     "start": 10.449,
+     "end": 10.634
+    },
+    {
+     "text": "assets,",
+     "start": 10.634,
+     "end": 11.055
+    },
+    {
+     "text": "odd",
+     "start": 11.15,
+     "end": 11.331
+    },
+    {
+     "text": "little",
+     "start": 11.331,
+     "end": 11.685
+    },
+    {
+     "text": "details",
+     "start": 11.685,
+     "end": 12.111
+    },
+    {
+     "text": "in",
+     "start": 12.111,
+     "end": 12.265
+    },
+    {
+     "text": "your",
+     "start": 12.265,
+     "end": 12.5
+    },
+    {
+     "text": "level",
+     "start": 12.5,
+     "end": 12.79
+    },
+    {
+     "text": "layouts",
+     "start": 12.79,
+     "end": 13.207
+    },
+    {
+     "text": "or",
+     "start": 13.207,
+     "end": 13.352
+    },
+    {
+     "text": "text",
+     "start": 13.352,
+     "end": 13.588
+    },
+    {
+     "text": "files,",
+     "start": 13.588,
+     "end": 13.905
+    },
+    {
+     "text": "or",
+     "start": 14.38,
+     "end": 14.529
+    },
+    {
+     "text": "even",
+     "start": 14.529,
+     "end": 14.722
+    },
+    {
+     "text": "hidden",
+     "start": 14.722,
+     "end": 14.968
+    },
+    {
+     "text": "key",
+     "start": 14.968,
+     "end": 15.17
+    },
+    {
+     "text": "combinations",
+     "start": 15.17,
+     "end": 15.846
+    },
+    {
+     "text": "that",
+     "start": 15.846,
+     "end": 16.074
+    },
+    {
+     "text": "would",
+     "start": 16.074,
+     "end": 16.364
+    },
+    {
+     "text": "be",
+     "start": 16.364,
+     "end": 16.487
+    },
+    {
+     "text": "hard",
+     "start": 16.487,
+     "end": 16.715
+    },
+    {
+     "text": "for",
+     "start": 16.715,
+     "end": 16.873
+    },
+    {
+     "text": "a",
+     "start": 16.873,
+     "end": 16.974
+    },
+    {
+     "text": "copycat",
+     "start": 16.974,
+     "end": 17.325
+    },
+    {
+     "text": "to",
+     "start": 17.37,
+     "end": 17.605
+    },
+    {
+     "text": "spot.",
+     "start": 17.66,
+     "end": 17.865
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-19.wav",
+   "seconds": 14.123,
+   "recordedAt": "2026-10-30T23:19:45.589Z",
+   "words": [
+    {
+     "text": "One",
+     "start": 0.54,
+     "end": 0.742
+    },
+    {
+     "text": "small",
+     "start": 0.742,
+     "end": 1.078
+    },
+    {
+     "text": "word",
+     "start": 1.078,
+     "end": 1.329
+    },
+    {
+     "text": "of",
+     "start": 1.329,
+     "end": 1.436
+    },
+    {
+     "text": "warning",
+     "start": 1.436,
+     "end": 1.858
+    },
+    {
+     "text": "though,",
+     "start": 1.858,
+     "end": 2.225
+    },
+    {
+     "text": "don't",
+     "start": 2.76,
+     "end": 3.049
+    },
+    {
+     "text": "rely",
+     "start": 3.049,
+     "end": 3.309
+    },
+    {
+     "text": "on",
+     "start": 3.309,
+     "end": 3.468
+    },
+    {
+     "text": "random",
+     "start": 3.468,
+     "end": 3.877
+    },
+    {
+     "text": "unused",
+     "start": 3.877,
+     "end": 4.286
+    },
+    {
+     "text": "lines",
+     "start": 4.286,
+     "end": 4.615
+    },
+    {
+     "text": "of",
+     "start": 4.66,
+     "end": 4.798
+    },
+    {
+     "text": "code",
+     "start": 4.798,
+     "end": 5.034
+    },
+    {
+     "text": "as",
+     "start": 5.034,
+     "end": 5.156
+    },
+    {
+     "text": "your",
+     "start": 5.156,
+     "end": 5.392
+    },
+    {
+     "text": "traps,",
+     "start": 5.392,
+     "end": 5.685
+    },
+    {
+     "text": "because",
+     "start": 5.75,
+     "end": 6.022
+    },
+    {
+     "text": "most",
+     "start": 6.022,
+     "end": 6.304
+    },
+    {
+     "text": "game",
+     "start": 6.304,
+     "end": 6.557
+    },
+    {
+     "text": "engines",
+     "start": 6.557,
+     "end": 6.946
+    },
+    {
+     "text": "and",
+     "start": 6.946,
+     "end": 7.141
+    },
+    {
+     "text": "compilers",
+     "start": 7.141,
+     "end": 7.714
+    },
+    {
+     "text": "will",
+     "start": 7.714,
+     "end": 7.938
+    },
+    {
+     "text": "often",
+     "start": 7.938,
+     "end": 8.22
+    },
+    {
+     "text": "strip",
+     "start": 8.22,
+     "end": 8.551
+    },
+    {
+     "text": "out",
+     "start": 8.551,
+     "end": 8.774
+    },
+    {
+     "text": "code",
+     "start": 8.774,
+     "end": 9.056
+    },
+    {
+     "text": "that",
+     "start": 9.056,
+     "end": 9.261
+    },
+    {
+     "text": "never",
+     "start": 9.261,
+     "end": 9.533
+    },
+    {
+     "text": "runs,",
+     "start": 9.533,
+     "end": 9.815
+    },
+    {
+     "text": "and",
+     "start": 10.3,
+     "end": 10.505
+    },
+    {
+     "text": "an",
+     "start": 10.505,
+     "end": 10.657
+    },
+    {
+     "text": "AI",
+     "start": 10.657,
+     "end": 10.809
+    },
+    {
+     "text": "clone",
+     "start": 10.809,
+     "end": 11.077
+    },
+    {
+     "text": "will",
+     "start": 11.077,
+     "end": 11.301
+    },
+    {
+     "text": "usually",
+     "start": 11.301,
+     "end": 11.703
+    },
+    {
+     "text": "rewrite",
+     "start": 11.703,
+     "end": 12.114
+    },
+    {
+     "text": "your",
+     "start": 12.114,
+     "end": 12.337
+    },
+    {
+     "text": "code",
+     "start": 12.337,
+     "end": 12.569
+    },
+    {
+     "text": "anyway.",
+     "start": 12.569,
+     "end": 12.855
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-20.wav",
+   "seconds": 15.36,
+   "recordedAt": "2026-10-30T23:20:08.618Z",
+   "words": [
+    {
+     "text": "Assets,",
+     "start": 0.69,
+     "end": 1.141
+    },
+    {
+     "text": "text",
+     "start": 1.141,
+     "end": 1.449
+    },
+    {
+     "text": "and",
+     "start": 1.449,
+     "end": 1.693
+    },
+    {
+     "text": "level",
+     "start": 1.693,
+     "end": 2.022
+    },
+    {
+     "text": "data",
+     "start": 2.022,
+     "end": 2.329
+    },
+    {
+     "text": "on",
+     "start": 2.329,
+     "end": 2.478
+    },
+    {
+     "text": "the",
+     "start": 2.478,
+     "end": 2.68
+    },
+    {
+     "text": "other",
+     "start": 2.68,
+     "end": 2.987
+    },
+    {
+     "text": "hand,",
+     "start": 2.987,
+     "end": 3.295
+    },
+    {
+     "text": "tend",
+     "start": 3.43,
+     "end": 3.693
+    },
+    {
+     "text": "to",
+     "start": 3.693,
+     "end": 3.82
+    },
+    {
+     "text": "get",
+     "start": 3.82,
+     "end": 3.929
+    },
+    {
+     "text": "copied",
+     "start": 3.929,
+     "end": 4.301
+    },
+    {
+     "text": "across",
+     "start": 4.301,
+     "end": 4.673
+    },
+    {
+     "text": "exactly",
+     "start": 4.673,
+     "end": 5.1
+    },
+    {
+     "text": "as",
+     "start": 5.1,
+     "end": 5.254
+    },
+    {
+     "text": "they",
+     "start": 5.254,
+     "end": 5.399
+    },
+    {
+     "text": "are.",
+     "start": 5.399,
+     "end": 5.635
+    },
+    {
+     "text": "That",
+     "start": 6.2,
+     "end": 6.417
+    },
+    {
+     "text": "makes",
+     "start": 6.417,
+     "end": 6.687
+    },
+    {
+     "text": "proving",
+     "start": 6.687,
+     "end": 6.922
+    },
+    {
+     "text": "a",
+     "start": 6.922,
+     "end": 7.021
+    },
+    {
+     "text": "copycat",
+     "start": 7.021,
+     "end": 7.446
+    },
+    {
+     "text": "an",
+     "start": 7.446,
+     "end": 7.599
+    },
+    {
+     "text": "open",
+     "start": 7.599,
+     "end": 7.861
+    },
+    {
+     "text": "and",
+     "start": 7.861,
+     "end": 8.023
+    },
+    {
+     "text": "shut",
+     "start": 8.023,
+     "end": 8.231
+    },
+    {
+     "text": "case",
+     "start": 8.231,
+     "end": 8.492
+    },
+    {
+     "text": "when",
+     "start": 8.492,
+     "end": 8.709
+    },
+    {
+     "text": "appealing",
+     "start": 8.709,
+     "end": 9.196
+    },
+    {
+     "text": "to",
+     "start": 9.196,
+     "end": 9.354
+    },
+    {
+     "text": "Valve",
+     "start": 9.354,
+     "end": 9.625
+    },
+    {
+     "text": "or",
+     "start": 9.625,
+     "end": 9.779
+    },
+    {
+     "text": "another",
+     "start": 9.779,
+     "end": 10.14
+    },
+    {
+     "text": "game",
+     "start": 10.14,
+     "end": 10.356
+    },
+    {
+     "text": "store.",
+     "start": 10.356,
+     "end": 10.645
+    },
+    {
+     "text": "Just",
+     "start": 11.22,
+     "end": 11.459
+    },
+    {
+     "text": "make",
+     "start": 11.459,
+     "end": 11.69
+    },
+    {
+     "text": "sure",
+     "start": 11.69,
+     "end": 11.822
+    },
+    {
+     "text": "you",
+     "start": 11.822,
+     "end": 11.995
+    },
+    {
+     "text": "document",
+     "start": 11.995,
+     "end": 12.433
+    },
+    {
+     "text": "somewhere",
+     "start": 12.433,
+     "end": 12.919
+    },
+    {
+     "text": "private",
+     "start": 12.919,
+     "end": 13.307
+    },
+    {
+     "text": "where",
+     "start": 13.307,
+     "end": 13.596
+    },
+    {
+     "text": "you",
+     "start": 13.596,
+     "end": 13.753
+    },
+    {
+     "text": "left",
+     "start": 13.753,
+     "end": 13.992
+    },
+    {
+     "text": "the",
+     "start": 13.992,
+     "end": 14.165
+    },
+    {
+     "text": "traps.",
+     "start": 14.21,
+     "end": 14.395
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-21.wav",
+   "seconds": 12.155,
+   "recordedAt": "2026-10-30T23:20:28.688Z",
+   "words": [
+    {
+     "text": "In",
+     "start": 0.71,
+     "end": 0.837
+    },
+    {
+     "text": "the",
+     "start": 0.837,
+     "end": 0.994
+    },
+    {
+     "text": "world",
+     "start": 0.994,
+     "end": 1.256
+    },
+    {
+     "text": "of",
+     "start": 1.256,
+     "end": 1.382
+    },
+    {
+     "text": "mobile",
+     "start": 1.382,
+     "end": 1.679
+    },
+    {
+     "text": "games,",
+     "start": 1.679,
+     "end": 1.985
+    },
+    {
+     "text": "there",
+     "start": 1.985,
+     "end": 2.247
+    },
+    {
+     "text": "are",
+     "start": 2.247,
+     "end": 2.404
+    },
+    {
+     "text": "a",
+     "start": 2.404,
+     "end": 2.491
+    },
+    {
+     "text": "couple",
+     "start": 2.491,
+     "end": 2.805
+    },
+    {
+     "text": "of",
+     "start": 2.805,
+     "end": 2.945
+    },
+    {
+     "text": "fairly",
+     "start": 3.02,
+     "end": 3.38
+    },
+    {
+     "text": "low-lift",
+     "start": 3.38,
+     "end": 3.802
+    },
+    {
+     "text": "things",
+     "start": 3.802,
+     "end": 4.126
+    },
+    {
+     "text": "you",
+     "start": 4.126,
+     "end": 4.31
+    },
+    {
+     "text": "can",
+     "start": 4.31,
+     "end": 4.472
+    },
+    {
+     "text": "do",
+     "start": 4.472,
+     "end": 4.616
+    },
+    {
+     "text": "to",
+     "start": 4.616,
+     "end": 4.76
+    },
+    {
+     "text": "make",
+     "start": 4.76,
+     "end": 4.958
+    },
+    {
+     "text": "it",
+     "start": 4.958,
+     "end": 5.057
+    },
+    {
+     "text": "harder",
+     "start": 5.057,
+     "end": 5.389
+    },
+    {
+     "text": "for",
+     "start": 5.389,
+     "end": 5.551
+    },
+    {
+     "text": "copycats",
+     "start": 5.551,
+     "end": 6.001
+    },
+    {
+     "text": "to",
+     "start": 6.001,
+     "end": 6.127
+    },
+    {
+     "text": "take",
+     "start": 6.127,
+     "end": 6.342
+    },
+    {
+     "text": "you",
+     "start": 6.342,
+     "end": 6.468
+    },
+    {
+     "text": "out.",
+     "start": 6.468,
+     "end": 6.675
+    },
+    {
+     "text": "The",
+     "start": 7.25,
+     "end": 7.608
+    },
+    {
+     "text": "first",
+     "start": 7.608,
+     "end": 7.925
+    },
+    {
+     "text": "is",
+     "start": 7.925,
+     "end": 8.097
+    },
+    {
+     "text": "enabling",
+     "start": 8.097,
+     "end": 8.571
+    },
+    {
+     "text": "Google",
+     "start": 8.571,
+     "end": 8.974
+    },
+    {
+     "text": "Play",
+     "start": 8.974,
+     "end": 9.196
+    },
+    {
+     "text": "Integrity",
+     "start": 9.196,
+     "end": 9.72
+    },
+    {
+     "text": "on",
+     "start": 9.72,
+     "end": 9.861
+    },
+    {
+     "text": "Android",
+     "start": 9.861,
+     "end": 10.285
+    },
+    {
+     "text": "and",
+     "start": 10.285,
+     "end": 10.516
+    },
+    {
+     "text": "App",
+     "start": 10.516,
+     "end": 10.748
+    },
+    {
+     "text": "Attest",
+     "start": 10.748,
+     "end": 11.172
+    },
+    {
+     "text": "on",
+     "start": 11.172,
+     "end": 11.343
+    },
+    {
+     "text": "iOS.",
+     "start": 11.343,
+     "end": 11.575
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-22.wav",
+   "seconds": 15.984,
+   "recordedAt": "2026-10-30T23:20:50.675Z",
+   "words": [
+    {
+     "text": "This",
+     "start": 0.67,
+     "end": 0.921
+    },
+    {
+     "text": "forces",
+     "start": 0.921,
+     "end": 1.276
+    },
+    {
+     "text": "a",
+     "start": 1.276,
+     "end": 1.374
+    },
+    {
+     "text": "check",
+     "start": 1.374,
+     "end": 1.68
+    },
+    {
+     "text": "that",
+     "start": 1.68,
+     "end": 1.922
+    },
+    {
+     "text": "the",
+     "start": 1.922,
+     "end": 2.101
+    },
+    {
+     "text": "copy",
+     "start": 2.101,
+     "end": 2.353
+    },
+    {
+     "text": "of",
+     "start": 2.353,
+     "end": 2.46
+    },
+    {
+     "text": "the",
+     "start": 2.46,
+     "end": 2.64
+    },
+    {
+     "text": "app",
+     "start": 2.64,
+     "end": 2.819
+    },
+    {
+     "text": "talking",
+     "start": 2.819,
+     "end": 3.241
+    },
+    {
+     "text": "to",
+     "start": 3.241,
+     "end": 3.394
+    },
+    {
+     "text": "your",
+     "start": 3.394,
+     "end": 3.636
+    },
+    {
+     "text": "server",
+     "start": 3.636,
+     "end": 4.004
+    },
+    {
+     "text": "is",
+     "start": 4.004,
+     "end": 4.156
+    },
+    {
+     "text": "a",
+     "start": 4.156,
+     "end": 4.255
+    },
+    {
+     "text": "real",
+     "start": 4.255,
+     "end": 4.497
+    },
+    {
+     "text": "game",
+     "start": 4.497,
+     "end": 4.74
+    },
+    {
+     "text": "installed",
+     "start": 4.74,
+     "end": 5.269
+    },
+    {
+     "text": "from",
+     "start": 5.269,
+     "end": 5.467
+    },
+    {
+     "text": "either",
+     "start": 5.467,
+     "end": 5.718
+    },
+    {
+     "text": "store.",
+     "start": 5.718,
+     "end": 6.005
+    },
+    {
+     "text": "As",
+     "start": 6.62,
+     "end": 6.755
+    },
+    {
+     "text": "long",
+     "start": 6.755,
+     "end": 6.945
+    },
+    {
+     "text": "as",
+     "start": 6.945,
+     "end": 7.04
+    },
+    {
+     "text": "your",
+     "start": 7.04,
+     "end": 7.195
+    },
+    {
+     "text": "server",
+     "start": 7.195,
+     "end": 7.481
+    },
+    {
+     "text": "actually",
+     "start": 7.481,
+     "end": 7.861
+    },
+    {
+     "text": "checks",
+     "start": 7.861,
+     "end": 8.147
+    },
+    {
+     "text": "the",
+     "start": 8.147,
+     "end": 8.289
+    },
+    {
+     "text": "result,",
+     "start": 8.289,
+     "end": 8.575
+    },
+    {
+     "text": "if",
+     "start": 9.01,
+     "end": 9.16
+    },
+    {
+     "text": "someone",
+     "start": 9.16,
+     "end": 9.451
+    },
+    {
+     "text": "repackaged",
+     "start": 9.451,
+     "end": 10.023
+    },
+    {
+     "text": "your",
+     "start": 10.023,
+     "end": 10.199
+    },
+    {
+     "text": "game",
+     "start": 10.199,
+     "end": 10.411
+    },
+    {
+     "text": "into",
+     "start": 10.411,
+     "end": 10.622
+    },
+    {
+     "text": "another",
+     "start": 10.622,
+     "end": 10.992
+    },
+    {
+     "text": "app,",
+     "start": 10.992,
+     "end": 11.195
+    },
+    {
+     "text": "anything",
+     "start": 11.59,
+     "end": 11.969
+    },
+    {
+     "text": "that",
+     "start": 11.969,
+     "end": 12.172
+    },
+    {
+     "text": "talks",
+     "start": 12.172,
+     "end": 12.401
+    },
+    {
+     "text": "to",
+     "start": 12.401,
+     "end": 12.551
+    },
+    {
+     "text": "your",
+     "start": 12.551,
+     "end": 12.709
+    },
+    {
+     "text": "servers",
+     "start": 12.709,
+     "end": 13.079
+    },
+    {
+     "text": "would",
+     "start": 13.079,
+     "end": 13.335
+    },
+    {
+     "text": "simply",
+     "start": 13.39,
+     "end": 13.793
+    },
+    {
+     "text": "stop",
+     "start": 13.793,
+     "end": 14.101
+    },
+    {
+     "text": "working.",
+     "start": 14.101,
+     "end": 14.515
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-23.wav",
+   "seconds": 18.427,
+   "recordedAt": "2026-10-30T23:21:17.450Z",
+   "words": [
+    {
+     "text": "One",
+     "start": 0.56,
+     "end": 0.762
+    },
+    {
+     "text": "other",
+     "start": 0.762,
+     "end": 0.99
+    },
+    {
+     "text": "thing",
+     "start": 0.99,
+     "end": 1.187
+    },
+    {
+     "text": "you",
+     "start": 1.187,
+     "end": 1.355
+    },
+    {
+     "text": "can",
+     "start": 1.355,
+     "end": 1.533
+    },
+    {
+     "text": "do",
+     "start": 1.533,
+     "end": 1.701
+    },
+    {
+     "text": "is",
+     "start": 1.701,
+     "end": 1.869
+    },
+    {
+     "text": "avoid",
+     "start": 1.869,
+     "end": 2.175
+    },
+    {
+     "text": "putting",
+     "start": 2.22,
+     "end": 2.604
+    },
+    {
+     "text": "all",
+     "start": 2.604,
+     "end": 2.81
+    },
+    {
+     "text": "of",
+     "start": 2.81,
+     "end": 2.953
+    },
+    {
+     "text": "your",
+     "start": 2.953,
+     "end": 3.167
+    },
+    {
+     "text": "content",
+     "start": 3.167,
+     "end": 3.56
+    },
+    {
+     "text": "in",
+     "start": 3.56,
+     "end": 3.712
+    },
+    {
+     "text": "the",
+     "start": 3.712,
+     "end": 3.873
+    },
+    {
+     "text": "initial",
+     "start": 3.873,
+     "end": 4.257
+    },
+    {
+     "text": "download.",
+     "start": 4.257,
+     "end": 4.695
+    },
+    {
+     "text": "Both",
+     "start": 5.38,
+     "end": 5.728
+    },
+    {
+     "text": "app",
+     "start": 5.728,
+     "end": 6.041
+    },
+    {
+     "text": "stores",
+     "start": 6.041,
+     "end": 6.425
+    },
+    {
+     "text": "optimize",
+     "start": 6.47,
+     "end": 6.884
+    },
+    {
+     "text": "for",
+     "start": 6.884,
+     "end": 7.1
+    },
+    {
+     "text": "small",
+     "start": 7.1,
+     "end": 7.344
+    },
+    {
+     "text": "initial",
+     "start": 7.344,
+     "end": 7.711
+    },
+    {
+     "text": "bundle",
+     "start": 7.711,
+     "end": 8.021
+    },
+    {
+     "text": "sizes",
+     "start": 8.021,
+     "end": 8.35
+    },
+    {
+     "text": "anyway,",
+     "start": 8.35,
+     "end": 8.735
+    },
+    {
+     "text": "and",
+     "start": 9.2,
+     "end": 9.42
+    },
+    {
+     "text": "many",
+     "start": 9.42,
+     "end": 9.645
+    },
+    {
+     "text": "developers",
+     "start": 9.645,
+     "end": 10.115
+    },
+    {
+     "text": "stream",
+     "start": 10.115,
+     "end": 10.469
+    },
+    {
+     "text": "content",
+     "start": 10.469,
+     "end": 10.891
+    },
+    {
+     "text": "down",
+     "start": 10.891,
+     "end": 11.169
+    },
+    {
+     "text": "after",
+     "start": 11.169,
+     "end": 11.485
+    },
+    {
+     "text": "install.",
+     "start": 11.485,
+     "end": 11.935
+    },
+    {
+     "text": "That",
+     "start": 12.46,
+     "end": 12.736
+    },
+    {
+     "text": "naturally",
+     "start": 12.736,
+     "end": 13.04
+    },
+    {
+     "text": "helps",
+     "start": 13.04,
+     "end": 13.306
+    },
+    {
+     "text": "you,",
+     "start": 13.306,
+     "end": 13.525
+    },
+    {
+     "text": "because",
+     "start": 13.6,
+     "end": 13.912
+    },
+    {
+     "text": "anybody",
+     "start": 13.912,
+     "end": 14.281
+    },
+    {
+     "text": "getting",
+     "start": 14.281,
+     "end": 14.632
+    },
+    {
+     "text": "a",
+     "start": 14.632,
+     "end": 14.739
+    },
+    {
+     "text": "hold",
+     "start": 14.739,
+     "end": 14.963
+    },
+    {
+     "text": "of",
+     "start": 14.963,
+     "end": 15.08
+    },
+    {
+     "text": "the",
+     "start": 15.08,
+     "end": 15.187
+    },
+    {
+     "text": "app",
+     "start": 15.187,
+     "end": 15.343
+    },
+    {
+     "text": "bundle",
+     "start": 15.343,
+     "end": 15.674
+    },
+    {
+     "text": "only",
+     "start": 15.674,
+     "end": 15.956
+    },
+    {
+     "text": "sees",
+     "start": 15.956,
+     "end": 16.228
+    },
+    {
+     "text": "about",
+     "start": 16.228,
+     "end": 16.491
+    },
+    {
+     "text": "half",
+     "start": 16.491,
+     "end": 16.774
+    },
+    {
+     "text": "of",
+     "start": 16.774,
+     "end": 16.939
+    },
+    {
+     "text": "the",
+     "start": 16.939,
+     "end": 17.066
+    },
+    {
+     "text": "picture.",
+     "start": 17.066,
+     "end": 17.455
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-24.wav",
+   "seconds": 18.613,
+   "recordedAt": "2026-10-30T23:21:43.217Z",
+   "words": [
+    {
+     "text": "It's",
+     "start": 0.77,
+     "end": 1.01
+    },
+    {
+     "text": "also",
+     "start": 1.01,
+     "end": 1.288
+    },
+    {
+     "text": "worth",
+     "start": 1.288,
+     "end": 1.515
+    },
+    {
+     "text": "noting",
+     "start": 1.56,
+     "end": 1.92
+    },
+    {
+     "text": "that",
+     "start": 1.92,
+     "end": 2.157
+    },
+    {
+     "text": "if",
+     "start": 2.157,
+     "end": 2.297
+    },
+    {
+     "text": "you",
+     "start": 2.297,
+     "end": 2.481
+    },
+    {
+     "text": "have",
+     "start": 2.481,
+     "end": 2.736
+    },
+    {
+     "text": "a",
+     "start": 2.736,
+     "end": 2.832
+    },
+    {
+     "text": "Unity",
+     "start": 2.832,
+     "end": 3.131
+    },
+    {
+     "text": "game,",
+     "start": 3.131,
+     "end": 3.385
+    },
+    {
+     "text": "on",
+     "start": 3.91,
+     "end": 4.103
+    },
+    {
+     "text": "iOS",
+     "start": 4.103,
+     "end": 4.438
+    },
+    {
+     "text": "it's",
+     "start": 4.438,
+     "end": 4.801
+    },
+    {
+     "text": "already",
+     "start": 4.801,
+     "end": 5.335
+    },
+    {
+     "text": "compiled",
+     "start": 5.335,
+     "end": 5.937
+    },
+    {
+     "text": "to",
+     "start": 5.937,
+     "end": 6.13
+    },
+    {
+     "text": "native",
+     "start": 6.13,
+     "end": 6.504
+    },
+    {
+     "text": "code",
+     "start": 6.504,
+     "end": 6.834
+    },
+    {
+     "text": "using",
+     "start": 6.834,
+     "end": 7.254
+    },
+    {
+     "text": "something",
+     "start": 7.254,
+     "end": 7.924
+    },
+    {
+     "text": "called",
+     "start": 7.924,
+     "end": 8.389
+    },
+    {
+     "text": "IL2CPP.",
+     "start": 8.389,
+     "end": 9.025
+    },
+    {
+     "text": "That's",
+     "start": 9.62,
+     "end": 9.993
+    },
+    {
+     "text": "effectively",
+     "start": 9.993,
+     "end": 10.391
+    },
+    {
+     "text": "a",
+     "start": 10.391,
+     "end": 10.487
+    },
+    {
+     "text": "requirement",
+     "start": 10.487,
+     "end": 11.102
+    },
+    {
+     "text": "from",
+     "start": 11.102,
+     "end": 11.345
+    },
+    {
+     "text": "Apple,",
+     "start": 11.39,
+     "end": 11.595
+    },
+    {
+     "text": "and",
+     "start": 12.03,
+     "end": 12.291
+    },
+    {
+     "text": "Unity's",
+     "start": 12.291,
+     "end": 12.789
+    },
+    {
+     "text": "own",
+     "start": 12.789,
+     "end": 13.022
+    },
+    {
+     "text": "documentation",
+     "start": 13.022,
+     "end": 13.962
+    },
+    {
+     "text": "says",
+     "start": 13.962,
+     "end": 14.291
+    },
+    {
+     "text": "IL2CPP",
+     "start": 14.291,
+     "end": 14.812
+    },
+    {
+     "text": "is",
+     "start": 14.812,
+     "end": 15.005
+    },
+    {
+     "text": "required",
+     "start": 15.005,
+     "end": 15.605
+    },
+    {
+     "text": "for",
+     "start": 15.605,
+     "end": 15.855
+    },
+    {
+     "text": "iOS",
+     "start": 15.855,
+     "end": 16.115
+    },
+    {
+     "text": "and",
+     "start": 16.115,
+     "end": 16.376
+    },
+    {
+     "text": "most",
+     "start": 16.376,
+     "end": 16.693
+    },
+    {
+     "text": "consoles.",
+     "start": 16.693,
+     "end": 17.305
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-25.wav",
+   "seconds": 20.32,
+   "recordedAt": "2026-10-30T23:22:10.175Z",
+   "words": [
+    {
+     "text": "On",
+     "start": 0.84,
+     "end": 1.029
+    },
+    {
+     "text": "Android,",
+     "start": 1.029,
+     "end": 1.585
+    },
+    {
+     "text": "this",
+     "start": 1.65,
+     "end": 1.9
+    },
+    {
+     "text": "is",
+     "start": 1.9,
+     "end": 2.057
+    },
+    {
+     "text": "technically",
+     "start": 2.057,
+     "end": 2.714
+    },
+    {
+     "text": "optional,",
+     "start": 2.714,
+     "end": 3.205
+    },
+    {
+     "text": "but",
+     "start": 3.59,
+     "end": 3.825
+    },
+    {
+     "text": "Google",
+     "start": 3.825,
+     "end": 4.09
+    },
+    {
+     "text": "Play",
+     "start": 4.09,
+     "end": 4.355
+    },
+    {
+     "text": "has",
+     "start": 4.355,
+     "end": 4.539
+    },
+    {
+     "text": "required",
+     "start": 4.539,
+     "end": 5.079
+    },
+    {
+     "text": "64-bit",
+     "start": 5.079,
+     "end": 5.834
+    },
+    {
+     "text": "support",
+     "start": 5.834,
+     "end": 6.314
+    },
+    {
+     "text": "since",
+     "start": 6.314,
+     "end": 6.579
+    },
+    {
+     "text": "2019,",
+     "start": 6.579,
+     "end": 7.405
+    },
+    {
+     "text": "and",
+     "start": 7.87,
+     "end": 8.085
+    },
+    {
+     "text": "Unity's",
+     "start": 8.085,
+     "end": 8.467
+    },
+    {
+     "text": "older",
+     "start": 8.467,
+     "end": 8.756
+    },
+    {
+     "text": "mono",
+     "start": 8.756,
+     "end": 8.98
+    },
+    {
+     "text": "options",
+     "start": 8.98,
+     "end": 9.418
+    },
+    {
+     "text": "don't",
+     "start": 9.418,
+     "end": 9.698
+    },
+    {
+     "text": "support",
+     "start": 9.698,
+     "end": 10.136
+    },
+    {
+     "text": "64-bit",
+     "start": 10.136,
+     "end": 10.733
+    },
+    {
+     "text": "on",
+     "start": 10.733,
+     "end": 10.845
+    },
+    {
+     "text": "Android,",
+     "start": 10.845,
+     "end": 11.265
+    },
+    {
+     "text": "so",
+     "start": 11.62,
+     "end": 11.778
+    },
+    {
+     "text": "if",
+     "start": 11.778,
+     "end": 11.914
+    },
+    {
+     "text": "your",
+     "start": 11.914,
+     "end": 12.095
+    },
+    {
+     "text": "game",
+     "start": 12.095,
+     "end": 12.263
+    },
+    {
+     "text": "is",
+     "start": 12.263,
+     "end": 12.375
+    },
+    {
+     "text": "on",
+     "start": 12.375,
+     "end": 12.468
+    },
+    {
+     "text": "the",
+     "start": 12.468,
+     "end": 12.617
+    },
+    {
+     "text": "Play",
+     "start": 12.617,
+     "end": 12.813
+    },
+    {
+     "text": "Store,",
+     "start": 12.813,
+     "end": 13.055
+    },
+    {
+     "text": "good",
+     "start": 13.2,
+     "end": 13.392
+    },
+    {
+     "text": "news,",
+     "start": 13.392,
+     "end": 13.642
+    },
+    {
+     "text": "you're",
+     "start": 13.642,
+     "end": 13.949
+    },
+    {
+     "text": "almost",
+     "start": 13.949,
+     "end": 14.256
+    },
+    {
+     "text": "certainly",
+     "start": 14.256,
+     "end": 14.717
+    },
+    {
+     "text": "using",
+     "start": 14.717,
+     "end": 15.005
+    },
+    {
+     "text": "it",
+     "start": 15.005,
+     "end": 15.14
+    },
+    {
+     "text": "already.",
+     "start": 15.14,
+     "end": 15.495
+    },
+    {
+     "text": "I'll",
+     "start": 16.04,
+     "end": 16.375
+    },
+    {
+     "text": "explain",
+     "start": 16.42,
+     "end": 16.777
+    },
+    {
+     "text": "what",
+     "start": 16.777,
+     "end": 17.064
+    },
+    {
+     "text": "IL2CPP",
+     "start": 17.064,
+     "end": 17.619
+    },
+    {
+     "text": "actually",
+     "start": 17.619,
+     "end": 18.144
+    },
+    {
+     "text": "does",
+     "start": 18.144,
+     "end": 18.451
+    },
+    {
+     "text": "in",
+     "start": 18.451,
+     "end": 18.62
+    },
+    {
+     "text": "a",
+     "start": 18.62,
+     "end": 18.699
+    },
+    {
+     "text": "moment.",
+     "start": 18.699,
+     "end": 19.105
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-26.wav",
+   "seconds": 13.621,
+   "recordedAt": "2026-10-30T23:24:14.176Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.54,
+     "end": 0.687
+    },
+    {
+     "text": "you're",
+     "start": 0.687,
+     "end": 1.031
+    },
+    {
+     "text": "building",
+     "start": 1.031,
+     "end": 1.531
+    },
+    {
+     "text": "for",
+     "start": 1.531,
+     "end": 1.728
+    },
+    {
+     "text": "PC,",
+     "start": 1.728,
+     "end": 1.895
+    },
+    {
+     "text": "it",
+     "start": 1.895,
+     "end": 2.022
+    },
+    {
+     "text": "gets",
+     "start": 2.022,
+     "end": 2.278
+    },
+    {
+     "text": "a",
+     "start": 2.278,
+     "end": 2.386
+    },
+    {
+     "text": "little",
+     "start": 2.386,
+     "end": 2.778
+    },
+    {
+     "text": "more",
+     "start": 2.778,
+     "end": 3.024
+    },
+    {
+     "text": "nuanced.",
+     "start": 3.024,
+     "end": 3.485
+    },
+    {
+     "text": "Again,",
+     "start": 3.85,
+     "end": 4.199
+    },
+    {
+     "text": "if",
+     "start": 4.199,
+     "end": 4.279
+    },
+    {
+     "text": "you",
+     "start": 4.279,
+     "end": 4.468
+    },
+    {
+     "text": "have",
+     "start": 4.468,
+     "end": 4.727
+    },
+    {
+     "text": "a",
+     "start": 4.727,
+     "end": 4.827
+    },
+    {
+     "text": "Unity",
+     "start": 4.827,
+     "end": 5.156
+    },
+    {
+     "text": "game,",
+     "start": 5.156,
+     "end": 5.445
+    },
+    {
+     "text": "make",
+     "start": 5.445,
+     "end": 5.654
+    },
+    {
+     "text": "sure",
+     "start": 5.654,
+     "end": 5.864
+    },
+    {
+     "text": "you're",
+     "start": 5.864,
+     "end": 6.163
+    },
+    {
+     "text": "selecting",
+     "start": 6.163,
+     "end": 6.631
+    },
+    {
+     "text": "that",
+     "start": 6.631,
+     "end": 6.851
+    },
+    {
+     "text": "IL2CPP",
+     "start": 6.851,
+     "end": 7.259
+    },
+    {
+     "text": "option",
+     "start": 7.259,
+     "end": 7.598
+    },
+    {
+     "text": "in",
+     "start": 7.598,
+     "end": 7.738
+    },
+    {
+     "text": "your",
+     "start": 7.738,
+     "end": 7.947
+    },
+    {
+     "text": "build",
+     "start": 7.947,
+     "end": 8.196
+    },
+    {
+     "text": "settings,",
+     "start": 8.196,
+     "end": 8.615
+    },
+    {
+     "text": "and",
+     "start": 9.12,
+     "end": 9.315
+    },
+    {
+     "text": "if",
+     "start": 9.315,
+     "end": 9.459
+    },
+    {
+     "text": "you're",
+     "start": 9.459,
+     "end": 9.662
+    },
+    {
+     "text": "in",
+     "start": 9.662,
+     "end": 9.797
+    },
+    {
+     "text": "Unreal,",
+     "start": 9.797,
+     "end": 10.144
+    },
+    {
+     "text": "use",
+     "start": 10.144,
+     "end": 10.347
+    },
+    {
+     "text": "an",
+     "start": 10.347,
+     "end": 10.466
+    },
+    {
+     "text": "encrypted",
+     "start": 10.466,
+     "end": 10.965
+    },
+    {
+     "text": "PAK",
+     "start": 11.02,
+     "end": 11.54
+    },
+    {
+     "text": "file.",
+     "start": 11.54,
+     "end": 12.195
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-27.wav",
+   "seconds": 11.403,
+   "recordedAt": "2026-10-30T23:24:34.674Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.58,
+     "end": 0.734
+    },
+    {
+     "text": "you're",
+     "start": 0.734,
+     "end": 1.093
+    },
+    {
+     "text": "building",
+     "start": 1.093,
+     "end": 1.544
+    },
+    {
+     "text": "in",
+     "start": 1.544,
+     "end": 1.719
+    },
+    {
+     "text": "Godot,",
+     "start": 1.719,
+     "end": 2.078
+    },
+    {
+     "text": "set",
+     "start": 2.078,
+     "end": 2.313
+    },
+    {
+     "text": "an",
+     "start": 2.313,
+     "end": 2.437
+    },
+    {
+     "text": "encryption",
+     "start": 2.437,
+     "end": 2.939
+    },
+    {
+     "text": "key.",
+     "start": 2.939,
+     "end": 3.175
+    },
+    {
+     "text": "Be",
+     "start": 3.61,
+     "end": 3.769
+    },
+    {
+     "text": "warned",
+     "start": 3.769,
+     "end": 4.103
+    },
+    {
+     "text": "though,",
+     "start": 4.103,
+     "end": 4.459
+    },
+    {
+     "text": "in",
+     "start": 4.459,
+     "end": 4.581
+    },
+    {
+     "text": "Godot",
+     "start": 4.581,
+     "end": 4.881
+    },
+    {
+     "text": "that",
+     "start": 4.881,
+     "end": 5.125
+    },
+    {
+     "text": "means",
+     "start": 5.125,
+     "end": 5.454
+    },
+    {
+     "text": "compiling",
+     "start": 5.454,
+     "end": 5.923
+    },
+    {
+     "text": "your",
+     "start": 5.923,
+     "end": 6.11
+    },
+    {
+     "text": "own",
+     "start": 6.11,
+     "end": 6.279
+    },
+    {
+     "text": "export",
+     "start": 6.279,
+     "end": 6.664
+    },
+    {
+     "text": "templates",
+     "start": 6.664,
+     "end": 7.114
+    },
+    {
+     "text": "with",
+     "start": 7.114,
+     "end": 7.321
+    },
+    {
+     "text": "the",
+     "start": 7.321,
+     "end": 7.461
+    },
+    {
+     "text": "key",
+     "start": 7.461,
+     "end": 7.612
+    },
+    {
+     "text": "built",
+     "start": 7.612,
+     "end": 7.856
+    },
+    {
+     "text": "in.",
+     "start": 7.856,
+     "end": 8.015
+    },
+    {
+     "text": "It",
+     "start": 8.39,
+     "end": 8.63
+    },
+    {
+     "text": "isn't",
+     "start": 8.63,
+     "end": 8.892
+    },
+    {
+     "text": "just",
+     "start": 8.892,
+     "end": 9.092
+    },
+    {
+     "text": "a",
+     "start": 9.092,
+     "end": 9.188
+    },
+    {
+     "text": "tick",
+     "start": 9.188,
+     "end": 9.38
+    },
+    {
+     "text": "box",
+     "start": 9.38,
+     "end": 9.581
+    },
+    {
+     "text": "in",
+     "start": 9.581,
+     "end": 9.72
+    },
+    {
+     "text": "the",
+     "start": 9.72,
+     "end": 9.878
+    },
+    {
+     "text": "settings.",
+     "start": 9.878,
+     "end": 10.305
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-28.wav",
+   "seconds": 13.653,
+   "recordedAt": "2026-10-30T23:24:55.547Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.58,
+     "end": 0.814
+    },
+    {
+     "text": "an",
+     "start": 0.814,
+     "end": 0.958
+    },
+    {
+     "text": "encryption",
+     "start": 0.958,
+     "end": 1.504
+    },
+    {
+     "text": "key",
+     "start": 1.504,
+     "end": 1.76
+    },
+    {
+     "text": "by",
+     "start": 1.76,
+     "end": 1.949
+    },
+    {
+     "text": "itself",
+     "start": 1.949,
+     "end": 2.405
+    },
+    {
+     "text": "won't",
+     "start": 2.46,
+     "end": 2.74
+    },
+    {
+     "text": "stop",
+     "start": 2.74,
+     "end": 2.968
+    },
+    {
+     "text": "somebody",
+     "start": 2.968,
+     "end": 3.353
+    },
+    {
+     "text": "copying",
+     "start": 3.353,
+     "end": 3.721
+    },
+    {
+     "text": "your",
+     "start": 3.721,
+     "end": 3.94
+    },
+    {
+     "text": "game,",
+     "start": 3.94,
+     "end": 4.185
+    },
+    {
+     "text": "but",
+     "start": 4.64,
+     "end": 4.833
+    },
+    {
+     "text": "it",
+     "start": 4.833,
+     "end": 4.976
+    },
+    {
+     "text": "does",
+     "start": 4.976,
+     "end": 5.094
+    },
+    {
+     "text": "make",
+     "start": 5.094,
+     "end": 5.337
+    },
+    {
+     "text": "it",
+     "start": 5.337,
+     "end": 5.459
+    },
+    {
+     "text": "harder.",
+     "start": 5.459,
+     "end": 5.745
+    },
+    {
+     "text": "If",
+     "start": 6.3,
+     "end": 6.415
+    },
+    {
+     "text": "you",
+     "start": 6.415,
+     "end": 6.537
+    },
+    {
+     "text": "don't",
+     "start": 6.537,
+     "end": 6.733
+    },
+    {
+     "text": "know",
+     "start": 6.733,
+     "end": 6.896
+    },
+    {
+     "text": "what",
+     "start": 6.896,
+     "end": 7.058
+    },
+    {
+     "text": "it",
+     "start": 7.058,
+     "end": 7.113
+    },
+    {
+     "text": "does,",
+     "start": 7.113,
+     "end": 7.275
+    },
+    {
+     "text": "simply",
+     "start": 7.47,
+     "end": 7.82
+    },
+    {
+     "text": "put,",
+     "start": 7.82,
+     "end": 8.05
+    },
+    {
+     "text": "your",
+     "start": 8.05,
+     "end": 8.14
+    },
+    {
+     "text": "game's",
+     "start": 8.14,
+     "end": 8.49
+    },
+    {
+     "text": "files",
+     "start": 8.49,
+     "end": 8.79
+    },
+    {
+     "text": "are",
+     "start": 8.79,
+     "end": 8.91
+    },
+    {
+     "text": "encrypted",
+     "start": 8.91,
+     "end": 9.43
+    },
+    {
+     "text": "with",
+     "start": 9.43,
+     "end": 9.66
+    },
+    {
+     "text": "a",
+     "start": 9.66,
+     "end": 9.77
+    },
+    {
+     "text": "key",
+     "start": 9.77,
+     "end": 9.995
+    },
+    {
+     "text": "so",
+     "start": 9.995,
+     "end": 10.205
+    },
+    {
+     "text": "that",
+     "start": 10.205,
+     "end": 10.43
+    },
+    {
+     "text": "only",
+     "start": 10.43,
+     "end": 10.71
+    },
+    {
+     "text": "they",
+     "start": 10.71,
+     "end": 10.91
+    },
+    {
+     "text": "can",
+     "start": 10.91,
+     "end": 11.095
+    },
+    {
+     "text": "be",
+     "start": 11.095,
+     "end": 11.215
+    },
+    {
+     "text": "accessed",
+     "start": 11.215,
+     "end": 11.695
+    },
+    {
+     "text": "if",
+     "start": 11.77,
+     "end": 11.933
+    },
+    {
+     "text": "you",
+     "start": 11.933,
+     "end": 12.088
+    },
+    {
+     "text": "have",
+     "start": 12.088,
+     "end": 12.306
+    },
+    {
+     "text": "that",
+     "start": 12.306,
+     "end": 12.496
+    },
+    {
+     "text": "key.",
+     "start": 12.496,
+     "end": 12.705
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-29.wav",
+   "seconds": 12.773,
+   "recordedAt": "2026-10-30T23:25:15.104Z",
+   "words": [
+    {
+     "text": "Ironically",
+     "start": 0.65,
+     "end": 1.463
+    },
+    {
+     "text": "though,",
+     "start": 1.463,
+     "end": 1.801
+    },
+    {
+     "text": "the",
+     "start": 1.801,
+     "end": 1.982
+    },
+    {
+     "text": "key",
+     "start": 1.982,
+     "end": 2.207
+    },
+    {
+     "text": "has",
+     "start": 2.207,
+     "end": 2.495
+    },
+    {
+     "text": "to",
+     "start": 2.495,
+     "end": 2.695
+    },
+    {
+     "text": "ship",
+     "start": 2.84,
+     "end": 3.088
+    },
+    {
+     "text": "inside",
+     "start": 3.088,
+     "end": 3.452
+    },
+    {
+     "text": "of",
+     "start": 3.452,
+     "end": 3.603
+    },
+    {
+     "text": "the",
+     "start": 3.603,
+     "end": 3.771
+    },
+    {
+     "text": "game",
+     "start": 3.771,
+     "end": 3.957
+    },
+    {
+     "text": "itself",
+     "start": 3.957,
+     "end": 4.321
+    },
+    {
+     "text": "so",
+     "start": 4.321,
+     "end": 4.472
+    },
+    {
+     "text": "the",
+     "start": 4.472,
+     "end": 4.649
+    },
+    {
+     "text": "game",
+     "start": 4.649,
+     "end": 4.844
+    },
+    {
+     "text": "can",
+     "start": 4.844,
+     "end": 5.022
+    },
+    {
+     "text": "unlock",
+     "start": 5.022,
+     "end": 5.376
+    },
+    {
+     "text": "its",
+     "start": 5.376,
+     "end": 5.554
+    },
+    {
+     "text": "own",
+     "start": 5.554,
+     "end": 5.705
+    },
+    {
+     "text": "files.",
+     "start": 5.705,
+     "end": 6.015
+    },
+    {
+     "text": "So",
+     "start": 6.59,
+     "end": 6.758
+    },
+    {
+     "text": "it",
+     "start": 6.758,
+     "end": 6.877
+    },
+    {
+     "text": "is",
+     "start": 6.877,
+     "end": 7.015
+    },
+    {
+     "text": "possible",
+     "start": 7.015,
+     "end": 7.411
+    },
+    {
+     "text": "to",
+     "start": 7.411,
+     "end": 7.57
+    },
+    {
+     "text": "find",
+     "start": 7.57,
+     "end": 7.827
+    },
+    {
+     "text": "it,",
+     "start": 7.827,
+     "end": 7.995
+    },
+    {
+     "text": "but",
+     "start": 8.05,
+     "end": 8.212
+    },
+    {
+     "text": "it's",
+     "start": 8.212,
+     "end": 8.418
+    },
+    {
+     "text": "a",
+     "start": 8.418,
+     "end": 8.504
+    },
+    {
+     "text": "frustrating",
+     "start": 8.504,
+     "end": 9.088
+    },
+    {
+     "text": "process",
+     "start": 9.088,
+     "end": 9.51
+    },
+    {
+     "text": "that",
+     "start": 9.51,
+     "end": 9.725
+    },
+    {
+     "text": "needs",
+     "start": 9.725,
+     "end": 9.959
+    },
+    {
+     "text": "special",
+     "start": 9.959,
+     "end": 10.336
+    },
+    {
+     "text": "software",
+     "start": 10.336,
+     "end": 10.767
+    },
+    {
+     "text": "to",
+     "start": 10.767,
+     "end": 10.92
+    },
+    {
+     "text": "do",
+     "start": 10.92,
+     "end": 11.064
+    },
+    {
+     "text": "in",
+     "start": 11.064,
+     "end": 11.163
+    },
+    {
+     "text": "a",
+     "start": 11.163,
+     "end": 11.248
+    },
+    {
+     "text": "timely",
+     "start": 11.248,
+     "end": 11.553
+    },
+    {
+     "text": "manner.",
+     "start": 11.553,
+     "end": 11.805
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-30.wav",
+   "seconds": 20.587,
+   "recordedAt": "2026-10-30T23:25:42.881Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.48,
+     "end": 0.682
+    },
+    {
+     "text": "I've",
+     "start": 0.682,
+     "end": 0.879
+    },
+    {
+     "text": "said",
+     "start": 0.879,
+     "end": 1.128
+    },
+    {
+     "text": "it",
+     "start": 1.128,
+     "end": 1.248
+    },
+    {
+     "text": "a",
+     "start": 1.248,
+     "end": 1.342
+    },
+    {
+     "text": "lot,",
+     "start": 1.342,
+     "end": 1.505
+    },
+    {
+     "text": "but",
+     "start": 1.64,
+     "end": 1.824
+    },
+    {
+     "text": "what",
+     "start": 1.824,
+     "end": 2.055
+    },
+    {
+     "text": "actually",
+     "start": 2.11,
+     "end": 2.555
+    },
+    {
+     "text": "is",
+     "start": 2.61,
+     "end": 2.932
+    },
+    {
+     "text": "IL-2",
+     "start": 2.932,
+     "end": 3.841
+    },
+    {
+     "text": "CPP?",
+     "start": 3.841,
+     "end": 4.295
+    },
+    {
+     "text": "Well,",
+     "start": 4.9,
+     "end": 5.169
+    },
+    {
+     "text": "it's",
+     "start": 5.169,
+     "end": 5.373
+    },
+    {
+     "text": "slightly",
+     "start": 5.373,
+     "end": 5.633
+    },
+    {
+     "text": "different",
+     "start": 5.633,
+     "end": 6.079
+    },
+    {
+     "text": "to",
+     "start": 6.079,
+     "end": 6.237
+    },
+    {
+     "text": "encryption.",
+     "start": 6.237,
+     "end": 6.775
+    },
+    {
+     "text": "Basically,",
+     "start": 7.15,
+     "end": 7.789
+    },
+    {
+     "text": "your",
+     "start": 7.789,
+     "end": 8.061
+    },
+    {
+     "text": "Unity",
+     "start": 8.061,
+     "end": 8.39
+    },
+    {
+     "text": "game",
+     "start": 8.39,
+     "end": 8.663
+    },
+    {
+     "text": "is",
+     "start": 8.663,
+     "end": 8.822
+    },
+    {
+     "text": "written",
+     "start": 8.822,
+     "end": 9.264
+    },
+    {
+     "text": "in",
+     "start": 9.264,
+     "end": 9.423
+    },
+    {
+     "text": "C#.",
+     "start": 9.423,
+     "end": 9.555
+    },
+    {
+     "text": "It's",
+     "start": 10.01,
+     "end": 10.257
+    },
+    {
+     "text": "first",
+     "start": 10.257,
+     "end": 10.579
+    },
+    {
+     "text": "compiled",
+     "start": 10.579,
+     "end": 11.081
+    },
+    {
+     "text": "into",
+     "start": 11.081,
+     "end": 11.356
+    },
+    {
+     "text": "a",
+     "start": 11.356,
+     "end": 11.461
+    },
+    {
+     "text": "format",
+     "start": 11.461,
+     "end": 11.849
+    },
+    {
+     "text": "called",
+     "start": 11.849,
+     "end": 12.134
+    },
+    {
+     "text": "IL,",
+     "start": 12.134,
+     "end": 12.295
+    },
+    {
+     "text": "and",
+     "start": 12.75,
+     "end": 13.139
+    },
+    {
+     "text": "IL-2",
+     "start": 13.139,
+     "end": 13.916
+    },
+    {
+     "text": "CPP",
+     "start": 13.916,
+     "end": 14.305
+    },
+    {
+     "text": "then",
+     "start": 14.36,
+     "end": 14.797
+    },
+    {
+     "text": "converts",
+     "start": 14.797,
+     "end": 15.479
+    },
+    {
+     "text": "that",
+     "start": 15.479,
+     "end": 15.852
+    },
+    {
+     "text": "into",
+     "start": 15.852,
+     "end": 16.225
+    },
+    {
+     "text": "C++,",
+     "start": 16.29,
+     "end": 16.715
+    },
+    {
+     "text": "which",
+     "start": 17.16,
+     "end": 17.535
+    },
+    {
+     "text": "then",
+     "start": 17.535,
+     "end": 17.794
+    },
+    {
+     "text": "compiles",
+     "start": 17.794,
+     "end": 18.312
+    },
+    {
+     "text": "it",
+     "start": 18.312,
+     "end": 18.464
+    },
+    {
+     "text": "into",
+     "start": 18.464,
+     "end": 18.696
+    },
+    {
+     "text": "native",
+     "start": 18.696,
+     "end": 19.062
+    },
+    {
+     "text": "machine",
+     "start": 19.062,
+     "end": 19.481
+    },
+    {
+     "text": "code.",
+     "start": 19.481,
+     "end": 19.785
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-31.wav",
+   "seconds": 12.704,
+   "recordedAt": "2026-10-30T23:26:13.094Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.53,
+     "end": 0.737
+    },
+    {
+     "text": "I",
+     "start": 0.737,
+     "end": 0.803
+    },
+    {
+     "text": "know",
+     "start": 0.803,
+     "end": 0.945
+    },
+    {
+     "text": "that",
+     "start": 0.945,
+     "end": 1.208
+    },
+    {
+     "text": "was",
+     "start": 1.208,
+     "end": 1.406
+    },
+    {
+     "text": "a",
+     "start": 1.406,
+     "end": 1.482
+    },
+    {
+     "text": "technical",
+     "start": 1.482,
+     "end": 2.037
+    },
+    {
+     "text": "mouthful,",
+     "start": 2.037,
+     "end": 2.565
+    },
+    {
+     "text": "but",
+     "start": 2.97,
+     "end": 3.319
+    },
+    {
+     "text": "the",
+     "start": 3.319,
+     "end": 3.469
+    },
+    {
+     "text": "best",
+     "start": 3.469,
+     "end": 3.723
+    },
+    {
+     "text": "analogy",
+     "start": 3.723,
+     "end": 4.15
+    },
+    {
+     "text": "I",
+     "start": 4.15,
+     "end": 4.25
+    },
+    {
+     "text": "can",
+     "start": 4.25,
+     "end": 4.404
+    },
+    {
+     "text": "draw",
+     "start": 4.404,
+     "end": 4.649
+    },
+    {
+     "text": "is",
+     "start": 4.649,
+     "end": 4.804
+    },
+    {
+     "text": "it's",
+     "start": 4.804,
+     "end": 5.012
+    },
+    {
+     "text": "like",
+     "start": 5.012,
+     "end": 5.267
+    },
+    {
+     "text": "giving",
+     "start": 5.267,
+     "end": 5.539
+    },
+    {
+     "text": "someone",
+     "start": 5.539,
+     "end": 5.829
+    },
+    {
+     "text": "a",
+     "start": 5.829,
+     "end": 5.934
+    },
+    {
+     "text": "cake",
+     "start": 5.934,
+     "end": 6.188
+    },
+    {
+     "text": "without",
+     "start": 6.188,
+     "end": 6.478
+    },
+    {
+     "text": "the",
+     "start": 6.478,
+     "end": 6.66
+    },
+    {
+     "text": "recipe.",
+     "start": 6.66,
+     "end": 7.005
+    },
+    {
+     "text": "They",
+     "start": 7.46,
+     "end": 7.728
+    },
+    {
+     "text": "can",
+     "start": 7.728,
+     "end": 7.876
+    },
+    {
+     "text": "certainly",
+     "start": 7.876,
+     "end": 8.154
+    },
+    {
+     "text": "try",
+     "start": 8.154,
+     "end": 8.339
+    },
+    {
+     "text": "and",
+     "start": 8.339,
+     "end": 8.477
+    },
+    {
+     "text": "guess",
+     "start": 8.477,
+     "end": 8.699
+    },
+    {
+     "text": "the",
+     "start": 8.699,
+     "end": 8.847
+    },
+    {
+     "text": "ingredients,",
+     "start": 8.847,
+     "end": 9.365
+    },
+    {
+     "text": "but",
+     "start": 9.42,
+     "end": 9.584
+    },
+    {
+     "text": "it",
+     "start": 9.584,
+     "end": 9.677
+    },
+    {
+     "text": "takes",
+     "start": 9.677,
+     "end": 9.883
+    },
+    {
+     "text": "some",
+     "start": 9.883,
+     "end": 10.079
+    },
+    {
+     "text": "specialist",
+     "start": 10.079,
+     "end": 10.472
+    },
+    {
+     "text": "knowledge",
+     "start": 10.472,
+     "end": 10.893
+    },
+    {
+     "text": "and",
+     "start": 10.893,
+     "end": 11.061
+    },
+    {
+     "text": "a",
+     "start": 11.061,
+     "end": 11.159
+    },
+    {
+     "text": "lot",
+     "start": 11.159,
+     "end": 11.272
+    },
+    {
+     "text": "of",
+     "start": 11.272,
+     "end": 11.384
+    },
+    {
+     "text": "time.",
+     "start": 11.384,
+     "end": 11.655
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-32.wav",
+   "seconds": 11.264,
+   "recordedAt": "2026-10-30T23:26:32.396Z",
+   "words": [
+    {
+     "text": "One",
+     "start": 0.84,
+     "end": 1.024
+    },
+    {
+     "text": "thing",
+     "start": 1.024,
+     "end": 1.303
+    },
+    {
+     "text": "to",
+     "start": 1.303,
+     "end": 1.427
+    },
+    {
+     "text": "bear",
+     "start": 1.427,
+     "end": 1.634
+    },
+    {
+     "text": "in",
+     "start": 1.634,
+     "end": 1.714
+    },
+    {
+     "text": "mind",
+     "start": 1.714,
+     "end": 1.938
+    },
+    {
+     "text": "though,",
+     "start": 1.938,
+     "end": 2.265
+    },
+    {
+     "text": "it",
+     "start": 2.7,
+     "end": 2.858
+    },
+    {
+     "text": "only",
+     "start": 2.858,
+     "end": 3.104
+    },
+    {
+     "text": "protects",
+     "start": 3.104,
+     "end": 3.596
+    },
+    {
+     "text": "your",
+     "start": 3.596,
+     "end": 3.866
+    },
+    {
+     "text": "code,",
+     "start": 3.866,
+     "end": 4.135
+    },
+    {
+     "text": "not",
+     "start": 4.24,
+     "end": 4.46
+    },
+    {
+     "text": "your",
+     "start": 4.46,
+     "end": 4.814
+    },
+    {
+     "text": "art,",
+     "start": 4.814,
+     "end": 5.095
+    },
+    {
+     "text": "audio",
+     "start": 5.17,
+     "end": 5.528
+    },
+    {
+     "text": "or",
+     "start": 5.528,
+     "end": 5.702
+    },
+    {
+     "text": "other",
+     "start": 5.702,
+     "end": 6.06
+    },
+    {
+     "text": "assets,",
+     "start": 6.06,
+     "end": 6.479
+    },
+    {
+     "text": "which",
+     "start": 6.479,
+     "end": 6.745
+    },
+    {
+     "text": "can",
+     "start": 6.745,
+     "end": 6.97
+    },
+    {
+     "text": "still",
+     "start": 6.97,
+     "end": 7.175
+    },
+    {
+     "text": "be",
+     "start": 7.175,
+     "end": 7.348
+    },
+    {
+     "text": "pulled",
+     "start": 7.348,
+     "end": 7.676
+    },
+    {
+     "text": "out",
+     "start": 7.676,
+     "end": 7.88
+    },
+    {
+     "text": "of",
+     "start": 7.88,
+     "end": 7.982
+    },
+    {
+     "text": "your",
+     "start": 7.982,
+     "end": 8.197
+    },
+    {
+     "text": "game",
+     "start": 8.197,
+     "end": 8.494
+    },
+    {
+     "text": "with",
+     "start": 8.494,
+     "end": 8.719
+    },
+    {
+     "text": "freely",
+     "start": 8.719,
+     "end": 9.046
+    },
+    {
+     "text": "available",
+     "start": 9.046,
+     "end": 9.537
+    },
+    {
+     "text": "tools.",
+     "start": 9.537,
+     "end": 9.895
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-33.wav",
+   "seconds": 12.283,
+   "recordedAt": "2026-10-30T23:27:21.978Z",
+   "words": [
+    {
+     "text": "Also,",
+     "start": 0.57,
+     "end": 0.894
+    },
+    {
+     "text": "rather",
+     "start": 0.894,
+     "end": 1.137
+    },
+    {
+     "text": "frustratingly,",
+     "start": 1.137,
+     "end": 2.155
+    },
+    {
+     "text": "Unity",
+     "start": 2.48,
+     "end": 2.798
+    },
+    {
+     "text": "doesn't",
+     "start": 2.798,
+     "end": 3.171
+    },
+    {
+     "text": "have",
+     "start": 3.171,
+     "end": 3.416
+    },
+    {
+     "text": "built-in",
+     "start": 3.416,
+     "end": 3.843
+    },
+    {
+     "text": "encryption",
+     "start": 3.843,
+     "end": 4.434
+    },
+    {
+     "text": "for",
+     "start": 4.434,
+     "end": 4.634
+    },
+    {
+     "text": "those",
+     "start": 4.634,
+     "end": 4.943
+    },
+    {
+     "text": "like",
+     "start": 4.943,
+     "end": 5.207
+    },
+    {
+     "text": "Unreal",
+     "start": 5.207,
+     "end": 5.58
+    },
+    {
+     "text": "and",
+     "start": 5.58,
+     "end": 5.789
+    },
+    {
+     "text": "Godot",
+     "start": 5.789,
+     "end": 6.07
+    },
+    {
+     "text": "do,",
+     "start": 6.07,
+     "end": 6.225
+    },
+    {
+     "text": "so",
+     "start": 6.73,
+     "end": 6.879
+    },
+    {
+     "text": "you",
+     "start": 6.879,
+     "end": 7.024
+    },
+    {
+     "text": "would",
+     "start": 7.024,
+     "end": 7.212
+    },
+    {
+     "text": "need",
+     "start": 7.212,
+     "end": 7.326
+    },
+    {
+     "text": "a",
+     "start": 7.326,
+     "end": 7.422
+    },
+    {
+     "text": "plugin",
+     "start": 7.422,
+     "end": 7.668
+    },
+    {
+     "text": "or",
+     "start": 7.668,
+     "end": 7.856
+    },
+    {
+     "text": "your",
+     "start": 7.856,
+     "end": 8.04
+    },
+    {
+     "text": "own",
+     "start": 8.04,
+     "end": 8.215
+    },
+    {
+     "text": "custom",
+     "start": 8.215,
+     "end": 8.513
+    },
+    {
+     "text": "loading",
+     "start": 8.513,
+     "end": 8.82
+    },
+    {
+     "text": "code",
+     "start": 8.82,
+     "end": 9.074
+    },
+    {
+     "text": "if",
+     "start": 9.074,
+     "end": 9.197
+    },
+    {
+     "text": "you",
+     "start": 9.197,
+     "end": 9.329
+    },
+    {
+     "text": "want",
+     "start": 9.329,
+     "end": 9.513
+    },
+    {
+     "text": "to",
+     "start": 9.513,
+     "end": 9.6
+    },
+    {
+     "text": "protect",
+     "start": 9.6,
+     "end": 9.907
+    },
+    {
+     "text": "them",
+     "start": 9.907,
+     "end": 10.1
+    },
+    {
+     "text": "with",
+     "start": 10.1,
+     "end": 10.275
+    },
+    {
+     "text": "encryption",
+     "start": 10.275,
+     "end": 10.722
+    },
+    {
+     "text": "as",
+     "start": 10.722,
+     "end": 10.871
+    },
+    {
+     "text": "well.",
+     "start": 10.871,
+     "end": 11.055
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-34.wav",
+   "seconds": 11.925,
+   "recordedAt": "2026-10-30T23:27:41.196Z",
+   "words": [
+    {
+     "text": "Okay,",
+     "start": 0.53,
+     "end": 0.791
+    },
+    {
+     "text": "so",
+     "start": 0.791,
+     "end": 0.912
+    },
+    {
+     "text": "moving",
+     "start": 0.912,
+     "end": 1.211
+    },
+    {
+     "text": "away",
+     "start": 1.211,
+     "end": 1.414
+    },
+    {
+     "text": "from",
+     "start": 1.414,
+     "end": 1.655
+    },
+    {
+     "text": "the",
+     "start": 1.655,
+     "end": 1.829
+    },
+    {
+     "text": "hard",
+     "start": 1.829,
+     "end": 2.109
+    },
+    {
+     "text": "technical",
+     "start": 2.109,
+     "end": 2.631
+    },
+    {
+     "text": "details,",
+     "start": 2.631,
+     "end": 3.085
+    },
+    {
+     "text": "one",
+     "start": 3.55,
+     "end": 3.755
+    },
+    {
+     "text": "mistake",
+     "start": 3.755,
+     "end": 4.105
+    },
+    {
+     "text": "I",
+     "start": 4.105,
+     "end": 4.218
+    },
+    {
+     "text": "see",
+     "start": 4.218,
+     "end": 4.454
+    },
+    {
+     "text": "quite",
+     "start": 4.454,
+     "end": 4.813
+    },
+    {
+     "text": "often",
+     "start": 4.813,
+     "end": 5.183
+    },
+    {
+     "text": "is",
+     "start": 5.183,
+     "end": 5.358
+    },
+    {
+     "text": "a",
+     "start": 5.358,
+     "end": 5.481
+    },
+    {
+     "text": "developer",
+     "start": 5.481,
+     "end": 5.81
+    },
+    {
+     "text": "uploading",
+     "start": 5.81,
+     "end": 6.385
+    },
+    {
+     "text": "their",
+     "start": 6.385,
+     "end": 6.652
+    },
+    {
+     "text": "whole",
+     "start": 6.652,
+     "end": 6.96
+    },
+    {
+     "text": "game",
+     "start": 6.96,
+     "end": 7.258
+    },
+    {
+     "text": "as",
+     "start": 7.258,
+     "end": 7.433
+    },
+    {
+     "text": "a",
+     "start": 7.433,
+     "end": 7.54
+    },
+    {
+     "text": "demo",
+     "start": 7.54,
+     "end": 7.787
+    },
+    {
+     "text": "onto",
+     "start": 7.787,
+     "end": 8.054
+    },
+    {
+     "text": "Steam",
+     "start": 8.054,
+     "end": 8.403
+    },
+    {
+     "text": "and",
+     "start": 8.403,
+     "end": 8.639
+    },
+    {
+     "text": "using",
+     "start": 8.639,
+     "end": 8.917
+    },
+    {
+     "text": "a",
+     "start": 8.917,
+     "end": 9.03
+    },
+    {
+     "text": "flag",
+     "start": 9.03,
+     "end": 9.328
+    },
+    {
+     "text": "to",
+     "start": 9.328,
+     "end": 9.502
+    },
+    {
+     "text": "gate",
+     "start": 9.502,
+     "end": 9.749
+    },
+    {
+     "text": "off",
+     "start": 9.749,
+     "end": 9.985
+    },
+    {
+     "text": "particular",
+     "start": 10.05,
+     "end": 10.544
+    },
+    {
+     "text": "bits",
+     "start": 10.544,
+     "end": 10.772
+    },
+    {
+     "text": "of",
+     "start": 10.772,
+     "end": 10.905
+    },
+    {
+     "text": "it.",
+     "start": 10.905,
+     "end": 11.015
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-35.wav",
+   "seconds": 14.965,
+   "recordedAt": "2026-10-30T23:28:04.073Z",
+   "words": [
+    {
+     "text": "Let",
+     "start": 0.47,
+     "end": 0.693
+    },
+    {
+     "text": "me",
+     "start": 0.693,
+     "end": 0.82
+    },
+    {
+     "text": "be",
+     "start": 0.82,
+     "end": 0.969
+    },
+    {
+     "text": "clear,",
+     "start": 0.969,
+     "end": 1.275
+    },
+    {
+     "text": "do",
+     "start": 1.7,
+     "end": 1.92
+    },
+    {
+     "text": "not",
+     "start": 1.92,
+     "end": 2.179
+    },
+    {
+     "text": "do",
+     "start": 2.179,
+     "end": 2.382
+    },
+    {
+     "text": "this.",
+     "start": 2.382,
+     "end": 2.765
+    },
+    {
+     "text": "You're",
+     "start": 2.91,
+     "end": 3.209
+    },
+    {
+     "text": "essentially",
+     "start": 3.209,
+     "end": 3.718
+    },
+    {
+     "text": "giving",
+     "start": 3.718,
+     "end": 4.044
+    },
+    {
+     "text": "away",
+     "start": 4.044,
+     "end": 4.262
+    },
+    {
+     "text": "your",
+     "start": 4.262,
+     "end": 4.462
+    },
+    {
+     "text": "entire",
+     "start": 4.462,
+     "end": 4.789
+    },
+    {
+     "text": "game",
+     "start": 4.789,
+     "end": 5.052
+    },
+    {
+     "text": "code",
+     "start": 5.052,
+     "end": 5.306
+    },
+    {
+     "text": "for",
+     "start": 5.306,
+     "end": 5.469
+    },
+    {
+     "text": "free",
+     "start": 5.469,
+     "end": 5.723
+    },
+    {
+     "text": "without",
+     "start": 5.723,
+     "end": 6.141
+    },
+    {
+     "text": "realising",
+     "start": 6.141,
+     "end": 6.631
+    },
+    {
+     "text": "it,",
+     "start": 6.631,
+     "end": 6.785
+    },
+    {
+     "text": "and",
+     "start": 7.39,
+     "end": 7.578
+    },
+    {
+     "text": "if",
+     "start": 7.578,
+     "end": 7.676
+    },
+    {
+     "text": "you're",
+     "start": 7.676,
+     "end": 7.953
+    },
+    {
+     "text": "releasing",
+     "start": 7.953,
+     "end": 8.369
+    },
+    {
+     "text": "a",
+     "start": 8.369,
+     "end": 8.459
+    },
+    {
+     "text": "demo",
+     "start": 8.459,
+     "end": 8.638
+    },
+    {
+     "text": "to",
+     "start": 8.638,
+     "end": 8.777
+    },
+    {
+     "text": "build",
+     "start": 8.777,
+     "end": 9.006
+    },
+    {
+     "text": "interest",
+     "start": 9.006,
+     "end": 9.365
+    },
+    {
+     "text": "while",
+     "start": 9.365,
+     "end": 9.544
+    },
+    {
+     "text": "you",
+     "start": 9.544,
+     "end": 9.675
+    },
+    {
+     "text": "finish",
+     "start": 9.675,
+     "end": 9.887
+    },
+    {
+     "text": "the",
+     "start": 9.887,
+     "end": 10.025
+    },
+    {
+     "text": "game,",
+     "start": 10.025,
+     "end": 10.205
+    },
+    {
+     "text": "you're",
+     "start": 10.55,
+     "end": 10.887
+    },
+    {
+     "text": "simply",
+     "start": 10.887,
+     "end": 11.213
+    },
+    {
+     "text": "inviting",
+     "start": 11.213,
+     "end": 11.713
+    },
+    {
+     "text": "somebody",
+     "start": 11.713,
+     "end": 12.098
+    },
+    {
+     "text": "to",
+     "start": 12.098,
+     "end": 12.262
+    },
+    {
+     "text": "swoop",
+     "start": 12.262,
+     "end": 12.598
+    },
+    {
+     "text": "in",
+     "start": 12.598,
+     "end": 12.694
+    },
+    {
+     "text": "and",
+     "start": 12.694,
+     "end": 12.858
+    },
+    {
+     "text": "take",
+     "start": 12.858,
+     "end": 13.108
+    },
+    {
+     "text": "it",
+     "start": 13.108,
+     "end": 13.223
+    },
+    {
+     "text": "all",
+     "start": 13.223,
+     "end": 13.396
+    },
+    {
+     "text": "before",
+     "start": 13.396,
+     "end": 13.723
+    },
+    {
+     "text": "release.",
+     "start": 13.723,
+     "end": 14.175
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-36.wav",
+   "seconds": 16.859,
+   "recordedAt": "2026-10-30T23:28:56.099Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.53,
+     "end": 0.736
+    },
+    {
+     "text": "I'm",
+     "start": 0.736,
+     "end": 0.918
+    },
+    {
+     "text": "not",
+     "start": 0.918,
+     "end": 1.053
+    },
+    {
+     "text": "just",
+     "start": 1.053,
+     "end": 1.321
+    },
+    {
+     "text": "talking",
+     "start": 1.321,
+     "end": 1.772
+    },
+    {
+     "text": "in",
+     "start": 1.772,
+     "end": 1.935
+    },
+    {
+     "text": "hypotheticals",
+     "start": 1.935,
+     "end": 2.731
+    },
+    {
+     "text": "either.",
+     "start": 2.731,
+     "end": 3.115
+    },
+    {
+     "text": "The",
+     "start": 3.23,
+     "end": 3.355
+    },
+    {
+     "text": "Steam",
+     "start": 3.355,
+     "end": 3.625
+    },
+    {
+     "text": "Next",
+     "start": 3.625,
+     "end": 3.895
+    },
+    {
+     "text": "Fest",
+     "start": 3.895,
+     "end": 4.165
+    },
+    {
+     "text": "demo",
+     "start": 4.21,
+     "end": 4.504
+    },
+    {
+     "text": "for",
+     "start": 4.504,
+     "end": 4.686
+    },
+    {
+     "text": "Grappledog",
+     "start": 4.686,
+     "end": 5.345
+    },
+    {
+     "text": "turned",
+     "start": 5.4,
+     "end": 5.679
+    },
+    {
+     "text": "out",
+     "start": 5.679,
+     "end": 5.856
+    },
+    {
+     "text": "to",
+     "start": 5.856,
+     "end": 5.986
+    },
+    {
+     "text": "contain",
+     "start": 5.986,
+     "end": 6.405
+    },
+    {
+     "text": "the",
+     "start": 6.405,
+     "end": 6.582
+    },
+    {
+     "text": "entire",
+     "start": 6.582,
+     "end": 6.935
+    },
+    {
+     "text": "game",
+     "start": 6.935,
+     "end": 7.205
+    },
+    {
+     "text": "four",
+     "start": 7.73,
+     "end": 7.967
+    },
+    {
+     "text": "whole",
+     "start": 7.967,
+     "end": 8.207
+    },
+    {
+     "text": "months",
+     "start": 8.207,
+     "end": 8.419
+    },
+    {
+     "text": "before",
+     "start": 8.419,
+     "end": 8.721
+    },
+    {
+     "text": "it",
+     "start": 8.721,
+     "end": 8.86
+    },
+    {
+     "text": "launched,",
+     "start": 8.86,
+     "end": 9.235
+    },
+    {
+     "text": "and",
+     "start": 9.68,
+     "end": 9.894
+    },
+    {
+     "text": "Square",
+     "start": 9.894,
+     "end": 10.216
+    },
+    {
+     "text": "Enix",
+     "start": 10.216,
+     "end": 10.487
+    },
+    {
+     "text": "had",
+     "start": 10.487,
+     "end": 10.654
+    },
+    {
+     "text": "to",
+     "start": 10.654,
+     "end": 10.766
+    },
+    {
+     "text": "pull",
+     "start": 10.766,
+     "end": 10.962
+    },
+    {
+     "text": "the",
+     "start": 10.962,
+     "end": 11.121
+    },
+    {
+     "text": "Trials",
+     "start": 11.121,
+     "end": 11.419
+    },
+    {
+     "text": "of",
+     "start": 11.419,
+     "end": 11.531
+    },
+    {
+     "text": "Mana",
+     "start": 11.531,
+     "end": 11.736
+    },
+    {
+     "text": "demo",
+     "start": 11.736,
+     "end": 12.007
+    },
+    {
+     "text": "from",
+     "start": 12.007,
+     "end": 12.212
+    },
+    {
+     "text": "Steam",
+     "start": 12.212,
+     "end": 12.473
+    },
+    {
+     "text": "after",
+     "start": 12.473,
+     "end": 12.734
+    },
+    {
+     "text": "people",
+     "start": 12.734,
+     "end": 13.042
+    },
+    {
+     "text": "worked",
+     "start": 13.042,
+     "end": 13.303
+    },
+    {
+     "text": "out",
+     "start": 13.303,
+     "end": 13.433
+    },
+    {
+     "text": "they",
+     "start": 13.433,
+     "end": 13.639
+    },
+    {
+     "text": "could",
+     "start": 13.639,
+     "end": 13.872
+    },
+    {
+     "text": "use",
+     "start": 13.872,
+     "end": 14.086
+    },
+    {
+     "text": "its",
+     "start": 14.086,
+     "end": 14.254
+    },
+    {
+     "text": "files",
+     "start": 14.254,
+     "end": 14.534
+    },
+    {
+     "text": "to",
+     "start": 14.534,
+     "end": 14.692
+    },
+    {
+     "text": "play",
+     "start": 14.692,
+     "end": 14.87
+    },
+    {
+     "text": "the",
+     "start": 14.87,
+     "end": 15.019
+    },
+    {
+     "text": "full",
+     "start": 15.019,
+     "end": 15.224
+    },
+    {
+     "text": "game.",
+     "start": 15.224,
+     "end": 15.485
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-37.wav",
+   "seconds": 12.64,
+   "recordedAt": "2026-10-30T23:29:18.480Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.74,
+     "end": 0.874
+    },
+    {
+     "text": "you're",
+     "start": 0.874,
+     "end": 1.199
+    },
+    {
+     "text": "building",
+     "start": 1.199,
+     "end": 1.403
+    },
+    {
+     "text": "a",
+     "start": 1.403,
+     "end": 1.505
+    },
+    {
+     "text": "multiplayer",
+     "start": 1.505,
+     "end": 2.136
+    },
+    {
+     "text": "game,",
+     "start": 2.136,
+     "end": 2.405
+    },
+    {
+     "text": "you",
+     "start": 2.56,
+     "end": 2.737
+    },
+    {
+     "text": "get",
+     "start": 2.737,
+     "end": 2.875
+    },
+    {
+     "text": "a",
+     "start": 2.875,
+     "end": 2.988
+    },
+    {
+     "text": "unique",
+     "start": 2.988,
+     "end": 3.342
+    },
+    {
+     "text": "sort",
+     "start": 3.342,
+     "end": 3.627
+    },
+    {
+     "text": "of",
+     "start": 3.627,
+     "end": 3.745
+    },
+    {
+     "text": "protection",
+     "start": 3.745,
+     "end": 4.296
+    },
+    {
+     "text": "from",
+     "start": 4.296,
+     "end": 4.582
+    },
+    {
+     "text": "copying.",
+     "start": 4.582,
+     "end": 4.975
+    },
+    {
+     "text": "That's",
+     "start": 5.54,
+     "end": 5.91
+    },
+    {
+     "text": "because",
+     "start": 5.91,
+     "end": 6.169
+    },
+    {
+     "text": "you",
+     "start": 6.169,
+     "end": 6.345
+    },
+    {
+     "text": "can",
+     "start": 6.345,
+     "end": 6.511
+    },
+    {
+     "text": "offload",
+     "start": 6.511,
+     "end": 6.881
+    },
+    {
+     "text": "some",
+     "start": 6.881,
+     "end": 7.121
+    },
+    {
+     "text": "of",
+     "start": 7.121,
+     "end": 7.242
+    },
+    {
+     "text": "your",
+     "start": 7.242,
+     "end": 7.473
+    },
+    {
+     "text": "game's",
+     "start": 7.473,
+     "end": 7.806
+    },
+    {
+     "text": "logic",
+     "start": 7.806,
+     "end": 8.093
+    },
+    {
+     "text": "onto",
+     "start": 8.093,
+     "end": 8.361
+    },
+    {
+     "text": "a",
+     "start": 8.361,
+     "end": 8.462
+    },
+    {
+     "text": "private",
+     "start": 8.462,
+     "end": 8.805
+    },
+    {
+     "text": "game",
+     "start": 8.805,
+     "end": 9.036
+    },
+    {
+     "text": "server",
+     "start": 9.036,
+     "end": 9.415
+    },
+    {
+     "text": "where",
+     "start": 9.69,
+     "end": 9.976
+    },
+    {
+     "text": "the",
+     "start": 9.976,
+     "end": 10.139
+    },
+    {
+     "text": "source",
+     "start": 10.139,
+     "end": 10.474
+    },
+    {
+     "text": "code",
+     "start": 10.474,
+     "end": 10.695
+    },
+    {
+     "text": "isn't",
+     "start": 10.695,
+     "end": 10.964
+    },
+    {
+     "text": "available",
+     "start": 10.964,
+     "end": 11.446
+    },
+    {
+     "text": "to",
+     "start": 11.446,
+     "end": 11.585
+    },
+    {
+     "text": "players.",
+     "start": 11.585,
+     "end": 11.895
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-38.wav",
+   "seconds": 14.571,
+   "recordedAt": "2026-10-30T23:29:39.665Z",
+   "words": [
+    {
+     "text": "For",
+     "start": 0.74,
+     "end": 0.958
+    },
+    {
+     "text": "my",
+     "start": 0.958,
+     "end": 1.123
+    },
+    {
+     "text": "game,",
+     "start": 1.123,
+     "end": 1.394
+    },
+    {
+     "text": "Blood",
+     "start": 1.394,
+     "end": 1.734
+    },
+    {
+     "text": "in",
+     "start": 1.734,
+     "end": 1.869
+    },
+    {
+     "text": "the",
+     "start": 1.869,
+     "end": 2.015
+    },
+    {
+     "text": "Sand",
+     "start": 2.015,
+     "end": 2.296
+    },
+    {
+     "text": "for",
+     "start": 2.296,
+     "end": 2.509
+    },
+    {
+     "text": "example,",
+     "start": 2.509,
+     "end": 2.965
+    },
+    {
+     "text": "all",
+     "start": 3.31,
+     "end": 3.482
+    },
+    {
+     "text": "of",
+     "start": 3.482,
+     "end": 3.618
+    },
+    {
+     "text": "my",
+     "start": 3.618,
+     "end": 3.765
+    },
+    {
+     "text": "ranked",
+     "start": 3.765,
+     "end": 4.169
+    },
+    {
+     "text": "queue",
+     "start": 4.169,
+     "end": 4.442
+    },
+    {
+     "text": "code,",
+     "start": 4.442,
+     "end": 4.735
+    },
+    {
+     "text": "ranked",
+     "start": 5.03,
+     "end": 5.421
+    },
+    {
+     "text": "match",
+     "start": 5.421,
+     "end": 5.764
+    },
+    {
+     "text": "simulation,",
+     "start": 5.764,
+     "end": 6.351
+    },
+    {
+     "text": "rating",
+     "start": 6.351,
+     "end": 6.713
+    },
+    {
+     "text": "systems",
+     "start": 6.713,
+     "end": 7.173
+    },
+    {
+     "text": "are",
+     "start": 7.173,
+     "end": 7.398
+    },
+    {
+     "text": "all",
+     "start": 7.398,
+     "end": 7.574
+    },
+    {
+     "text": "handled",
+     "start": 7.574,
+     "end": 7.995
+    },
+    {
+     "text": "on",
+     "start": 7.995,
+     "end": 8.132
+    },
+    {
+     "text": "the",
+     "start": 8.132,
+     "end": 8.298
+    },
+    {
+     "text": "game",
+     "start": 8.298,
+     "end": 8.514
+    },
+    {
+     "text": "server,",
+     "start": 8.514,
+     "end": 8.905
+    },
+    {
+     "text": "as",
+     "start": 9.36,
+     "end": 9.526
+    },
+    {
+     "text": "are",
+     "start": 9.526,
+     "end": 9.702
+    },
+    {
+     "text": "achievements,",
+     "start": 9.702,
+     "end": 10.365
+    },
+    {
+     "text": "purchases",
+     "start": 10.42,
+     "end": 11.165
+    },
+    {
+     "text": "and",
+     "start": 11.165,
+     "end": 11.456
+    },
+    {
+     "text": "a",
+     "start": 11.456,
+     "end": 11.595
+    },
+    {
+     "text": "whole",
+     "start": 11.72,
+     "end": 12.057
+    },
+    {
+     "text": "plethora",
+     "start": 12.057,
+     "end": 12.553
+    },
+    {
+     "text": "of",
+     "start": 12.553,
+     "end": 12.703
+    },
+    {
+     "text": "other",
+     "start": 12.703,
+     "end": 13.031
+    },
+    {
+     "text": "things.",
+     "start": 13.031,
+     "end": 13.415
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-39.wav",
+   "seconds": 16.955,
+   "recordedAt": "2026-10-30T23:30:06.584Z",
+   "words": [
+    {
+     "text": "Now",
+     "start": 0.55,
+     "end": 0.736
+    },
+    {
+     "text": "I'm",
+     "start": 0.736,
+     "end": 0.9
+    },
+    {
+     "text": "not",
+     "start": 0.9,
+     "end": 1.032
+    },
+    {
+     "text": "going",
+     "start": 1.032,
+     "end": 1.287
+    },
+    {
+     "text": "to",
+     "start": 1.287,
+     "end": 1.396
+    },
+    {
+     "text": "get",
+     "start": 1.396,
+     "end": 1.559
+    },
+    {
+     "text": "high",
+     "start": 1.559,
+     "end": 1.75
+    },
+    {
+     "text": "and",
+     "start": 1.75,
+     "end": 1.878
+    },
+    {
+     "text": "mighty,",
+     "start": 1.878,
+     "end": 2.205
+    },
+    {
+     "text": "if",
+     "start": 2.36,
+     "end": 2.472
+    },
+    {
+     "text": "somebody",
+     "start": 2.472,
+     "end": 2.786
+    },
+    {
+     "text": "wanted",
+     "start": 2.786,
+     "end": 3.161
+    },
+    {
+     "text": "to",
+     "start": 3.161,
+     "end": 3.324
+    },
+    {
+     "text": "copy",
+     "start": 3.324,
+     "end": 3.567
+    },
+    {
+     "text": "my",
+     "start": 3.567,
+     "end": 3.729
+    },
+    {
+     "text": "game",
+     "start": 3.729,
+     "end": 4.013
+    },
+    {
+     "text": "they",
+     "start": 4.013,
+     "end": 4.267
+    },
+    {
+     "text": "still",
+     "start": 4.267,
+     "end": 4.622
+    },
+    {
+     "text": "could,",
+     "start": 4.622,
+     "end": 4.967
+    },
+    {
+     "text": "after",
+     "start": 4.967,
+     "end": 5.18
+    },
+    {
+     "text": "all",
+     "start": 5.18,
+     "end": 5.362
+    },
+    {
+     "text": "nothing",
+     "start": 5.362,
+     "end": 5.747
+    },
+    {
+     "text": "is",
+     "start": 5.747,
+     "end": 5.92
+    },
+    {
+     "text": "sacred,",
+     "start": 5.92,
+     "end": 6.285
+    },
+    {
+     "text": "but",
+     "start": 6.97,
+     "end": 7.136
+    },
+    {
+     "text": "it",
+     "start": 7.136,
+     "end": 7.212
+    },
+    {
+     "text": "would",
+     "start": 7.212,
+     "end": 7.476
+    },
+    {
+     "text": "take",
+     "start": 7.476,
+     "end": 7.642
+    },
+    {
+     "text": "many",
+     "start": 7.642,
+     "end": 7.838
+    },
+    {
+     "text": "hundreds",
+     "start": 7.838,
+     "end": 8.238
+    },
+    {
+     "text": "of",
+     "start": 8.238,
+     "end": 8.367
+    },
+    {
+     "text": "hours",
+     "start": 8.367,
+     "end": 8.631
+    },
+    {
+     "text": "to",
+     "start": 8.631,
+     "end": 8.759
+    },
+    {
+     "text": "reverse",
+     "start": 8.759,
+     "end": 9.114
+    },
+    {
+     "text": "engineer",
+     "start": 9.114,
+     "end": 9.469
+    },
+    {
+     "text": "its",
+     "start": 9.469,
+     "end": 9.635
+    },
+    {
+     "text": "behaviour",
+     "start": 9.68,
+     "end": 10.189
+    },
+    {
+     "text": "from",
+     "start": 10.189,
+     "end": 10.44
+    },
+    {
+     "text": "talking",
+     "start": 10.44,
+     "end": 10.846
+    },
+    {
+     "text": "to",
+     "start": 10.846,
+     "end": 10.992
+    },
+    {
+     "text": "the",
+     "start": 10.992,
+     "end": 11.174
+    },
+    {
+     "text": "server",
+     "start": 11.174,
+     "end": 11.381
+    },
+    {
+     "text": "itself,",
+     "start": 11.381,
+     "end": 11.735
+    },
+    {
+     "text": "and",
+     "start": 12.24,
+     "end": 12.545
+    },
+    {
+     "text": "for",
+     "start": 12.545,
+     "end": 12.784
+    },
+    {
+     "text": "99%",
+     "start": 12.784,
+     "end": 13.435
+    },
+    {
+     "text": "of",
+     "start": 13.435,
+     "end": 13.66
+    },
+    {
+     "text": "cases",
+     "start": 13.66,
+     "end": 14.125
+    },
+    {
+     "text": "that",
+     "start": 14.31,
+     "end": 14.539
+    },
+    {
+     "text": "is",
+     "start": 14.539,
+     "end": 14.674
+    },
+    {
+     "text": "just",
+     "start": 14.674,
+     "end": 14.895
+    },
+    {
+     "text": "too",
+     "start": 14.95,
+     "end": 15.146
+    },
+    {
+     "text": "much",
+     "start": 15.146,
+     "end": 15.375
+    },
+    {
+     "text": "effort",
+     "start": 15.43,
+     "end": 15.675
+    },
+    {
+     "text": "to",
+     "start": 15.75,
+     "end": 15.86
+    },
+    {
+     "text": "bother",
+     "start": 15.86,
+     "end": 16.124
+    },
+    {
+     "text": "with.",
+     "start": 16.124,
+     "end": 16.305
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-40.wav",
+   "seconds": 17.408,
+   "recordedAt": "2026-10-30T23:31:12.596Z",
+   "words": [
+    {
+     "text": "Now,",
+     "start": 0.43,
+     "end": 0.637
+    },
+    {
+     "text": "this",
+     "start": 0.637,
+     "end": 0.791
+    },
+    {
+     "text": "opinion",
+     "start": 0.791,
+     "end": 1.243
+    },
+    {
+     "text": "is",
+     "start": 1.243,
+     "end": 1.407
+    },
+    {
+     "text": "maybe",
+     "start": 1.407,
+     "end": 1.734
+    },
+    {
+     "text": "not",
+     "start": 1.734,
+     "end": 1.955
+    },
+    {
+     "text": "quite",
+     "start": 2,
+     "end": 2.29
+    },
+    {
+     "text": "as",
+     "start": 2.29,
+     "end": 2.455
+    },
+    {
+     "text": "spicy",
+     "start": 2.5,
+     "end": 2.832
+    },
+    {
+     "text": "as",
+     "start": 2.832,
+     "end": 2.994
+    },
+    {
+     "text": "my",
+     "start": 2.994,
+     "end": 3.155
+    },
+    {
+     "text": "AI",
+     "start": 3.155,
+     "end": 3.317
+    },
+    {
+     "text": "take",
+     "start": 3.317,
+     "end": 3.592
+    },
+    {
+     "text": "from",
+     "start": 3.592,
+     "end": 3.849
+    },
+    {
+     "text": "my",
+     "start": 3.849,
+     "end": 3.963
+    },
+    {
+     "text": "previous",
+     "start": 3.963,
+     "end": 4.447
+    },
+    {
+     "text": "video,",
+     "start": 4.447,
+     "end": 4.77
+    },
+    {
+     "text": "which",
+     "start": 4.77,
+     "end": 5.055
+    },
+    {
+     "text": "you",
+     "start": 5.1,
+     "end": 5.323
+    },
+    {
+     "text": "should",
+     "start": 5.323,
+     "end": 5.561
+    },
+    {
+     "text": "watch,",
+     "start": 5.561,
+     "end": 5.808
+    },
+    {
+     "text": "I",
+     "start": 5.808,
+     "end": 5.846
+    },
+    {
+     "text": "think,",
+     "start": 5.846,
+     "end": 6.055
+    },
+    {
+     "text": "but",
+     "start": 6.74,
+     "end": 6.941
+    },
+    {
+     "text": "over",
+     "start": 6.941,
+     "end": 7.146
+    },
+    {
+     "text": "the",
+     "start": 7.146,
+     "end": 7.289
+    },
+    {
+     "text": "past",
+     "start": 7.289,
+     "end": 7.467
+    },
+    {
+     "text": "few",
+     "start": 7.467,
+     "end": 7.646
+    },
+    {
+     "text": "weeks,",
+     "start": 7.646,
+     "end": 7.958
+    },
+    {
+     "text": "I've",
+     "start": 7.958,
+     "end": 8.146
+    },
+    {
+     "text": "seen",
+     "start": 8.146,
+     "end": 8.342
+    },
+    {
+     "text": "some",
+     "start": 8.342,
+     "end": 8.538
+    },
+    {
+     "text": "people",
+     "start": 8.538,
+     "end": 8.833
+    },
+    {
+     "text": "screaming",
+     "start": 8.833,
+     "end": 9.27
+    },
+    {
+     "text": "from",
+     "start": 9.27,
+     "end": 9.484
+    },
+    {
+     "text": "the",
+     "start": 9.484,
+     "end": 9.627
+    },
+    {
+     "text": "rooftops",
+     "start": 9.627,
+     "end": 10.056
+    },
+    {
+     "text": "about",
+     "start": 10.056,
+     "end": 10.288
+    },
+    {
+     "text": "how",
+     "start": 10.288,
+     "end": 10.484
+    },
+    {
+     "text": "indie",
+     "start": 10.484,
+     "end": 10.752
+    },
+    {
+     "text": "devs",
+     "start": 10.752,
+     "end": 11.01
+    },
+    {
+     "text": "need",
+     "start": 11.01,
+     "end": 11.18
+    },
+    {
+     "text": "to",
+     "start": 11.18,
+     "end": 11.305
+    },
+    {
+     "text": "stop",
+     "start": 11.305,
+     "end": 11.519
+    },
+    {
+     "text": "building",
+     "start": 11.519,
+     "end": 11.894
+    },
+    {
+     "text": "in",
+     "start": 11.894,
+     "end": 12.023
+    },
+    {
+     "text": "the",
+     "start": 12.023,
+     "end": 12.166
+    },
+    {
+     "text": "open.",
+     "start": 12.166,
+     "end": 12.425
+    },
+    {
+     "text": "It",
+     "start": 12.87,
+     "end": 13.036
+    },
+    {
+     "text": "leaves",
+     "start": 13.036,
+     "end": 13.334
+    },
+    {
+     "text": "us",
+     "start": 13.334,
+     "end": 13.49
+    },
+    {
+     "text": "too",
+     "start": 13.49,
+     "end": 13.675
+    },
+    {
+     "text": "exposed,",
+     "start": 13.675,
+     "end": 14.134
+    },
+    {
+     "text": "they",
+     "start": 14.134,
+     "end": 14.387
+    },
+    {
+     "text": "say,",
+     "start": 14.387,
+     "end": 14.612
+    },
+    {
+     "text": "to",
+     "start": 14.612,
+     "end": 14.739
+    },
+    {
+     "text": "having",
+     "start": 14.739,
+     "end": 15.119
+    },
+    {
+     "text": "our",
+     "start": 15.119,
+     "end": 15.305
+    },
+    {
+     "text": "IP",
+     "start": 15.305,
+     "end": 15.47
+    },
+    {
+     "text": "taken",
+     "start": 15.47,
+     "end": 15.812
+    },
+    {
+     "text": "away.",
+     "start": 15.812,
+     "end": 16.095
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-41.wav",
+   "seconds": 17.067,
+   "recordedAt": "2026-10-30T23:31:37.814Z",
+   "words": [
+    {
+     "text": "Oh,",
+     "start": 0.62,
+     "end": 0.757
+    },
+    {
+     "text": "and",
+     "start": 0.757,
+     "end": 0.937
+    },
+    {
+     "text": "of",
+     "start": 0.937,
+     "end": 1.089
+    },
+    {
+     "text": "course",
+     "start": 1.089,
+     "end": 1.373
+    },
+    {
+     "text": "not",
+     "start": 1.373,
+     "end": 1.563
+    },
+    {
+     "text": "to",
+     "start": 1.563,
+     "end": 1.714
+    },
+    {
+     "text": "mention",
+     "start": 1.714,
+     "end": 2.131
+    },
+    {
+     "text": "Early",
+     "start": 2.131,
+     "end": 2.415
+    },
+    {
+     "text": "Access,",
+     "start": 2.415,
+     "end": 2.775
+    },
+    {
+     "text": "literally",
+     "start": 2.775,
+     "end": 3.315
+    },
+    {
+     "text": "gifting",
+     "start": 3.36,
+     "end": 3.812
+    },
+    {
+     "text": "code",
+     "start": 3.812,
+     "end": 4.097
+    },
+    {
+     "text": "to",
+     "start": 4.097,
+     "end": 4.264
+    },
+    {
+     "text": "copycat",
+     "start": 4.264,
+     "end": 4.696
+    },
+    {
+     "text": "developers.",
+     "start": 4.696,
+     "end": 5.315
+    },
+    {
+     "text": "To",
+     "start": 6.35,
+     "end": 6.529
+    },
+    {
+     "text": "be",
+     "start": 6.529,
+     "end": 6.686
+    },
+    {
+     "text": "fair,",
+     "start": 6.686,
+     "end": 6.975
+    },
+    {
+     "text": "I",
+     "start": 7.2,
+     "end": 7.269
+    },
+    {
+     "text": "get",
+     "start": 7.269,
+     "end": 7.412
+    },
+    {
+     "text": "where",
+     "start": 7.412,
+     "end": 7.63
+    },
+    {
+     "text": "they're",
+     "start": 7.63,
+     "end": 7.886
+    },
+    {
+     "text": "coming",
+     "start": 7.886,
+     "end": 8.142
+    },
+    {
+     "text": "from.",
+     "start": 8.142,
+     "end": 8.335
+    },
+    {
+     "text": "Alliance",
+     "start": 8.81,
+     "end": 9.304
+    },
+    {
+     "text": "Arts",
+     "start": 9.304,
+     "end": 9.575
+    },
+    {
+     "text": "pulled",
+     "start": 9.66,
+     "end": 10.041
+    },
+    {
+     "text": "their",
+     "start": 10.041,
+     "end": 10.366
+    },
+    {
+     "text": "Steam",
+     "start": 10.366,
+     "end": 10.635
+    },
+    {
+     "text": "Next",
+     "start": 10.635,
+     "end": 10.858
+    },
+    {
+     "text": "Fest",
+     "start": 10.858,
+     "end": 11.095
+    },
+    {
+     "text": "demo,",
+     "start": 11.095,
+     "end": 11.392
+    },
+    {
+     "text": "and",
+     "start": 11.392,
+     "end": 11.522
+    },
+    {
+     "text": "the",
+     "start": 11.522,
+     "end": 11.694
+    },
+    {
+     "text": "team",
+     "start": 11.694,
+     "end": 11.861
+    },
+    {
+     "text": "behind",
+     "start": 11.861,
+     "end": 12.139
+    },
+    {
+     "text": "Moonlighter",
+     "start": 12.139,
+     "end": 12.734
+    },
+    {
+     "text": "have",
+     "start": 12.734,
+     "end": 12.91
+    },
+    {
+     "text": "said",
+     "start": 12.91,
+     "end": 13.086
+    },
+    {
+     "text": "they",
+     "start": 13.086,
+     "end": 13.254
+    },
+    {
+     "text": "won't",
+     "start": 13.254,
+     "end": 13.458
+    },
+    {
+     "text": "run",
+     "start": 13.458,
+     "end": 13.579
+    },
+    {
+     "text": "a",
+     "start": 13.579,
+     "end": 13.681
+    },
+    {
+     "text": "public",
+     "start": 13.681,
+     "end": 13.885
+    },
+    {
+     "text": "playtest",
+     "start": 13.93,
+     "end": 14.4
+    },
+    {
+     "text": "for",
+     "start": 14.4,
+     "end": 14.55
+    },
+    {
+     "text": "their",
+     "start": 14.55,
+     "end": 14.776
+    },
+    {
+     "text": "next",
+     "start": 14.776,
+     "end": 14.964
+    },
+    {
+     "text": "game",
+     "start": 14.964,
+     "end": 15.209
+    },
+    {
+     "text": "because",
+     "start": 15.209,
+     "end": 15.519
+    },
+    {
+     "text": "of",
+     "start": 15.519,
+     "end": 15.65
+    },
+    {
+     "text": "AI",
+     "start": 15.65,
+     "end": 15.81
+    },
+    {
+     "text": "cloning.",
+     "start": 15.81,
+     "end": 16.205
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-42.wav",
+   "seconds": 14.037,
+   "recordedAt": "2026-10-30T23:31:59.492Z",
+   "words": [
+    {
+     "text": "But,",
+     "start": 0.41,
+     "end": 0.815
+    },
+    {
+     "text": "the",
+     "start": 0.93,
+     "end": 1.086
+    },
+    {
+     "text": "Moonlighter",
+     "start": 1.086,
+     "end": 1.658
+    },
+    {
+     "text": "team",
+     "start": 1.658,
+     "end": 1.866
+    },
+    {
+     "text": "said",
+     "start": 1.866,
+     "end": 2.117
+    },
+    {
+     "text": "they'd",
+     "start": 2.117,
+     "end": 2.42
+    },
+    {
+     "text": "had",
+     "start": 2.42,
+     "end": 2.585
+    },
+    {
+     "text": "tens",
+     "start": 2.63,
+     "end": 2.846
+    },
+    {
+     "text": "of",
+     "start": 2.846,
+     "end": 2.999
+    },
+    {
+     "text": "thousands",
+     "start": 2.999,
+     "end": 3.413
+    },
+    {
+     "text": "of",
+     "start": 3.413,
+     "end": 3.566
+    },
+    {
+     "text": "people",
+     "start": 3.566,
+     "end": 3.863
+    },
+    {
+     "text": "signed",
+     "start": 3.863,
+     "end": 4.187
+    },
+    {
+     "text": "up",
+     "start": 4.187,
+     "end": 4.313
+    },
+    {
+     "text": "for",
+     "start": 4.313,
+     "end": 4.475
+    },
+    {
+     "text": "their",
+     "start": 4.475,
+     "end": 4.745
+    },
+    {
+     "text": "Steam",
+     "start": 4.745,
+     "end": 4.988
+    },
+    {
+     "text": "playtest,",
+     "start": 4.988,
+     "end": 5.465
+    },
+    {
+     "text": "and",
+     "start": 5.93,
+     "end": 6.13
+    },
+    {
+     "text": "moving",
+     "start": 6.13,
+     "end": 6.405
+    },
+    {
+     "text": "it",
+     "start": 6.405,
+     "end": 6.509
+    },
+    {
+     "text": "to",
+     "start": 6.509,
+     "end": 6.614
+    },
+    {
+     "text": "Discord",
+     "start": 6.614,
+     "end": 6.953
+    },
+    {
+     "text": "means",
+     "start": 6.953,
+     "end": 7.258
+    },
+    {
+     "text": "that",
+     "start": 7.258,
+     "end": 7.45
+    },
+    {
+     "text": "a",
+     "start": 7.45,
+     "end": 7.545
+    },
+    {
+     "text": "few",
+     "start": 7.545,
+     "end": 7.702
+    },
+    {
+     "text": "hundred",
+     "start": 7.702,
+     "end": 8.042
+    },
+    {
+     "text": "people",
+     "start": 8.042,
+     "end": 8.338
+    },
+    {
+     "text": "will",
+     "start": 8.338,
+     "end": 8.529
+    },
+    {
+     "text": "play",
+     "start": 8.529,
+     "end": 8.721
+    },
+    {
+     "text": "it",
+     "start": 8.721,
+     "end": 8.825
+    },
+    {
+     "text": "at",
+     "start": 8.825,
+     "end": 8.912
+    },
+    {
+     "text": "best.",
+     "start": 8.912,
+     "end": 9.165
+    },
+    {
+     "text": "And",
+     "start": 9.68,
+     "end": 9.986
+    },
+    {
+     "text": "I'm",
+     "start": 9.986,
+     "end": 10.146
+    },
+    {
+     "text": "going",
+     "start": 10.146,
+     "end": 10.221
+    },
+    {
+     "text": "to",
+     "start": 10.221,
+     "end": 10.325
+    },
+    {
+     "text": "tell",
+     "start": 10.325,
+     "end": 10.475
+    },
+    {
+     "text": "you",
+     "start": 10.475,
+     "end": 10.616
+    },
+    {
+     "text": "why",
+     "start": 10.616,
+     "end": 10.786
+    },
+    {
+     "text": "I",
+     "start": 10.786,
+     "end": 10.889
+    },
+    {
+     "text": "think",
+     "start": 10.889,
+     "end": 11.153
+    },
+    {
+     "text": "that's",
+     "start": 11.153,
+     "end": 11.435
+    },
+    {
+     "text": "bullshit",
+     "start": 11.435,
+     "end": 11.849
+    },
+    {
+     "text": "advice.",
+     "start": 11.849,
+     "end": 12.235
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-43.wav",
+   "seconds": 16.763,
+   "recordedAt": "2026-10-30T23:32:45.423Z",
+   "words": [
+    {
+     "text": "Firstly,",
+     "start": 0.53,
+     "end": 1.075
+    },
+    {
+     "text": "games",
+     "start": 1.5,
+     "end": 1.775
+    },
+    {
+     "text": "live",
+     "start": 1.775,
+     "end": 1.949
+    },
+    {
+     "text": "and",
+     "start": 1.949,
+     "end": 2.086
+    },
+    {
+     "text": "die",
+     "start": 2.086,
+     "end": 2.287
+    },
+    {
+     "text": "by",
+     "start": 2.287,
+     "end": 2.421
+    },
+    {
+     "text": "their",
+     "start": 2.421,
+     "end": 2.673
+    },
+    {
+     "text": "community",
+     "start": 2.673,
+     "end": 3.129
+    },
+    {
+     "text": "in",
+     "start": 3.129,
+     "end": 3.255
+    },
+    {
+     "text": "the",
+     "start": 3.255,
+     "end": 3.405
+    },
+    {
+     "text": "modern",
+     "start": 3.405,
+     "end": 3.704
+    },
+    {
+     "text": "day,",
+     "start": 3.704,
+     "end": 3.885
+    },
+    {
+     "text": "and",
+     "start": 4.32,
+     "end": 4.524
+    },
+    {
+     "text": "selling",
+     "start": 4.524,
+     "end": 4.772
+    },
+    {
+     "text": "in",
+     "start": 4.772,
+     "end": 4.896
+    },
+    {
+     "text": "a",
+     "start": 4.896,
+     "end": 4.967
+    },
+    {
+     "text": "crowded",
+     "start": 4.967,
+     "end": 5.339
+    },
+    {
+     "text": "market",
+     "start": 5.339,
+     "end": 5.676
+    },
+    {
+     "text": "is",
+     "start": 5.676,
+     "end": 5.827
+    },
+    {
+     "text": "hard",
+     "start": 5.827,
+     "end": 6.048
+    },
+    {
+     "text": "enough",
+     "start": 6.048,
+     "end": 6.394
+    },
+    {
+     "text": "as",
+     "start": 6.394,
+     "end": 6.536
+    },
+    {
+     "text": "it",
+     "start": 6.536,
+     "end": 6.624
+    },
+    {
+     "text": "is.",
+     "start": 6.624,
+     "end": 6.775
+    },
+    {
+     "text": "As",
+     "start": 7.36,
+     "end": 7.637
+    },
+    {
+     "text": "I",
+     "start": 7.637,
+     "end": 7.705
+    },
+    {
+     "text": "said",
+     "start": 7.705,
+     "end": 7.952
+    },
+    {
+     "text": "in",
+     "start": 7.952,
+     "end": 8.037
+    },
+    {
+     "text": "my",
+     "start": 8.037,
+     "end": 8.165
+    },
+    {
+     "text": "video",
+     "start": 8.165,
+     "end": 8.463
+    },
+    {
+     "text": "about",
+     "start": 8.463,
+     "end": 8.761
+    },
+    {
+     "text": "why",
+     "start": 8.761,
+     "end": 8.957
+    },
+    {
+     "text": "most",
+     "start": 8.957,
+     "end": 9.212
+    },
+    {
+     "text": "mobile",
+     "start": 9.212,
+     "end": 9.561
+    },
+    {
+     "text": "games",
+     "start": 9.561,
+     "end": 9.86
+    },
+    {
+     "text": "fail,",
+     "start": 9.86,
+     "end": 10.115
+    },
+    {
+     "text": "building",
+     "start": 10.6,
+     "end": 11.099
+    },
+    {
+     "text": "the",
+     "start": 11.099,
+     "end": 11.26
+    },
+    {
+     "text": "game",
+     "start": 11.26,
+     "end": 11.461
+    },
+    {
+     "text": "is",
+     "start": 11.461,
+     "end": 11.622
+    },
+    {
+     "text": "only",
+     "start": 11.622,
+     "end": 11.844
+    },
+    {
+     "text": "half",
+     "start": 11.844,
+     "end": 12.126
+    },
+    {
+     "text": "the",
+     "start": 12.126,
+     "end": 12.308
+    },
+    {
+     "text": "battle,",
+     "start": 12.308,
+     "end": 12.67
+    },
+    {
+     "text": "and",
+     "start": 12.67,
+     "end": 12.831
+    },
+    {
+     "text": "developers",
+     "start": 12.831,
+     "end": 13.234
+    },
+    {
+     "text": "need",
+     "start": 13.234,
+     "end": 13.496
+    },
+    {
+     "text": "to",
+     "start": 13.496,
+     "end": 13.617
+    },
+    {
+     "text": "keep",
+     "start": 13.617,
+     "end": 13.758
+    },
+    {
+     "text": "finding",
+     "start": 13.758,
+     "end": 14.201
+    },
+    {
+     "text": "new",
+     "start": 14.201,
+     "end": 14.433
+    },
+    {
+     "text": "ways",
+     "start": 14.433,
+     "end": 14.695
+    },
+    {
+     "text": "to",
+     "start": 14.74,
+     "end": 14.895
+    },
+    {
+     "text": "promote",
+     "start": 14.895,
+     "end": 15.185
+    },
+    {
+     "text": "their",
+     "start": 15.185,
+     "end": 15.385
+    },
+    {
+     "text": "games",
+     "start": 15.385,
+     "end": 15.676
+    },
+    {
+     "text": "to",
+     "start": 15.676,
+     "end": 15.831
+    },
+    {
+     "text": "potential",
+     "start": 15.831,
+     "end": 16.285
+    },
+    {
+     "text": "players.",
+     "start": 16.285,
+     "end": 16.685
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-44.wav",
+   "seconds": 18.24,
+   "recordedAt": "2026-10-30T23:33:28.888Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.55,
+     "end": 0.848
+    },
+    {
+     "text": "ironically,",
+     "start": 0.848,
+     "end": 1.635
+    },
+    {
+     "text": "in",
+     "start": 2.08,
+     "end": 2.281
+    },
+    {
+     "text": "my",
+     "start": 2.281,
+     "end": 2.471
+    },
+    {
+     "text": "opinion,",
+     "start": 2.471,
+     "end": 2.945
+    },
+    {
+     "text": "building",
+     "start": 3.57,
+     "end": 3.992
+    },
+    {
+     "text": "in",
+     "start": 3.992,
+     "end": 4.12
+    },
+    {
+     "text": "the",
+     "start": 4.12,
+     "end": 4.303
+    },
+    {
+     "text": "open",
+     "start": 4.303,
+     "end": 4.522
+    },
+    {
+     "text": "is",
+     "start": 4.522,
+     "end": 4.657
+    },
+    {
+     "text": "actually",
+     "start": 4.657,
+     "end": 5.08
+    },
+    {
+     "text": "one",
+     "start": 5.08,
+     "end": 5.263
+    },
+    {
+     "text": "of",
+     "start": 5.263,
+     "end": 5.39
+    },
+    {
+     "text": "the",
+     "start": 5.39,
+     "end": 5.574
+    },
+    {
+     "text": "best",
+     "start": 5.574,
+     "end": 5.805
+    },
+    {
+     "text": "things",
+     "start": 5.805,
+     "end": 6.131
+    },
+    {
+     "text": "you",
+     "start": 6.131,
+     "end": 6.275
+    },
+    {
+     "text": "can",
+     "start": 6.275,
+     "end": 6.402
+    },
+    {
+     "text": "do",
+     "start": 6.402,
+     "end": 6.53
+    },
+    {
+     "text": "to",
+     "start": 6.53,
+     "end": 6.665
+    },
+    {
+     "text": "protect",
+     "start": 6.71,
+     "end": 7.09
+    },
+    {
+     "text": "your",
+     "start": 7.09,
+     "end": 7.324
+    },
+    {
+     "text": "game",
+     "start": 7.324,
+     "end": 7.539
+    },
+    {
+     "text": "from",
+     "start": 7.539,
+     "end": 7.754
+    },
+    {
+     "text": "theft.",
+     "start": 7.754,
+     "end": 8.095
+    },
+    {
+     "text": "You've",
+     "start": 8.67,
+     "end": 8.981
+    },
+    {
+     "text": "got",
+     "start": 8.981,
+     "end": 9.127
+    },
+    {
+     "text": "a",
+     "start": 9.127,
+     "end": 9.229
+    },
+    {
+     "text": "community",
+     "start": 9.229,
+     "end": 9.682
+    },
+    {
+     "text": "of",
+     "start": 9.682,
+     "end": 9.833
+    },
+    {
+     "text": "players",
+     "start": 9.833,
+     "end": 10.18
+    },
+    {
+     "text": "who",
+     "start": 10.18,
+     "end": 10.362
+    },
+    {
+     "text": "will",
+     "start": 10.362,
+     "end": 10.544
+    },
+    {
+     "text": "happily",
+     "start": 10.544,
+     "end": 10.819
+    },
+    {
+     "text": "go",
+     "start": 10.819,
+     "end": 10.97
+    },
+    {
+     "text": "into",
+     "start": 10.97,
+     "end": 11.165
+    },
+    {
+     "text": "bat",
+     "start": 11.165,
+     "end": 11.369
+    },
+    {
+     "text": "for",
+     "start": 11.369,
+     "end": 11.543
+    },
+    {
+     "text": "you",
+     "start": 11.543,
+     "end": 11.694
+    },
+    {
+     "text": "if",
+     "start": 11.694,
+     "end": 11.836
+    },
+    {
+     "text": "it",
+     "start": 11.836,
+     "end": 11.955
+    },
+    {
+     "text": "does",
+     "start": 11.955,
+     "end": 12.098
+    },
+    {
+     "text": "happen,",
+     "start": 12.098,
+     "end": 12.435
+    },
+    {
+     "text": "and",
+     "start": 12.93,
+     "end": 13.147
+    },
+    {
+     "text": "by",
+     "start": 13.147,
+     "end": 13.297
+    },
+    {
+     "text": "building",
+     "start": 13.297,
+     "end": 13.768
+    },
+    {
+     "text": "openly",
+     "start": 13.768,
+     "end": 14.154
+    },
+    {
+     "text": "you've",
+     "start": 14.154,
+     "end": 14.493
+    },
+    {
+     "text": "got",
+     "start": 14.493,
+     "end": 14.587
+    },
+    {
+     "text": "a",
+     "start": 14.587,
+     "end": 14.691
+    },
+    {
+     "text": "clear",
+     "start": 14.691,
+     "end": 14.983
+    },
+    {
+     "text": "trail",
+     "start": 14.983,
+     "end": 15.275
+    },
+    {
+     "text": "of",
+     "start": 15.275,
+     "end": 15.426
+    },
+    {
+     "text": "evidence",
+     "start": 15.426,
+     "end": 15.784
+    },
+    {
+     "text": "for",
+     "start": 15.784,
+     "end": 16
+    },
+    {
+     "text": "who",
+     "start": 16,
+     "end": 16.188
+    },
+    {
+     "text": "built",
+     "start": 16.188,
+     "end": 16.452
+    },
+    {
+     "text": "the",
+     "start": 16.452,
+     "end": 16.641
+    },
+    {
+     "text": "game",
+     "start": 16.641,
+     "end": 16.885
+    },
+    {
+     "text": "first.",
+     "start": 16.885,
+     "end": 17.215
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-45.wav",
+   "seconds": 10.939,
+   "recordedAt": "2026-10-30T23:33:54.819Z",
+   "words": [
+    {
+     "text": "You",
+     "start": 0.83,
+     "end": 1.011
+    },
+    {
+     "text": "only",
+     "start": 1.011,
+     "end": 1.22
+    },
+    {
+     "text": "have",
+     "start": 1.22,
+     "end": 1.428
+    },
+    {
+     "text": "to",
+     "start": 1.428,
+     "end": 1.559
+    },
+    {
+     "text": "look",
+     "start": 1.559,
+     "end": 1.704
+    },
+    {
+     "text": "at",
+     "start": 1.704,
+     "end": 1.813
+    },
+    {
+     "text": "what",
+     "start": 1.813,
+     "end": 1.958
+    },
+    {
+     "text": "happened",
+     "start": 1.958,
+     "end": 2.321
+    },
+    {
+     "text": "with",
+     "start": 2.321,
+     "end": 2.466
+    },
+    {
+     "text": "Needle",
+     "start": 2.466,
+     "end": 2.81
+    },
+    {
+     "text": "in",
+     "start": 2.81,
+     "end": 2.91
+    },
+    {
+     "text": "a",
+     "start": 2.91,
+     "end": 2.955
+    },
+    {
+     "text": "Haystack",
+     "start": 2.955,
+     "end": 3.363
+    },
+    {
+     "text": "Simulator.",
+     "start": 3.363,
+     "end": 3.825
+    },
+    {
+     "text": "The",
+     "start": 4.27,
+     "end": 4.496
+    },
+    {
+     "text": "game",
+     "start": 4.496,
+     "end": 4.713
+    },
+    {
+     "text": "went",
+     "start": 4.713,
+     "end": 4.998
+    },
+    {
+     "text": "viral,",
+     "start": 4.998,
+     "end": 5.342
+    },
+    {
+     "text": "and",
+     "start": 5.342,
+     "end": 5.47
+    },
+    {
+     "text": "when",
+     "start": 5.47,
+     "end": 5.726
+    },
+    {
+     "text": "its",
+     "start": 5.726,
+     "end": 5.883
+    },
+    {
+     "text": "Steam",
+     "start": 5.883,
+     "end": 6.158
+    },
+    {
+     "text": "page",
+     "start": 6.158,
+     "end": 6.414
+    },
+    {
+     "text": "went",
+     "start": 6.414,
+     "end": 6.67
+    },
+    {
+     "text": "live,",
+     "start": 6.67,
+     "end": 6.955
+    },
+    {
+     "text": "two",
+     "start": 7.32,
+     "end": 7.579
+    },
+    {
+     "text": "clones",
+     "start": 7.579,
+     "end": 7.961
+    },
+    {
+     "text": "went",
+     "start": 7.961,
+     "end": 8.215
+    },
+    {
+     "text": "live",
+     "start": 8.215,
+     "end": 8.499
+    },
+    {
+     "text": "on",
+     "start": 8.499,
+     "end": 8.665
+    },
+    {
+     "text": "the",
+     "start": 8.665,
+     "end": 8.842
+    },
+    {
+     "text": "very",
+     "start": 8.842,
+     "end": 9.096
+    },
+    {
+     "text": "same",
+     "start": 9.096,
+     "end": 9.37
+    },
+    {
+     "text": "day.",
+     "start": 9.37,
+     "end": 9.595
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-46.wav",
+   "seconds": 16.981,
+   "recordedAt": "2026-10-30T23:34:18.374Z",
+   "words": [
+    {
+     "text": "Chris",
+     "start": 0.59,
+     "end": 0.959
+    },
+    {
+     "text": "Sakovsky",
+     "start": 0.959,
+     "end": 1.503
+    },
+    {
+     "text": "from",
+     "start": 1.503,
+     "end": 1.801
+    },
+    {
+     "text": "How",
+     "start": 1.801,
+     "end": 2.026
+    },
+    {
+     "text": "to",
+     "start": 2.026,
+     "end": 2.201
+    },
+    {
+     "text": "Market",
+     "start": 2.201,
+     "end": 2.539
+    },
+    {
+     "text": "a",
+     "start": 2.539,
+     "end": 2.688
+    },
+    {
+     "text": "Game",
+     "start": 2.688,
+     "end": 2.965
+    },
+    {
+     "text": "pointed",
+     "start": 3.06,
+     "end": 3.461
+    },
+    {
+     "text": "out",
+     "start": 3.461,
+     "end": 3.657
+    },
+    {
+     "text": "that",
+     "start": 3.657,
+     "end": 3.904
+    },
+    {
+     "text": "the",
+     "start": 3.904,
+     "end": 4.075
+    },
+    {
+     "text": "original",
+     "start": 4.075,
+     "end": 4.526
+    },
+    {
+     "text": "was",
+     "start": 4.526,
+     "end": 4.723
+    },
+    {
+     "text": "in",
+     "start": 4.723,
+     "end": 4.85
+    },
+    {
+     "text": "the",
+     "start": 4.85,
+     "end": 5.038
+    },
+    {
+     "text": "lead",
+     "start": 5.038,
+     "end": 5.345
+    },
+    {
+     "text": "right",
+     "start": 5.77,
+     "end": 6.129
+    },
+    {
+     "text": "up",
+     "start": 6.129,
+     "end": 6.304
+    },
+    {
+     "text": "until",
+     "start": 6.304,
+     "end": 6.55
+    },
+    {
+     "text": "one",
+     "start": 6.55,
+     "end": 6.755
+    },
+    {
+     "text": "of",
+     "start": 6.755,
+     "end": 6.868
+    },
+    {
+     "text": "the",
+     "start": 6.868,
+     "end": 6.971
+    },
+    {
+     "text": "copycats",
+     "start": 6.971,
+     "end": 7.515
+    },
+    {
+     "text": "got",
+     "start": 7.515,
+     "end": 7.699
+    },
+    {
+     "text": "a",
+     "start": 7.699,
+     "end": 7.802
+    },
+    {
+     "text": "demo",
+     "start": 7.802,
+     "end": 8.069
+    },
+    {
+     "text": "out",
+     "start": 8.069,
+     "end": 8.305
+    },
+    {
+     "text": "first",
+     "start": 8.305,
+     "end": 8.664
+    },
+    {
+     "text": "and",
+     "start": 8.664,
+     "end": 8.9
+    },
+    {
+     "text": "the",
+     "start": 8.9,
+     "end": 9.064
+    },
+    {
+     "text": "content",
+     "start": 9.064,
+     "end": 9.372
+    },
+    {
+     "text": "creators",
+     "start": 9.372,
+     "end": 9.844
+    },
+    {
+     "text": "started",
+     "start": 9.844,
+     "end": 10.255
+    },
+    {
+     "text": "playing",
+     "start": 10.255,
+     "end": 10.665
+    },
+    {
+     "text": "it.",
+     "start": 11.17,
+     "end": 11.312
+    },
+    {
+     "text": "Hiding",
+     "start": 11.312,
+     "end": 11.655
+    },
+    {
+     "text": "your",
+     "start": 11.655,
+     "end": 11.898
+    },
+    {
+     "text": "game",
+     "start": 11.898,
+     "end": 12.14
+    },
+    {
+     "text": "away",
+     "start": 12.14,
+     "end": 12.383
+    },
+    {
+     "text": "doesn't",
+     "start": 12.383,
+     "end": 12.818
+    },
+    {
+     "text": "stop",
+     "start": 12.818,
+     "end": 13.061
+    },
+    {
+     "text": "the",
+     "start": 13.061,
+     "end": 13.253
+    },
+    {
+     "text": "copycats,",
+     "start": 13.253,
+     "end": 13.755
+    },
+    {
+     "text": "it",
+     "start": 14.06,
+     "end": 14.202
+    },
+    {
+     "text": "just",
+     "start": 14.202,
+     "end": 14.445
+    },
+    {
+     "text": "gives",
+     "start": 14.5,
+     "end": 14.779
+    },
+    {
+     "text": "them",
+     "start": 14.779,
+     "end": 14.923
+    },
+    {
+     "text": "a",
+     "start": 14.923,
+     "end": 15.034
+    },
+    {
+     "text": "head",
+     "start": 15.034,
+     "end": 15.266
+    },
+    {
+     "text": "start.",
+     "start": 15.266,
+     "end": 15.545
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-47.wav",
+   "seconds": 11.408,
+   "recordedAt": "2026-10-30T23:34:37.840Z",
+   "words": [
+    {
+     "text": "He",
+     "start": 0.83,
+     "end": 0.968
+    },
+    {
+     "text": "also",
+     "start": 0.968,
+     "end": 1.225
+    },
+    {
+     "text": "pointed",
+     "start": 1.225,
+     "end": 1.606
+    },
+    {
+     "text": "out",
+     "start": 1.606,
+     "end": 1.817
+    },
+    {
+     "text": "that",
+     "start": 1.817,
+     "end": 2.001
+    },
+    {
+     "text": "Needle",
+     "start": 2.001,
+     "end": 2.322
+    },
+    {
+     "text": "and",
+     "start": 2.322,
+     "end": 2.478
+    },
+    {
+     "text": "a",
+     "start": 2.478,
+     "end": 2.543
+    },
+    {
+     "text": "Haystack",
+     "start": 2.543,
+     "end": 3.02
+    },
+    {
+     "text": "Simulator",
+     "start": 3.02,
+     "end": 3.562
+    },
+    {
+     "text": "had",
+     "start": 3.562,
+     "end": 3.745
+    },
+    {
+     "text": "only",
+     "start": 3.745,
+     "end": 3.984
+    },
+    {
+     "text": "ever",
+     "start": 3.984,
+     "end": 4.223
+    },
+    {
+     "text": "run",
+     "start": 4.223,
+     "end": 4.407
+    },
+    {
+     "text": "a",
+     "start": 4.407,
+     "end": 4.498
+    },
+    {
+     "text": "playtest.",
+     "start": 4.498,
+     "end": 4.985
+    },
+    {
+     "text": "They",
+     "start": 5.5,
+     "end": 5.806
+    },
+    {
+     "text": "were",
+     "start": 5.806,
+     "end": 6.018
+    },
+    {
+     "text": "still",
+     "start": 6.018,
+     "end": 6.282
+    },
+    {
+     "text": "clones,",
+     "start": 6.282,
+     "end": 6.715
+    },
+    {
+     "text": "and",
+     "start": 6.87,
+     "end": 7.099
+    },
+    {
+     "text": "they",
+     "start": 7.099,
+     "end": 7.278
+    },
+    {
+     "text": "got",
+     "start": 7.278,
+     "end": 7.417
+    },
+    {
+     "text": "overtaken",
+     "start": 7.417,
+     "end": 8.003
+    },
+    {
+     "text": "when",
+     "start": 8.003,
+     "end": 8.242
+    },
+    {
+     "text": "Find",
+     "start": 8.242,
+     "end": 8.53
+    },
+    {
+     "text": "the",
+     "start": 8.53,
+     "end": 8.729
+    },
+    {
+     "text": "Needle",
+     "start": 8.729,
+     "end": 9.127
+    },
+    {
+     "text": "put",
+     "start": 9.127,
+     "end": 9.325
+    },
+    {
+     "text": "a",
+     "start": 9.325,
+     "end": 9.43
+    },
+    {
+     "text": "demo",
+     "start": 9.43,
+     "end": 9.668
+    },
+    {
+     "text": "out",
+     "start": 9.668,
+     "end": 9.867
+    },
+    {
+     "text": "first.",
+     "start": 9.867,
+     "end": 10.215
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-48.wav",
+   "seconds": 16.475,
+   "recordedAt": "2026-10-30T23:35:01.216Z",
+   "words": [
+    {
+     "text": "Remember",
+     "start": 0.5,
+     "end": 1.055
+    },
+    {
+     "text": "that",
+     "start": 1.14,
+     "end": 1.265
+    },
+    {
+     "text": "copycats",
+     "start": 1.32,
+     "end": 1.915
+    },
+    {
+     "text": "aren't",
+     "start": 2,
+     "end": 2.39
+    },
+    {
+     "text": "looking",
+     "start": 2.39,
+     "end": 2.838
+    },
+    {
+     "text": "to",
+     "start": 2.838,
+     "end": 2.99
+    },
+    {
+     "text": "get",
+     "start": 2.99,
+     "end": 3.124
+    },
+    {
+     "text": "sued",
+     "start": 3.124,
+     "end": 3.4
+    },
+    {
+     "text": "or",
+     "start": 3.4,
+     "end": 3.562
+    },
+    {
+     "text": "have",
+     "start": 3.562,
+     "end": 3.828
+    },
+    {
+     "text": "long",
+     "start": 3.828,
+     "end": 4.095
+    },
+    {
+     "text": "drawn",
+     "start": 4.095,
+     "end": 4.428
+    },
+    {
+     "text": "out",
+     "start": 4.428,
+     "end": 4.628
+    },
+    {
+     "text": "legal",
+     "start": 4.628,
+     "end": 4.962
+    },
+    {
+     "text": "fires.",
+     "start": 4.962,
+     "end": 5.295
+    },
+    {
+     "text": "They",
+     "start": 5.7,
+     "end": 5.95
+    },
+    {
+     "text": "want",
+     "start": 5.95,
+     "end": 6.071
+    },
+    {
+     "text": "to",
+     "start": 6.071,
+     "end": 6.174
+    },
+    {
+     "text": "get",
+     "start": 6.174,
+     "end": 6.338
+    },
+    {
+     "text": "in,",
+     "start": 6.338,
+     "end": 6.485
+    },
+    {
+     "text": "copy,",
+     "start": 6.69,
+     "end": 7.165
+    },
+    {
+     "text": "sell",
+     "start": 7.23,
+     "end": 7.498
+    },
+    {
+     "text": "and",
+     "start": 7.498,
+     "end": 7.684
+    },
+    {
+     "text": "get",
+     "start": 7.684,
+     "end": 7.86
+    },
+    {
+     "text": "out",
+     "start": 7.86,
+     "end": 8.045
+    },
+    {
+     "text": "with",
+     "start": 8.045,
+     "end": 8.285
+    },
+    {
+     "text": "as",
+     "start": 8.285,
+     "end": 8.434
+    },
+    {
+     "text": "little",
+     "start": 8.434,
+     "end": 8.795
+    },
+    {
+     "text": "fuss",
+     "start": 8.795,
+     "end": 9.035
+    },
+    {
+     "text": "as",
+     "start": 9.035,
+     "end": 9.165
+    },
+    {
+     "text": "possible.",
+     "start": 9.22,
+     "end": 9.725
+    },
+    {
+     "text": "By",
+     "start": 10.16,
+     "end": 10.358
+    },
+    {
+     "text": "making",
+     "start": 10.358,
+     "end": 10.802
+    },
+    {
+     "text": "yourself",
+     "start": 10.802,
+     "end": 11.245
+    },
+    {
+     "text": "a",
+     "start": 11.29,
+     "end": 11.429
+    },
+    {
+     "text": "problem",
+     "start": 11.429,
+     "end": 11.792
+    },
+    {
+     "text": "that",
+     "start": 11.792,
+     "end": 11.944
+    },
+    {
+     "text": "can't",
+     "start": 11.944,
+     "end": 12.189
+    },
+    {
+     "text": "be",
+     "start": 12.189,
+     "end": 12.311
+    },
+    {
+     "text": "ignored,",
+     "start": 12.311,
+     "end": 12.615
+    },
+    {
+     "text": "you're",
+     "start": 12.89,
+     "end": 13.181
+    },
+    {
+     "text": "making",
+     "start": 13.181,
+     "end": 13.436
+    },
+    {
+     "text": "yourself",
+     "start": 13.436,
+     "end": 13.864
+    },
+    {
+     "text": "less",
+     "start": 13.864,
+     "end": 14.128
+    },
+    {
+     "text": "likely",
+     "start": 14.128,
+     "end": 14.502
+    },
+    {
+     "text": "to",
+     "start": 14.502,
+     "end": 14.657
+    },
+    {
+     "text": "become",
+     "start": 14.657,
+     "end": 14.993
+    },
+    {
+     "text": "a",
+     "start": 14.993,
+     "end": 15.094
+    },
+    {
+     "text": "target.",
+     "start": 15.094,
+     "end": 15.385
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-49.wav",
+   "seconds": 17.989,
+   "recordedAt": "2026-10-30T23:35:55.870Z",
+   "words": [
+    {
+     "text": "And",
+     "start": 0.6,
+     "end": 0.847
+    },
+    {
+     "text": "lastly,",
+     "start": 0.847,
+     "end": 1.325
+    },
+    {
+     "text": "please",
+     "start": 1.78,
+     "end": 2.149
+    },
+    {
+     "text": "make",
+     "start": 2.149,
+     "end": 2.411
+    },
+    {
+     "text": "sure",
+     "start": 2.411,
+     "end": 2.636
+    },
+    {
+     "text": "you",
+     "start": 2.636,
+     "end": 2.78
+    },
+    {
+     "text": "keep",
+     "start": 2.78,
+     "end": 3.015
+    },
+    {
+     "text": "all",
+     "start": 3.015,
+     "end": 3.195
+    },
+    {
+     "text": "of",
+     "start": 3.195,
+     "end": 3.312
+    },
+    {
+     "text": "your",
+     "start": 3.312,
+     "end": 3.555
+    },
+    {
+     "text": "game's",
+     "start": 3.555,
+     "end": 3.844
+    },
+    {
+     "text": "code",
+     "start": 3.844,
+     "end": 4.078
+    },
+    {
+     "text": "in",
+     "start": 4.078,
+     "end": 4.204
+    },
+    {
+     "text": "some",
+     "start": 4.204,
+     "end": 4.439
+    },
+    {
+     "text": "form",
+     "start": 4.439,
+     "end": 4.646
+    },
+    {
+     "text": "of",
+     "start": 4.646,
+     "end": 4.772
+    },
+    {
+     "text": "source",
+     "start": 4.772,
+     "end": 5.141
+    },
+    {
+     "text": "control.",
+     "start": 5.141,
+     "end": 5.565
+    },
+    {
+     "text": "If",
+     "start": 6.01,
+     "end": 6.167
+    },
+    {
+     "text": "you",
+     "start": 6.167,
+     "end": 6.319
+    },
+    {
+     "text": "ever",
+     "start": 6.319,
+     "end": 6.554
+    },
+    {
+     "text": "end",
+     "start": 6.554,
+     "end": 6.739
+    },
+    {
+     "text": "up",
+     "start": 6.739,
+     "end": 6.859
+    },
+    {
+     "text": "disputing",
+     "start": 6.859,
+     "end": 7.403
+    },
+    {
+     "text": "a",
+     "start": 7.403,
+     "end": 7.509
+    },
+    {
+     "text": "clone,",
+     "start": 7.509,
+     "end": 7.795
+    },
+    {
+     "text": "you'll",
+     "start": 7.87,
+     "end": 8.121
+    },
+    {
+     "text": "have",
+     "start": 8.121,
+     "end": 8.285
+    },
+    {
+     "text": "a",
+     "start": 8.33,
+     "end": 8.427
+    },
+    {
+     "text": "clear",
+     "start": 8.427,
+     "end": 8.756
+    },
+    {
+     "text": "dated",
+     "start": 8.756,
+     "end": 9.095
+    },
+    {
+     "text": "history",
+     "start": 9.095,
+     "end": 9.54
+    },
+    {
+     "text": "to",
+     "start": 9.54,
+     "end": 9.705
+    },
+    {
+     "text": "prove",
+     "start": 9.76,
+     "end": 10.04
+    },
+    {
+     "text": "you",
+     "start": 10.04,
+     "end": 10.278
+    },
+    {
+     "text": "made",
+     "start": 10.278,
+     "end": 10.548
+    },
+    {
+     "text": "it",
+     "start": 10.548,
+     "end": 10.682
+    },
+    {
+     "text": "first.",
+     "start": 10.682,
+     "end": 11.045
+    },
+    {
+     "text": "And",
+     "start": 11.5,
+     "end": 11.674
+    },
+    {
+     "text": "while",
+     "start": 11.674,
+     "end": 11.894
+    },
+    {
+     "text": "you're",
+     "start": 11.894,
+     "end": 12.06
+    },
+    {
+     "text": "at",
+     "start": 12.06,
+     "end": 12.166
+    },
+    {
+     "text": "it,",
+     "start": 12.166,
+     "end": 12.295
+    },
+    {
+     "text": "it's",
+     "start": 12.59,
+     "end": 12.808
+    },
+    {
+     "text": "worth",
+     "start": 12.808,
+     "end": 13.078
+    },
+    {
+     "text": "looking",
+     "start": 13.078,
+     "end": 13.428
+    },
+    {
+     "text": "into",
+     "start": 13.428,
+     "end": 13.636
+    },
+    {
+     "text": "trademarking",
+     "start": 13.636,
+     "end": 14.29
+    },
+    {
+     "text": "your",
+     "start": 14.29,
+     "end": 14.507
+    },
+    {
+     "text": "game's",
+     "start": 14.507,
+     "end": 14.829
+    },
+    {
+     "text": "name",
+     "start": 14.829,
+     "end": 15.047
+    },
+    {
+     "text": "too",
+     "start": 15.047,
+     "end": 15.265
+    },
+    {
+     "text": "if",
+     "start": 15.265,
+     "end": 15.426
+    },
+    {
+     "text": "you",
+     "start": 15.426,
+     "end": 15.568
+    },
+    {
+     "text": "can",
+     "start": 15.568,
+     "end": 15.729
+    },
+    {
+     "text": "afford",
+     "start": 15.729,
+     "end": 15.994
+    },
+    {
+     "text": "to.",
+     "start": 15.994,
+     "end": 16.155
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-50.wav",
+   "seconds": 13.088,
+   "recordedAt": "2026-10-30T23:36:15.926Z",
+   "words": [
+    {
+     "text": "Right,",
+     "start": 0.45,
+     "end": 0.759
+    },
+    {
+     "text": "so",
+     "start": 0.759,
+     "end": 0.868
+    },
+    {
+     "text": "that",
+     "start": 0.868,
+     "end": 1.105
+    },
+    {
+     "text": "wraps",
+     "start": 1.105,
+     "end": 1.405
+    },
+    {
+     "text": "it",
+     "start": 1.405,
+     "end": 1.55
+    },
+    {
+     "text": "up.",
+     "start": 1.55,
+     "end": 1.705
+    },
+    {
+     "text": "I",
+     "start": 2.09,
+     "end": 2.257
+    },
+    {
+     "text": "hope",
+     "start": 2.257,
+     "end": 2.41
+    },
+    {
+     "text": "you",
+     "start": 2.41,
+     "end": 2.549
+    },
+    {
+     "text": "found",
+     "start": 2.549,
+     "end": 2.757
+    },
+    {
+     "text": "this",
+     "start": 2.757,
+     "end": 2.901
+    },
+    {
+     "text": "useful.",
+     "start": 2.901,
+     "end": 3.225
+    },
+    {
+     "text": "If",
+     "start": 3.71,
+     "end": 3.874
+    },
+    {
+     "text": "you're",
+     "start": 3.874,
+     "end": 4.203
+    },
+    {
+     "text": "a",
+     "start": 4.203,
+     "end": 4.261
+    },
+    {
+     "text": "game",
+     "start": 4.261,
+     "end": 4.415
+    },
+    {
+     "text": "developer",
+     "start": 4.415,
+     "end": 4.889
+    },
+    {
+     "text": "yourself,",
+     "start": 4.889,
+     "end": 5.333
+    },
+    {
+     "text": "let",
+     "start": 5.333,
+     "end": 5.449
+    },
+    {
+     "text": "me",
+     "start": 5.449,
+     "end": 5.546
+    },
+    {
+     "text": "know",
+     "start": 5.546,
+     "end": 5.71
+    },
+    {
+     "text": "in",
+     "start": 5.71,
+     "end": 5.807
+    },
+    {
+     "text": "the",
+     "start": 5.807,
+     "end": 5.923
+    },
+    {
+     "text": "comments",
+     "start": 5.923,
+     "end": 6.252
+    },
+    {
+     "text": "if",
+     "start": 6.252,
+     "end": 6.416
+    },
+    {
+     "text": "you've",
+     "start": 6.416,
+     "end": 6.648
+    },
+    {
+     "text": "used",
+     "start": 6.648,
+     "end": 6.841
+    },
+    {
+     "text": "any",
+     "start": 6.841,
+     "end": 6.996
+    },
+    {
+     "text": "of",
+     "start": 6.996,
+     "end": 7.092
+    },
+    {
+     "text": "these",
+     "start": 7.092,
+     "end": 7.286
+    },
+    {
+     "text": "techniques,",
+     "start": 7.286,
+     "end": 7.701
+    },
+    {
+     "text": "or",
+     "start": 7.701,
+     "end": 7.865
+    },
+    {
+     "text": "if",
+     "start": 7.865,
+     "end": 8.03
+    },
+    {
+     "text": "you'll",
+     "start": 8.03,
+     "end": 8.32
+    },
+    {
+     "text": "give",
+     "start": 8.32,
+     "end": 8.455
+    },
+    {
+     "text": "them",
+     "start": 8.455,
+     "end": 8.58
+    },
+    {
+     "text": "a",
+     "start": 8.58,
+     "end": 8.677
+    },
+    {
+     "text": "try",
+     "start": 8.677,
+     "end": 8.851
+    },
+    {
+     "text": "now",
+     "start": 8.851,
+     "end": 9.064
+    },
+    {
+     "text": "you",
+     "start": 9.064,
+     "end": 9.218
+    },
+    {
+     "text": "know",
+     "start": 9.218,
+     "end": 9.421
+    },
+    {
+     "text": "about",
+     "start": 9.421,
+     "end": 9.682
+    },
+    {
+     "text": "them.",
+     "start": 9.682,
+     "end": 9.885
+    },
+    {
+     "text": "I'll",
+     "start": 10.64,
+     "end": 10.808
+    },
+    {
+     "text": "see",
+     "start": 10.808,
+     "end": 10.935
+    },
+    {
+     "text": "you",
+     "start": 10.935,
+     "end": 11.062
+    },
+    {
+     "text": "in",
+     "start": 11.062,
+     "end": 11.146
+    },
+    {
+     "text": "the",
+     "start": 11.146,
+     "end": 11.233
+    },
+    {
+     "text": "next",
+     "start": 11.233,
+     "end": 11.408
+    },
+    {
+     "text": "one.",
+     "start": 11.408,
+     "end": 11.555
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-51.wav",
+   "seconds": 4.976,
+   "recordedAt": "2026-11-02T22:26:53.360Z",
+   "words": [
+    {
+     "text": "If",
+     "start": 0.5,
+     "end": 0.652
+    },
+    {
+     "text": "someone",
+     "start": 0.652,
+     "end": 0.957
+    },
+    {
+     "text": "wanted",
+     "start": 0.957,
+     "end": 1.312
+    },
+    {
+     "text": "to",
+     "start": 1.312,
+     "end": 1.474
+    },
+    {
+     "text": "copy",
+     "start": 1.474,
+     "end": 1.759
+    },
+    {
+     "text": "my",
+     "start": 1.759,
+     "end": 1.931
+    },
+    {
+     "text": "multiplayer",
+     "start": 1.931,
+     "end": 2.571
+    },
+    {
+     "text": "game,",
+     "start": 2.571,
+     "end": 2.865
+    },
+    {
+     "text": "they",
+     "start": 3.12,
+     "end": 3.363
+    },
+    {
+     "text": "still",
+     "start": 3.363,
+     "end": 3.638
+    },
+    {
+     "text": "could.",
+     "start": 3.638,
+     "end": 3.955
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-52.wav",
+   "seconds": 4.635,
+   "recordedAt": "2026-11-02T22:34:04.714Z",
+   "words": [
+    {
+     "text": "You'd",
+     "start": 0.63,
+     "end": 0.896
+    },
+    {
+     "text": "think",
+     "start": 0.896,
+     "end": 1.107
+    },
+    {
+     "text": "getting",
+     "start": 1.107,
+     "end": 1.511
+    },
+    {
+     "text": "your",
+     "start": 1.511,
+     "end": 1.743
+    },
+    {
+     "text": "game",
+     "start": 1.743,
+     "end": 1.975
+    },
+    {
+     "text": "cloned",
+     "start": 1.975,
+     "end": 2.327
+    },
+    {
+     "text": "with",
+     "start": 2.327,
+     "end": 2.559
+    },
+    {
+     "text": "AI",
+     "start": 2.559,
+     "end": 2.705
+    },
+    {
+     "text": "was",
+     "start": 2.705,
+     "end": 2.903
+    },
+    {
+     "text": "just",
+     "start": 2.903,
+     "end": 3.135
+    },
+    {
+     "text": "bad",
+     "start": 3.18,
+     "end": 3.421
+    },
+    {
+     "text": "luck.",
+     "start": 3.421,
+     "end": 3.725
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-53.wav",
+   "seconds": 4.187,
+   "recordedAt": "2026-11-02T22:34:19.554Z",
+   "words": [
+    {
+     "text": "Adding",
+     "start": 0.67,
+     "end": 1.06
+    },
+    {
+     "text": "traps",
+     "start": 1.06,
+     "end": 1.371
+    },
+    {
+     "text": "into",
+     "start": 1.371,
+     "end": 1.628
+    },
+    {
+     "text": "your",
+     "start": 1.628,
+     "end": 1.859
+    },
+    {
+     "text": "game",
+     "start": 1.859,
+     "end": 2.117
+    },
+    {
+     "text": "to",
+     "start": 2.117,
+     "end": 2.267
+    },
+    {
+     "text": "catch",
+     "start": 2.267,
+     "end": 2.578
+    },
+    {
+     "text": "copiers.",
+     "start": 2.578,
+     "end": 3.075
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-55.wav",
+   "seconds": 4.459,
+   "recordedAt": "2026-11-02T22:34:49.709Z",
+   "words": [
+    {
+     "text": "Mapmakers",
+     "start": 0.48,
+     "end": 1.147
+    },
+    {
+     "text": "hid",
+     "start": 1.147,
+     "end": 1.357
+    },
+    {
+     "text": "fake",
+     "start": 1.357,
+     "end": 1.686
+    },
+    {
+     "text": "towns",
+     "start": 1.686,
+     "end": 2.006
+    },
+    {
+     "text": "in",
+     "start": 2.006,
+     "end": 2.171
+    },
+    {
+     "text": "their",
+     "start": 2.171,
+     "end": 2.49
+    },
+    {
+     "text": "maps",
+     "start": 2.49,
+     "end": 2.801
+    },
+    {
+     "text": "to",
+     "start": 2.801,
+     "end": 2.966
+    },
+    {
+     "text": "catch",
+     "start": 2.966,
+     "end": 3.285
+    },
+    {
+     "text": "copiers.",
+     "start": 3.285,
+     "end": 3.715
+    }
+   ],
+   "transcribed": true
+  },
+  {
+   "file": "voice/takes/script-940ea78d-56.wav",
+   "seconds": 5.093,
+   "recordedAt": "2026-11-02T22:35:02.537Z",
+   "words": [
+    {
+     "text": "People",
+     "start": 0.53,
+     "end": 0.897
+    },
+    {
+     "text": "are",
+     "start": 0.897,
+     "end": 1.085
+    },
+    {
+     "text": "telling",
+     "start": 1.085,
+     "end": 1.442
+    },
+    {
+     "text": "indie",
+     "start": 1.442,
+     "end": 1.731
+    },
+    {
+     "text": "developers",
+     "start": 1.731,
+     "end": 2.301
+    },
+    {
+     "text": "to",
+     "start": 2.301,
+     "end": 2.465
+    },
+    {
+     "text": "stop",
+     "start": 2.465,
+     "end": 2.696
+    },
+    {
+     "text": "showing",
+     "start": 2.696,
+     "end": 3.034
+    },
+    {
+     "text": "their",
+     "start": 3.034,
+     "end": 3.314
+    },
+    {
+     "text": "games",
+     "start": 3.314,
+     "end": 3.623
+    },
+    {
+     "text": "in",
+     "start": 3.623,
+     "end": 3.787
+    },
+    {
+     "text": "public.",
+     "start": 3.787,
+     "end": 4.115
+    }
+   ],
+   "transcribed": true
+  }
+ ],
+ "voice": {
+  "captionNudgeMs": -50,
+  "tidy": true
+ },
+ "music": {
+  "song": "generated/score-defence-against-the-dark-arts-how-to-protect-your-indie-game-from-ai-copycats-short-6-r2-s90369-irn1bc.wav",
+  "from": 0,
+  "level": 0.1
+ },
+ "overlay": {
+  "id": "o1",
+  "cards": [
+   {
+    "id": "26nfx5jk",
+    "kind": "build",
+    "src": "cards/940ea78d-0a91-4b4a-98e7-5c8ee4ac1572/alabhr4j-1.png",
+    "seed": 7209,
+    "at": 0,
+    "seconds": 18.781,
+    "place": "full",
+    "beat": "7i179lwm"
+   },
+   {
+    "id": "huu5gewf",
+    "kind": "build",
+    "src": "cards/940ea78d-0a91-4b4a-98e7-5c8ee4ac1572/n45bdwdg-1.png",
+    "seed": 8073,
+    "at": 18.781,
+    "seconds": 13.415,
+    "place": "full",
+    "beat": "f0dqjqfl"
+   },
+   {
+    "id": "g7t4f5zc",
+    "kind": "build",
+    "src": "cards/940ea78d-0a91-4b4a-98e7-5c8ee4ac1572/aem1i1r7-1.png",
+    "seed": 1281,
+    "at": 32.196,
+    "seconds": 14.505,
+    "place": "full",
+    "beat": "9w2gdya1"
+   }
+  ]
+ },
+ "markers": [
+  {
+   "id": "fqlbuc52",
+   "at": 0
+  },
+  {
+   "id": "zbwn1c6n",
+   "at": 3.505
+  },
+  {
+   "id": "akv6xrce",
+   "at": 18.781
+  },
+  {
+   "id": "lxkx75l8",
+   "at": 32.196
+  }
+ ],
+ "slide": 0.4,
+ "createdAt": "2026-11-02T22:35:10.634Z",
+ "updatedAt": "2026-11-02T22:36:00.715Z"
+}

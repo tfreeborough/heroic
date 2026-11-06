@@ -1,6 +1,7 @@
 ---
 title: "The case for AI in game development, from a solo indie dev"
 description: "Steam release data, quality gates, CGI, bedroom coders and my own pathfinding maths: why AI tools might help indie games more than they hurt."
+summary: "I think AI coding gives solo developers a fighting chance against a $300 million AAA industry and takes game making back to its bedroom coder roots. The slop is a quality gate problem, not an AI problem: Steam releases roughly doubled from 2020 to 2025, nearly half of 2025's games got fewer than 10 reviews, and curated GOG has no slop problem. Like CGI, you only notice it when it's done badly."
 date: 2026-10-27
 youtube: "es4ll3k2xKg"
 cover: ./cover.jpg

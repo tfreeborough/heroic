@@ -11,7 +11,7 @@ import { ResearchPanel } from "./Research";
 import { DocPicker } from "./DocPicker";
 import { type ResearchState, wovenSource } from "../lib/research";
 import { spokenText } from "../lib/doc";
-import { type Beat, type Cut, type DiffOp, type PlanState, type ScriptTake, type ShortPost, type ShortRender, type ShortsState, SHORT_MAX, SHORT_MIN, beatText, cutDiff, cutText, isStale, newId, hookBeats, longEdits, nudgeShort, paragraphs, shortBeats, shortLabel, shortSeconds, spokenSeconds, withHook } from "../lib/scripts";
+import { type Beat, type Cut, type DiffOp, type PlanState, type ScriptTake, pictureStyleOf, type ShortPost, type ShortRender, type ShortsState, SHORT_MAX, SHORT_MIN, SHORT_PIECES, beatText, cutDiff, cutText, isStale, newId, hookBeats, longEdits, nudgeShort, paragraphs, piecesOf, refsOf, sentencesOf, shortRefsLabel, shortSeconds, toggleSentence, sourcesForYouTube, sourcesList, spokenSeconds, withHook } from "../lib/scripts";
 
 /**
  * The Scripts tab (docs/design/desk-scripts.md): the list down the left
@@ -184,6 +184,8 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   const [s, setS] = useState<Script | null>(null);
   // Pictures being made on the server right now ("<beat>:<k>"); while any are, the page polls and folds them in.
   const [pending, setPending] = useState<string[]>([]);
+  // Cast reference pictures being made on the server (names); polled like pictures.
+  const [castMaking, setCastMaking] = useState<string[]>([]);
   // The newest edit's score: making, made, or failed (desk-ascii-scripts.md § The score).
   const [score, setScore] = useState<ScoreState | null>(null);
   // A research run going (or just failed) on the server (desk-research.md).
@@ -205,10 +207,11 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   useEffect(() => {
     void api
       .script(id)
-      .then(({ pending: p, score: sc, researching: rs, planning: pl, finding: fd, rendering: rd, ...x }) => {
+      .then(({ pending: p, castMaking: cm, score: sc, researching: rs, planning: pl, finding: fd, rendering: rd, ...x }) => {
         saved.current = JSON.stringify(patchOf(x));
         setS(x);
         setPending(p);
+        setCastMaking(cm ?? []);
         setScore(sc);
         setResearching(rs);
         setPlanning(pl);
@@ -226,12 +229,13 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
   }, [api, id]);
   // Pictures land in the background: poll while any are in flight and take their src (and errors) into the page's copy.
   useEffect(() => {
-    if (!pending.length) return;
+    if (!pending.length && !castMaking.length) return;
     const t = setInterval(() => {
       void api
         .script(id)
-        .then(({ pending: p, score: _sc, ...x }) => {
+        .then(({ pending: p, castMaking: cm, score: _sc, ...x }) => {
           setPending(p);
+          setCastMaking(cm ?? []);
           const fresh = new Map((x.long?.beats ?? []).map((b) => [b.id, b.pictures ?? []] as const));
           setS((cur) => {
             if (!cur) return cur;
@@ -254,7 +258,8 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
               const missed = h.candidates.filter((c) => !t.candidates.includes(c));
               return missed.length || h.error !== t.error ? { ...t, candidates: [...t.candidates, ...missed], chosen: missed.length ? h.chosen : t.chosen, error: h.error } : t;
             });
-            const next = { ...cur, long: cur.long ? fold(cur.long) : undefined, thumbnails };
+            // The cast's reference pictures are the server's (never saved from the page), and so is the style it pinned at the first picture.
+            const next = { ...cur, long: cur.long ? fold(cur.long) : undefined, thumbnails, castRefs: x.castRefs, pictureStyle: x.pictureStyle ?? cur.pictureStyle };
             // What the server has is what's saved: don't let the fold look like an edit to save.
             saved.current = JSON.stringify(patchOf(next));
             return next;
@@ -263,7 +268,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
         .catch(() => {});
     }, 2500);
     return () => clearInterval(t);
-  }, [pending.length, api, id]);
+  }, [pending.length, castMaking.length, api, id]);
 
   // The plan lands a batch at a time: poll while it runs and take each beat's new plan (and the world) into the page's copy.
   // (onChanged is a fresh function each render: held in a ref so the poll isn't restarted on every keystroke.)
@@ -274,7 +279,8 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
     const t = setInterval(() => {
       void api
         .script(id)
-        .then(({ planning: pl, ...x }) => {
+        .then(({ planning: pl, castMaking: cm, ...x }) => {
+          setCastMaking(cm ?? []);
           const fresh = new Map((x.long?.beats ?? []).map((b) => [b.id, b] as const));
           setS((cur) => {
             if (!cur?.long) return cur;
@@ -285,7 +291,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
               if (!f || planOf(f) === planOf(b)) return b;
               return { ...b, scene: f.scene, mood: f.mood, pulled: f.pulled, chapter: f.chapter, pictures: f.pictures };
             });
-            const next = { ...cur, long: { ...cur.long, beats }, theme: x.theme, look: x.look, cast: x.cast };
+            const next = { ...cur, long: { ...cur.long, beats }, theme: x.theme, look: x.look, cast: x.cast, castRefs: x.castRefs };
             // What the server has is what's saved: don't let the fold look like an edit to save.
             saved.current = JSON.stringify(patchOf(next));
             return next;
@@ -308,11 +314,11 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
         .then(({ finding: fd, ...x }) => {
           setFinding(fd);
           if (fd?.state === "running") return;
-          if (fd?.state === "failed") return setErr(`Finding the shorts didn't come back: ${fd.error}. Press Find the shorts again.`);
-          const secs = new Map((x.long?.beats ?? []).map((b) => [b.id, b.seconds] as const));
+          if (fd?.state === "failed") return setErr(fd.short ? `Reshaping didn't come back: ${fd.error}.` : `Finding the shorts didn't come back: ${fd.error}. Press Find the shorts again.`);
+          const measured = new Map((x.long?.beats ?? []).map((b) => [b.id, b] as const));
           setS((cur) => {
             if (!cur?.long) return cur;
-            const next = { ...cur, long: { ...cur.long, beats: cur.long.beats.map((b) => (secs.get(b.id) !== undefined ? { ...b, seconds: secs.get(b.id) } : b)) }, shorts: x.shorts };
+            const next = { ...cur, long: { ...cur.long, beats: cur.long.beats.map((b) => { const m = measured.get(b.id); return m ? { ...b, seconds: m.seconds, sentences: m.sentences } : b; }) }, shorts: x.shorts };
             saved.current = JSON.stringify(patchOf(next));
             return next;
           });
@@ -390,6 +396,16 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
     }, 600);
     return () => clearTimeout(t);
   }, [s, api, id, onChanged]);
+
+  /** The page's unsaved changes saved now, before a server step that reads the saved script. */
+  const flush = async () => {
+    if (!s) return;
+    const patch = patchOf(s);
+    const body = JSON.stringify(patch);
+    if (body === saved.current) return;
+    await api.updateScript(id, patch);
+    saved.current = body;
+  };
 
   /** A server step: the whole script comes back; it's the saved state now. True when it worked. */
   const step = async (name: Busy, run: () => Promise<Script>) => {
@@ -618,10 +634,10 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
           pending={pending}
           onBeat={(beatId, f) => setS((cur) => (cur?.long ? { ...cur, long: { ...cur.long, beats: cur.long.beats.map((b) => (b.id === beatId ? f(b) : b)) } } : cur))}
           planning={planning}
-          onStory={() => {
+          onStory={(fresh) => {
             setErr("");
             void api
-              .planStory(id)
+              .planStory(id, fresh, pictureStyleOf(s))
               .then(setPlanning)
               .catch((e: Error) => setErr(e.message));
           }}
@@ -645,6 +661,18 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
           }
           onOwn={(beat, k, file) => void step(`own:${beat}`, () => api.ownPicture(id, beat, k, file))}
           onNewPrompt={(beat, k, instruction) => void step(`prompt:${beat}:${k}`, () => api.newPicturePrompt(id, beat, k, instruction))}
+          castMaking={castMaking}
+          onCastRefs={(only) =>
+            void api
+              .makeCastRefs(id, only)
+              .then((r) => {
+                if (!r.started) return setErr("Every cast member has a picture for their look already. Press again on one for another try.");
+                setCastMaking((m) => [...new Set([...m, ...(only ?? (s.cast ?? []).map((c) => c.name))])]);
+              })
+              .catch((e: Error) => setErr(e.message))
+          }
+          onChooseCastRef={(name, src) => void step(`castref:${name}`, () => api.chooseCastRef(id, name, src))}
+          onPictureStyle={(pictureStyle) => patch({ pictureStyle })}
         />
       ) : null}
 
@@ -821,8 +849,16 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
           busy={busy}
           onFind={(more) => {
             setErr("");
-            void api
-              .findShorts(id, more)
+            // Anything not saved yet (a keep, a bin and its reason) goes first: the find reads the saved script.
+            void flush()
+              .then(() => api.findShorts(id, more))
+              .then(setFinding)
+              .catch((e: Error) => setErr(e.message));
+          }}
+          onReshape={(short, note) => {
+            setErr("");
+            void flush()
+              .then(() => api.reshapeShort(id, short, note))
               .then(setFinding)
               .catch((e: Error) => setErr(e.message));
           }}
@@ -841,7 +877,7 @@ const ScriptPage: React.FC<{ api: GameApi; id: string; stage?: string; claude: b
             </div>
             <div className="panel stack" style={{ gap: 8 }}>
               <h4 style={{ margin: 0 }}>Description and tags</h4>
-              <YouTubeStep youtube={s.youtube} chapters={longEdits(s).at(-1)?.youtube} claude={claude} busy={busy} onChange={(youtube) => patch({ youtube })} onWrite={(instruction) => void step("youtube", () => api.writeYouTube(id, instruction))} />
+              <YouTubeStep youtube={s.youtube} chapters={longEdits(s).at(-1)?.youtube} sources={sourcesForYouTube(sourcesList(s))} claude={claude} busy={busy} onChange={(youtube) => patch({ youtube })} onWrite={(instruction) => void step("youtube", () => api.writeYouTube(id, instruction))} />
             </div>
           </div>
           <div className="panel">
@@ -1007,7 +1043,7 @@ const YouTubeChapters: React.FC<{ text: string }> = ({ text }) => (
  * across. The chapters (from the last organise) go under the lines, and his
  * own links and the rest under those, in YouTube.
  */
-const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; chapters?: string; claude: boolean; busy: Busy; onChange: (y: { description: string; tags: string }) => void; onWrite: (instruction: string) => void }> = ({ youtube, chapters, claude, busy, onChange, onWrite }) => {
+const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; chapters?: string; sources: string; claude: boolean; busy: Busy; onChange: (y: { description: string; tags: string }) => void; onWrite: (instruction: string) => void }> = ({ youtube, chapters, sources, claude, busy, onChange, onWrite }) => {
   const [ask, setAsk] = useState("");
   const write = () => {
     onWrite(ask);
@@ -1019,6 +1055,8 @@ const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; c
     .filter(Boolean)
     .reduce((n, t, i) => n + t.length + (t.includes(" ") ? 2 : 0) + (i ? 1 : 0), 0);
   const copy = (text: string) => void navigator.clipboard.writeText(text);
+  // The whole description, top to bottom: the lines, the chapters, the sources. YouTube takes 5000 characters.
+  const whole = [youtube?.description.trim(), chapters, sources].filter(Boolean).join("\n\n");
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
@@ -1037,9 +1075,9 @@ const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; c
                 <button className="link small" onClick={() => copy(youtube.description)}>
                   copy
                 </button>
-                {chapters ? (
-                  <button className="link small" onClick={() => copy(`${youtube.description}\n\n${chapters}`)} title="These lines with the chapters under them">
-                    copy with the chapters
+                {chapters || sources ? (
+                  <button className="link small" onClick={() => copy(whole)} title={`These lines${chapters ? ", the chapters" : ""}${sources ? ", the sources" : ""} under them: the whole description`}>
+                    copy it all
                   </button>
                 ) : null}
               </span>
@@ -1063,12 +1101,32 @@ const YouTubeStep: React.FC<{ youtube?: { description: string; tags: string }; c
       ) : (
         <div className="small muted">Claude writes a couple of lines about this video for the top of the description (the chapters go under them, your links and the rest under those) and the tags.</div>
       )}
+      <div className="stack" style={{ gap: 4 }}>
+        <div className="row between">
+          <strong className="small">Sources</strong>
+          {sources ? (
+            <span className="row small" style={{ gap: 10 }}>
+              {youtube ? <span className={whole.length > 5000 ? "warn" : "muted"}>whole description {whole.length}/5000</span> : null}
+              <button className="link small" onClick={() => copy(sources)}>
+                copy
+              </button>
+            </span>
+          ) : null}
+        </div>
+        {sources ? (
+          <pre className="log small" style={{ whiteSpace: "pre-wrap", maxHeight: 220, overflow: "auto" }}>
+            {sources}
+          </pre>
+        ) : (
+          <div className="small muted">Put a Sources section in the script (a heading, then a link a line) or accept some research, and the links show up here for the description.</div>
+        )}
+      </div>
     </div>
   );
 };
 
 /** What the page saves of a script (the server owns the rest). */
-const patchOf = (s: Script): ScriptPatch => ({ title: s.title, source: s.source, long: s.long, shorts: s.shorts, gap: s.gap, takes: s.takes, thumbnails: s.thumbnails, titles: s.titles, youtube: s.youtube, writeup: s.writeup, theme: s.theme ?? "", look: s.look ?? "", cast: s.cast ?? [] });
+const patchOf = (s: Script): ScriptPatch => ({ title: s.title, source: s.source, long: s.long, shorts: s.shorts, gap: s.gap, takes: s.takes, thumbnails: s.thumbnails, titles: s.titles, youtube: s.youtube, writeup: s.writeup, theme: s.theme ?? "", look: s.look ?? "", cast: s.cast ?? [], ...(s.pictureStyle ? { pictureStyle: s.pictureStyle } : {}) });
 
 /**
  * The Cut stage: the beats down a rail on the left (what the rewrite
@@ -1508,6 +1566,8 @@ const ShortsStage: React.FC<{
   busy: Busy;
   covers: Map<string, Cover[]>;
   onFind: (more: boolean) => void;
+  /** One short reshaped (desk-shorts.md § 6), to Tom's note or none. */
+  onReshape: (short: string, note: string) => void;
   onShorts: (shorts: Cut[]) => void;
   onOrganise: () => void;
   onError: (m: string) => void;
@@ -1519,7 +1579,7 @@ const ShortsStage: React.FC<{
   /** A short's title, description and tags written by Claude (desk-shorts.md § 5). */
   onPost: (short: string, instruction: string) => void;
   go: (route: { name: "edit"; id: string } | { name: "renders" }) => void;
-}> = ({ api, id, s, claude, finding, busy, covers, onFind, onShorts, onOrganise, onError, onTakes, onReplace, onDraft, rendering, onRender, onPost, go }) => {
+}> = ({ api, id, s, claude, finding, busy, covers, onFind, onReshape, onShorts, onOrganise, onError, onTakes, onReplace, onDraft, rendering, onRender, onPost, go }) => {
   const keptShorts = s.shorts.filter((c) => c.state === "kept");
   const undrafted = keptShorts.some((c) => !c.hookDrafts?.length);
   // Render ticked (desk-shorts.md § 4): every kept short is ticked unless Tom unticks it.
@@ -1531,13 +1591,18 @@ const ShortsStage: React.FC<{
   const [hookText, setHookText] = useState<Record<string, string>>({});
   const [showBinned, setShowBinned] = useState(false);
   const [showMisses, setShowMisses] = useState(false);
+  const longBeats = s.long?.beats ?? [];
   const running = finding?.state === "running";
+  const reshapingNow = finding?.state === "running" ? finding.short : undefined;
+  // Bin asks why, Reshape asks what to change (desk-shorts.md § 6): the short whose box is open, and what's typed.
+  const [asking, setAsking] = useState<{ short: string; kind: "bin" | "reshape"; text: string } | null>(null);
   const offered = s.shorts.filter((c) => c.state);
   const binned = offered.filter((c) => c.state === "binned");
-  const misses = offered.filter((c) => c.state === "suggested" && c.problem);
-  const shown = offered.filter((c) => (c.state !== "binned" || showBinned) && !(c.state === "suggested" && c.problem && !showMisses));
+  // A reshape always shows, even when the judge failed it: Tom asked for it.
+  const misses = offered.filter((c) => c.state === "suggested" && c.problem && !c.reshapedFrom);
+  const shown = offered.filter((c) => (c.state !== "binned" || showBinned) && !(c.state === "suggested" && c.problem && !c.reshapedFrom && !showMisses));
+  const measuredYet = longBeats.some((b) => b.sentences?.length);
   const set = (c: Cut, f: (c: Cut) => Cut) => onShorts(s.shorts.map((x) => (x.id === c.id ? f(x) : x)));
-  const longBeats = s.long?.beats ?? [];
   if (!longEdits(s).length)
     return (
       <div className="panel stack" style={{ gap: 8 }}>
@@ -1554,10 +1619,10 @@ const ShortsStage: React.FC<{
       <div className="panel row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <button
           disabled={!claude || running || Boolean(busy)}
-          title={`Claude finds the runs of beats (${SHORT_MIN}–${SHORT_MAX}s, one jump at most) that could stand alone, then a second, stricter pass judges each as a stranger scrolling. Only the ones that pass show; the rest fold away as near misses. Ones you haven't decided on are offered afresh; kept and binned ones stay, and they're the standard the next find is held to.`}
+          title={`Claude reads what you actually said, sentence by sentence, and cuts shorts out of it (${SHORT_MIN}–${SHORT_MAX}s, up to ${SHORT_PIECES} pieces, lines skipped or moved round when it makes the point better, your meaning kept), then a second, stricter pass judges each as a stranger scrolling. Only the ones that pass show; the rest fold away as near misses. Ones you haven't decided on are offered afresh; kept and binned ones stay, they're the standard the next find is held to, and a binned one can come back in a shape that fixes why you binned it.`}
           onClick={() => onFind(false)}
         >
-          {running ? "finding the shorts…" : offered.length ? "Find the shorts again" : "Find the shorts"}
+          {running ? (reshapingNow ? "reshaping…" : "finding the shorts…") : offered.length ? "Find the shorts again" : "Find the shorts"}
         </button>
         {offered.length ? (
           <button className="ghost" disabled={!claude || running || Boolean(busy)} title="Shorts not offered before; everything already here stays." onClick={() => onFind(true)}>
@@ -1567,7 +1632,7 @@ const ShortsStage: React.FC<{
         <span className="small muted" style={{ flex: 1 }}>
           {offered.length
             ? `${offered.filter((c) => c.state === "kept").length} kept · ${offered.filter((c) => c.state === "suggested" && !c.problem).length} to decide · ${misses.length} near miss${misses.length === 1 ? "" : "es"} · ${binned.length} binned`
-            : "Each short is a run of beats said exactly as you recorded them. Keep the ones you'd post; the hooks come next."}
+            : "Each short is lines of the long video said exactly as you recorded them. Keep the ones you'd post; the hooks come next."}
         </span>
         {misses.length ? (
           <button className="link small" onClick={() => setShowMisses((x) => !x)}>
@@ -1600,12 +1665,23 @@ const ShortsStage: React.FC<{
         ) : null}
         {!claude ? <span className="small warn">needs ANTHROPIC_API_KEY and a script voice</span> : null}
       </div>
+      {offered.length && !measuredYet ? <div className="small muted">These were found a beat at a time. Find more, or Reshape one, and the long video gets measured line by line: then you can click a line to leave it out.</div> : null}
       {shown.map((c) => {
-        const ns = shortBeats(s, c);
+        const refs = refsOf(s, c);
+        const pieces = piecesOf(s, refs);
         const secs = shortSeconds(s, c);
-        const n = s.long?.beats.length ?? 0;
         const kept = c.state === "kept";
         const nudge = (end: "start" | "end", by: 1 | -1) => set(c, (x) => nudgeShort(s, x, end, by));
+        const canNudge = (end: "start" | "end", by: 1 | -1) => nudgeShort(s, c, end, by) !== c;
+        const was = c.reshapedFrom ? s.shorts.find((x) => x.id === c.reshapedFrom) : undefined;
+        const box = asking?.short === c.id ? asking : null;
+        const reshaping = reshapingNow === c.id;
+        const submit = () => {
+          if (!box) return;
+          if (box.kind === "bin") set(c, (x) => ({ ...x, state: "binned", ...(box.text.trim() ? { binReason: box.text.trim() } : {}) }));
+          else onReshape(c.id, box.text);
+          setAsking(null);
+        };
         return (
           <div key={c.id} className="panel stack" style={{ gap: 8, opacity: c.state === "binned" ? 0.55 : 1, borderColor: kept ? "var(--ok, #7c6)" : undefined }}>
             <div className="row" style={{ gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -1619,13 +1695,16 @@ const ShortsStage: React.FC<{
                   {c.score}/10
                 </span>
               ) : null}
-              <span className={`small ${secs < SHORT_MIN || secs > SHORT_MAX ? "warn" : "muted"}`} title="As recorded: the kept parts of the takes that read these beats.">
-                {ns.length ? `beats ${shortLabel(ns)}` : "no beats"} · {clock(secs)}
+              <span className={`small ${secs < SHORT_MIN || secs > SHORT_MAX || pieces.length > SHORT_PIECES ? "warn" : "muted"}`} title={`As recorded: the kept parts of the takes that read these lines. 12 is beat 12, 12.3 its third sentence; + is a seam (${pieces.length} piece${pieces.length === 1 ? "" : "s"}, ${SHORT_PIECES} at most before it sounds stitched).`}>
+                {refs.length ? shortRefsLabel(s, c) : "no lines"} · {clock(secs)}
               </span>
               <span className="small muted">{c.state === "kept" ? "kept" : c.state === "binned" ? "binned" : c.problem ? "near miss" : "suggested"}</span>
             </div>
+            {was ? <div className="small muted">Reshaped from “{was.title}”</div> : null}
+            {reshaping ? <div className="small">reshaping this one…</div> : null}
             {c.why ? <div className="small">{c.why}</div> : null}
-            {c.join ? <div className="small muted">The join: {c.join}</div> : null}
+            {c.join ? <div className="small muted">The seams: {c.join}</div> : null}
+            {c.state === "binned" && c.binReason ? <div className="small muted">Binned because: {c.binReason}</div> : null}
             {c.problem ? <div className="small warn">What's wrong: {c.problem}</div> : null}
             {c.check ? <div className="small warn">The hook has to say: {c.check}</div> : null}
             {kept ? <ShortRenderRow api={api} r={rendering[c.id]} edit={s.sequences?.find((x) => x.short === c.id)} go={go} /> : null}
@@ -1664,61 +1743,115 @@ const ShortsStage: React.FC<{
                 })()
               : null}
             <div className="stack" style={{ gap: 4 }}>
-              {c.beats.filter((b) => b.from).map((b, i, bs) => {
-                const k = longBeats.findIndex((x) => x.id === b.from);
-                const prev = i ? bs[i - 1] : undefined;
-                const prevK = prev?.from ? longBeats.findIndex((x) => x.id === prev.from) : -1;
-                const jump = k >= 0 && prevK >= 0 && k !== prevK + 1;
-                return (
-                  <Fragment key={b.id}>
-                    {jump ? <div className="small muted" style={{ paddingLeft: "2.7em" }}>⤵ jump</div> : null}
-                    <div className="small" style={{ display: "flex", gap: 8 }}>
-                      <span className="muted" style={{ flex: "0 0 2.2em", textAlign: "right" }}>
-                        {k >= 0 ? k + 1 : "·"}
-                      </span>
-                      <span style={{ minWidth: 0 }}>{beatText(s, b)}</span>
-                    </div>
-                  </Fragment>
-                );
-              })}
+              {(() => {
+                // A row per long beat as said (desk-shorts.md § 6): all its sentences, the ones left out greyed; click one to leave it out or put it back.
+                const rows: { k: number; beats: Beat[] }[] = [];
+                for (const b of c.beats.filter((x) => x.from)) {
+                  const k = longBeats.findIndex((x) => x.id === b.from);
+                  const r = rows.at(-1);
+                  if (r && r.k === k && (b.part?.first ?? 1) > (r.beats.at(-1)!.part?.last ?? Infinity)) r.beats.push(b);
+                  else rows.push({ k, beats: [b] });
+                }
+                const editable = c.state !== "binned" && !reshaping;
+                const lastOf = (row: { k: number; beats: Beat[] }) => row.beats.at(-1)!.part?.last ?? sentencesOf(longBeats[row.k] ?? { text: "" }).length;
+                return rows.map((row, i) => {
+                  const lb = longBeats[row.k];
+                  const sents = lb ? sentencesOf(lb) : [];
+                  const lit = new Set(row.beats.flatMap((b) => {
+                    const f = b.part?.first ?? 1;
+                    const l = b.part?.last ?? sents.length;
+                    return Array.from({ length: Math.max(0, l - f + 1) }, (_, j) => f + j);
+                  }));
+                  const prev = rows[i - 1];
+                  const straight = prev && row.k === prev.k + 1 && (row.beats[0]!.part?.first ?? 1) === 1 && lastOf(prev) === sentencesOf(longBeats[prev.k] ?? { text: "" }).length;
+                  const seam = prev && !straight ? (row.k > prev.k ? `⤵ skips to ${row.k + 1}` : `⤴ back to ${row.k + 1}`) : "";
+                  return (
+                    <Fragment key={row.beats[0]!.id}>
+                      {seam ? <div className="small muted" style={{ paddingLeft: "2.7em" }}>{seam}</div> : null}
+                      <div className="small" style={{ display: "flex", gap: 8 }}>
+                        <span className="muted" style={{ flex: "0 0 2.2em", textAlign: "right" }}>
+                          {row.k >= 0 ? row.k + 1 : "·"}
+                        </span>
+                        <span style={{ minWidth: 0 }}>
+                          {lb?.sentences?.length
+                            ? sents.map((x, j) => {
+                                const on = lit.has(j + 1);
+                                return (
+                                  <span key={j} className={`short-line${on ? "" : " off"}${editable ? " can" : ""}`} title={editable ? (on ? "Leave this line out" : "Put this line back") : undefined} onClick={editable ? () => set(c, (y) => toggleSentence(s, y, { n: row.k + 1, k: j + 1 })) : undefined}>
+                                    {x.text}{" "}
+                                  </span>
+                                );
+                              })
+                            : beatText(s, row.beats[0]!)}
+                        </span>
+                      </div>
+                    </Fragment>
+                  );
+                });
+              })()}
             </div>
             {kept ? <ShortPostBox short={c} claude={claude} busy={busy === `post:${c.id}`} onChange={(post) => set(c, (x) => ({ ...x, post }))} onWrite={(instruction) => onPost(c.id, instruction)} /> : null}
             <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
               {c.state !== "binned" ? (
                 <>
-                  <button className={kept ? "ghost small" : "small"} disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: kept ? "suggested" : "kept" }))}>
+                  <button className={kept ? "ghost small" : "small"} disabled={Boolean(busy) || reshaping} onClick={() => set(c, (x) => ({ ...x, state: kept ? "suggested" : "kept" }))}>
                     {kept ? "Unkeep" : c.problem ? "Keep anyway" : "Keep"}
                   </button>
-                  <button className="ghost small danger" disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: "binned" }))}>
+                  <button className="ghost small danger" disabled={Boolean(busy) || reshaping} onClick={() => setAsking({ short: c.id, kind: "bin", text: "" })}>
                     Bin
                   </button>
                 </>
               ) : (
-                <button className="ghost small" disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: "suggested" }))}>
+                <button className="ghost small" disabled={Boolean(busy)} onClick={() => set(c, (x) => ({ ...x, state: "suggested", binReason: undefined }))}>
                   Back from the bin
                 </button>
               )}
+              <button className="ghost small" disabled={!claude || running || Boolean(busy)} title="Claude keeps the idea and fixes what was wrong with it (the judge's problem, why you binned it, your note), cutting lines, taking others from anywhere in the video or moving them round, your meaning kept. The new one lands next to this one, judged like the rest; this one stays as it is." onClick={() => setAsking({ short: c.id, kind: "reshape", text: "" })}>
+                {reshaping ? "reshaping…" : "Reshape…"}
+              </button>
               <span style={{ flex: 1 }} />
-              {ns.length && c.state !== "binned" ? (
-                <span className="row small muted" style={{ gap: 4 }} title="Widen or narrow it by one beat at either end: the beats stay word for word with the long video, so your takes still read them.">
+              {refs.length && c.state !== "binned" ? (
+                <span className="row small muted" style={{ gap: 4 }} title="Widen or narrow it by one line at either end, as recorded. Or click a line above to leave it out or put it back.">
                   start
-                  <button className="ghost small" disabled={ns[0]! <= 1 || ns.includes(ns[0]! - 1)} onClick={() => nudge("start", 1)}>
+                  <button className="ghost small" disabled={!canNudge("start", 1)} onClick={() => nudge("start", 1)}>
                     ◂+
                   </button>
-                  <button className="ghost small" disabled={ns.length < 2} onClick={() => nudge("start", -1)}>
+                  <button className="ghost small" disabled={!canNudge("start", -1)} onClick={() => nudge("start", -1)}>
                     −▸
                   </button>
                   <span style={{ width: 8 }} />
                   end
-                  <button className="ghost small" disabled={ns.length < 2} onClick={() => nudge("end", -1)}>
+                  <button className="ghost small" disabled={!canNudge("end", -1)} onClick={() => nudge("end", -1)}>
                     ◂−
                   </button>
-                  <button className="ghost small" disabled={ns[ns.length - 1]! >= n || ns.includes(ns[ns.length - 1]! + 1)} onClick={() => nudge("end", 1)}>
+                  <button className="ghost small" disabled={!canNudge("end", 1)} onClick={() => nudge("end", 1)}>
                     +▸
                   </button>
                 </span>
               ) : null}
             </div>
+            {box ? (
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <input
+                  type="text"
+                  autoFocus
+                  value={box.text}
+                  placeholder={box.kind === "bin" ? "why? (optional: the next find and Reshape learn from it)" : "what should change? (optional)"}
+                  onChange={(e) => setAsking({ ...box, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submit();
+                    if (e.key === "Escape") setAsking(null);
+                  }}
+                  style={{ flex: 1 }}
+                />
+                <button className={box.kind === "bin" ? "small danger" : "small"} disabled={box.kind === "reshape" && (!claude || running)} onClick={submit}>
+                  {box.kind === "bin" ? "Bin it" : "Reshape"}
+                </button>
+                <button className="ghost small" onClick={() => setAsking(null)}>
+                  cancel
+                </button>
+              </div>
+            ) : null}
           </div>
         );
       })}

@@ -20,9 +20,9 @@ import { footageDir, listBinned, listClips, publicDir, readSidecar, restoreClip,
 import { jobs, renderStillTo, rendersDir, startRender } from "./lib/render";
 import { deleteBatch, deleteRender, listBatches, listRenders, uploadRenders } from "./lib/renders";
 import { hasClaude } from "./lib/draft";
-import { type ScriptPatch, longEdits } from "./lib/scripts";
+import { PICTURE_STYLES, type PictureStyle, type ScriptPatch, longEdits } from "./lib/scripts";
 import { addScript, addTakeToScript, listScripts, readScript, removeScript, removeTakeFromScript, updateScript } from "./lib/scriptsStore";
-import { adjustScript, anotherShort, binEdit, hasClaude as hasRewriter, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, ownSiteStill, saveArticle, videoPublishDate, writeArticle, writePrompts, writeYouTube, writeShortPost, draftHooks, findShorts, previewShort, renderShorts, shortRenderState, shortsState } from "./lib/scriptSteps";
+import { adjustScript, anotherShort, binEdit, castRefsMaking, chooseCastRef, hasClaude as hasRewriter, makeCastRefs, makePictures, makeThumbnails, chooseScore, organise, ownPicture, ownThumbnail, pendingPictures, planState, planStory, planThumbnails, redoBeat, redoCut, redoPicturePrompt, remakeScore, scriptScores, rewriteScript, planTitles, ownSiteStill, saveArticle, videoPublishDate, writeArticle, writePrompts, writeYouTube, writeShortPost, draftHooks, findShorts, reshapeShort, previewShort, renderShorts, shortRenderState, shortsState } from "./lib/scriptSteps";
 import { scoreState } from "./lib/score";
 import { decide, researchState, startResearch } from "./lib/researcher";
 import { docModified, listDocs, pullDoc, unlinkDoc } from "./lib/scriptDocs";
@@ -508,7 +508,7 @@ const server = Bun.serve({
       GET: withGame((g, req) => {
         const s = readScript(g, req.params.id!);
         const seqId = s ? longEdits(s).at(-1)?.id : undefined;
-        return s ? json({ ...s, pending: pendingPictures(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null, planning: planState(s.id) ?? null, finding: shortsState(s.id) ?? null, rendering: shortRenderState(s.id) }) : json({ error: "no such script" }, 404);
+        return s ? json({ ...s, pending: pendingPictures(s.id), castMaking: castRefsMaking(s.id), score: seqId ? (scoreState(g, seqId) ?? null) : null, researching: researchState(s.id) ?? null, planning: planState(s.id) ?? null, finding: shortsState(s.id) ?? null, rendering: shortRenderState(s.id) }) : json({ error: "no such script" }, 404);
       }),
       PUT: withGame(async (g, req) => {
         try {
@@ -573,9 +573,13 @@ const server = Bun.serve({
     },
     /** The story (docs/design/desk-ascii-scripts.md § Pictures): world, cast, chapters and a scene line a beat, in one call. Starts in the background; answers with the state, the script's `planning` says how it's going. */
     "/api/:game/scripts/:id/story": {
-      POST: withGame((g, req) => {
+      /** `{ fresh: true }`: a new look and cast for the world line, in the script's picture style. */
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { fresh?: boolean; style?: string };
         try {
-          return json(planStory(g, req.params.id!));
+          // The style picked on the page, saved first (the page's own save may not have landed yet).
+          if (body.style && body.style in PICTURE_STYLES) updateScript(g, req.params.id!, { pictureStyle: body.style as PictureStyle });
+          return json(planStory(g, req.params.id!, body.fresh === true));
         } catch (e) {
           return fail(e);
         }
@@ -605,6 +609,29 @@ const server = Bun.serve({
         try {
           const only = Array.isArray(body.only) ? body.only.map((o) => ({ beat: String(o.beat), k: Math.round(Number(o.k)) || 0 })) : undefined;
           return json(makePictures(g, req.params.id!, only));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** Cast reference pictures in the background (film style): every cast member with none for their look, or (`only`) a fresh try at these names. */
+    "/api/:game/scripts/:id/cast-refs": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { only?: string[] };
+        try {
+          const { started } = makeCastRefs(g, req.params.id!, Array.isArray(body.only) ? body.only.map(String) : undefined);
+          return json({ started });
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** One of a cast member's tries as their reference: `{ name, src }`. Answers with the script. */
+    "/api/:game/scripts/:id/cast-refs/choose": {
+      POST: withGame(async (g, req) => {
+        const body = (await req.json().catch(() => ({}))) as { name?: string; src?: string };
+        try {
+          return json(chooseCastRef(g, req.params.id!, String(body.name ?? ""), String(body.src ?? "")));
         } catch (e) {
           return fail(e);
         }
@@ -778,6 +805,17 @@ const server = Bun.serve({
       POST: withGame((g, req) => {
         try {
           return json(findShorts(g, req.params.id!, new URL(req.url).searchParams.get("more") === "1"));
+        } catch (e) {
+          return fail(e);
+        }
+      }),
+    },
+    /** One short reshaped (desk-shorts.md § 6): `{ note? }`, in the background on the find's slot; the new short lands beside it. Answers with the state; the script's `finding` says how it's going. */
+    "/api/:game/scripts/:id/shorts/:short/reshape": {
+      POST: withGame(async (g, req) => {
+        try {
+          const body = (await req.json().catch(() => ({}))) as { note?: string };
+          return json(reshapeShort(g, req.params.id!, req.params.short!, String(body.note ?? "")));
         } catch (e) {
           return fail(e);
         }

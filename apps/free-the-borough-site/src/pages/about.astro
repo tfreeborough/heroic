@@ -1,0 +1,42 @@
+---
+import Base from "../layouts/Base.astro";
+import { SITE, ORG, AUTHOR, AUTHOR_NAME, YOUTUBE, LINKEDIN, EMAIL } from "../lib/studio";
+
+// The person and the studio behind the site, so the dev log has a real,
+// checkable author. Everything on this page has to stay true: no claims Tom
+// hasn't made himself.
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "ProfilePage",
+  url: `${SITE}/about/`,
+  mainEntity: AUTHOR,
+  about: ORG,
+};
+---
+<Base
+  title={`About ${AUTHOR_NAME} — Free the Borough`}
+  description="Free the Borough is a one-person game studio run by Tom Freeborough, the maker of Blood in the Sand for iPhone and Android."
+  jsonLd={jsonLd}
+>
+  <main>
+    <div class="wrap">
+      <h1>About</h1>
+      <p class="lede">I'm {AUTHOR_NAME}, and Free the Borough is me. I make the games on
+      my own, after more than a decade working in the software industry.</p>
+
+      <p>The game out now is <a href="/">Blood in the Sand</a>, a short, bloody
+      multiplayer arena game for iPhone and Android where you don't aim, you time it.</p>
+
+      <p>I also make videos about making games on
+      <a href={YOUTUBE} target="_blank" rel="noopener">YouTube</a>: how things like
+      cheating and store cuts actually work, what goes wrong when you build a game on
+      your own, and what I've changed my mind about. Each one gets written up properly
+      in the <a href="/log/">dev log</a>, with its sources.</p>
+
+      <h2>Get in touch</h2>
+      <p>Email me at <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. If it's about a game,
+      the <a href="/support/">support page</a> has what to include. I'm also on
+      <a href={LINKEDIN} target="_blank" rel="noopener me">LinkedIn</a>.</p>
+    </div>
+  </main>
+</Base>

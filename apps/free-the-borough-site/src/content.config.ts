@@ -14,6 +14,10 @@ const log = defineCollection({
     z.object({
       title: z.string(),
       description: z.string(),
+      // The answer-first opening: two or three plain sentences that answer the
+      // title's question, shown above the video. Answer engines quote passages
+      // like this, so it stands on its own and only says what the post says.
+      summary: z.string().optional(),
       date: z.coerce.date(),
       updated: z.coerce.date().optional(),
       youtube: z.string().optional(),

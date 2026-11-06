@@ -1,6 +1,7 @@
 ---
 title: "How cheating works in multiplayer games"
 description: "Client broadcast, client host and server authority compared: how each trusts players, how cheaters exploit them, and why servers aren't always used."
+summary: "Cheating comes down to how much a game trusts each player's device. In client broadcast every device's events are taken as fact, so a cheater can claim they've beaten everyone, and in client host one player enforces the rules, unless that host is the cheater. With server authority, players only send intentions and a game server decides what happens, which almost always stops cheaters, but servers add cost and complexity, so they're often only used for competitive games."
 date: 2026-10-12
 youtube: "NYk9hQLeuvI"
 cover: ./cover.jpg

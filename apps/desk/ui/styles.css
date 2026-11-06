@@ -484,7 +484,6 @@ mark.pulled { background: rgba(220,185,111,0.3); color: var(--bone); border-radi
 .rec-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .take-wave.big { height: 56px; cursor: pointer; }
 .take-wave .tv-head { z-index: 2; }
-.clamp3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
 .playbtn { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 12px; flex: none; }
 .beat-take { display: flex; gap: 8px; align-items: center; padding: 3px 4px; border-radius: 6px; }
 .beat-take.on { background: rgba(220,185,111,0.12); }
@@ -523,8 +522,17 @@ mark.pulled { background: rgba(220,185,111,0.3); color: var(--bone); border-radi
 .tv-word { position: absolute; bottom: 2px; height: 22px; line-height: 22px; padding: 0 3px; font-size: 11.5px; white-space: nowrap; color: var(--bone); border-left: 1px solid rgba(220,185,111,0.5); pointer-events: none; }
 .tv-word.tick { width: 4px; padding: 0; overflow: hidden; color: transparent; border-left-color: rgba(220,185,111,0.3); }
 .tv-word.now { color: var(--sand); }
-.tv-covers { position: relative; height: 20px; }
-.tv-cover { position: absolute; top: 0; height: 18px; line-height: 18px; font-size: 11px; padding: 0 6px; border-radius: 4px; background: rgba(159,224,173,0.2); color: #9fe0ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv-covers { position: relative; height: 22px; }
+.tv-cover { position: absolute; top: 0; height: 20px; line-height: 20px; font-size: 11px; padding: 0 10px; border-radius: 4px; background: rgba(159,224,173,0.2); color: #9fe0ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; user-select: none; box-sizing: border-box; display: flex; align-items: center; gap: 4px; }
+.tv-cover .lbl { overflow: hidden; text-overflow: ellipsis; }
+.tv-cover.set { border: 1px dashed rgba(159,224,173,0.7); }
+.tv-cover.moving { cursor: grabbing; background: rgba(159,224,173,0.35); }
+.tv-cover .h { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; background: rgba(159,224,173,0.35); }
+.tv-cover .h.l { left: 0; border-radius: 4px 0 0 4px; }
+.tv-cover .h.r { right: 0; border-radius: 0 4px 4px 0; }
+.tv-cover .h:hover { background: rgba(159,224,173,0.7); }
+.tv-cover .reset { margin-left: auto; padding: 0 4px; height: 16px; line-height: 16px; font-size: 11px; background: none; border: none; color: #9fe0ad; cursor: pointer; }
+.tv-span { position: absolute; top: 0; bottom: 0; background: rgba(159,224,173,0.12); border-left: 2px solid #9fe0ad; border-right: 2px solid #9fe0ad; pointer-events: none; }
 .plan-sketch { width: 140px; height: 140px; object-fit: contain; background: rgba(0,0,0,0.3); border-radius: 8px; }
 
 /* ── the sequence editor's tracks ── */
@@ -564,3 +572,8 @@ mark.pulled { background: rgba(220,185,111,0.3); color: var(--bone); border-radi
 .yt-title { font-size: 15px; line-height: 1.35; font-weight: 500; }
 .yt-row .yt-title { font-size: 14px; }
 .yt-sub { font-size: 12px; color: var(--yt-sub); margin-top: 2px; }
+
+/* A short's lines (desk-shorts.md § 6): click one to leave it out or put it back. */
+.short-line.can { cursor: pointer; border-radius: 3px; }
+.short-line.can:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+.short-line.off { opacity: 0.4; text-decoration: line-through; }

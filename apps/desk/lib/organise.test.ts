@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Word } from "@heroic/voiceover";
-import { matchScript } from "./match";
+import { KEEP_AFTER, KEEP_BEFORE, matchScript } from "./match";
 import { organiseCut, splitPoint } from "./organise";
 import { type Cut, type Script, emptyScript } from "./scripts";
 
@@ -34,9 +34,9 @@ describe("organise", () => {
     expect(clips[0]!.at).toBe(0);
     // The second clip starts where the first ends plus the gap.
     expect(clips[1]!.at).toBeCloseTo(clips[0]!.end - clips[0]!.start + 0.3, 2);
-    // Slices run from just before the beat's first word to the next beat's start; a gap too short for both margins is shared out 0.3 : 0.12.
-    expect(clips[0]!.start).toBeCloseTo(1 - 0.12, 2);
-    expect(clips[0]!.end).toBeCloseTo(1 + 19 * 0.3 - 0.05 + (0.05 * 0.3) / 0.42, 3);
+    // Slices run from just before the beat's first word to the next beat's start; a gap too short for both margins is shared out KEEP_AFTER : KEEP_BEFORE.
+    expect(clips[0]!.start).toBeCloseTo(1 - KEEP_BEFORE, 2);
+    expect(clips[0]!.end).toBeCloseTo(1 + 19 * 0.3 - 0.05 + (0.05 * KEEP_AFTER) / (KEEP_AFTER + KEEP_BEFORE), 3);
     expect(seq.markers?.length).toBe(3);
     const cards = seq.overlay!.cards;
     expect(cards.map((c) => c.kind)).toEqual(["text", "image"]);
@@ -80,19 +80,19 @@ describe("organise", () => {
     const words = said(`So to be fair, ${B1} Honestly 100%`, 1);
     const s = script([{ file: "voice/takes/t1.wav", seconds: 30, recordedAt: "", words, transcribed: true }]);
     const clip = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips[0]!;
-    expect(clip.start).toBeCloseTo(1 - 0.12, 2);
-    expect(clip.end).toBeCloseTo(words.at(-1)!.end + 0.3, 2);
+    expect(clip.start).toBeCloseTo(1 - KEEP_BEFORE, 2);
+    expect(clip.end).toBeCloseTo(words.at(-1)!.end + KEEP_AFTER, 2);
   });
 
   test("a pause the trim shortened stays short, and the beat carries on after it", () => {
     const words = [...said(B1.split(". ")[0]! + ".", 1), ...said(B1.split(". ")[1]!, 6)];
-    const s = script([{ file: "voice/takes/t1.wav", seconds: 12, recordedAt: "", words, transcribed: true, keep: [{ start: 0.8, end: 3.75 }, { start: 5.8, end: 11 }] }]);
+    const s = script([{ file: "voice/takes/t1.wav", seconds: 12, recordedAt: "", words, transcribed: true, keep: [{ start: 0.5, end: 3.75 }, { start: 5.8, end: 11 }] }]);
     const clips = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips;
     expect(clips.map((c) => [c.start, c.end])).toEqual([
-      [0.88, 3.75],
-      [5.8, r3(words.at(-1)!.end + 0.3)],
+      [r3(1 - KEEP_BEFORE), 3.75],
+      [5.8, r3(words.at(-1)!.end + KEEP_AFTER)],
     ]);
-    expect(clips[1]!.at).toBeCloseTo(3.75 - 0.88, 3);
+    expect(clips[1]!.at).toBeCloseTo(3.75 - (1 - KEEP_BEFORE), 3);
   });
 
   test("a short's shared beat is read by the long beat's take", () => {
@@ -148,5 +148,11 @@ describe("organise", () => {
     // Two chapters is under YouTube's three: no list.
     expect(youtubeChapters(chapters)).toBe("");
     expect(youtubeChapters([...chapters, { name: "The end", at: chapters[1]!.at + 60 }]).split("\n")[0]).toBe("0:00 The start");
+  });
+  test("a beat Tom dragged is sliced exactly where he put it", () => {
+    const words = said(`${B1} ${B2}`, 1);
+    const s = script([{ file: "voice/takes/t1.wav", seconds: 30, recordedAt: "", words, transcribed: true, spans: { b1: { start: 0.2, end: 4 } } }]);
+    const clips = organiseCut(s, long, covers(s), { id: "x", name: "x" }).seq.audio[0]!.clips;
+    expect(clips[0]).toMatchObject({ start: 0.2, end: 4 });
   });
 });

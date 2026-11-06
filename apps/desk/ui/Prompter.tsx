@@ -4,7 +4,7 @@ import { type GameApi, type Script, type WhisperStatus, fmtSeconds } from "./api
 import { go } from "./App";
 import { type Mic, type MicDevice, listMics, micPermission, micSupported, openMic, peaksOf } from "./mic";
 import { Wave, remember } from "./edit/widgets";
-import { type Cover, LONG_PAUSE, type Span, autoTrim, cutRegion, keptSeconds, matchScript, trimRegion } from "../lib/match";
+import { type Cover, KEEP_AFTER, KEEP_BEFORE, LONG_PAUSE, type Span, autoTrim, cutRegion, keptSeconds, matchScript, trimRegion } from "../lib/match";
 import { type Beat, type Cut, type ScriptTake, plannedBeats } from "../lib/scripts";
 
 /**
@@ -300,6 +300,16 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: M
     setOpen(file);
   };
   const setKeep = (take: ScriptTake, keep: Span[] | undefined) => onTakes(s.takes.map((t) => (t.file === take.file ? { ...t, keep: keep?.length ? keep : undefined } : t)));
+  /** Tom dragged a beat to somewhere in a take (undefined = back to where the matcher put it). */
+  const setSpan = (take: ScriptTake, beat: string, span: Span | undefined) =>
+    onTakes(
+      s.takes.map((t) => {
+        if (t.file !== take.file) return t;
+        const { [beat]: _was, ...rest } = t.spans ?? {};
+        const spans = span ? { ...rest, [beat]: span } : rest;
+        return { ...t, spans: Object.keys(spans).length ? spans : undefined };
+      }),
+    );
   /** Tom says which beats a take reads ("7", "7-9", "7, 9"; blank = let the matcher decide again). */
   const setAssign = (take: ScriptTake, text: string): string | undefined => {
     const ids: string[] = [];
@@ -478,7 +488,7 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: M
                   delete
                 </button>
               </div>
-              <div className="small muted words clamp3">{wordsOf(last)}</div>
+              <div className="small muted words">{wordsOf(last)}</div>
               {!(covers.get(last.file) ?? []).length && last.transcribed ? <div className="small">{assignBox(last)}</div> : null}
             </>
           ) : (
@@ -529,7 +539,7 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: M
                   <input type="checkbox" checked={autoOn} onChange={(e) => (setAutoOn(e.target.checked), remember("autotrim", e.target.checked ? "on" : "off"))} />
                   trim as they land
                 </label>
-                <label className="row muted" style={{ gap: 4 }} title={`Pauses longer than ${LONG_PAUSE}s between words are cut down to about 0.4s.`}>
+                <label className="row muted" style={{ gap: 4 }} title={`Pauses longer than ${LONG_PAUSE}s between words are cut down to about ${KEEP_AFTER + KEEP_BEFORE}s.`}>
                   <input type="checkbox" checked={pausesOn} onChange={(e) => (setPausesOn(e.target.checked), remember("autotrim-pauses", e.target.checked ? "on" : "off"))} />
                   shorten pauses
                 </label>
@@ -569,7 +579,7 @@ export const Prompter: React.FC<{ api: GameApi; s: Script; id: string; covers: M
 
       {openTake ? (
         <div className="take-sheet">
-          <TakeView take={openTake} peaks={peaks[openTake.file]} covers={covers.get(openTake.file) ?? []} beats={beats} audio={api.publicUrl(openTake.file)} onKeep={(k) => setKeep(openTake, k)} onClose={() => setOpen(null)} />
+          <TakeView take={openTake} peaks={peaks[openTake.file]} covers={covers.get(openTake.file) ?? []} beats={beats} audio={api.publicUrl(openTake.file)} onKeep={(k) => setKeep(openTake, k)} onSpan={(beat, span) => setSpan(openTake, beat, span)} onClose={() => setOpen(null)} />
         </div>
       ) : null}
     </div>
@@ -599,15 +609,33 @@ const KeepShade: React.FC<{ keep: Span[]; seconds: number }> = ({ keep, seconds 
  * the beats it covers under; the kept regions lit, the cuts shaded. Drag
  * across to select a stretch, then cut it out or keep only it; drag the
  * end handles to trim. The audio plays from a click. Nothing touches the
- * file.
+ * file. A beat under it can be dragged to move it, or by either end to
+ * start or end it somewhere else (organise slices exactly there); click
+ * one to hear just its stretch.
  */
-const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover[]; beats: { cut: Cut; beat: Beat }[]; audio: string; onKeep: (k: Span[] | undefined) => void; onClose: () => void }> = ({ take, peaks, covers, beats, audio, onKeep, onClose }) => {
+const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover[]; beats: { cut: Cut; beat: Beat }[]; audio: string; onKeep: (k: Span[] | undefined) => void; onSpan: (beat: string, span: Span | undefined) => void; onClose: () => void }> = ({ take, peaks, covers, beats, audio, onKeep, onSpan, onClose }) => {
   const box = useRef<HTMLDivElement>(null);
   const player = useRef<HTMLAudioElement>(null);
   const [sel, setSel] = useState<Span | null>(null);
   const [t, setT] = useState(0);
   const [width, setWidth] = useState(800);
   const drag = useRef<{ x0: number; moved: boolean } | null>(null);
+  // Dragging a beat: which, by what (its body moves it, an end moves that end), and where it is while the mouse is down.
+  const beatDrag = useRef<{ beat: string; by: "move" | "start" | "end"; x0: number; from: Span; moved: boolean } | null>(null);
+  const [moving, setMoving] = useState<Cover | null>(null);
+  const movingRef = useRef<Cover | null>(null);
+  const setMovingTo = (c: Cover | null) => {
+    movingRef.current = c;
+    setMoving(c);
+  };
+  const stopAt = useRef<number | null>(null);
+  const playSpan = (sp: Span) => {
+    const p = player.current;
+    if (!p) return;
+    p.currentTime = sp.start;
+    stopAt.current = sp.end;
+    void p.play();
+  };
   useEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -627,7 +655,24 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
     setSel({ start: at, end: at });
   };
   useEffect(() => {
+    const MIN = 0.3;
     const move = (e: MouseEvent) => {
+      const bd = beatDrag.current;
+      if (bd) {
+        if (!bd.moved && Math.abs(e.clientX - bd.x0) < 3) return;
+        bd.moved = true;
+        const dt = ((e.clientX - bd.x0) / (box.current?.clientWidth || 1)) * take.seconds;
+        const len = bd.from.end - bd.from.start;
+        let sp: Span;
+        if (bd.by === "move") {
+          const start = Math.max(0, Math.min(take.seconds - len, bd.from.start + dt));
+          sp = { start, end: start + len };
+        } else if (bd.by === "start") sp = { start: Math.max(0, Math.min(bd.from.end - MIN, bd.from.start + dt)), end: bd.from.end };
+        else sp = { start: bd.from.start, end: Math.min(take.seconds, Math.max(bd.from.start + MIN, bd.from.end + dt)) };
+        const c = covers.find((x) => x.beat === bd.beat);
+        if (c) setMovingTo({ ...c, ...sp });
+        return;
+      }
       const d = drag.current;
       if (!d) return;
       if (!d.moved && Math.abs(e.clientX - d.x0) < 3) return;
@@ -637,6 +682,15 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
       setSel({ start: Math.min(a, b), end: Math.max(a, b) });
     };
     const up = (e: MouseEvent) => {
+      const bd = beatDrag.current;
+      if (bd) {
+        beatDrag.current = null;
+        const m = movingRef.current;
+        setMovingTo(null);
+        if (bd.moved && m) onSpan(bd.beat, { start: Math.round(m.start * 1000) / 1000, end: Math.round(m.end * 1000) / 1000 });
+        else if (!bd.moved) playSpan(bd.from);
+        return;
+      }
       const d = drag.current;
       drag.current = null;
       if (!d) return;
@@ -647,6 +701,7 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
         const p = player.current;
         if (p) {
           p.currentTime = at;
+          stopAt.current = null;
           void p.play();
         }
       }
@@ -658,8 +713,15 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
       removeEventListener("mouseup", up);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [take.seconds]);
+  }, [take.seconds, covers, onSpan]);
   const x = (s: number) => (s / take.seconds) * 100;
+  const grabBeat = (c: Cover, by: "move" | "start" | "end") => (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    beatDrag.current = { beat: c.beat, by, x0: e.clientX, from: { start: c.start, end: c.end }, moved: false };
+  };
+  const shown = covers.map((c) => (moving?.beat === c.beat ? moving : c));
   const keep = take.keep?.length ? take.keep : [{ start: 0, end: take.seconds }];
   const words = take.words.filter((w) => !w.hidden);
   // Label the words there's room for; the rest are ticks.
@@ -674,12 +736,12 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
       right = px + w.text.length * 6.5 + 8;
     });
   }
-  const speech = words.length ? { start: Math.max(0, words[0]!.start - 0.15), end: Math.min(take.seconds, words[words.length - 1]!.end + 0.2) } : null;
+  const speech = words.length ? { start: Math.max(0, words[0]!.start - KEEP_BEFORE), end: Math.min(take.seconds, words[words.length - 1]!.end + KEEP_AFTER) } : null;
   const hasSel = sel && sel.end - sel.start > 0.05;
   return (
     <div className="take-view stack" style={{ gap: 8 }}>
       <div className="row between">
-        <strong className="small">Take {fmtSeconds(take.seconds)} · drag across the sound to select, click to play from there</strong>
+        <strong className="small">Take {fmtSeconds(take.seconds)} · drag across the sound to select, click to play from there · drag a beat (or its ends) to place it</strong>
         <button className="link small" onClick={onClose}>
           close (Esc)
         </button>
@@ -688,6 +750,7 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
         <Wave peaks={peaks} start={0} end={take.seconds} width={width} height={90} />
         <KeepShade keep={keep} seconds={take.seconds} />
         {hasSel ? <div className="tv-sel" style={{ left: `${x(sel.start)}%`, width: `${x(sel.end - sel.start)}%` }} /> : null}
+        {moving ? <div className="tv-span" style={{ left: `${x(moving.start)}%`, width: `${x(moving.end - moving.start)}%` }} /> : null}
         <div className="tv-head" style={{ left: `${x(t)}%` }} />
         <div className="tv-words">
           {words.map((w, i) => (
@@ -698,11 +761,24 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
         </div>
       </div>
       <div className="tv-covers">
-        {covers.map((c) => {
+        {shown.map((c) => {
           const n = beats.findIndex((b) => b.beat.id === c.beat) + 1;
           return (
-            <div key={c.beat} className="tv-cover" style={{ left: `${x(c.start)}%`, width: `${x(c.end - c.start)}%` }} title={`Beat ${n}, ${Math.round(c.score * 100)}% of its words heard`}>
-              beat {n}
+            <div
+              key={c.beat}
+              className={`tv-cover${c.set ? " set" : ""}${moving?.beat === c.beat ? " moving" : ""}`}
+              style={{ left: `${x(c.start)}%`, width: `${x(c.end - c.start)}%` }}
+              onMouseDown={grabBeat(c, "move")}
+              title={`Beat ${n}, ${Math.round(c.score * 100)}% of its words heard, ${fmtSeconds(c.start)}–${fmtSeconds(c.end)}${c.set ? " (placed by you)" : ""}. Drag to move it, drag an end to start or end it elsewhere, click to hear it.`}
+            >
+              <span className="h l" onMouseDown={grabBeat(c, "start")} />
+              <span className="lbl">beat {n}</span>
+              {c.set && !moving ? (
+                <button className="reset" onMouseDown={(e) => e.stopPropagation()} onClick={() => onSpan(c.beat, undefined)} title="Back to where the matcher put it">
+                  ↺
+                </button>
+              ) : null}
+              <span className="h r" onMouseDown={grabBeat(c, "end")} />
             </div>
           );
         })}
@@ -721,7 +797,20 @@ const TakeView: React.FC<{ take: ScriptTake; peaks?: Float32Array; covers: Cover
           Reset
         </button>
         <span className="grow" />
-        <audio ref={player} src={audio} controls style={{ height: 30 }} onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} />
+        <audio
+          ref={player}
+          src={audio}
+          controls
+          style={{ height: 30 }}
+          onTimeUpdate={(e) => {
+            const p = e.currentTarget;
+            setT(p.currentTime);
+            if (stopAt.current !== null && p.currentTime >= stopAt.current) {
+              stopAt.current = null;
+              p.pause();
+            }
+          }}
+        />
       </div>
     </div>
   );

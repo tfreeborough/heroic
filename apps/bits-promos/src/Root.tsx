@@ -13,6 +13,8 @@ import { BANNER_SIZE, ChannelBanner } from "./Banner";
 import { THUMB_FRAME, ThumbMock, thumbMockSchema } from "./experiments/thumbnail/ThumbMock";
 import { ThumbReal, thumbRealSchema } from "./experiments/thumbnail/ThumbReal";
 import { ATTENTION_CHECKPOINTS, AttentionTest, attentionSchema, attentionSeconds } from "./experiments/attention/AttentionTest";
+import { BEATS_LOOK } from "@heroic/ascii-build";
+import { LookLab, lookLabSchema } from "./experiments/look/LookLab";
 
 /**
  * Vertical 1080×1920 by default — the one format TikTok, Reels and Shorts all
@@ -100,13 +102,15 @@ export const Root: React.FC = () => (
       durationInFrames={FPS * 61}
       fps={FPS}
       {...formatSize("landscape")}
-      defaultProps={{ clip: "", title: "", durationSeconds: 60, startFrom: 0, palette: "matrix" as const, cols: 280, opening: "title" as const, ending: "card" as const, captions: "terminal" as const, format: "landscape" as const }}
+      defaultProps={{ clip: "", title: "", durationSeconds: 60, startFrom: 0, palette: "matrix" as const, cols: BEATS_LOOK.cols, opening: "title" as const, ending: "card" as const, captions: "terminal" as const, format: "landscape" as const }}
       calculateMetadata={({ props }) => ({
         durationInFrames: Math.round(beatsDurationSeconds(props) * FPS),
         ...formatSize(props.format),
       })}
     />
     {/* Experiments: one-off videos built to test the algorithm, not formats to reuse (docs/design/social-experiments.md). */}
+    {/* The look lab: one Beats picture, the glyph look's knobs as props (glow, punch, outline, columns, camera move). */}
+    <Composition id="LookLab" component={LookLab} schema={lookLabSchema} durationInFrames={FPS * 12} fps={FPS} width={1920} height={1080} defaultProps={{ src: "", seconds: 11 }} calculateMetadata={({ props }) => ({ durationInFrames: Math.round((props.seconds + 1) * FPS) })} />
     <Composition
       id="AttentionTest"
       component={AttentionTest}

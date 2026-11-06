@@ -143,3 +143,108 @@ describe("darkSide", () => {
     expect(freeWidth(half("right"), "right")).toBe(0);
   });
 });
+
+describe("punch and outline (BEATS_LOOK, 11-05)", () => {
+  /** A soft photo: a grey wash everywhere with a brighter disc in it. */
+  const softPhoto = (): Ink => {
+    const w = 80, h = 80, data = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) data[y * w + x] = Math.hypot(x - 40, y - 40) < 18 ? 0.9 : 0.35 + ((x * 7 + y * 3) % 5) * 0.02;
+    return { data, w, h };
+  };
+  const look = (extra: Partial<Look>): Look => ({ ...LOCKED_LOOK, cols: 40, edge: "hard", ...extra });
+  const build = (l: Look, ink: Ink = softPhoto()) => planBuild({ ink, look: l, box: { x: 0, y: 0, w: 400, h: 400 }, frame: { w: 400, h: 400 }, start: 0, end: 1, seed: 3, arrival: "pop", order: "random" });
+
+  test("punch drops a photo's grey wash and keeps the lit subject", async () => {
+    const { punchInk } = await import("./index");
+    const p = punchInk(softPhoto(), "strong");
+    expect(p.data[40 * 80 + 40]).toBe(1);
+    expect(p.data[5 * 80 + 5]).toBe(0);
+    expect(build(look({ punch: "strong" })).cells.length).toBeLessThan(build(look({})).cells.length);
+  });
+
+  test("outline puts edge characters round the subject and leaves its middle alone", () => {
+    const b = build(look({ punch: "strong", outline: "strong" }));
+    const edge = new Set(["-", "=", "|", "/", "\\"]);
+    const centre = b.cells.find((c) => c.gx === 20 && c.gy === Math.floor(b.rows / 2))!;
+    expect(edge.has(centre.ch)).toBe(false);
+    const lefts = b.cells.filter((c) => c.gy === Math.floor(b.rows / 2) && c.gx < 20).sort((a, z) => a.gx - z.gx);
+    expect(lefts[0]!.ch).toBe("|");
+    expect(b.cells.some((c) => edge.has(c.ch))).toBe(true);
+  });
+
+  test("off by default: the old look is untouched", () => {
+    const a = build(look({})), z = build({ ...LOCKED_LOOK, cols: 40, edge: "hard" });
+    expect(a.cells.map((c) => c.ch).join("")).toBe(z.cells.map((c) => c.ch).join(""));
+  });
+});
+
+describe("camera moves (11-05)", () => {
+  const lit: Ink = (() => { const w = 40, h = 30, data = new Float32Array(w * h); for (let y = 5; y < 15; y++) for (let x = 25; x < 35; x++) data[y * w + x] = 1; return { data, w, h }; })();
+  test("push in 10%, pull back and pan 20% (Tom's sizes)", async () => {
+    const { cameraMove } = await import("./remotion");
+    expect(cameraMove(lit, 1, 0.1, ["push"])!.to.s).toBeCloseTo(1.1);
+    expect(cameraMove(lit, 1, 0.1, ["pull"])!.from.s).toBeCloseTo(1.2);
+    expect(cameraMove(lit, 1, 0.1, ["pan"])!.from.s).toBeCloseTo(1.2);
+    // The pan slides two thirds as far as the pull's scale would allow (11-06).
+    const pan = cameraMove(lit, 1, 0.1, ["pan"])!;
+    expect(Math.abs(pan.to.x - pan.from.x)).toBeCloseTo(0.1 * 0.9 * (2 / 3), 5);
+  });
+  test("a push heads for the light, and nothing moves at 0", async () => {
+    const { cameraMove } = await import("./remotion");
+    const m = cameraMove(lit, 1, 0.1, ["push"])!;
+    expect(m.fx).toBeGreaterThan(0.6);
+    expect(m.fy).toBeLessThan(0.5);
+    expect(cameraMove(lit, 1, 0)).toBeNull();
+  });
+  test("the default mix is mostly push in, some pull back and pan, nothing else", async () => {
+    const { cameraMove } = await import("./remotion");
+    const n: Record<string, number> = {};
+    for (let s = 1; s <= 1000; s++) { const k = cameraMove(lit, s, 0.1)!.kind; n[k] = (n[k] ?? 0) + 1; }
+    expect(Object.keys(n).sort()).toEqual(["pan", "pull", "push"]);
+    expect(n.push!).toBeGreaterThan(450);
+  });
+  test("with a depth map the mix is push, pull and pan (the arc only by name); without one the depth moves drop out", async () => {
+    const { cameraMove } = await import("./remotion");
+    const kinds = new Set<string>();
+    for (let s = 1; s <= 400; s++) kinds.add(cameraMove(lit, s, 0.1, undefined, true)!.kind);
+    expect([...kinds].sort()).toEqual(["pan", "pull", "push"]);
+    expect(cameraMove(lit, 5, 0.1, ["orbit"], true)!.kind).toBe("orbit");
+    for (let s = 1; s <= 200; s++) expect(["orbit", "warp", "layers"]).not.toContain(cameraMove(lit, s, 0.1, ["orbit", "push"], false)!.kind);
+  });
+  test("a smooth-tone build shades by unstepped brightness; a plain one doesn't carry it", () => {
+    const smoothB = plan(3, { smoothTone: true }), plain = plan(3);
+    expect(smoothB.cells.length).toBe(plain.cells.length);
+    expect(smoothB.cells.every((c) => c.tone !== undefined && c.tone > 0)).toBe(true);
+    expect(plain.cells.every((c) => c.tone === undefined)).toBe(true);
+  });
+  test("a near thing moving across the wall leaves the wall behind it, not a ghost of itself", async () => {
+    const { splatThrough } = await import("./remotion");
+    const w = 40, h = 6;
+    const ink = { w, h, data: new Float32Array(w * h).fill(0.2) }, depth = { w, h, data: new Float32Array(w * h).fill(0.2) };
+    for (let y = 0; y < h; y++) for (let x = 10; x < 16; x++) { ink.data[y * w + x] = 1; depth.data[y * w + x] = 0.9; }
+    const out = splatThrough(ink, depth, (d) => ({ s: 1, x: d * 10, y: 0 }));
+    // The square went 9 right, the wall 2: where the square was is wall again, and the square is whole where it went.
+    for (const x of [12, 14, 17]) expect(out.data[3 * w + x]!).toBeCloseTo(0.2, 2);
+    for (const x of [20, 22, 23]) expect(out.data[3 * w + x]!).toBeCloseTo(1, 1);
+  });
+  test("crisp depth snaps a blurred step to its two sides and leaves a gentle slope alone", async () => {
+    const { crispDepth } = await import("./remotion");
+    const w = 800, h = 4;
+    const step = { w, h, data: new Float32Array(w * h) }, slope = { w, h, data: new Float32Array(w * h) };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { step.data[y * w + x] = clamp01((x - 396) / 8) * 0.6 + 0.2; slope.data[y * w + x] = x / w; }
+    const a = crispDepth(step), b = crispDepth(slope);
+    for (let x = 390; x < 406; x++) expect([0.2, 0.8].some((v) => Math.abs(a.data[x]! - v) < 1e-6)).toBe(true);
+    expect(b.data[400]!).toBeCloseTo(0.5, 5);
+  });
+  test("with a depth map push, pull and pan go through the scene; without one, or at parallax 0, they stay flat", async () => {
+    const { cameraMove, DEPTH_PARALLAX } = await import("./remotion");
+    for (const k of ["push", "pull", "pan"] as const) {
+      expect(cameraMove(lit, 3, 0.1, [k], true)!.deep).toBe(DEPTH_PARALLAX);
+      expect(cameraMove(lit, 3, 0.1, [k], false)!.deep).toBeUndefined();
+      expect(cameraMove(lit, 3, 0.1, [k], true, 0)!.deep).toBeUndefined();
+    }
+    expect(cameraMove(lit, 3, 0.1, ["orbit"], true)!.deep).toBeUndefined();
+  });
+});
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));

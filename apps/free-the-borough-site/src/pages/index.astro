@@ -2,13 +2,11 @@
 import Base from "../layouts/Base.astro";
 import YouTube from "../components/YouTube.astro";
 import { appStoreRating } from "../lib/appStore";
+import { SITE, ORG, DISCORD, REDDIT } from "../lib/studio";
 
-const SITE = "https://free-the-borough.com";
 const APP_STORE = "https://apple.co/4gY0KDK";
 const APP_STORE_ID = "6793047587";
 const PLAY = "https://play.google.com/store/apps/details?id=com.heroic.blood_in_the_sand";
-const DISCORD = "https://discord.gg/8FHgBmaSnT";
-const REDDIT = "https://www.reddit.com/r/FreeTheBoroughGames/";
 
 const description =
   "Blood in the Sand is a short, bloody multiplayer arena game for iPhone and Android from Free the Borough. You don't aim, you time it.";
@@ -20,15 +18,7 @@ const screenshots = ["01-dies", "02-blood", "03-dodge", "04-mates", "05-standing
 // VideoGame on its own gets none, so the game is both. The rating is only ever the
 // App Store's real one, and goes in once there is one.
 const jsonLd = [
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "@id": `${SITE}/#org`,
-    name: "Free the Borough",
-    url: `${SITE}/`,
-    logo: `${SITE}/img/bits/icon.png`,
-    sameAs: [DISCORD, REDDIT],
-  },
+  { "@context": "https://schema.org", ...ORG },
   {
     "@context": "https://schema.org",
     "@type": ["MobileApplication", "VideoGame"],

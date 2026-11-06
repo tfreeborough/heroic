@@ -1,6 +1,7 @@
 ---
 title: "Why most mobile games fail, from an indie developer"
 description: "Approvals, discovery, ad budgets, touch controls and who mobile players really are: the five fronts a small mobile developer fights all at once."
+summary: "Most indie mobile games fail because a small developer has to fight five battles at once with little to no budget: app store approvals, getting found, competing with huge studios' ad spend, designing around a touch screen, and reaching players who mostly want casual games. Apple rejected nearly one in four submissions in its latest transparency report, and around 10,000 views of my Blood in the Sand clips got me exactly one download."
 date: 2026-10-18
 youtube: "C2pBsQMM6ds"
 cover: ./cover.jpg

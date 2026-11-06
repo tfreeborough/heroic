@@ -24,8 +24,8 @@
  * frame 0's exact state, and the score is a loop of the same length. No
  * title, chapters or end card.
  */
-import { CHAPTER_CARD, COLD_OPEN, END_CARD, LOCKED_LOOK, LOOP_TAIL, PALETTES } from "@heroic/ascii-build";
-import { BUILD_TAIL, BuildLayer, ChapterCard, EndCard, TerminalCaptions, TextBuild } from "@heroic/ascii-build/remotion";
+import { BEATS_GLOW, BEATS_LOOK, BEATS_MOTION, CHAPTER_CARD, COLD_OPEN, END_CARD, LOOP_TAIL, PALETTES } from "@heroic/ascii-build";
+import { BUILD_TAIL, BuildLayer, ChapterCard, EndCard, MOVE_KINDS, TerminalCaptions, TextBuild } from "@heroic/ascii-build/remotion";
 import { type Playable, layersAt, placedWords } from "@heroic/voiceover";
 import { VoiceTrack } from "@heroic/voiceover/remotion";
 import { useMemo } from "react";
@@ -47,7 +47,12 @@ export const beatsSchema = z.object({
   durationSeconds: z.number().min(1).describe("Seconds of the edit to play. In the Desk, leave empty for the whole edit"),
   startFrom: z.number().min(0).optional().describe("Seconds into the edit to start from"),
   palette: z.enum(["sand", "matrix"]).optional().describe("The glyphs' colours: matrix (green, the default) or sand (bone on near-black, the brand)"),
-  cols: z.number().min(60).max(400).optional().describe("Glyph columns across a picture: more is finer detail, fewer is chunkier (default 280)"),
+  cols: z.number().min(60).max(400).optional().describe("Glyph columns across a picture: more is finer detail, fewer is chunkier (default 360, BEATS_LOOK)"),
+  glow: z.number().min(0).max(0.5).optional().describe("The picture glowing faintly under its glyphs, 0 to 0.5 (default 0.22)"),
+  punch: z.enum(["off", "on", "strong"]).optional().describe("Contrast set from each picture's own range, so a photo's greys split into lit subject and empty dark (default off)"),
+  outline: z.enum(["off", "on", "strong"]).optional().describe("Characters on a clear edge follow it (- | / \\), like hand-made ASCII art (default off)"),
+  motion: z.number().min(0).max(0.3).optional().describe("A slow camera move on each picture: push in to the lit subject, pull back or pan. A push in zooms this much; pull back, pan, tilt and drift go twice as far. 0 to 0.3 (default 0.125; 0 holds still)"),
+  moves: z.array(z.enum(MOVE_KINDS)).optional().describe("The kinds of camera move to pick from, one per picture by its seed. Empty: push in, pull back and pan"),
   opening: z.enum(["title", "none"]).optional().describe("The title cold open before the first beat, or straight in"),
   ending: z.enum(["card", "none", "loop"]).optional().describe("The end card (the reel, the mosaic, the sign-off, a hold for YouTube's end screen), end on the last word, or loop (a short: no end card, the hook drops back in so the replay reads as one)"),
   hook: z.string().optional().describe("A short's hook: the first thing said, over the picture from frame 0 while it's said. Leave it blank on the long video"),
@@ -77,7 +82,7 @@ const CAPTION_BAND = 0.14;
 
 
 export const Beats: React.FC<BeatsProps> = (p) => {
-  const { clip, title, durationSeconds, startFrom = 0, palette = "matrix", cols = 280, music, musicFrom, musicVolume = 0.1, voice, voiceData, captions = "terminal", voiceVolume = 0.7, duck = 1, sequenceData, hook, hookFor = LOOP.hookFor } = p;
+  const { clip, title, durationSeconds, startFrom = 0, palette = "matrix", cols = BEATS_LOOK.cols, music, musicFrom, musicVolume = 0.1, voice, voiceData, captions = "terminal", voiceVolume = 0.7, duck = 1, sequenceData, hook, hookFor = LOOP.hookFor } = p;
   const loop = p.ending === "loop";
   const { channel = "Free the Borough Games", signoff = "Thanks for watching, and I'll see you in the next one." } = p;
   const { fps } = useVideoConfig();
@@ -91,7 +96,11 @@ export const Beats: React.FC<BeatsProps> = (p) => {
   const offset = Math.round(startFrom * fps);
   const spoken = useVoice({ voice, voiceData, duck }, track, startFrom, bodyEnd, fps);
   const bed = useBed(track, { music, musicFrom, musicVolume });
-  const look = useMemo(() => ({ ...LOCKED_LOOK, cols }), [cols]);
+  const look = useMemo(
+    () => ({ ...BEATS_LOOK, cols, punch: p.punch === "off" ? undefined : (p.punch ?? BEATS_LOOK.punch), outline: p.outline === "off" ? undefined : (p.outline ?? BEATS_LOOK.outline) }),
+    [cols, p.punch, p.outline],
+  );
+  const glow = p.glow ?? BEATS_GLOW;
   const words = useMemo(() => (spoken.spoken ? placedWords(spoken.spoken, spoken.pieces) : []), [spoken.spoken, spoken.pieces]);
 
   // The pictures, each with its pulled words timed to when they're said (seconds from the card's start).
@@ -154,7 +163,7 @@ export const Beats: React.FC<BeatsProps> = (p) => {
       <Sequence from={openFrames} durationInFrames={bodyEnd + Math.round((loop ? LOOP_TAIL : BUILD_TAIL) * fps)} layout="none">
         {/* Footage dropped in by hand plays over the pictures; the pictures don't draw underneath it. */}
         {hasFootage && src ? <Footage seq={track!} src={src} startFrom={offset} /> : null}
-        <BuildLayer cards={builds} offset={offset} palette={pal} family={FAMILY} look={look} box={layout.pic} hiddenAt={hiddenAt} />
+        <BuildLayer cards={builds} offset={offset} palette={pal} family={FAMILY} look={look} box={layout.pic} glow={glow} motion={p.motion ?? BEATS_MOTION} moves={p.moves?.length ? p.moves : undefined} hiddenAt={hiddenAt} />
         {chapters.map((c, i) => {
           const from = Math.round(c.at * fps) - offset;
           if (from + CHAPTER_CARD * fps <= 0 || from >= bodyEnd) return null;
@@ -176,7 +185,7 @@ export const Beats: React.FC<BeatsProps> = (p) => {
 
       {p.ending !== "none" && !loop ? (
         <Sequence from={openFrames + bodyEnd} layout="none">
-          <EndCard pictures={pictures} channel={channel} line={signoff} palette={pal} family={FAMILY} nameFont={nameFont} look={look} />
+          <EndCard pictures={pictures} channel={channel} line={signoff} palette={pal} family={FAMILY} nameFont={nameFont} look={look} glow={glow} />
         </Sequence>
       ) : null}
 

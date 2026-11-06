@@ -161,7 +161,7 @@ export const gameApi = (game: string) => {
     /** The Scripts tab. `claude` = the server has a key and the game a script voice, so the rewrite steps are on. */
     scripts: () => fetch(`${base}/scripts`).then((r) => j<{ list: ScriptSummary[]; claude: boolean; images: boolean; palette: "matrix" | "sand" }>(r)),
     /** `pending`: beats whose sketch is being made right now. */
-    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; score: ScoreState | null; researching: ResearchState | null; planning: PlanState | null; finding: ShortsState | null; rendering: Record<string, ShortRender> }>(r)),
+    script: (id: string) => fetch(`${base}/scripts/${enc(id)}`).then((r) => j<Script & { pending: string[]; castMaking: string[]; score: ScoreState | null; researching: ResearchState | null; planning: PlanState | null; finding: ShortsState | null; rendering: Record<string, ShortRender> }>(r)),
     /** The Google Docs in the game's scripts folder (docs/design/desk-docs.md). */
     docs: (fresh = false) => fetch(`${base}/docs${fresh ? "?fresh=1" : ""}`).then((r) => j<{ docs: DocEntry[] }>(r)),
     /** Pull a Doc into a script (`doc` links it; without, the latest of the one it's linked to). */
@@ -187,10 +187,14 @@ export const gameApi = (game: string) => {
     removeScriptTake: (id: string, file: string) => fetch(`${base}/scripts/${enc(id)}/takes/${enc(file)}`, { method: "DELETE" }).then((r) => j<Script>(r)),
     organise: (id: string) => post(`${base}/scripts/${enc(id)}/organise`).then((r) => j<{ script: Script; made: { cut: string; title: string; id: string; missing: string[]; conflicts: { beat: string; takes: string[] }[]; youtube: string }[] }>(r)),
     /** The story (docs/design/desk-ascii-scripts.md § Pictures): world, cast, chapters and a scene line a beat, in one call in the background; the script's `planning` says how it's going. */
-    planStory: (id: string) => post(`${base}/scripts/${enc(id)}/story`).then((r) => j<PlanState>(r)),
+    /** `fresh`: keep only the world line; a new look and cast in the script's picture style. */
+    planStory: (id: string, fresh = false, style?: string) => post(`${base}/scripts/${enc(id)}/story`, { fresh, ...(style ? { style } : {}) }).then((r) => j<PlanState>(r)),
     /** The prompts from the story; `all` = every beat again. A batch of beats a call in the background, each landing on the beats as it's done. */
     writePrompts: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/prompts${all ? "?all=1" : ""}`).then((r) => j<PlanState>(r)),
     /** Pictures made in the background: every one not yet made, or another try at exactly `only`. */
+    /** Cast reference pictures (film style) in the background: every cast member missing one, or a fresh try at `only`. */
+    makeCastRefs: (id: string, only?: string[]) => post(`${base}/scripts/${enc(id)}/cast-refs`, { only }).then((r) => j<{ started: number }>(r)),
+    chooseCastRef: (id: string, name: string, src: string) => post(`${base}/scripts/${enc(id)}/cast-refs/choose`, { name, src }).then((r) => j<Script>(r)),
     makePictures: (id: string, only?: { beat: string; k: number }[]) => post(`${base}/scripts/${enc(id)}/pictures`, { only }).then((r) => j<{ started: number }>(r)),
     /** One picture's prompt written again by Claude (to an instruction, or blank for just a better idea). */
     newPicturePrompt: (id: string, beat: string, k: number, instruction: string) => post(`${base}/scripts/${enc(id)}/prompt`, { beat, k, instruction }).then((r) => j<Script>(r)),
@@ -229,6 +233,8 @@ export const gameApi = (game: string) => {
     redoCut: (id: string, cut: string, instruction: string) => post(`${base}/scripts/${enc(id)}/redo`, { cut, instruction }).then((r) => j<Script>(r)),
     /** The shorts inside the long video (docs/design/desk-shorts.md), found in the background; `more` = runs not offered before. The script's `finding` says how it's going. */
     findShorts: (id: string, more = false) => post(`${base}/scripts/${enc(id)}/shorts/find${more ? "?more=1" : ""}`).then((r) => j<ShortsState>(r)),
+    /** One short reshaped (desk-shorts.md § 6), to Tom's note or none; the script's `finding` (with `short`) says how it's going. */
+    reshapeShort: (id: string, short: string, note = "") => post(`${base}/scripts/${enc(id)}/shorts/${enc(short)}/reshape`, { note }).then((r) => j<ShortsState>(r)),
     renderShorts: (id: string, shorts: string[]) => post(`${base}/scripts/${enc(id)}/shorts/render`, { shorts }).then((r) => j<RenderShortsResult>(r)),
     /** Hook drafts for the kept shorts without any; `all` = every kept short again. */
     draftHooks: (id: string, all = false) => post(`${base}/scripts/${enc(id)}/hooks${all ? "?all=1" : ""}`).then((r) => j<Script>(r)),

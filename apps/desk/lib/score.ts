@@ -24,6 +24,8 @@ import { readSequence, writeSequence } from "./sequences";
 const DIR = "generated";
 /** The bed's level under the voice: 10% (Tom, 10-11). Beats doesn't duck it by default, it's quiet enough. */
 export const SCORE_LEVEL = 0.1;
+/** A short's bed sits a touch lower: on a phone speaker the talking has to win (Tom, 11-06). */
+export const SHORT_SCORE_LEVEL = 0.08;
 /** Scores kept per game (newest first); every change to an edit's timing makes a new one. */
 const KEEP = 30;
 const SCRIPT = join(import.meta.dir, "../../../packages/music/scripts/journey.ts");
@@ -139,7 +141,7 @@ export const scoreState = (g: GameConfig, seqId: string): ScoreState | undefined
  * promise is for whoever wants to wait), then set as the edit's music bed
  * unless Tom has put a song of his own on it.
  */
-export const makeScore = (g: GameConfig, s: Pick<Script, "long">, seqId: string, seed: number, opts: { loop?: boolean } = {}): Promise<ScoreState> => {
+export const makeScore = (g: GameConfig, s: Pick<Script, "long">, seqId: string, seed: number, opts: { loop?: boolean; level?: number } = {}): Promise<ScoreState> => {
   const seq = readSequence(g, seqId);
   if (!seq) return Promise.resolve({ seq: seqId, file: "", seed, state: "failed", error: "that edit isn't there any more" });
   const plan = planFor(seq, s, opts);
@@ -149,7 +151,7 @@ export const makeScore = (g: GameConfig, s: Pick<Script, "long">, seqId: string,
   const place = (st: ScoreState): ScoreState => {
     const now = readSequence(g, seqId);
     // Tom's own song stays: only an empty bed or one of ours is replaced.
-    if (now && st.state === "ready" && (!now.music?.song || now.music.song.startsWith(`${DIR}/score-`)) && now.music?.song !== file) writeSequence(g, { ...now, music: { song: file, from: 0, level: now.music?.level ?? SCORE_LEVEL } });
+    if (now && st.state === "ready" && (!now.music?.song || now.music.song.startsWith(`${DIR}/score-`)) && now.music?.song !== file) writeSequence(g, { ...now, music: { song: file, from: 0, level: now.music?.level ?? opts.level ?? SCORE_LEVEL } });
     states.set(seqId, st);
     return st;
   };

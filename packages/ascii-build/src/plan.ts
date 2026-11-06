@@ -3,8 +3,8 @@
  * lands, and (for a loop) when it leaves again. Pure data from a seed, so
  * any frame can be drawn on its own and a render is repeatable.
  */
-import { type Ink, sampleGrid } from "./ink";
-import { type Look, mulberry } from "./look";
+import { type Ink, punchInk, sampleGrid } from "./ink";
+import { type Look, type Strength, mulberry } from "./look";
 
 /** How a glyph gets to its cell. Each has the fill order it looks best with. */
 export const ARRIVALS = {
@@ -61,6 +61,8 @@ export type Cell = {
   /** When it drops away in the exit (Infinity without one). */
   leave: number;
   seed: number;
+  /** Brightness before stepping to the look's levels (smoothTone builds only): drawn by this, so a moving picture's glyphs dim and brighten smoothly instead of jumping a level. */
+  tone?: number;
 };
 
 export type Build = {
@@ -101,20 +103,66 @@ export type PlanOptions = {
   /** A fast start: `share` of the glyphs set off in the first `seconds`, then
    * the rest at the steady pace (a hook for the first second of a feed). */
   burst?: { share: number; seconds: number };
+  /** Shade each glyph by its unstepped brightness (the glyph cameras, 11-06): a cell hovering at a level's edge keeps its brightness and only its character flips, instead of blinking. */
+  smoothTone?: boolean;
 };
 
 /** How long a fallen glyph takes to fade out of the exit. */
 export const LEAVE_FALL = 0.9;
 
+/**
+ * Outline glyphs: a cell on a clear edge takes the character that runs along
+ * it (- | / \, = for a bright horizontal), like hand-made ASCII art. The
+ * edge's direction is the structure tensor of the ink over the cell
+ * (sign-free, so lit-to-dark and dark-to-lit agree); only the strongest
+ * quarter of cells (45% when strong) with a single clear direction change.
+ */
+const OUTLINE_SHARE: Record<Strength, number> = { on: 0.25, strong: 0.45 };
+const outlineChar = (gx: number, gy: number, cols: number, rows: number, v: number, ink: Ink): { strength: number; ch: string } | null => {
+  const { w, h, data } = ink;
+  const at = (x: number, y: number) => data[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))]!;
+  const cw = w / cols, chh = h / rows;
+  const x0 = Math.floor(gx * cw), x1 = Math.max(x0 + 1, Math.floor((gx + 1) * cw));
+  const y0 = Math.floor(gy * chh), y1 = Math.max(y0 + 1, Math.floor((gy + 1) * chh));
+  let sxx = 0, syy = 0, sxy = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const dx = at(x + 1, y) - at(x - 1, y), dy = at(x, y + 1) - at(x, y - 1);
+    sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+  }
+  const n = (x1 - x0) * (y1 - y0);
+  sxx /= n; syy /= n; sxy /= n;
+  const tr = sxx + syy;
+  if (tr < 1e-9) return null;
+  const det = Math.sqrt((sxx - syy) ** 2 + 4 * sxy * sxy);
+  const l1 = (tr + det) / 2, l2 = (tr - det) / 2;
+  if ((l1 - l2) / tr < 0.45) return null;
+  // The edge runs at right angles to the gradient; y points down the screen.
+  const a = ((((0.5 * Math.atan2(2 * sxy, sxx - syy) + Math.PI / 2) * 180) / Math.PI) % 180 + 180) % 180;
+  const ch = a < 22.5 || a >= 157.5 ? (v > 0.6 ? "=" : "-") : a < 67.5 ? "\\" : a < 112.5 ? "|" : "/";
+  return { strength: Math.sqrt(l1), ch };
+};
+
+const outlineCells = (cells: Cell[], ink: Ink, cols: number, rows: number, strength: Strength) => {
+  const found = cells.map((c) => outlineChar(c.gx, c.gy, cols, rows, c.v, ink));
+  const all = cells.map((_, i) => found[i]?.strength ?? 0).sort((a, b) => a - b);
+  const cut = Math.max(0.02, all[Math.floor(all.length * (1 - OUTLINE_SHARE[strength]))] ?? Infinity);
+  cells.forEach((c, i) => {
+    const f = found[i];
+    if (f && f.strength >= cut) c.ch = f.ch;
+  });
+};
+
 export const planBuild = (o: PlanOptions): Build => {
-  const { ink, look, box, frame } = o;
+  const { look, box, frame } = o;
+  const ink = look.punch ? punchInk(o.ink, look.punch) : o.ink;
   const aspect = ink.w / ink.h;
   const pw = Math.min(box.w, box.h * aspect), ph = pw / aspect;
   const pic = { x: box.x + (box.w - pw) / 2, y: box.y + (box.h - ph) / 2, w: pw, h: ph };
   const cols = look.cols;
   const cw = pic.w / cols, ch = cw / 0.6;
   const rows = Math.floor(pic.h / ch);
-  const grid = sampleGrid(ink, cols, rows, look);
+  const tone = o.smoothTone ? new Float32Array(cols * rows) : undefined;
+  const grid = sampleGrid(ink, cols, rows, look, tone);
   const rnd = mulberry(o.seed);
   const cx = cols / 2, cy = rows / 2, rMax = Math.hypot(cx, cy * 1.66);
 
@@ -135,8 +183,9 @@ export const planBuild = (o: PlanOptions): Build => {
       detail: v + j * 0.35,
     }[o.order];
     const x = pic.x + gx * cw, y = pic.y + gy * ch;
-    cells.push({ gx, gy, v, ch: RAMP[Math.max(1, Math.round(v * (RAMP.length - 1)))]!, x, y, x0: x, y0: y, release: 0, land: 0, leave: Infinity, seed: 0, key });
+    cells.push({ gx, gy, v, ch: RAMP[Math.max(1, Math.round(v * (RAMP.length - 1)))]!, x, y, x0: x, y0: y, release: 0, land: 0, leave: Infinity, seed: 0, key, ...(tone ? { tone: tone[gy * cols + gx]! } : {}) });
   }
+  if (look.outline) outlineCells(cells, ink, cols, rows, look.outline);
   cells.sort((a, b) => a.key - b.key);
 
   const span = (o.end - o.start) * 0.97;

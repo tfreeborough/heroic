@@ -15,7 +15,7 @@ export default defineConfig({
   build: { format: "directory" },
   integrations: [
     sitemap({
-      filter: (page) => !page.endsWith("/404/") && !page.endsWith("/sitemap-video.xml") && (hasLog || !page.endsWith("/log/")),
+      filter: (page) => !page.endsWith("/404/") && !page.endsWith("/sitemap-video.xml") && !page.endsWith("/llms.txt") && (hasLog || !page.endsWith("/log/")),
       // The video sitemap (src/pages/sitemap-video.xml.ts) sits beside the page one in the index.
       customSitemaps: hasLog ? ["https://free-the-borough.com/sitemap-video.xml"] : [],
     }),

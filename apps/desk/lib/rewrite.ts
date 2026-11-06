@@ -13,7 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { type Beat, type BeatMood, type Cut, SCORE_MOODS, SHORT_MAX, SHORT_MIN, type Script, newId, picturesWanted, spokenSeconds, tokens, type ShortPost } from "./scripts";
+import { type Beat, type BeatMood, type Cut, type PictureStyle, SCORE_MOODS, SHORT_MAX, SHORT_MIN, SHORT_PIECES, type Script, type SentenceRef, newId, picturesWanted, piecesOf, refsLabel, refsOfPieces, sentencesOf, spokenSeconds, tokens, type ShortPost } from "./scripts";
 
 export const hasClaude = (): boolean => Boolean(process.env.ANTHROPIC_API_KEY);
 
@@ -25,7 +25,7 @@ export type ScriptVoice = {
   rules: string;
   /** Lines actually written in the voice, if the game has none of the author's own scripts yet. Never invented ones. */
   examples?: string[];
-  /** The picture style, added to every picture prompt (default: the chiaroscuro film still, cards.ts). */
+  /** The picture style, added to every picture prompt (default: the script's own, cards.ts pictureStyleText). */
   picture?: string;
 };
 
@@ -251,27 +251,33 @@ export const anotherShort = async (v: ScriptVoice, samples: string[], source: st
   return { id: newId(), kind: "short", title: clean(out.title), hook: clean(out.hook), why: clean(out.why), beats: toShortBeats(long.beats, out.beats) };
 };
 
-// ── finding the shorts in the long video (docs/design/desk-shorts.md § 1) ──
+// ── finding the shorts in the long video (docs/design/desk-shorts.md § 1, § 6) ──
 //
-// Nothing is written here: a short is a run of the long cut's beats as
-// recorded, so the calls only pick runs and say why. Two calls: a finder
+// Nothing is written here: a short is sentences of the long cut as
+// recorded, so the calls only pick pieces and say why. Two calls: a finder
 // that's generous, and a judge that isn't (a finder approves its own
-// picks). The hooks come later (§ 2), with their own voice handling.
+// picks). Reshape is the finder's rules on one short, judged the same way.
+// The hooks come later (§ 2), with their own voice handling.
 
+const PieceOut = z.object({
+  from: z.string().describe("The first sentence of the piece, as its number: '12.3'."),
+  to: z.string().describe("The last sentence of the piece, as its number: '14.2' (the same as from for one sentence). Every sentence between them in the long cut is in the piece."),
+});
 const FoundShortOut = z.object({
-  beats: z.array(z.number()).min(1).describe("The long beats in the short, by number, in the order they're said: one run of consecutive beats, or two runs with one jump between them."),
-  join: z.string().nullable().describe("With two runs: why the jump reads as if it were written that way (what the last beat before it sets up, what the first after it answers). null for one run."),
-  carry: z.string().nullable().describe("When the short starts one beat after its natural opener because that opener leans on the long video: what the hook has to say for the first beat to land, as content in one plain sentence (the claim or question the dropped beat made), not a hook draft. null when the first beat stands with no help."),
+  pieces: z.array(PieceOut).min(1).describe(`The short, in the order it's said: up to ${SHORT_PIECES} pieces, each a run of consecutive sentences of the long cut (a run may cross from one beat into the next).`),
+  join: z.string().nullable().describe("With more than one piece: why each seam sounds like one piece of speech said in one go, and why the author still means the same thing at each point. null for one piece."),
+  carry: z.string().nullable().describe("When the short starts after its natural opener because that opener leans on the long video: what the hook has to say for the first sentence to land, as content in one plain sentence (the claim or question the dropped line made), not a hook draft. null when the first sentence stands with no help."),
   title: z.string().describe("A working title for the short, under 60 characters, plain, no ALL CAPS, no hashtags."),
   why: z.string().describe("One plain sentence: what makes this stand on its own, and (over a minute) what keeps someone watching to the end."),
 });
-const FindShortsOut = z.object({ shorts: z.array(FoundShortOut).describe("Every run worth judging, best first.") });
+const FindShortsOut = z.object({ shorts: z.array(FoundShortOut).describe("Every short worth judging, best first.") });
 
 const FIND_RULES = [
-  `You find the SHORTS inside a long video one person made about making their game: short vertical videos for TikTok, YouTube Shorts, Reels and X, cut straight out of the long recording. Nothing is rewritten and nothing is re-recorded. A short is made of beats of the long cut said exactly as they are: one run of consecutive beats, or two runs with a single jump, ${SHORT_MIN} to ${SHORT_MAX} seconds spoken by the timings given. Each short will open with a hook line of a few seconds, recorded separately later. The point of a short is that someone who has never heard of this person watches to the end and goes to the profile to see who they are.`,
-  "A run is worth offering when: it STANDS ALONE (a viewer who hasn't heard the rest follows every sentence, the first included: a sentence that gestures at something outside the run, a this, that or it, a 'whenever this comes up', sounds like the middle of a conversation even with a hook in front of it, so it can't open a short and can't be in one); it has a PAYOFF (ends on a point, a reveal or a punchline, never mid-argument); it has THE PERSON IN IT (an opinion, an admission, a mistake, a real number, something they tried; a run that only explains how something works is the weakest kind); and it's ONE thing. A jump is for one purpose only: a payoff separated from its setup by a digression. Both runs must read as one piece of speech; never jump to collect good lines.",
-  "When a run's natural opener leans like that, don't bin the run and don't keep the beat: START ONE BEAT LATER and say in carry what the hook has to tell the viewer for that first beat to land (the thing the dropped beat said), so a beat that begins with 'But that's like saying' or 'So' reads as the answer to the hook. Only when the next beat does read that way; otherwise the run isn't one.",
-  "Length is never the aim. A self-contained story of eighty seconds beats a thirty second fragment. A run that only reaches the window by taking in a beat that doesn't belong is out. Shorts may overlap by a beat, never share most of their beats. A beat marked NOT RECORDED can't be in a short. Offer everything worth judging, best first; a stricter judge reads them after you.",
+  `You find the SHORTS inside a long video one person made about making their game: short vertical videos for TikTok, YouTube Shorts, Reels and X, cut straight out of the long recording. Nothing is rewritten and nothing is re-recorded: you have the recording's transcript, beat by beat and sentence by sentence, each sentence with its number and how long it runs. A short is made of sentences said exactly as they are, in up to ${SHORT_MAX} seconds and at least ${SHORT_MIN}, as up to ${SHORT_PIECES} PIECES, each a run of consecutive sentences. Each short will open with a hook line of a few seconds, recorded separately later. The point of a short is that someone who has never heard of this person watches to the end and goes to the profile to see who they are.`,
+  "A short is worth offering when: it STANDS ALONE (a viewer who hasn't heard the rest follows every sentence, the first included: a sentence that gestures at something outside the short, a this, that or it, a 'whenever this comes up', sounds like the middle of a conversation even with a hook in front of it, so it can't open a short and can't be in one); it has a PAYOFF (ends on a point, a reveal or a punchline, never mid-argument); it has THE PERSON IN IT (an opinion, an admission, a mistake, a real number, something they tried; a run that only explains how something works is the weakest kind); and it's ONE thing.",
+  "CUT IT TO THE BONE, by sentence. Leave out any sentence that doesn't serve this short's one point: an aside, a line that points back at the rest of the long video or on to a later part of it, a closing line about the author's own plans or their game that the viewer hasn't been given a reason to care about, a recap of what the short already said. The last sentence is the payoff, never a line after it. You may skip sentences or whole beats and you may put pieces in a different order from the long video, to make the point land better, on two conditions: the author still means exactly what they meant at each point in the long video (never cut a 'not' out of an argument, never put an answer under a question it wasn't answering, never make them say something they didn't), and every seam sounds like one piece of speech said in one go. Fewer pieces is better; a seam is a risk, so take one only when it clearly makes the short better.",
+  "When a short's natural opener leans on the long video, don't bin the short and don't keep the line: START ONE SENTENCE LATER and say in carry what the hook has to tell the viewer for that first sentence to land (the thing the dropped line said), so a sentence that begins with 'But that's like saying' or 'So' reads as the answer to the hook. Only when the next sentence does read that way; otherwise the short isn't one.",
+  "Length is never the aim. A self-contained story of eighty seconds beats a thirty second fragment. A short that only reaches the window by taking in a sentence that doesn't belong is out. Shorts may share a sentence or two, never most of their sentences. A beat marked NOT RECORDED can't be in a short. Offer everything worth judging, best first; a stricter judge reads them after you.",
   "Titles and reasons are in the author's register: plain, first person where it fits, nothing that reads like marketing. A title is read by a stranger with no context, who takes every word in its everyday sense: it names the thing itself (the cut Steam takes of a sale, not 'the discount', which a reader takes as a sale price) and says what the short is about, never a shorthand that only makes sense once you've watched.",
 ].join("\n\n");
 
@@ -281,68 +287,99 @@ const JudgedOut = z.object({
   verdict: z.enum(["pass", "fail"]).describe("pass only at 7 and up with no fault below."),
   problem: z.string().nullable().describe("A fail: the one thing that most stops it, in a plain sentence, quoting the line where it's a line. null for a pass."),
   title: z.string().nullable().describe("A clearer title, when the candidate's could be taken two ways by a stranger (a word with an everyday meaning in this world, like a discount that reads as a sale price) or doesn't say what the short is about. Plain, under 60 characters, no ALL CAPS. null to keep the title as it is."),
-  check: z.string().nullable().describe("A pass that only works with its hook carrying something: what the hook has to say, as content, in one plain sentence (the candidate's own carry line, corrected if it's wrong). null when the first beat stands on its own."),
+  check: z.string().nullable().describe("A pass that only works with its hook carrying something: what the hook has to say, as content, in one plain sentence (the candidate's own carry line, corrected if it's wrong). null when the first sentence stands on its own."),
 });
 const JudgeOut = z.object({ judged: z.array(JudgedOut) });
 
 const JUDGE_RULES = [
-  "You judge candidate shorts cut from a long video one person made about making their game. You're not the one who picked them and you owe them nothing. Read each as a stranger scrolling who has never heard of this person and will never see the long video: you have the words exactly as they'll be heard, nothing else, except that a hook line of a few seconds, recorded later, will open each one. Where a candidate says what its hook will carry, judge its first beat as if a line saying that had just been said: an answer that begins 'But that's like saying' or 'So' can land then. A first sentence that gestures at something the hook didn't say (a this, that, it, a 'whenever this comes up') still sounds like the middle of a conversation, hook or not.",
-  "The bar is: would that stranger watch to the end and then tap the profile to see who this is. Fail a candidate for any one of these: any sentence that leans on something outside it that the hook won't have said (a this, that, it, these, a name or term the long video introduced earlier, an argument it's answering); no payoff (it ends mid-argument, or on a conclusion to something the viewer didn't hear); nobody in it (it explains how something works and the person never shows: no opinion, admission, number of their own, or thing they did); two things, not one; a jump between runs that doesn't read as one piece of speech; a beat that's there only to make the length. Score honestly across the whole set: most sets have a few sevens and eights and some fours.",
+  "You judge candidate shorts cut from a long video one person made about making their game. You're not the one who picked them and you owe them nothing. Read each as a stranger scrolling who has never heard of this person and will never see the long video: you have the words exactly as they'll be heard, nothing else, except that a hook line of a few seconds, recorded later, will open each one. Where a candidate says what its hook will carry, judge its first sentence as if a line saying that had just been said: an answer that begins 'But that's like saying' or 'So' can land then. A first sentence that gestures at something the hook didn't say (a this, that, it, a 'whenever this comes up') still sounds like the middle of a conversation, hook or not.",
+  "A candidate may be cut from several places in the long video, marked [seam] where one piece ends and the next begins, each piece labelled with its sentence numbers. The viewer hears no seam: it has to sound like one piece of speech. You also have the whole transcript, to check every seam against what the author actually said around it.",
+  "The bar is: would that stranger watch to the end and then tap the profile to see who this is. Fail a candidate for any one of these: any sentence that leans on something outside it that the hook won't have said (a this, that, it, these, a name or term the long video introduced earlier, an argument it's answering); no payoff (it ends mid-argument, on a conclusion to something the viewer didn't hear, or on a line after the payoff that points back at the long video or at the author's plans); nobody in it (it explains how something works and the person never shows: no opinion, admission, number of their own, or thing they did); two things, not one; a seam that doesn't sound like one piece of speech; a cut or a reordering that changes what the author meant at that point in the long video, or makes them say something they didn't; a sentence that's there only to make the length. Score honestly across the whole set: most sets have a few sevens and eights and some fours.",
   "Read each title too, as that stranger: every word in its everyday sense, nothing from the long video. When a title could be taken another way or doesn't say what the short is about, give a plain one that does.",
   "Reasons are one plain sentence each, in everyday words.",
 ].join("\n\n");
 
-type Found = z.infer<typeof FoundShortOut>;
+type Found = Omit<z.infer<typeof FoundShortOut>, "pieces"> & { refs: SentenceRef[] };
 type Judged = z.infer<typeof JudgedOut>;
 export type ShortVerdict = Found & Omit<Judged, "n">;
 
-/** The author's past calls (desk-shorts.md: keeps and bins feed back), for both calls. */
+/** The author's past calls (desk-shorts.md: keeps and bins feed back, a bin with its reason), for every call. */
 export type ShortTaste = { kept: string[]; binned: string[] };
 const tasteLines = (taste: ShortTaste): string[] =>
   taste.kept.length || taste.binned.length
     ? [
         "THE AUTHOR'S OWN CALLS ON EARLIER SHORTS are the standard. Shorts they kept:",
         ...(taste.kept.length ? taste.kept.map((t) => `- ${t}`) : ["- (none yet)"]),
-        "Shorts they binned:",
+        "Shorts they binned (with why, where they said):",
         ...(taste.binned.length ? taste.binned.map((t) => `- ${t}`) : ["- (none yet)"]),
         "",
       ]
     : [];
 
-/** The long cut's beats as recorded, with the shorts already offered, → candidate shorts, judged. */
-export const findShorts = async (
-  v: ScriptVoice,
-  long: Cut,
-  timed: { n: number; text: string; seconds?: number }[],
-  offered: { beats: number[]; title: string; state: string }[],
-  taste: ShortTaste,
-): Promise<ShortVerdict[]> => {
-  const total = timed.reduce((n, b) => n + (b.seconds ?? 0), 0);
-  const about = [`About the game and the person (for you, not for the script): ${v.about}`, "", "The voice, in rules:", v.rules, ""];
-  const cut = [`THE LONG CUT (title: ${long.title}; ${Math.round(total / 60)} minutes recorded), each beat with how long it runs as recorded:`, ...timed.map((b) => `${b.n}. [${b.seconds !== undefined ? `${Math.round(b.seconds)}s` : "NOT RECORDED"}] ${b.text}`), ""];
-  const user = [
-    ...cut,
-    ...tasteLines(taste),
-    ...(offered.length ? ["ALREADY OFFERED (never offer these again, nor a short that's mostly the same beats):", ...offered.map((o) => `beats ${o.beats.join(", ")}: ${o.title} (${o.state})`), ""] : []),
-    offered.length ? "Find the shorts worth judging that haven't been offered." : "Find the shorts worth judging.",
-  ].join("\n");
-  const found = await ask([...about, FIND_RULES].join("\n"), user, FindShortsOut);
-  const okRun = (ns: number[]) => {
-    if (!ns.length || ns.some((n) => !Number.isInteger(n) || n < 1 || n > timed.length || timed[n - 1]!.seconds === undefined)) return false;
-    if (new Set(ns).size !== ns.length) return false;
-    let jumps = 0;
-    for (let i = 1; i < ns.length; i++) if (ns[i] !== ns[i - 1]! + 1) jumps++;
-    return jumps <= 1;
-  };
-  const cands = found.shorts.filter((x) => okRun(x.beats)).map((x) => ({ ...x, title: clean(x.title), why: clean(x.why), join: x.join ? clean(x.join) : null, carry: x.carry ? clean(x.carry) : null }));
+/** A short already on the page, for the finder: where it's from, its title, what Tom made of it. */
+export type OfferedShort = { label: string; title: string; state: string; reason?: string };
+
+/** The long cut as measured (beats with their seconds and sentences as recorded). */
+type Measured = Pick<Script, "long">;
+
+/** The transcript by beat and sentence, numbered, with seconds. */
+const transcriptLines = (m: Measured): string[] => {
+  const beats = m.long?.beats ?? [];
+  const total = beats.reduce((n, b) => n + (b.seconds ?? 0), 0);
+  return [
+    `THE LONG CUT AS RECORDED (title: ${m.long?.title}; ${Math.round(total / 60)} minutes), beat by beat, each sentence with its number and seconds:`,
+    ...beats.flatMap((b, i) =>
+      b.seconds === undefined
+        ? [`${i + 1} [NOT RECORDED] ${b.text}`]
+        : [`${i + 1} [${Math.round(b.seconds)}s]`, ...sentencesOf(b).map((x, k) => `  ${i + 1}.${k + 1} [${Math.round(x.seconds)}s] ${x.text}`)],
+    ),
+    "",
+  ];
+};
+
+const offeredLines = (offered: OfferedShort[]): string[] => {
+  const live = offered.filter((o) => o.state !== "binned");
+  const binned = offered.filter((o) => o.state === "binned");
+  return [
+    ...(live.length ? ["ALREADY OFFERED (never offer these again, nor a short that's mostly the same sentences):", ...live.map((o) => `${o.label}: ${o.title} (${o.state})`), ""] : []),
+    ...(binned.length ? ["BINNED BY THE AUTHOR (never again as they were; the same material may come back only in a shape that clearly fixes why it was binned):", ...binned.map((o) => `${o.label}: ${o.title}${o.reason ? `. Why: ${o.reason}` : ""}`), ""] : []),
+  ];
+};
+
+/** A found short's pieces → its sentences, if they're real, recorded, never repeated and no more than SHORT_PIECES pieces. */
+const toRefs = (m: Measured, pieces: { from: string; to: string }[]): SentenceRef[] | undefined => {
+  const beats = m.long?.beats ?? [];
+  const refs = refsOfPieces(m, pieces);
+  if (!refs?.length) return undefined;
+  if (refs.some((r) => beats[r.n - 1]?.seconds === undefined)) return undefined;
+  if (new Set(refs.map((r) => `${r.n}.${r.k}`)).size !== refs.length) return undefined;
+  return piecesOf(m, refs).length <= SHORT_PIECES ? refs : undefined;
+};
+
+const refSeconds = (m: Measured, refs: SentenceRef[]) => refs.reduce((n, r) => n + (sentencesOf(m.long!.beats[r.n - 1]!).at(r.k - 1)?.seconds ?? 0), 0);
+
+/** A candidate exactly as heard: each piece with its numbers, [seam] between. */
+const heardLines = (m: Measured, refs: SentenceRef[]): string[] =>
+  piecesOf(m, refs).flatMap((p, i) => [...(i ? ["[seam]"] : []), `(${refsLabel(m, p)}) ${p.map((r) => sentencesOf(m.long!.beats[r.n - 1]!)[r.k - 1]!.text).join(" ")}`]);
+
+const aboutLines = (v: ScriptVoice) => [`About the game and the person (for you, not for the script): ${v.about}`, "", "The voice, in rules:", v.rules, ""];
+
+const found = (m: Measured, x: z.infer<typeof FoundShortOut>): Found | undefined => {
+  const refs = toRefs(m, x.pieces);
+  return refs ? { refs, title: clean(x.title), why: clean(x.why), join: x.join && piecesOf(m, refs).length > 1 ? clean(x.join) : null, carry: x.carry ? clean(x.carry) : null } : undefined;
+};
+
+/** The judge over candidates (desk-shorts.md § 1): a stranger scrolling, with the transcript to check every seam. */
+const judgeShorts = async (v: ScriptVoice, m: Measured, cands: Found[], taste: ShortTaste): Promise<ShortVerdict[]> => {
   if (!cands.length) return [];
-  const judgeUser = [
+  const user = [
+    ...transcriptLines(m),
     "THE CANDIDATES, each exactly as it will be heard:",
-    ...cands.flatMap((c, i) => [`--- candidate ${i + 1}: "${c.title}" (${Math.round(c.beats.reduce((n, b) => n + (timed[b - 1]!.seconds ?? 0), 0))}s)${c.carry ? ` · the hook will carry: ${c.carry}` : ""} ---`, ...c.beats.map((n) => timed[n - 1]!.text), ""]),
+    ...cands.flatMap((c, i) => [`--- candidate ${i + 1}: "${c.title}" (${Math.round(refSeconds(m, c.refs))}s)${c.carry ? ` · the hook will carry: ${c.carry}` : ""} ---`, ...heardLines(m, c.refs), ...(c.join ? [`(the finder on its seams: ${c.join})`] : []), ""]),
     ...tasteLines(taste),
     "Judge every candidate.",
   ].join("\n");
-  const { judged } = await ask([...about, JUDGE_RULES].join("\n"), judgeUser, JudgeOut);
+  const { judged } = await ask([...aboutLines(v), JUDGE_RULES].join("\n"), user, JudgeOut);
   const byN = new Map(judged.map((j) => [Math.round(j.n), j]));
   return cands.flatMap((c, i) => {
     const j = byN.get(i + 1);
@@ -350,6 +387,41 @@ export const findShorts = async (
     const score = Math.max(1, Math.min(10, Math.round(j.score)));
     return [{ ...c, title: j.title ? clean(j.title) : c.title, score, verdict: j.verdict === "pass" && score >= 7 ? "pass" : "fail", problem: j.problem ? clean(j.problem) : null, check: j.check ? clean(j.check) : c.carry }];
   });
+};
+
+/** The long cut as recorded, with the shorts already offered, → candidate shorts, judged. */
+export const findShorts = async (v: ScriptVoice, m: Measured, offered: OfferedShort[], taste: ShortTaste): Promise<ShortVerdict[]> => {
+  const user = [...transcriptLines(m), ...tasteLines(taste), ...offeredLines(offered), offered.length ? "Find the shorts worth judging that haven't been offered." : "Find the shorts worth judging."].join("\n");
+  const out = await ask([...aboutLines(v), FIND_RULES].join("\n"), user, FindShortsOut);
+  return judgeShorts(v, m, out.shorts.flatMap((x) => found(m, x) ?? []), taste);
+};
+
+/** The short to reshape, as it was. */
+export type ReshapeTarget = { label: string; refs: SentenceRef[]; title: string; why?: string; problem?: string; reason?: string; state: string };
+
+/**
+ * Reshape (desk-shorts.md § 6): one short's idea kept, what was wrong with
+ * it fixed (the judge's problem, Tom's bin reason, his note), under the
+ * finder's rules over the whole transcript, then judged like any other.
+ * Undefined when nothing usable came back.
+ */
+export const reshapeShort = async (v: ScriptVoice, m: Measured, target: ReshapeTarget, note: string, offered: OfferedShort[], taste: ShortTaste): Promise<ShortVerdict | undefined> => {
+  const user = [
+    ...transcriptLines(m),
+    ...tasteLines(taste),
+    ...offeredLines(offered.filter((o) => o.label !== target.label)),
+    `THE SHORT TO RESHAPE: "${target.title}" (${target.label}, ${target.state})`,
+    ...heardLines(m, target.refs),
+    ...(target.why ? [`Why it was offered: ${target.why}`] : []),
+    ...(target.problem ? [`What the judge found wrong: ${target.problem}`] : []),
+    ...(target.reason ? [`Why the author binned it: ${target.reason}`] : []),
+    ...(note.trim() ? [`The author says: ${note.trim()}`] : []),
+    "",
+    "Reshape it: keep its idea and fix what was wrong, by cutting sentences, taking them from elsewhere in the long cut, or putting pieces in another order, under every rule above. It must be a different shape from the one it was. Return exactly one short.",
+  ].join("\n");
+  const out = await ask([...aboutLines(v), FIND_RULES].join("\n"), user, FindShortsOut);
+  const cands = out.shorts.flatMap((x) => found(m, x) ?? []).slice(0, 1);
+  return (await judgeShorts(v, m, cands, taste))[0];
 };
 
 // ── the hooks (docs/design/desk-shorts.md § 2, "The hook's voice") ──
@@ -469,6 +541,10 @@ const StoryOut = z.object({
 });
 
 /** What every picture prompt must survive: the image model sees the look line and this one prompt, nothing else, and takes every word literally. */
+/** How the shots are framed (11-05): posed faces looking at things are what made the pictures read as generated, so the story is told the way films tell it. */
+const DIRECTOR_RULES =
+  "SHOOT IT LIKE A DIRECTOR, NOT A PORTRAIT PHOTOGRAPHER. Posed faces looking at things are what make pictures look generated, so a face toward the camera is saved for the moments that need it most: about one picture in four, where the feeling on a face IS the beat. The rest of the story is told the way films tell it: hands doing the thing, over a shoulder, a figure from behind or in profile, a silhouette in a lit doorway or window, a shadow thrown on a wall, a low angle up at someone, the object in close-up with a person just out of focus beyond it. The viewer must still always know who is who: keep each character's outline recognisable (their hat, hair, clothes, what they carry) and their place in the story clear. Never centre the subject like a catalogue shot: compose off-centre, with depth (something near the lens, something beyond).";
+
 const PROMPT_LITERAL = [
   "THE IMAGE MODEL KNOWS NOTHING BUT THE PROMPT. Each picture is made on its own by an image model that's given the style, the world's look and that one prompt: never the script, the theme, the cast list or any other picture. It takes every word literally. So:",
   "- Every prompt stands alone. Never lean on another picture or on the story: nothing it hasn't been told about in this prompt (no 'the' for something introduced elsewhere, no 'again', 'same', 'still', 'rival', 'her', 'his'). A cast member is written out with their look, word for word, every time they appear.",
@@ -487,7 +563,7 @@ const STORY_RULES = [
   "You plan the pictures for a video one person made about making their game: the story told in pictures while they talk. Every beat of the script gets a picture on screen while it's said (two for a long one). Each picture is turned into ASCII art (built out of typed characters, light becoming glyphs, shadow becoming empty screen). You decide WHAT every picture shows; someone else writes each picture's full prompt from your line later, so your lines are the one place the whole story is held together.",
   "Every video has its own world, and every picture lives in it. Find it in this script before planning a single scene: read what the script is really arguing (what's at stake, who is up against what, what it feels like to be in the author's shoes) and pick a setting where that same struggle plays out, then run with it like a film director would. It must belong to this script and no other: if the same world would fit any video about making games, it's the wrong one. Real, historical, everyday or science fiction all work, as long as every beat can be shown in it. Swords, castles and fantasy are the obvious picks, so take them only when this script really calls for them. In the theme, name the world and say which idea in the script it stands for. Then write down what the world looks like (the look) and its cast.",
   "Show each beat's point as a moment in that world, often a metaphor. Give the world recurring characters, places and objects (the cast) and keep them the same from scene to scene, so the video feels like one story told in pictures: a thread the viewer can follow, with an image from early on coming back when its idea does (say which beat it's from). Even a beat about the game itself is shown in the video's world, never as the game.",
-  "THE SCENE LINE IS A SHOT, NOT A SUMMARY. One short sentence saying what is literally in the picture: who or what, doing what, where. Never what the beat is about, never a feeling or an idea on its own (a feeling is a pose, a gesture, a face). Name the cast member or place by its cast name so the prompt writer looks up its look. Don't write the light, the camera or the style: that's the prompt writer's job. Vary what's shown down the video: never two beats running with the same subject doing the same thing, unless it's a deliberate return.",
+  "THE SCENE LINE IS A SHOT, NOT A SUMMARY. One short sentence saying what is literally in the picture: who or what, doing what, where. Never what the beat is about, never a feeling or an idea on its own (a feeling is a pose, a gesture, a face). Name the cast member or place by its cast name so the prompt writer looks up its look. Tell most moments through what people do (hands at work, a figure in a doorway, someone from behind, the object close), and save a face showing its feeling for the beats that turn on it, about one in four. Don't write the light, the camera or the style: that's the prompt writer's job. Vary what's shown down the video: never two beats running with the same subject doing the same thing, unless it's a deliberate return.",
   GLYPH_RULES,
   `Moods for the music: ${SCORE_MOODS.join(", ")}. focus is for explaining how something works (the most common), curious for a question or a what-if, tense for a problem, eerie for something wrong or strange, driving for momentum and getting work done, melancholy for something lost or cut, triumph for the payoff; the first six are the soft ones. Neighbouring beats usually share a mood or move to a near one; a jump is for a real turn in the story.`,
   "Chapters: only when the video is long enough (the total is given). A chapter is a real turn in the story, never just a new paragraph. At most one every three minutes of speaking, so a ten minute video has three or four. When there are chapters, the first beat starts the first one. When the total is under six minutes, give no chapters of your own. These rules are for chapters you come up with; the author's own headings (below) get theirs regardless.",
@@ -496,20 +572,47 @@ const STORY_RULES = [
 export type StoryLine = { scene: string; mood: BeatMood; pulled: string[]; chapter?: string };
 
 /** The story: the world and a scene line (plus mood, pulled word, chapter) for every beat, in one call. */
+/**
+ * How the look line is written for each picture style (11-05). It goes to the
+ * image model with every picture, so for the conté drawings it keeps to era,
+ * places, materials and clothes: a film-set list of lamps, bulbs and lit
+ * windows dragged every drawing into busy night streets.
+ */
+const LOOK_GUIDE: Record<PictureStyle, string> = {
+  conte: "The pictures are soft conté crayon drawings of lonely figures in empty dark spaces; that's only how they're drawn, never when or where the world is. So the look says only the era, the kinds of places, the materials, the clothes and the objects, plainly. At most one kind of light, said once. No streets or rows of lit windows, no lamps, bulbs or signs listed, no crowds, no weather. Never call it a film, drama or photograph.",
+  film: "The pictures are black-and-white film stills. The look names the genre and era plainly, the places, materials, clothes, technology and light sources.",
+  woodcut: "The pictures are black-and-white woodcut prints. The look names the genre and era plainly, the places, materials, clothes, technology and light sources.",
+};
+
 export const planStory = async (
   v: ScriptVoice,
   title: string,
   all: { n: number; text: string }[],
   headings: { heading: string; before: string }[] = [],
   world: World = { theme: "", look: "", cast: [] },
+  style: PictureStyle = "film",
+  /** Looks already tried and thrown away for this script (New look & cast): the next one goes somewhere else. */
+  tried: string[] = [],
 ): Promise<{ world: World; lines: Map<number, StoryLine> }> => {
   const { theme } = world;
+  // The author's line with no look yet is a storyline: the setting is Claude's to choose (11-05: read as a setting,
+  // "an inventor… rags to riches" came back as an early-1900s music-box workshop every time).
+  const choosing = Boolean(theme.trim() && !world.look.trim());
   const total = all.reduce((t, b) => t + spokenSeconds(b.text), 0);
   const user = [
     `The video: "${title}". About ${Math.round(total / 60)} minutes spoken (${total} seconds).`,
     "",
-    theme.trim() ? `The video's world is already set, so every scene lives in it: ${theme.trim()}` : "Pick the video's world first (theme), then plan every scene in it.",
-    ...(theme.trim() && world.look.trim() ? [`Its look is set too: ${world.look.trim()}`] : theme.trim() ? ["Write its look for that world."] : []),
+    choosing
+      ? [
+          `The author's storyline for the pictures: ${theme.trim()}`,
+          "Keep to that story (its people, what happens to them, how it turns), but the setting is yours to choose: the era and the place, from the distant past to the far future, whatever makes this story most striking and clearest in pictures. The words of the storyline don't fix a time or place, and neither does the picture style. Skip the first setting, characters and objects anyone would reach for with this storyline; choose a less expected world that still tells it plainly. Whatever the story's central thing is (the product, the invention, the prize), make it belong to that world.",
+          ...(tried.length ? ["Settings already tried for this video and thrown away (go somewhere clearly different in era, place and objects):", ...tried.map((t) => `- ${t}`)] : []),
+        ].join("\n")
+      : theme.trim()
+        ? `The video's world is already set, so every scene lives in it: ${theme.trim()}`
+        : "Pick the video's world first (theme), then plan every scene in it.",
+    ...(theme.trim() && world.look.trim() ? [`Its look is set too: ${world.look.trim()}`] : theme.trim() ? [`Write its look for that world. ${LOOK_GUIDE[style]}`] : [`For the look: ${LOOK_GUIDE[style]}`]),
+    ...(theme.trim() && !world.cast.length ? ["Its cast is yours to write afresh: new characters, places and objects for this world, each with its look."] : []),
     ...(theme.trim() && world.cast.length ? ["Its cast so far (copy these back exactly, add any new ones):", ...world.cast.map((c) => `- ${c.name}: ${c.look}`)] : []),
     "",
     "The whole script, beat by beat (roughly how long each takes to say in brackets; LONG = two pictures, so two moments):",
@@ -560,17 +663,36 @@ const PromptsOut = z.object({
     z.object({
       n: z.number().describe("The beat's number."),
       pictures: z
-        .array(z.string())
+        .array(
+          z.object({
+            prompt: z.string().describe("The picture prompt."),
+            cast: z.array(z.string()).describe("The cast members seen in this picture, by cast name exactly as given (empty when none)."),
+          }),
+        )
         .min(1)
         .max(2)
-        .describe("One picture prompt; two only when the beat is marked LONG (the second follows the first while the beat is still being said: the second moment the scene line names, or the same moment from another angle)."),
+        .describe("One picture; two only when the beat is marked LONG (the second follows the first while the beat is still being said: the second moment the scene line names, or the same moment from another angle)."),
     }),
   ),
 });
 
+/**
+ * How a conté picture is composed (11-05): Spilliaert's subjects and
+ * placement, which Tom found the most interesting of the painter round;
+ * the drawing itself is Seurat's (cards.ts CONTE_STYLE). The image model
+ * never sees this, only the prompts written with it.
+ */
+const CONTE_RULES =
+  "THIS VIDEO'S PICTURE LANGUAGE is Léon Spilliaert's (his ink and gouache works of 1900–1910): lonely, often elongated figures, vast empty dark spaces around them, eerie stillness, odd steep perspectives (a long staircase, a corridor, a figure seen from high above or very low), a few bold simple shapes. Strange and lonely, never cosy. Tell each scene in that language: the same characters and the same moment as the scene line, but placed and framed the way he would. A face to camera only where the feeling on a face is the point; otherwise hands, backs, silhouettes, a figure small against a great dark shape, the object close. The background is empty darkness or one plain shape, never a street full of lit windows or a room full of lamps.";
+
+/** The prompt writer's rules for a script's picture style: the conté's Spilliaert language, or the film's director framing. */
+const promptRules = (style: PictureStyle) => PROMPT_RULES.replace(DIRECTOR_RULES, style === "conte" ? CONTE_RULES : DIRECTOR_RULES);
+
 const PROMPT_RULES = [
   "You write the picture prompts for a video one person made about making their game. The story has already been decided: every beat has a scene line saying what its picture shows, in the video's world, with a cast whose looks are fixed. Your job is the telling of each scene, never the choosing: write the scene the line names, with its subject and moment exactly as given, and never swap in a different idea. Each picture is turned into ASCII art (built out of typed characters, light becoming glyphs, shadow becoming empty screen), so it must read as strong shapes of light against darkness.",
-  "A picture prompt describes ONE scene as a still from a film: the subject, what it's doing, where the light falls from, the camera's angle and distance. Two or three sentences, concrete and visual. No style words (woodcut, ink, chiaroscuro): the style is added for you. Never a flat diagram or an icon.",
+  "A picture prompt describes ONE scene as a still from a film: the subject, what it's doing, where the light falls from, the camera's angle and distance. Two or three sentences, concrete and visual. No style words (photograph, film, drawing, conté, charcoal, painting, black and white, woodcut, ink, chiaroscuro, or any artist's name): the style is added for you. Never a flat diagram or an icon.",
+  DIRECTOR_RULES,
+  "With each prompt, list the cast members who are seen in it, by their cast name exactly as given: their reference pictures go to the image model with it. Only who or what is actually in the frame.",
   PROMPT_LITERAL,
   GLYPH_RULES,
   "Vary the light as the world allows (a window, a screen, a fire, a doorway, headlights, the low sun, a desk lamp): it shouldn't be the same lamp in every picture.",
@@ -584,7 +706,8 @@ export const writePrompts = async (
   beats: { n: number; text: string; scene: string }[],
   all: { n: number; text: string; scene: string; prompts: string[] }[],
   world: World,
-): Promise<Map<number, string[]>> => {
+  style: PictureStyle = "film",
+): Promise<Map<number, PlannedPicture[]>> => {
   const want = new Set(beats.map((b) => b.n));
   const user = [
     `The video: "${title}".`,
@@ -604,22 +727,29 @@ export const writePrompts = async (
     "",
     `Write the prompts for these beats, by number: ${[...want].join(", ")}.`,
   ].join("\n");
-  const out = await ask(PROMPT_RULES, user, PromptsOut, "medium");
-  const plan = new Map<number, string[]>();
+  const out = await ask(promptRules(style), user, PromptsOut, "medium");
+  const plan = new Map<number, PlannedPicture[]>();
+  const names = new Set(world.cast.map((c) => c.name));
   for (const it of out.items) {
     const n = Math.round(it.n);
     const beat = beats.find((b) => b.n === n);
     if (!beat) continue;
-    const prompts = it.pictures.map(clean).filter(Boolean).slice(0, picturesWanted(beat.text));
-    if (prompts.length) plan.set(n, prompts);
+    const pics = it.pictures.map((p) => ({ prompt: clean(p.prompt), cast: p.cast.filter((c) => names.has(c)) })).filter((p) => p.prompt).slice(0, picturesWanted(beat.text));
+    if (pics.length) plan.set(n, pics);
   }
   // Every prompt read once more as the image model will read it, before a penny goes on pictures.
-  const checked = await checkPrompts(world, [...plan].flatMap(([n, p]) => p.map((prompt, k) => ({ key: `${n}:${k}`, beat: beats.find((b) => b.n === n)!.text, prompt }))));
-  for (const [n, p] of plan) plan.set(n, p.map((prompt, k) => checked.get(`${n}:${k}`) ?? prompt));
+  const checked = await checkPrompts(world, [...plan].flatMap(([n, p]) => p.map((x, k) => ({ key: `${n}:${k}`, beat: beats.find((b) => b.n === n)!.text, prompt: x.prompt }))));
+  for (const [n, p] of plan) plan.set(n, p.map((x, k) => ({ ...x, prompt: checked.get(`${n}:${k}`) ?? x.prompt })));
   return plan;
 };
 
-const OnePromptOut = z.object({ prompt: z.string().describe("The new picture prompt: one scene as a film still, two or three sentences, standing alone, no style words, no words in the picture.") });
+/** A picture's prompt and who's in it (their reference pictures go with it). */
+export type PlannedPicture = { prompt: string; cast: string[] };
+
+const OnePromptOut = z.object({
+  prompt: z.string().describe("The new picture prompt: one scene as a film still, two or three sentences, standing alone, no style words, no words in the picture."),
+  cast: z.array(z.string()).describe("The cast members seen in it, by cast name exactly as given (empty when none)."),
+});
 
 /** One picture's prompt written again (to an instruction, or just differently), the whole script and the other pictures' prompts for context. */
 export const redoPicturePrompt = async (
@@ -630,9 +760,10 @@ export const redoPicturePrompt = async (
   k: number,
   instruction: string,
   world: World = { theme: "", look: "", cast: [] },
-): Promise<string> => {
+  style: PictureStyle = "film",
+): Promise<PlannedPicture> => {
   // No game blurb here: it pulled every picture towards gladiators. The script says what the video is about.
-  const sys = PROMPT_RULES;
+  const sys = promptRules(style);
   const { theme } = world;
   const beat = beats.find((b) => b.n === n);
   if (!beat) throw new Error("that beat isn't in the script");
@@ -658,7 +789,8 @@ export const redoPicturePrompt = async (
     .join("\n");
   const out = await ask(sys, user, OnePromptOut, "medium");
   const prompt = clean(out.prompt);
-  return (await checkPrompts(world, [{ key: "one", beat: beat.text, prompt }])).get("one") ?? prompt;
+  const cast = out.cast.filter((c) => world.cast.some((x) => x.name === c));
+  return { prompt: (await checkPrompts(world, [{ key: "one", beat: beat.text, prompt }])).get("one") ?? prompt, cast };
 };
 
 // ── the literal reader: every prompt checked before it costs a picture ──
@@ -677,7 +809,7 @@ const CheckOut = z.object({
 });
 
 const CHECK_RULES = [
-  "You check picture prompts before they're paid for. Each one goes to an image model with a fixed style (a black and white print, one strong light carving the subject out of darkness) and one line describing the world's look, and nothing else. It has never seen the script, the story, the cast list or the other pictures, and it takes every word literally. Read each prompt exactly as that model would, picture what it would actually draw, and fix the prompt wherever that's not what was meant. The beat it's for is given so you know what was meant; the model never sees it.",
+  "You check picture prompts before they're paid for. Each one goes to an image model with a fixed style (a black and white film still, drawing or print, the subject lit against darkness) and one line describing the world's look, and nothing else. It has never seen the script, the story, the cast list or the other pictures, and it takes every word literally. Read each prompt exactly as that model would, picture what it would actually draw, and fix the prompt wherever that's not what was meant. The beat it's for is given so you know what was meant; the model never sees it.",
   "What goes wrong:",
   "- A word drawn literally that was meant as mood, genre or a label (a 'dark' or 'black' subject comes out as a dark block; a coined or genre word comes out as whatever it most plainly names).",
   "- Something the model hasn't been told about in this prompt: 'the' for a thing introduced elsewhere, 'again', 'same', 'still', 'rival', a pronoun with nobody named. Write it out in full; for a cast member, use their look word for word.",
@@ -891,6 +1023,7 @@ export const planTitles = async (v: ScriptVoice, title: string, beats: string[],
 const ArticleOut = z.object({
   title: z.string().describe("The article's title: what it is actually about, in the words someone would type to find it. Sentence case, under 70 characters."),
   description: z.string().describe("One or two sentences, under 160 characters, on what the article covers, specifically. Never starts with 'In this article'."),
+  summary: z.string().describe("The answer-first opening, shown above everything else: two or three sentences (40 to 70 words) that answer the question the title asks, with the article's own verdict and its most important specifics (names, numbers, steps). Stands on its own for someone who reads nothing else. Never refers to the article or the video."),
   slug: z.string().describe("The URL: three to six lower-case words from the title joined by hyphens, no filler words, ascii only."),
   body: z.string().describe("The article, as markdown: paragraphs, ## headings between sections, - lists where the script lists. No title line at the top."),
 });
@@ -903,6 +1036,7 @@ const ARTICLE_RULES = [
   "Sections get ## headings in plain words, sentence case: the script's chapters if there are any, otherwise one every three to six paragraphs, and none at all for a short piece. Paragraphs of two to five sentences. A list only where the script lists things. No bold or italics for emphasis, no title line. Markdown only: paragraphs, ## headings, - lists.",
   "Hard rules: first person singular, British spelling, everyday words, no em dashes, no ALL CAPS, no exclamation marks, no three-beat slogans, no coined aphorisms, no emoji, no hashtags.",
   "The title is for search, so it says what the piece is actually about in the words people would type, and it reads well written down (a title that only works beside a thumbnail doesn't). The description adds to the title; it never repeats it.",
+  "The summary is separate from the body and is the one place a summary belongs: AI search tools quote a short passage that answers a question, and this is that passage. Everything in it comes from the script, said the way the author says it; it adds nothing and doesn't soften or sharpen their view. The body still starts with the first real point, not a restatement of the summary.",
   "The author's sources are listed under the article by the tool afterwards, so write no Sources, References or Links section and no footnotes.",
 ].join("\n\n");
 
@@ -938,6 +1072,7 @@ export const writeArticle = async (v: ScriptVoice, game: string, samples: string
   return {
     title: clean(out.title).replace(/!/g, "").slice(0, 120),
     description: clean(out.description).replace(/!/g, ".").slice(0, 300),
+    summary: clean(out.summary).replace(/!/g, ".").slice(0, 600),
     slug: out.slug,
     body: out.body.replace(/—/g, ",").replace(/^#\s+.*\n+/, "").trim(),
   };

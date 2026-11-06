@@ -5,7 +5,7 @@
  * screen), Tom edits the words here, pastes the video's link once it's up,
  * and Save to the site writes the markdown and the chosen thumbnail as its
  * cover into the site's content folder for him to commit. Render builds it.
- * The pictures go in as the video shows them, glyphs and glow, not the
+ * The pictures go in as the video shows them (glyphs in BEATS_LOOK), not the
  * stills they were made from: the page draws each one with the real engine
  * (glyphStill, thumbStill) and sends it up just before the save.
  */
@@ -136,6 +136,13 @@ export const WriteupStep: React.FC<{
               <span className={w.description.length > 160 ? "warn" : "muted"}>{w.description.length}/160 (the listing, the search snippet, the social card)</span>
             </span>
             <textarea rows={2} value={w.description} onChange={(e) => set({ description: e.target.value })} />
+          </label>
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="row between small">
+              <strong>Summary</strong>
+              <span className="muted">the answer to the title, shown above the video, what AI search quotes</span>
+            </span>
+            <textarea rows={3} value={w.summary ?? ""} onChange={(e) => set({ summary: e.target.value })} />
           </label>
           <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <strong className="small">Dated</strong>

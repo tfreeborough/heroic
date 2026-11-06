@@ -18,9 +18,9 @@
  * the editor's job, after.
  */
 import { type AudioClip, type Card, type Sequence, type Take, type Word, emptySequence, newId } from "@heroic/voiceover";
-import { type Cover, KEEP_AFTER, type Span, keptWords } from "./match";
+import { type Cover, KEEP_AFTER, KEEP_BEFORE, type Span, keptWords } from "./match";
 import { CHAPTER_CARD } from "@heroic/ascii-build";
-import { type Beat, type Cut, type Script, allowedChapters, cardOfBeat } from "./scripts";
+import { type Beat, type BeatPart, type Cut, type Script, allowedChapters, cardOfBeat, tokens } from "./scripts";
 
 export type Organised = {
   seq: Sequence;
@@ -30,12 +30,12 @@ export type Organised = {
   conflicts: { beat: string; takes: string[] }[];
   /** Where each chapter starts, in edit seconds (the first beat's, if it opens one, at 0). */
   chapters: { name: string; at: number }[];
-  /** Each beat that went in: where it starts in the edit and how long its kept speech runs (Find shorts measures by this). */
-  laid: { beat: string; at: number; seconds: number }[];
+  /** Each beat that went in: where it starts in the edit and how long its kept speech runs (Find shorts measures by this), and its slice of the take (take index, take seconds) before the trim. */
+  laid: { beat: string; at: number; seconds: number; take: number; start: number; end: number }[];
 };
 
-/** A little of the take before the first word, so a slice doesn't start on a consonant… */
-const LEAD = 0.12;
+/** A little of the take before the first word, the trim's own margin, so a slice doesn't clip it (see KEEP_BEFORE)… */
+const LEAD = KEEP_BEFORE;
 /** …and after the last, the trim's own margin, which a closing "t" needs (see KEEP_AFTER). */
 const TAIL = KEEP_AFTER;
 /** Where to cut between two words not said in one breath: TAIL after the first, LEAD before the second, the pause shared out in that proportion when it's too short for both. */
@@ -55,6 +55,8 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000;
  * run on into another beat's cover belong to that beat.
  */
 export const sliceOf = (take: Script["takes"][number], cover: Cover, covers: Cover[]): Span => {
+  // Tom dragged it there: exactly there.
+  if (cover.set) return { start: r3(Math.max(0, cover.start)), end: r3(Math.min(take.seconds, cover.end)) };
   const words = keptWords(take);
   const claimed = (w: Word) => covers.some((c) => c.beat !== cover.beat && w.start >= c.start - 1e-3 && w.end <= c.end + 1e-3);
   const joined = (a: Word, b: Word) => b.start - a.end < JOINED;
@@ -100,6 +102,66 @@ export const splitPoint = (words: { text: string; start: number; end: number }[]
   return r3((best ?? mid) - start);
 };
 
+/** A sentence of a slice as recorded: its words, where to cut it (take seconds, the breath margins shared with its neighbours), and its kept seconds. */
+export type SlicedSentence = { text: string; start: number; end: number; seconds: number };
+
+/**
+ * A beat's slice of a take (start..end, take seconds) as its sentences
+ * (desk-shorts.md § 6): the kept words in it, split after each word that
+ * ends a sentence. The first starts at the slice's start and the last ends
+ * at its end; in between, each cut falls in the breath between two
+ * sentences, shared out the way organise cuts between beats.
+ */
+export const sentencesIn = (take: Script["takes"][number], start: number, end: number): SlicedSentence[] => {
+  const words = keptWords(take).filter((w) => w.start >= start - 1e-3 && w.end <= end + 1e-3 && w.text.trim());
+  const groups: Word[][] = [];
+  let cur: Word[] = [];
+  for (const w of words) {
+    cur.push(w);
+    if (/[.!?…]["”’)]*$/.test(w.text.trim())) {
+      groups.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length) groups.push(cur);
+  return groups.map((g, i) => {
+    const prev = groups[i - 1]?.at(-1);
+    const next = groups[i + 1]?.[0];
+    const a = prev ? between(prev, g[0]!).start : start;
+    const z = next ? between(g.at(-1)!, next).end : end;
+    const span = { start: r3(Math.max(start, a)), end: r3(Math.min(end, z)) };
+    return { text: g.map((w) => w.text.trim()).join(" "), ...span, seconds: r3(keptPieces(take, span.start, span.end).reduce((n, p) => n + (p.end - p.start), 0)) };
+  });
+};
+
+/**
+ * Where a part (sentences first..last and the words they had) is in a
+ * slice's sentences now: at its numbers if the words still match, else
+ * wherever a run of sentences says the same words (a re-trim moved them),
+ * else the closest run if it's nearly the same. Indices into `sents`;
+ * undefined when the words aren't there any more.
+ */
+export const findPart = (sents: { text: string }[], part: BeatPart): { first: number; last: number } | undefined => {
+  const key = (t: string) => tokens(t).join(" ");
+  const want = key(part.said);
+  const runText = (i: number, j: number) => key(sents.slice(i, j + 1).map((x) => x.text).join(" "));
+  const a = part.first - 1;
+  const z = part.last - 1;
+  if (a >= 0 && z < sents.length && a <= z && runText(a, z) === want) return { first: a, last: z };
+  const wantSet = tokens(part.said);
+  let best: { first: number; last: number; score: number } | undefined;
+  for (let i = 0; i < sents.length; i++)
+    for (let j = i; j < sents.length; j++) {
+      const got = runText(i, j);
+      if (got === want) return { first: i, last: j };
+      const have = tokens(got);
+      const common = wantSet.filter((w) => have.includes(w)).length;
+      const score = (2 * common) / (wantSet.length + have.length || 1);
+      if (!best || score > best.score) best = { first: i, last: j, score };
+    }
+  return best && best.score >= 0.8 ? best : undefined;
+};
+
 export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, opts: { id: string; name: string }): Organised => {
   const seq: Sequence = { ...emptySequence(opts.id, opts.name), idea: s.id, ...(cut.title.trim() ? { title: cut.title.trim() } : {}), takes: s.takes.map(({ keep: _k, ...t }): Take => t) };
   // Chapters the rules allow (desk-ascii-scripts.md); one on a beat nobody read moves to the next beat that's in.
@@ -132,11 +194,26 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
     const tk = s.takes[take]!;
     const inTake = covers.get(tk.file) ?? [];
     // The slice: from just before the beat's first word to where the next beat starts in this same take, else just after its last word.
-    const next = cut.beats[k + 1];
+    // A short's beat is its long beat's slice: it ends where the next LONG beat starts (a jump forward in one take never carries the beats between).
+    const longAt = b.from ? (s.long?.beats.findIndex((x) => x.id === b.from) ?? -1) : -1;
+    const next = b.from ? (longAt >= 0 ? s.long!.beats[longAt + 1] : undefined) : cut.beats[k + 1];
     const nextHere = next ? reads(next).find((x) => x.take === take && x.cover.start > cover.start) : undefined;
     const { start } = sliceOf(tk, cover, inTake);
-    const end = nextHere ? sliceOf(tk, nextHere.cover, inTake).start : sliceOf(tk, cover, inTake).end;
-    const pieces = keptPieces(tk, start, end);
+    const end = cover.set || !nextHere ? sliceOf(tk, cover, inTake).end : sliceOf(tk, nextHere.cover, inTake).start;
+    // A part (desk-shorts.md § 6): only its sentences of the slice, found again by their words.
+    let partFrom = start;
+    let partTo = end;
+    if (b.part) {
+      const sents = sentencesIn(tk, start, end);
+      const at = findPart(sents, b.part);
+      if (!at) {
+        missing.push(b.id);
+        return;
+      }
+      partFrom = sents[at.first]!.start;
+      partTo = sents[at.last]!.end;
+    }
+    const pieces = keptPieces(tk, partFrom, partTo);
     const seconds = pieces.reduce((n, p) => n + (p.end - p.start), 0);
     if (seconds < 0.1) {
       missing.push(b.id);
@@ -161,9 +238,10 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
       laid += p.end - p.start;
     }
     markers.push({ id: newId(), at });
-    placed.push({ beat: b.id, at, seconds: r3(seconds) });
-    // The beat's pictures, as glyph builds.
-    const pics = (b.pictures ?? []).filter((p) => p.chosen);
+    placed.push({ beat: b.id, at, seconds: r3(seconds), take, start: r3(start), end: r3(end) });
+    // The beat's pictures, as glyph builds. A part shows one: the half of its long beat it mostly sits in.
+    const allPics = (b.pictures ?? []).filter((p) => p.chosen);
+    const pics = b.part && allPics.length > 1 ? [allPics[(partFrom + partTo) / 2 > start + splitPoint(tk.words, start, end) ? 1 : 0]!] : allPics;
     if (pics.length) {
       // The same picture again, straight after (a short's hook beat and its first beat): one build, not two.
       if (pics.length === 1 && lastCard?.kind === "build" && lastCard.src === pics[0]!.chosen && Math.abs(lastCard.at + lastCard.seconds + s.gap - at) < 0.05) {
@@ -198,4 +276,43 @@ export const organiseCut = (s: Script, cut: Cut, covers: Map<string, Cover[]>, o
   if (cards.length) seq.overlay = { id: "o1", cards: cards.filter((c) => c.seconds >= 0.3) };
   if (markers.length) seq.markers = markers;
   return { seq, missing, conflicts, chapters, laid: placed };
+};
+
+/**
+ * The long cut's beats as recorded (desk-shorts.md § 6): each beat's kept
+ * seconds and its sentences, from the slices organise would lay (nothing
+ * written). A beat no take reads gets neither.
+ */
+export const measureLong = (s: Script, covers: Map<string, Cover[]>): Beat[] => {
+  if (!s.long) return [];
+  const { laid } = organiseCut(s, s.long, covers, { id: "timing", name: "timing" });
+  const at = new Map(laid.map((l) => [l.beat, l] as const));
+  return s.long.beats.map((b) => {
+    const { seconds: _s, sentences: _ss, ...rest } = b;
+    const l = at.get(b.id);
+    if (!l) return rest;
+    return { ...rest, seconds: l.seconds, sentences: sentencesIn(s.takes[l.take]!, l.start, l.end).map((x) => ({ text: x.text, seconds: x.seconds })) };
+  });
+};
+
+/**
+ * The shorts' parts renumbered against freshly measured long beats (a
+ * re-trim moves sentences): each part is found again by its words and keeps
+ * them; one whose words aren't there any more is left as it was (organise
+ * reports it missing).
+ */
+export const remapParts = (long: Beat[], shorts: Cut[]): Cut[] => {
+  const byId = new Map(long.map((b) => [b.id, b] as const));
+  return shorts.map((c) =>
+    c.beats.some((b) => b.part)
+      ? {
+          ...c,
+          beats: c.beats.map((b) => {
+            const sents = b.part && b.from ? byId.get(b.from)?.sentences : undefined;
+            const at = sents && b.part ? findPart(sents, b.part) : undefined;
+            return at && b.part ? { ...b, part: { ...b.part, first: at.first + 1, last: at.last + 1 } } : b;
+          }),
+        }
+      : c,
+  );
 };

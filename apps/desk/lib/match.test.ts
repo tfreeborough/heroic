@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Word } from "@heroic/voiceover";
-import { cutRegion, keptWords, matchTake, trimRegion } from "./match";
+import { KEEP_AFTER, KEEP_BEFORE, cutRegion, keptWords, matchTake, trimRegion } from "./match";
 
 /** Words said one after another, 0.3s each from `from`. */
 const said = (text: string, from = 0, step = 0.3): Word[] => text.split(/\s+/).map((t, i) => ({ text: t, start: from + i * step, end: from + (i + 1) * step - 0.05 }));
@@ -104,17 +104,34 @@ describe("beats set by hand", () => {
   });
 });
 
+describe("a take's kept speech, shared out whole", () => {
+  test("an ad-lib way in belongs to the first beat, a word after the last to the last, and a dragged beat sits where it was dragged", async () => {
+    const { matchScript } = await import("./match");
+    const { emptyScript } = await import("./scripts");
+    const s = { ...emptyScript("s", "t"), long: { id: "L", kind: "long" as const, title: "t", beats: [{ id: "a", text: "IL2CPP is slightly different to encryption and that matters a lot" }] } };
+    // "Now, what actually is IL-2 CPP? Well, it's" isn't in the script: the matcher alone started the beat at "slightly".
+    const words = [...said("Now what actually is IL-2 CPP", 0.5), ...said("Well it's slightly different to encryption and that matters a lot anyway", 3)];
+    const take = { file: "t.wav", seconds: 10, recordedAt: "", words, transcribed: true };
+    const [c] = matchScript(take, s);
+    expect(c!.start).toBe(0.5);
+    expect(c!.end).toBeCloseTo(words.at(-1)!.end, 5);
+    expect(c!.set).toBeUndefined();
+    const [d] = matchScript({ ...take, spans: { a: { start: 2, end: 6 } } }, s);
+    expect(d).toMatchObject({ beat: "a", start: 2, end: 6, set: true });
+  });
+});
+
 describe("auto trim", () => {
   test("trims the ends, shortens a long pause, keeps a hand cut, and changes nothing the second time", async () => {
     const { autoTrim } = await import("./match");
     const w = (text: string, start: number, end: number) => ({ text, start, end });
     const take = { seconds: 20, words: [w("one", 2, 2.4), w("two", 2.5, 2.9), w("three", 6, 6.4), w("four", 6.5, 6.9), w("five", 12, 12.4)] };
     const keep = autoTrim(take)!;
-    expect(keep[0]!.start).toBeCloseTo(1.85, 5);
-    expect(keep.at(-1)!.end).toBeCloseTo(12.7, 5);
-    // The 3.1s pause after "two" comes down to 0.45s, most of it after "two" (a closing "t" lands up to 0.25s late).
-    expect(keep[0]!.end).toBeCloseTo(2.9 + 0.3, 5);
-    expect(keep[1]!.start).toBeCloseTo(6 - 0.15, 5);
+    expect(keep[0]!.start).toBeCloseTo(2 - KEEP_BEFORE, 5);
+    expect(keep.at(-1)!.end).toBeCloseTo(12.4 + KEEP_AFTER, 5);
+    // The 3.1s pause after "two" comes down to KEEP_AFTER + KEEP_BEFORE, most of it after "two" (a closing "t" lands up to 0.25s late).
+    expect(keep[0]!.end).toBeCloseTo(2.9 + KEEP_AFTER, 5);
+    expect(keep[1]!.start).toBeCloseTo(6 - KEEP_BEFORE, 5);
     expect(autoTrim({ ...take, keep })).toEqual(keep);
     // Tom cut "four" out by hand: it stays out.
     const cut = [{ start: 0, end: 6.45 }, { start: 6.95, end: 20 }];
@@ -123,7 +140,7 @@ describe("auto trim", () => {
     // Without pauses: just the ends.
     const ends = autoTrim(take, false)!;
     expect(ends.length).toBe(1);
-    expect(ends[0]!.start).toBeCloseTo(1.85, 5);
-    expect(ends[0]!.end).toBeCloseTo(12.7, 5);
+    expect(ends[0]!.start).toBeCloseTo(2 - KEEP_BEFORE, 5);
+    expect(ends[0]!.end).toBeCloseTo(12.4 + KEEP_AFTER, 5);
   });
 });

@@ -8,17 +8,20 @@ import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:f
 import { join, relative, resolve } from "node:path";
 import type { GameConfig } from "../game";
 import { youtubeChapters } from "@heroic/ascii-build";
-import { PICTURE_STYLE, THUMB_STYLE, cardsDir, hasImages, makePicture, saveOwnPicture } from "./cards";
+import { type CastRefFile, THUMB_STYLE, WOODCUT_STYLE, cardsDir, hasImages, makeCastRef, makePicture, pictureStyleText, saveOwnPicture } from "./cards";
+import { publicDir } from "./footage";
+import { makeDepth } from "./depth";
 import * as ai from "./rewrite";
 import { matchScript } from "./match";
-import { organiseCut } from "./organise";
-import { type Beat, type BeatPicture, type Cut, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, slugify, articlePictures, sourcesList, sourcesMarkdown, withoutSources, youtubeId, type PlanState, type ShortsState, type ShortRender, beatText, excerpt, longEdits, renderableShort, shortBeats, shortLabel } from "./scripts";
+import { measureLong, organiseCut, remapParts } from "./organise";
+import { type Beat, type BeatPicture, type Cut, castIn, castRefOf, pictureStyleOf, usesCastRefs, type Script, type ThumbnailIdea, isStale, newId, newLook, picturesWanted, plannedBeats, scriptText, slugify, articlePictures, sourcesList, sourcesMarkdown, withoutSources, youtubeId, type PlanState, type ShortsState, type ShortRender, beatText, beatsFromRefs, longEdits, pieceText, refsLabel, refsOf, renderableShort, shortRefsLabel } from "./scripts";
 import { type Job, startRender } from "./render";
 import { sequenceSeconds } from "@heroic/voiceover";
 import { exec } from "./exec";
 import { listScripts, readScript, saveScript, voiceSamples } from "./scriptsStore";
 import { docHeadings } from "./doc";
-import { SCORE_LEVEL, type ScoreListing, listScores, makeScore, scoreState, useScore } from "./score";
+import { SCORE_LEVEL, SHORT_SCORE_LEVEL, type ScoreListing, listScores, makeScore, scoreState, useScore } from "./score";
+import { resoundTakes } from "./voice";
 import { readSequence, seqSlug, sequencePath, trashSequence, writeSequence } from "./sequences";
 
 export const hasClaude = ai.hasClaude;
@@ -89,7 +92,7 @@ export const anotherShort = async (g: GameConfig, id: string, instruction: strin
 const finds = new Map<string, ShortsState>();
 export const shortsState = (id: string): ShortsState | undefined => finds.get(id);
 
-/** What Tom kept and binned across every script (desk-shorts.md: his calls are the standard), each as its title and beats' first words. */
+/** What Tom kept and binned across every script (desk-shorts.md: his calls are the standard), each as its title and first words, a bin with his reason. */
 const shortTaste = (g: GameConfig): ai.ShortTaste => {
   const taste: ai.ShortTaste = { kept: [], binned: [] };
   for (const sum of listScripts(g)) {
@@ -97,22 +100,66 @@ const shortTaste = (g: GameConfig): ai.ShortTaste => {
     if (!s?.long) continue;
     for (const c of s.shorts) {
       if (c.state !== "kept" && c.state !== "binned") continue;
-      const line = `${c.title} (${s.title}): "${c.beats.map((b) => beatText(s, b)).join(" ").split(/\s+/).slice(0, 25).join(" ")}…"`;
-      taste[c.state].push(line);
+      const words = c.beats.filter((b) => b.from).map((b) => pieceText(s, b)).join(" ").split(/\s+/).slice(0, 25).join(" ");
+      taste[c.state].push(`${c.title} (${s.title}): "${words}…"${c.state === "binned" && c.binReason?.trim() ? ` Binned because: ${c.binReason.trim()}` : ""}`);
     }
   }
   return { kept: taste.kept.slice(-30), binned: taste.binned.slice(-30) };
 };
 
+/** The script measured for the shorts (desk-shorts.md § 6): the long beats' seconds and sentences as recorded, and the shorts' parts renumbered against them. Nothing saved. */
+const measured = (s: Script): { long: Cut; shorts: Cut[] } => {
+  const covers = new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
+  const beats = measureLong(s, covers);
+  return { long: { ...s.long!, beats }, shorts: remapParts(beats, s.shorts) };
+};
+
+/** The measurements onto the long cut as it is now (Tom's words on it stay his), so the page can measure a nudge and show the sentences. */
+const withMeasures = (now: Cut, beats: Beat[]): Cut => {
+  const m = new Map(beats.map((b) => [b.id, b] as const));
+  return {
+    ...now,
+    beats: now.beats.map((b) => {
+      const { seconds: _s, sentences: _ss, ...rest } = b;
+      const x = m.get(b.id);
+      return { ...rest, ...(x?.seconds !== undefined ? { seconds: x.seconds } : {}), ...(x?.sentences ? { sentences: x.sentences } : {}) };
+    }),
+  };
+};
+
+const offeredOf = (m: { long: Cut }, shorts: Cut[]): ai.OfferedShort[] =>
+  shorts.flatMap((c) => {
+    const refs = refsOf(m, c);
+    return refs.length ? [{ label: refsLabel(m, refs), title: c.title, state: c.state ?? "suggested", ...(c.binReason?.trim() ? { reason: c.binReason.trim() } : {}) }] : [];
+  });
+
+/** A judged short as a suggestion card. */
+const shortCut = (m: { long: Cut }, x: ai.ShortVerdict, extra: Partial<Cut> = {}): Cut => ({
+  id: newId(),
+  kind: "short",
+  title: x.title,
+  why: x.why,
+  score: x.score,
+  ...(x.join ? { join: x.join } : {}),
+  ...(x.verdict === "pass" && x.check ? { check: x.check } : {}),
+  ...(x.verdict === "fail" ? { problem: x.problem ?? "didn't pass the judge" } : {}),
+  state: "suggested",
+  ...extra,
+  beats: beatsFromRefs(m, x.refs),
+});
+
 /**
- * Find shorts: the long cut's beats timed from the kept takes (the same
- * slicing organise does, nothing written), then two Claude calls in the
- * background: a generous finder and a strict judge (rewrite.ts). Passes
- * land as suggested shorts ranked by score (beats word for word with the
- * long cut, `from` on each); fails land as near misses with their
- * problem, folded away on the page. `more`: shorts not offered before,
- * with everything already offered (kept, binned, suggested) left alone;
- * without it, the suggestions not yet decided on are replaced.
+ * Find shorts: the long cut measured from the kept takes (the same slicing
+ * organise does, nothing written: each beat's seconds and sentences), then
+ * two Claude calls in the background: a generous finder and a strict judge
+ * (rewrite.ts), both by sentence (desk-shorts.md § 6). Passes land as
+ * suggested shorts ranked by score (each beat `from` its long beat, a
+ * `part` where it keeps only some sentences); fails land as near misses
+ * with their problem, folded away on the page. `more`: shorts not offered
+ * before, with everything already offered (kept, binned, suggested) left
+ * alone; without it, the suggestions not yet decided on are replaced.
+ * Binned shorts go in with Tom's reason, as material that may come back
+ * reshaped.
  */
 export const findShorts = (g: GameConfig, id: string, more = false): ShortsState => {
   const { s, v } = need(g, id);
@@ -123,46 +170,67 @@ export const findShorts = (g: GameConfig, id: string, more = false): ShortsState
   const state: ShortsState = { state: "running", startedAt: new Date().toISOString() };
   finds.set(id, state);
   void (async () => {
-    const covers = new Map(s.takes.map((t) => [t.file, matchScript(t, s)]));
-    const { laid } = organiseCut(s, s.long!, covers, { id: "timing", name: "timing" });
-    const secs = new Map(laid.map((l) => [l.beat, l.seconds]));
-    const timed = s.long!.beats.map((b, i) => ({ n: i + 1, text: b.text, seconds: secs.get(b.id) }));
-    const old = more ? s.shorts : s.shorts.filter((c) => c.state && c.state !== "suggested");
-    const offered = old.flatMap((c) => {
-      const beats = shortBeats(s, c);
-      return beats.length ? [{ beats, title: c.title, state: c.state ?? "suggested" }] : [];
-    });
-    const verdicts = await ai.findShorts(v, s.long!, timed, offered, shortTaste(g));
+    const m = measured(s);
+    const old = more ? m.shorts : m.shorts.filter((c) => c.state && c.state !== "suggested");
+    const verdicts = await ai.findShorts(v, m, offeredOf(m, old), shortTaste(g));
     const now = readScript(g, id);
     if (!now?.long) throw new Error("the script went away");
-    // The timings onto the long beats (Tom's words on them stay his), so the page can measure a nudge.
-    const long: Cut = { ...now.long, beats: now.long.beats.map((b) => ({ ...b, seconds: secs.get(b.id) })) };
-    const at = { long };
-    const seen = new Set(old.map((c) => shortLabel(shortBeats(s, c))));
-    const fresh: Cut[] = [...verdicts]
+    const at = { long: withMeasures(now.long, m.long.beats) };
+    const shorts = remapParts(at.long.beats, now.shorts);
+    const seen = new Set(old.map((c) => shortRefsLabel(at, c)));
+    const fresh = [...verdicts]
       .sort((a, b) => (a.verdict === b.verdict ? b.score - a.score : a.verdict === "pass" ? -1 : 1))
-      .map(
-        (x): Cut => ({
-          id: newId(),
-          kind: "short",
-          title: x.title,
-          why: x.why,
-          score: x.score,
-          ...(x.join ? { join: x.join } : {}),
-          ...(x.verdict === "pass" && x.check ? { check: x.check } : {}),
-          ...(x.verdict === "fail" ? { problem: x.problem ?? "didn't pass the judge" } : {}),
-          state: "suggested",
-          beats: excerpt(at, x.beats),
-        }),
-      )
-      .filter((c) => c.beats.length && !seen.has(shortLabel(shortBeats(at, c))));
-    const keep = more ? now.shorts : now.shorts.filter((c) => c.state && c.state !== "suggested");
-    saveScript(g, { ...now, long, shorts: [...keep, ...fresh] });
+      .map((x) => shortCut(at, x))
+      .filter((c) => c.beats.length && !seen.has(shortRefsLabel(at, c)));
+    const keep = more ? shorts : shorts.filter((c) => c.state && c.state !== "suggested");
+    saveScript(g, { ...now, long: at.long, shorts: [...keep, ...fresh] });
   })().then(
     () => finds.delete(id),
     (e: Error) => {
       console.warn(`⚠ shorts ${id}: ${e.message}`);
       finds.set(id, { state: "failed", error: e.message });
+    },
+  );
+  return state;
+};
+
+/**
+ * Reshape one short (desk-shorts.md § 6): its idea kept, what was wrong
+ * fixed (the judge's problem, Tom's bin reason, his note), under the
+ * finder's rules, judged like any other. In the background on the find's
+ * slot; the new short lands as a suggestion straight after the old one,
+ * which keeps its state (a bin stays a bin).
+ */
+export const reshapeShort = (g: GameConfig, id: string, shortId: string, note = ""): ShortsState => {
+  const { s, v } = need(g, id);
+  if (!s.long) throw new Error("rewrite the script first");
+  if (!longEdits(s).length) throw new Error("organise the long video first: the shorts are cut from it as recorded");
+  if (!s.shorts.some((c) => c.id === shortId)) throw new Error("that short isn't in the script any more");
+  const cur = finds.get(id);
+  if (cur?.state === "running") return cur;
+  const state: ShortsState = { state: "running", startedAt: new Date().toISOString(), short: shortId };
+  finds.set(id, state);
+  void (async () => {
+    const m = measured(s);
+    const c = m.shorts.find((x) => x.id === shortId)!;
+    const refs = refsOf(m, c);
+    if (!refs.length) throw new Error("that short has no lines of the long video to reshape");
+    const target: ai.ReshapeTarget = { label: refsLabel(m, refs), refs, title: c.title, state: c.state ?? "suggested", ...(c.why ? { why: c.why } : {}), ...(c.problem ? { problem: c.problem } : {}), ...(c.binReason?.trim() ? { reason: c.binReason.trim() } : {}) };
+    const offered = offeredOf(m, m.shorts.filter((x) => x.state && x.id !== shortId));
+    const x = await ai.reshapeShort(v, m, target, note, offered, shortTaste(g));
+    if (!x) throw new Error("Claude didn't come back with a short that reads; try again, or say what to change");
+    const now = readScript(g, id);
+    if (!now?.long) throw new Error("the script went away");
+    const at = { long: withMeasures(now.long, m.long.beats) };
+    const shorts = remapParts(at.long.beats, now.shorts);
+    const made = shortCut(at, x, { reshapedFrom: shortId });
+    const i = shorts.findIndex((y) => y.id === shortId);
+    saveScript(g, { ...now, long: at.long, shorts: i < 0 ? [...shorts, made] : [...shorts.slice(0, i + 1), made, ...shorts.slice(i + 1)] });
+  })().then(
+    () => finds.delete(id),
+    (e: Error) => {
+      console.warn(`⚠ reshape ${id}/${shortId}: ${e.message}`);
+      finds.set(id, { state: "failed", error: e.message, short: shortId });
     },
   );
   return state;
@@ -189,7 +257,7 @@ export const draftHooks = async (g: GameConfig, id: string, all = false): Promis
   if (!s.long) throw new Error("rewrite the script first");
   const want = s.shorts.filter((c) => c.state === "kept" && (all || !c.hookDrafts?.length));
   if (!want.length) throw new Error(s.shorts.some((c) => c.state === "kept") ? "every kept short has its drafts; Draft again writes them afresh" : "keep a short first");
-  const shorts = want.map((c, i) => ({ n: i + 1, title: c.title, beats: c.beats.filter((b) => b.from).map((b) => beatText(s, b)), ...(c.check ? { carry: c.check } : {}) }));
+  const shorts = want.map((c, i) => ({ n: i + 1, title: c.title, beats: c.beats.filter((b) => b.from).map((b) => pieceText(s, b)), ...(c.check ? { carry: c.check } : {}) }));
   const drafts = await ai.draftHooks(v, samples, s.long, shorts, hookTaste(g));
   const now = readScript(g, id);
   if (!now) throw new Error("the script went away");
@@ -225,7 +293,7 @@ export const previewShort = (g: GameConfig, id: string, shortId: string): ShortP
   const lastId = longEdits(s).at(-1)?.id;
   const bed = lastId ? readSequence(g, lastId)?.music : undefined;
   const score = lastId ? scoreState(g, lastId) : undefined;
-  const music = bed?.song ? { path: `music/${bed.song}`, from: bed.from, level: bed.level } : score?.state === "ready" ? { path: `music/${score.file}`, from: 0, level: SCORE_LEVEL } : undefined;
+  const music = bed?.song ? { path: `music/${bed.song}`, from: bed.from, level: Math.min(bed.level, SHORT_SCORE_LEVEL) } : score?.state === "ready" ? { path: `music/${score.file}`, from: 0, level: SHORT_SCORE_LEVEL } : undefined;
   return { clips, seconds, ...(music ? { music } : {}), missing, conflicts: conflicts.length };
 };
 
@@ -273,9 +341,11 @@ const background = (id: string, state: PlanState & { state: "running" }, run: ()
  * prompts can then be written a batch at a time with nothing left to choose.
  * Runs in the background and lands on the script in one go. A story again
  * keeps the world Tom has set (and its look and cast) and writes new lines;
- * the prompts already written stay until they're written again.
+ * the prompts already written stay until they're written again. `fresh`:
+ * keep only the world line, and write a new look and cast for it in the
+ * script's picture style (and new scene lines to go with them).
  */
-export const planStory = (g: GameConfig, id: string): PlanState => {
+export const planStory = (g: GameConfig, id: string, fresh = false): PlanState => {
   const { s, v } = need(g, id);
   if (!s.long) throw new Error("rewrite the script first");
   const cur = plans.get(id);
@@ -283,11 +353,16 @@ export const planStory = (g: GameConfig, id: string): PlanState => {
   const every = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, id: b.id }));
   const headings = docHeadings(scriptText(s));
   return background(id, { state: "running", stage: "story", done: 0, total: every.length, startedAt: new Date().toISOString() }, async () => {
-    const { world, lines } = await ai.planStory(v, s.long!.title, every, headings, worldOf(s));
+    const was = worldOf(s);
+    // A fresh look remembers the one it replaces, so pressing again goes somewhere new.
+    const tried = fresh && was.look.trim() ? [...(s.triedLooks ?? []).filter((t) => t !== was.look.trim()), was.look.trim()].slice(-6) : (s.triedLooks ?? []);
+    const { world, lines } = await ai.planStory(v, s.long!.title, every, headings, fresh ? { theme: was.theme, look: "", cast: [] } : was, pictureStyleOf(s), tried);
     // The script as it is now (Tom may have edited while this ran), the story on it.
     const now = readScript(g, id);
     if (!now) throw new Error("the script went away");
-    let next: Script = { ...now, theme: world.theme, look: world.look || undefined, cast: world.cast.length ? world.cast : undefined };
+    // References only for who's still in the story (the files stay on disk).
+    const refs = Object.fromEntries(Object.entries(now.castRefs ?? {}).filter(([name]) => world.cast.some((c) => c.name === name)));
+    let next: Script = { ...now, theme: world.theme, look: world.look || undefined, cast: world.cast.length ? world.cast : undefined, castRefs: Object.keys(refs).length ? refs : undefined, ...(tried.length ? { triedLooks: tried } : {}) };
     for (const x of every) {
       const l = lines.get(x.n);
       if (!l) continue;
@@ -295,6 +370,8 @@ export const planStory = (g: GameConfig, id: string): PlanState => {
     }
     saveScript(g, next);
     plans.set(id, { state: "running", stage: "story", done: every.length, total: every.length, startedAt: new Date().toISOString() });
+    // No cast references here: Tom may press New look & cast a few times to find a world, and every press made a dozen
+    // references for a cast about to be thrown away (11-05). They're made when the first picture needs them, or from the strip.
   });
 };
 
@@ -321,7 +398,7 @@ export const writePrompts = (g: GameConfig, id: string, all = false): PlanState 
       const at = readScript(g, id);
       if (!at?.long) throw new Error("the script went away");
       const every = at.long.beats.map((b, j) => ({ n: j + 1, text: b.text, scene: b.scene ?? "", prompts: (b.pictures ?? []).map((p) => p.prompt) }));
-      const plan = await ai.writePrompts(v, at.long.title, batch.map((x) => ({ n: x.n, text: every[x.n - 1]?.text ?? x.beat.text, scene: every[x.n - 1]?.scene ?? "" })), every, worldOf(at));
+      const plan = await ai.writePrompts(v, at.long.title, batch.map((x) => ({ n: x.n, text: every[x.n - 1]?.text ?? x.beat.text, scene: every[x.n - 1]?.scene ?? "" })), every, worldOf(at), pictureStyleOf(at));
       const now = readScript(g, id);
       if (!now) throw new Error("the script went away");
       let next: Script = now;
@@ -330,10 +407,10 @@ export const writePrompts = (g: GameConfig, id: string, all = false): PlanState 
         if (!prompts) continue;
         next = withBeat(next, x.beat.id, (b) => {
           const had = b.pictures ?? [];
-          const pictures = prompts.map((prompt, k): BeatPicture => {
+          const pictures = prompts.map(({ prompt, cast }, k): BeatPicture => {
             const h = had[k];
-            if (!h) return { prompt, candidates: [], look: newLook() };
-            return { ...h, prompt, ...(h.candidates.length && h.prompt.trim() !== prompt.trim() ? { check: true } : {}) };
+            if (!h) return { prompt, candidates: [], look: newLook(), cast, castFor: prompt };
+            return { ...h, prompt, cast, castFor: prompt, ...(h.candidates.length && h.prompt.trim() !== prompt.trim() ? { check: true } : {}) };
           });
           return { ...b, pictures };
         });
@@ -351,17 +428,95 @@ export const redoPicturePrompt = async (g: GameConfig, id: string, beatId: strin
   const beats = s.long.beats.map((b, i) => ({ n: i + 1, text: b.text, scene: b.scene ?? "", prompts: (b.pictures ?? []).map((p) => p.prompt), id: b.id }));
   const beat = beats.find((b) => b.id === beatId);
   if (!beat) throw new Error("that beat isn't in the script any more");
-  const prompt = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction, worldOf(s));
+  const { prompt, cast } = await ai.redoPicturePrompt(v, s.long.title, beats, beat.n, k, instruction, worldOf(s), pictureStyleOf(s));
   return saveScript(
     g,
     withBeat(s, beatId, (b) => {
       const pictures = [...(b.pictures ?? [])];
       while (pictures.length <= k) pictures.push({ prompt: "", candidates: [], look: newLook() });
-      pictures[k] = { ...pictures[k]!, prompt, ...(pictures[k]!.candidates.length ? { check: true } : {}) };
+      pictures[k] = { ...pictures[k]!, prompt, cast, castFor: prompt, ...(pictures[k]!.candidates.length ? { check: true } : {}) };
       return { ...b, pictures };
     }),
   );
 };
+
+/** Cast reference pictures being made right now, by script and cast name, so a picture that needs one waits for it instead of making a second. */
+const makingRefs = new Map<string, Map<string, Promise<void>>>();
+/** The cast names whose reference is being made for a script (the page shows them as making). */
+export const castRefsMaking = (id: string): string[] => [...(makingRefs.get(id)?.keys() ?? [])];
+
+/**
+ * Cast reference pictures (film style, docs/design/desk-ascii-scripts.md §
+ * Film stills): one for each cast member with none for their look as it
+ * stands (`only`: these names, a fresh try each, the old ones kept to pick
+ * from). In the background; each lands on the script as it finishes.
+ */
+export const makeCastRefs = (g: GameConfig, id: string, only?: string[]): { started: number; done: Promise<void> } => {
+  if (!hasImages()) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
+  const { s } = need(g, id);
+  const inFlight = makingRefs.get(id) ?? new Map<string, Promise<void>>();
+  makingRefs.set(id, inFlight);
+  const todo = (s.cast ?? []).filter((c) => !inFlight.has(c.name) && (only ? only.includes(c.name) : !castRefOf(s, c)));
+  for (const c of todo) {
+    const run = (async () => {
+      try {
+        const style = pictureStyleOf(s);
+        const src = await makeCastRef(g, s, c, s.look, style);
+        const now = readScript(g, id);
+        if (!now) return;
+        // A look changed since this was asked for: keep it as a try, but it isn't this look's reference.
+        const look = now.cast?.find((x) => x.name === c.name)?.look ?? c.look;
+        const was = now.castRefs?.[c.name];
+        // Older tries count only for the same look in the same style.
+        const kept = was && was.look.trim() === c.look.trim() && (was.style ?? "film") === style ? was.candidates : [];
+        saveScript(g, { ...now, castRefs: { ...now.castRefs, [c.name]: { look: c.look, style, candidates: [...kept, src], ...(look.trim() === c.look.trim() && pictureStyleOf(now) === style ? { chosen: src } : {}) } } });
+      } catch (e) {
+        console.warn(`⚠ cast reference for ${id}/${c.name}: ${(e as Error).message}`);
+        const now = readScript(g, id);
+        const was = now?.castRefs?.[c.name];
+        if (now) saveScript(g, { ...now, castRefs: { ...now.castRefs, [c.name]: { look: c.look, ...(was?.style ? { style: was.style } : {}), candidates: was?.candidates ?? [], ...(was?.chosen ? { chosen: was.chosen } : {}), error: (e as Error).message.slice(0, 200) } } });
+      } finally {
+        inFlight.delete(c.name);
+      }
+    })();
+    inFlight.set(c.name, run);
+  }
+  return { started: todo.length, done: Promise.all(todo.map((c) => inFlight.get(c.name))).then(() => undefined) };
+};
+
+/** Tom picks one of a cast member's tries as their reference (pictures made after use it). */
+export const chooseCastRef = (g: GameConfig, id: string, name: string, src: string): Script => {
+  const { s } = need(g, id);
+  const r = s.castRefs?.[name];
+  if (!r || !r.candidates.includes(src)) throw new Error("that isn't one of the cast member's pictures");
+  return saveScript(g, { ...s, castRefs: { ...s.castRefs, [name]: { ...r, chosen: src, error: undefined } } });
+};
+
+/** The reference files for the cast in a picture, making (or waiting for) any that are missing. A failed reference just leaves that member out. */
+const castRefsFor = async (g: GameConfig, id: string, names: string[]): Promise<CastRefFile[]> => {
+  if (!names.length) return [];
+  const s = readScript(g, id);
+  if (!s) return [];
+  const missing = (s.cast ?? []).filter((c) => names.includes(c.name) && !castRefOf(s, c)).map((c) => c.name);
+  if (missing.length) {
+    const waiting = missing.map((n) => makingRefs.get(id)?.get(n)).filter(Boolean);
+    const fresh = missing.filter((n) => !makingRefs.get(id)?.has(n));
+    await Promise.all([...waiting, ...(fresh.length ? [makeCastRefs(g, id, fresh).done] : [])]);
+  }
+  const now = readScript(g, id) ?? s;
+  return names.flatMap((n) => {
+    const c = now.cast?.find((x) => x.name === n);
+    const src = c && castRefOf(now, c);
+    return src ? [{ name: n, file: join(publicDir(g), src) }] : [];
+  });
+};
+
+/**
+ * A picture's depth map, made beside it in the background (the gentle arc
+ * and the other depth moves read it at render; without one a picture just
+ * gets the plain moves). Local model, about 2s, never blocks the request.
+ */
+const depthBeside = (g: GameConfig, src: string) => void makeDepth(join(publicDir(g), src)).catch((e: Error) => console.warn(`⚠ depth for ${src}: ${e.message}`));
 
 /** Pictures being made right now, by script: "<beat>:<k>" keys (the page shows them as making). */
 const making = new Map<string, Set<string>>();
@@ -376,7 +531,9 @@ export const pendingPictures = (id: string): string[] => [...(making.get(id) ?? 
 export const makePictures = (g: GameConfig, id: string, only?: { beat: string; k: number }[]): { started: number } => {
   if (!hasImages()) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
   const { s, v } = need(g, id);
-  const style = v.picture ?? PICTURE_STYLE;
+  // The style is pinned at the first picture, so a script never mixes film stills and woodcuts.
+  const pstyle = pictureStyleOf(s);
+  const style = v.picture ?? pictureStyleText(pstyle);
   const inFlight = making.get(id) ?? new Set<string>();
   making.set(id, inFlight);
   const todo = plannedBeats(s).flatMap(({ beat }) =>
@@ -384,19 +541,22 @@ export const makePictures = (g: GameConfig, id: string, only?: { beat: string; k
       const key = `${beat.id}:${k}`;
       if (!p.prompt.trim() || inFlight.has(key)) return [];
       const wanted = only ? only.some((o) => o.beat === beat.id && o.k === k) : !p.candidates.length;
-      return wanted ? [{ beat, k, prompt: p.prompt, key }] : [];
+      return wanted ? [{ beat, k, prompt: p.prompt, pic: p, key }] : [];
     }),
   );
+  if (todo.length && !s.pictureStyle) saveScript(g, { ...readScript(g, id)!, pictureStyle: pstyle });
   for (const t of todo) inFlight.add(t.key);
   const run = async () => {
     const queue = [...todo];
     const worker = async () => {
       for (let t = queue.shift(); t; t = queue.shift()) {
         try {
-          const src = await makePicture(g, s, t.beat, t.k, t.prompt, style, s.look);
+          const refs = usesCastRefs(pstyle) ? await castRefsFor(g, id, castIn(t.pic, s.cast ?? [])) : [];
+          const src = await makePicture(g, s, t.beat, t.k, t.prompt, style, s.look, refs);
           const now = readScript(g, id);
           // The newest try is the one on screen; the older ones stay to pick from.
           if (now) saveScript(g, withPicture(now, t.beat.id, t.k, (p) => ({ ...p, candidates: [...p.candidates, src], chosen: src, approved: false, check: undefined, error: undefined })));
+          depthBeside(g, src);
         } catch (e) {
           console.warn(`⚠ picture for ${id}/${t.key}: ${(e as Error).message}`);
           const now = readScript(g, id);
@@ -420,6 +580,7 @@ export const ownPicture = (g: GameConfig, id: string, beatId: string, k: number,
   if (!beat) throw new Error("that beat isn't in the script any more");
   if (k < 0 || k >= Math.max(picturesWanted(beat.text), beat.pictures?.length ?? 0, 1) || k > 1) throw new Error("no such picture on that beat");
   const src = saveOwnPicture(g, s, beat, k, bytes, ext);
+  depthBeside(g, src);
   return saveScript(
     g,
     withBeat(s, beatId, (b) => {
@@ -479,7 +640,8 @@ export const writeYouTube = async (g: GameConfig, id: string, instruction: strin
 export const makeThumbnails = (g: GameConfig, id: string, only?: string[]): { started: number } => {
   if (!hasImages()) throw new Error("no OPENAI_API_KEY in apps/desk/.env");
   const { s, v } = need(g, id);
-  const style = v.picture ?? PICTURE_STYLE;
+  // Thumbnails stay on the woodcut for now (11-05): tested on their own later, so one change doesn't muddy the other.
+  const style = v.picture ?? WOODCUT_STYLE;
   const inFlight = making.get(id) ?? new Set<string>();
   making.set(id, inFlight);
   const todo = (s.thumbnails ?? []).filter((t) => t.prompt.trim() && !inFlight.has(thumbKey(t.id)) && (only ? only.includes(t.id) : !t.candidates.length));
@@ -613,11 +775,26 @@ export type RenderShortsResult = { started: string[]; left: { short: string; rea
 /** Seconds the hook's words stay up: as long as they're said, a touch after, three at most. */
 const hookUp = (spoken: number) => Math.min(3, Math.max(1, spoken + 0.3));
 
+/** The noise cleanup a short's voice gets: Light (NOISE_LEVELS), which leaves the room in (Tom, 11-06). */
+const SHORT_NOISE = 1;
+
+/** A short's edit pointed at its takes with the noise down, made the first time and kept beside them. Only the takes it plays: a script can have dozens. */
+const cleanShortVoice = async (g: GameConfig, seqId: string) => {
+  const seq = readSequence(g, seqId);
+  if (!seq) throw new Error("that edit isn't there any more");
+  const takes = [...seq.takes];
+  for (const i of new Set(seq.audio.flatMap((t) => t.clips.map((c) => c.take)))) {
+    const [made] = await resoundTakes(g, [takes[i]!], { tidy: seq.voice.tidy, denoise: SHORT_NOISE });
+    takes[i] = made!;
+  }
+  writeSequence(g, { ...seq, takes, voice: { ...seq.voice, denoise: SHORT_NOISE } });
+};
+
 /**
  * The kept shorts asked for, each organised afresh into its own edit (the
  * long beats' pictures and moods looked through, the hook in front, one
- * build under the hook and the first beat), scored as a loop, and rendered
- * vertical by the Beats template's short mode: one batch a short, two
+ * build under the hook and the first beat), its voice cleaned, scored as
+ * a loop, and rendered vertical by the Beats template's short mode: one batch a short, two
  * renders at a time. Answers at once; the page asks after them. A short
  * with no hook, or a beat not recorded or read twice, is left out and said
  * so, never rendered with a hole.
@@ -679,7 +856,13 @@ export const renderShorts = (g: GameConfig, id: string, shortIds: string[]): Ren
   };
   void (async () => {
     for (const x of todo) {
-      const sc = await makeScore(g, { long: x.cut }, x.seqId, seed, { loop: true });
+      try {
+        await cleanShortVoice(g, x.seqId);
+      } catch (e) {
+        runs.set(x.c.id, { state: "failed", seq: x.seqId, error: `the voice cleanup didn't work: ${(e as Error).message}` });
+        continue;
+      }
+      const sc = await makeScore(g, { long: x.cut }, x.seqId, seed, { loop: true, level: SHORT_SCORE_LEVEL });
       if (sc.state !== "ready") {
         runs.set(x.c.id, { state: "failed", seq: x.seqId, error: `the score didn't make: ${sc.error ?? "no reason given"}` });
         continue;
@@ -700,7 +883,7 @@ export const writeShortPost = async (g: GameConfig, id: string, shortId: string,
   const c = s.shorts.find((x) => x.id === shortId);
   if (!c) throw new Error(`no short ${shortId}`);
   if (!s.long) throw new Error("rewrite the script first");
-  const beats = c.beats.filter((b) => b.from).map((b) => beatText(s, b));
+  const beats = c.beats.filter((b) => b.from).map((b) => pieceText(s, b));
   const post = await ai.writeShortPost(v, g.name, s.long.title, { title: c.title, hook: c.hook?.trim() ?? "", why: c.why, beats }, c.post, instruction);
   const cur = readScript(g, id) ?? s;
   return saveScript(g, { ...cur, shorts: cur.shorts.map((x) => (x.id === shortId ? { ...x, post } : x)) });
@@ -827,6 +1010,7 @@ export const saveArticle = async (g: GameConfig, id: string, signal?: AbortSigna
     "---",
     `title: ${yamlString(w.title)}`,
     `description: ${yamlString(w.description)}`,
+    ...(w.summary?.trim() ? [`summary: ${yamlString(w.summary.trim())}`] : []),
     `date: ${date}`,
     ...(w.saved && date !== today ? [`updated: ${today}`] : []),
     ...(w.youtube ? [`youtube: ${yamlString(w.youtube)}`] : []),

@@ -1,6 +1,7 @@
 ---
 title: "How to protect your indie game from AI copycats"
 description: "Trap streets in your assets, Play Integrity and App Attest, IL2CPP and encryption, server-side logic, and why building in the open helps rather than hurts."
+summary: "Hide small fake details, like a map maker's trap streets, in your assets, text and level data to prove a clone copied you. Turn on Play Integrity and App Attest for mobile, use IL2CPP in Unity or encryption in Unreal and Godot, never ship your full game as a demo with parts locked off, and keep logic on a private server if you're multiplayer. And keep building in the open, because hiding hands copycats the head start."
 date: 2026-11-02
 youtube: "Rh5AfDnG6DE"
 cover: ./cover.jpg
